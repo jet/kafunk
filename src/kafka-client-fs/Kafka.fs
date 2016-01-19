@@ -107,78 +107,12 @@ module Constructors =
 // -------------------------------------------------------------------------------------------------------------------------------------
 // Connection
 
-module internal Conn =
-
-  let private Log = Log.create "Marvel.Kafka.Conn"
-
-  let ApiVersion : ApiVersion = 0s
-
-  /// Establishes a fault-tolerance connection to the specified endpoint.
-  let connect (ep:IPEndPoint, clientId:ClientId) = async {
-
-    /// Encodes the request into a session layer request, keeping ApiKey as state.
-    let encode (req:RequestMessage, correlationId:CorrelationId) =
-      let req = Request(ApiVersion, correlationId, clientId, req)  
-      let sessionData = toArraySeg req 
-      sessionData,req.apiKey
-      
-    /// Decodes the session layer input and session state into a response.
-    let decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
-      let res = ResponseMessage.readApiKey (data, apiKey)
-      res   
-
-
-    let connSocket =
-      let s = new Socket(ep.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
-      //s.ReceiveBufferSize <- 8192
-      //s.SendBufferSize <- 8192
-      s.NoDelay <- true
-      s.ExclusiveAddressUse <- true
-      s
-
-    Log.info "connecting...|client_id=%s" clientId
-    let! sendRcvSocket = Socket.connect connSocket ep
-    Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint     
+/// A request/reply channel to Kafka.
+type Chan = RequestMessage -> Async<ResponseMessage>
 
 
 
-    /// An unframed input stream.  
-    let inputStream =
-      Socket.receiveStream sendRcvSocket
-      |> Framing.LengthPrefix.unframe
-
-    /// A framing sender.
-    let send (data:ArraySeg<byte>) =
-      let framed = data |> Framing.LengthPrefix.frame
-      Socket.sendAll sendRcvSocket framed
-
-    
-       
-    /// A framing sender.
-    let rec send2 (data:ArraySeg<byte>) =
-      let framed = data |> Framing.LengthPrefix.frame
-      Socket.sendAll sendRcvSocket framed
-      |> Async.Catch
-      |> Async.bind (function
-        | Success x -> async.Return x
-        | Failure ex ->
-          match ex with
-          | :? SocketException as x -> 
-            // TODO: reco
-            send2 data
-          | _ -> raise ex)
-
-
-    let session = 
-      Session.requestReply
-        Session.corrId encode decode inputStream send
-
-    return session }
-  
-
-
-
-
+ 
 [<AutoOpen>]
 module internal ResponseEx =
 
@@ -203,43 +137,43 @@ module internal ResponseEx =
 /// API operations on a generic request/reply channel.
 module internal Api =
   
-  let inline metadata (send:RequestMessage -> Async<ResponseMessage>) (req:MetadataRequest) =
+  let inline metadata (send:Chan) (req:MetadataRequest) =
     send (RequestMessage.Metadata req) |> Async.map (function MetadataResponse x -> x | _ -> wrongResponse ())
 
-  let inline fetch (send:RequestMessage -> Async<ResponseMessage>) (req:FetchRequest) : Async<FetchResponse> = 
+  let inline fetch (send:Chan) (req:FetchRequest) : Async<FetchResponse> = 
     send (RequestMessage.Fetch req) |> Async.map ResponseMessage.toFetch
 
-  let inline produce (send:RequestMessage -> Async<ResponseMessage>) (req:ProduceRequest) : Async<ProduceResponse> = 
+  let inline produce (send:Chan) (req:ProduceRequest) : Async<ProduceResponse> = 
     send (RequestMessage.Produce req) |> Async.map ResponseMessage.toProduce
 
-  let inline offset (send:RequestMessage -> Async<ResponseMessage>) (req:OffsetRequest) : Async<OffsetResponse> = 
+  let inline offset (send:Chan) (req:OffsetRequest) : Async<OffsetResponse> = 
     send (RequestMessage.Offset req) |> Async.map ResponseMessage.toOffset
 
-  let inline groupCoordinator (send:RequestMessage -> Async<ResponseMessage>) (req:GroupCoordinatorRequest) : Async<GroupCoordinatorResponse> = 
+  let inline groupCoordinator (send:Chan) (req:GroupCoordinatorRequest) : Async<GroupCoordinatorResponse> = 
     send (RequestMessage.GroupCoordinator req) |> Async.map ResponseMessage.toGroupCoordinator
 
-  let inline offsetCommit (send:RequestMessage -> Async<ResponseMessage>) (req:OffsetCommitRequest) : Async<OffsetCommitResponse> = 
+  let inline offsetCommit (send:Chan) (req:OffsetCommitRequest) : Async<OffsetCommitResponse> = 
     send (RequestMessage.OffsetCommit req) |> Async.map ResponseMessage.toOffsetCommit
 
-  let inline offsetFetch (send:RequestMessage -> Async<ResponseMessage>) (req:OffsetFetchRequest) : Async<OffsetFetchResponse> = 
+  let inline offsetFetch (send:Chan) (req:OffsetFetchRequest) : Async<OffsetFetchResponse> = 
     send (RequestMessage.OffsetFetch req) |> Async.map ResponseMessage.toOffsetFetch
 
-  let inline joinGroup (send:RequestMessage -> Async<ResponseMessage>) (req:JoinGroupRequest) : Async<JoinGroupResponse> = 
+  let inline joinGroup (send:Chan) (req:JoinGroupRequest) : Async<JoinGroupResponse> = 
     send (RequestMessage.JoinGroup req) |> Async.map ResponseMessage.toJoinGroup
 
-  let inline syncGroup (send:RequestMessage -> Async<ResponseMessage>) (req:SyncGroupRequest) : Async<SyncGroupResponse> = 
+  let inline syncGroup (send:Chan) (req:SyncGroupRequest) : Async<SyncGroupResponse> = 
     send (RequestMessage.SyncGroup req) |> Async.map ResponseMessage.toSyncGroup
 
-  let inline heartbeat (send:RequestMessage -> Async<ResponseMessage>) (req:HeartbeatRequest) : Async<HeartbeatResponse> = 
+  let inline heartbeat (send:Chan) (req:HeartbeatRequest) : Async<HeartbeatResponse> = 
     send (RequestMessage.Heartbeat req) |> Async.map ResponseMessage.toHeartbeat
 
-  let inline leaveGroup (send:RequestMessage -> Async<ResponseMessage>) (req:LeaveGroupRequest) : Async<LeaveGroupResponse> = 
+  let inline leaveGroup (send:Chan) (req:LeaveGroupRequest) : Async<LeaveGroupResponse> = 
     send (RequestMessage.LeaveGroup req) |> Async.map ResponseMessage.toLeaveGroup
 
-  let inline listGroups (send:RequestMessage -> Async<ResponseMessage>) (req:ListGroupsRequest) : Async<ListGroupsResponse> = 
+  let inline listGroups (send:Chan) (req:ListGroupsRequest) : Async<ListGroupsResponse> = 
     send (RequestMessage.ListGroups req) |> Async.map ResponseMessage.toListGroups
 
-  let inline describeGroups (send:RequestMessage -> Async<ResponseMessage>) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> = 
+  let inline describeGroups (send:Chan) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> = 
     send (RequestMessage.DescribeGroups req) |> Async.map ResponseMessage.toDescribeGroups
 
 
@@ -262,11 +196,8 @@ module internal Route =
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
   /// Group related requests are routed to the respective broker.
-  let route (metadata:MetadataResponse) (conn:IPEndPoint -> (RequestMessage -> Async<ResponseMessage>)) =    
+  let route (metadata:MetadataResponse) (bootstrap:Chan) (conn:IPEndPoint -> Chan) : Chan =    
     
-    let bootstrap : RequestMessage -> Async<ResponseMessage> =
-      failwith ""
-
     let brokers = 
       metadata.brokers 
       |> Seq.toKeyValueMap (fun b -> b.nodeId) (fun b -> hostEndpoint (b.host, b.port) |> conn)
@@ -279,7 +210,7 @@ module internal Route =
       )
       |> dict
 
-    let groupBrokers : IDictionary<GroupId, (RequestMessage -> Async<ResponseMessage>)> = 
+    let groupBrokers : IDictionary<GroupId, Chan> = 
       failwith ""
 
     fun (req:RequestMessage) -> async {
@@ -389,6 +320,99 @@ module internal Route =
            
     }
 
+
+module internal Conn =
+
+  let private Log = Log.create "KafkaFs.Conn"
+
+  let ApiVersion : ApiVersion = 0s
+
+  /// Encodes the request into a session layer request, keeping ApiKey as state.
+  let private encode clientId (req:RequestMessage, correlationId:CorrelationId) =
+    let req = Request(ApiVersion, correlationId, clientId, req)  
+    let sessionData = toArraySeg req 
+    sessionData,req.apiKey
+      
+  /// Decodes the session layer input and session state into a response.
+  let private decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
+    let res = ResponseMessage.readApiKey (data, apiKey)
+    res   
+
+
+  /// Establishes a fault-tolerant connection to the specified endpoint.
+  let connect (ep:IPEndPoint, clientId:ClientId) = async {
+       
+    let ep = DVar.create ep
+    
+    let connSocket =
+      ep
+      |> DVar.map (fun ep ->
+        let s = new Socket(ep.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        //s.ReceiveBufferSize <- 8192
+        //s.SendBufferSize <- 8192
+        s.NoDelay <- true
+        s.ExclusiveAddressUse <- true
+        s)
+    
+    Log.info "connecting...|client_id=%s" clientId
+
+    let! sendRcvSocket =  
+      (connSocket,ep)
+      ||> DVar.zipWithAsync (Socket.connect)
+      
+    sendRcvSocket 
+    |> DVar.iter (fun sendRcvSocket -> 
+      Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint)
+    
+    /// An unframed input stream.  
+    let inputStream =
+      sendRcvSocket
+      |> DVar.map (fun sendRcvSocket -> 
+        Socket.receiveStream sendRcvSocket 
+        |> Framing.LengthPrefix.unframe
+        |> Async.tryFinally (fun () ->
+          Log.info "TCP connection closed."
+        ))
+
+    let rec send =
+      sendRcvSocket
+      |> DVar.map (fun sendRcvSocket ->
+          fun (data:ArraySeg<byte>) ->
+            let framed = data |> Framing.LengthPrefix.frame
+            Socket.sendAll sendRcvSocket framed
+            |> Async.Catch
+            |> Async.bind (function
+              | Choice1Of2 sent -> async.Return sent
+              | Choice2Of2 ex -> async {
+                // TODO: check error, restart workflow
+                DVar.ping ep
+                return! send data }))
+      |> DVar.toFun
+
+    /// A framing sender.
+    let rec send =
+      sendRcvSocket
+      |> DVar.map (fun sendRcvSocket ->
+          fun (data:ArraySeg<byte>) ->
+            let framed = data |> Framing.LengthPrefix.frame
+            Socket.sendAll sendRcvSocket framed
+            |> Async.Catch
+            |> Async.bind (function
+              | Choice1Of2 sent -> async.Return sent
+              | Choice2Of2 ex -> async {
+                // TODO: check error, restart workflow
+                DVar.ping ep
+                let! s = DVar.nextAsync send
+                return! s data }))
+
+    let session = 
+      (inputStream,send)
+      ||> DVar.zipWith (fun inputStream send ->
+        Session.requestReply
+          Session.corrId (encode clientId) decode inputStream send)
+
+    return session }
+
   
 
 // http://kafka.apache.org/documentation.html#connectconfigs
@@ -445,7 +469,7 @@ and KafkaConn internal (reqRepSession:ReqRepSession<_,_,_>) =
     reqRepSession.Send req
 
   static member internal connect (ep:IPEndPoint) = async {
-
+   
     let clientId : ClientId = Guid.NewGuid().ToString("N")
 
     let connSocket =
