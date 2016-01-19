@@ -14,29 +14,41 @@ open System.Runtime.ExceptionServices
 
 open KafkaFs
 
+module Dns =
+
+  let ipv4sAsync (host:string) = 
+    Dns.GetHostAddressesAsync(host) 
+    |> Async.AwaitTask
+    |> Async.map (Array.filter (fun ip -> ip.AddressFamily = AddressFamily.InterNetwork))
+
+  let ipv4Async (host:string) = 
+    ipv4sAsync host |> Async.map (Array.item 0)
+
+  let ipv4 = ipv4Async >> Async.RunSynchronously
+
 
 /// Operations on Berkley sockets.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Socket =
 
   /// Executes an async socket operation.
-  let inline exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (prep:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
+  let exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (config:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
     Async.FromContinuations <| fun (ok, error, _) ->
 
       let args = alloc ()
-      prep args
+      config args
 
       let rec k (_:obj) (args:SocketAsyncEventArgs) =
         match args.SocketError with
         | SocketError.Success ->
-            args.remove_Completed(k')
-            let result = map args
-            free args
-            ok result
+          args.remove_Completed(k')
+          let result = map args
+          free args
+          ok result
         | e ->
-            args.remove_Completed(k')
-            free args
-            error (SocketException(int e))
+          args.remove_Completed(k')
+          free args
+          error (SocketException(int e))
 
       and k' = EventHandler<SocketAsyncEventArgs>(k)
 
@@ -105,6 +117,9 @@ module Socket =
   let disconnect (socket:Socket) (reuse:bool) =
     exec argsAlloc (fun a -> a.DisconnectReuseSocket <- reuse) socket.DisconnectAsync (ignore)
 
+  /// Returns an async sequence each item of which corresponds to a receive on the specified socket.
+  /// The sequence finishes when a receive operation completes transferring 0 bytes.
+  /// Socket errors are propagated as exceptions.
   let receiveStream (socket:Socket) : AsyncSeq<ArraySeg<byte>> =
 
     let remBuff = ref None
@@ -255,6 +270,9 @@ type SessionMessage =
   new (txId, payload) = { tx_id = txId ; payload = payload }
 
 /// A multiplexed request/reply session.
+/// Note a session is stateful in that it maintains state between requests and responses
+/// and in that starts a process to read the input stream.
+/// Send failures are propagated to the caller who is responsible for recreating the session.
 type ReqRepSession<'a, 'b, 's> internal 
   (
     /// A correlation id generator.
