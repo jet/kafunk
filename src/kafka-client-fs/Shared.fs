@@ -297,6 +297,12 @@ module Dict =
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Array =
+  
+  let inline item i a = Array.get a i
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Seq =
 
   /// Creates a map from a sequnce based on a key and value selection function.
@@ -304,3 +310,157 @@ module Seq =
       s
       |> Seq.map (fun a -> key a,value a)
       |> Map.ofSeq
+
+
+
+// ------------------------------------------------------------------------------------------------------------------
+// dependent/dynamic references
+
+
+/// A dependant variable.
+type DVar<'a> = private { cell : 'a ref ; event : Event<'a> }
+
+/// Operations on dependant variables.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module DVar =
+  
+  /// Creates a DVar and initializes it with the specified value.
+  let create (a:'a) : DVar<'a> =
+    let e = new Event<'a>()
+    let cell = ref (Unchecked.defaultof<'a>)
+    e.Publish.Add <| fun a -> cell := a
+    e.Trigger a
+    { cell = cell ; event = e }
+
+  /// Gets the current value of a DVar.
+  let get (d:DVar<'a>) : 'a =
+    d.cell.Value
+
+  /// Puts a value into a DVar.
+  let put (a:'a) (d:DVar<'a>) : unit =
+    d.cell := a
+    d.event.Trigger a
+
+  /// Triggers a change in the DVar using its current value.
+  let ping (d:DVar<'a>) =
+    put (get d) d
+
+  /// Publishes DVar changes as an event.
+  let changes (d:DVar<'a>) : IEvent<'a> =
+    d.event.Publish
+
+  /// Subscribes a callback to changes to the DVar.
+  let subs (d:DVar<'a>) (f:'a -> unit)  : unit =
+    d |> changes |> Event.add f
+
+  /// Invokes the callback with the current value of the DVar
+  /// as well as all subsequent values.
+  let iter (f:'a -> unit) (d:DVar<'a>) =
+    f (get d)
+    d |> changes |> Event.add f
+
+  /// Creates DVar derived from the argument DVar through a pure mapping function.
+  /// When the argument changes, the dependant variable changes.
+  let map (f:'a -> 'b) (v:DVar<'a>) : DVar<'b> =
+    let b = f (get v)
+    let dv = create b
+    subs v <| fun a -> let b = f a in put b dv
+    dv
+
+  /// Creates a DVar based on two argument DVars, one storing a function value
+  /// and the other a value to apply the function to. The resulting DVar contains 
+  /// the resulting value and changes based on the two DVars.
+  let ap (f:DVar<'a -> 'b>) (v:DVar<'a>) : DVar<'b> =
+    let b = (get f) (get v)
+    let db = create b
+    subs f <| fun f -> let b = f (get v) in put b db
+    subs v <| fun a -> let f = get f in let b = f a in put b db
+    db
+
+  /// Combine values of two DVars using the specified function.
+  let zipWith (f:'a -> 'b -> 'c) (a:DVar<'a>) (b:DVar<'b>) : DVar<'c> =
+    ap (ap (create f) a) b
+
+  /// Combining two DVars into a single DVar containg tuples.
+  let zip (a:DVar<'a>) (b:DVar<'b>) : DVar<'a * 'b> =
+    zipWith (fun a b -> a,b) a b 
+
+  let bind (f:'a -> DVar<'b>) (v:DVar<'a>) : DVar<'b> =
+    let vb = f (get v)
+    subs v (f >> iter (fun b -> put b vb))
+    vb
+
+  /// Represents a DVar containing a function value as a function value which selects
+  /// the implementation from the DVar on each invocation.
+  let toFun (v:DVar<'a -> 'b>) : 'a -> 'b =
+    fun a -> (get v) a
+
+  /// Creates a DVar given an initial value and binds it to an event.
+  let ofEvent (initial:'a) (e:IEvent<'a>) : DVar<'a> =
+    let dv = create initial
+    e |> Event.add (fun a -> put a dv)
+    dv
+
+  /// Creates a DVar given an initial value and binds it to an observable.
+  let ofObservable (initial:'a) (e:IObservable<'a>) : DVar<'a> =
+    let dv = create initial
+    e |> Observable.add (fun a -> put a dv)
+    dv
+
+  /// Binds a DVar to a ref such that its current value is assigned to the ref
+  /// and the ref is bound to all subsequent updates of the DVar.
+  let bindToRef (r:'a ref) (a:DVar<'a>) =
+    r := (get a)
+    subs a <| fun a -> r := a
+
+  let duplicate (d:DVar<'a>) : DVar<DVar<'a>> =
+    failwith ""
+
+  let extend (f:DVar<'a> -> 'b) (da:DVar<'a>) : DVar<'b> =
+    let b = f da
+    let db = create b
+    da |> iter (fun _ -> let b = f da in put b db)
+    db
+
+      
+  type State<'s, 'a> = 's -> 'a * 's
+
+  /// Returns the sequence of outputs produced by the state transition starting
+  /// with an initial state.
+  let unfold (st:State<'s, 'a>) (s:'s) =
+    Seq.unfold (st >> Some) s
+    
+
+
+
+  /// Returns an async computation which completes when the DVar changes.
+  let nextAsync (d:DVar<'a>) : Async<'a> =
+    Async.FromContinuations <| fun (ok,_,_) ->
+      subs d ok
+
+  /// Starts the async computation and stores the result in the DVar.
+  let putAsync (a:Async<'a>) (d:DVar<'a>) =
+    Async.Start (async {
+      let! a = a
+      put a d })
+    
+  let mapAsync (f:'a -> Async<'b>) (d:DVar<'a>) : Async<DVar<'b>> = async {
+    let! b = f (get d)
+    let dv = create b
+    subs d <| fun a -> 
+      let b = f a
+      putAsync b dv
+    return dv }
+    
+  let zipWithAsync (f:'a -> 'b -> Async<'c>) (a:DVar<'a>) (b:DVar<'b>) : Async<DVar<'c>> = async {
+    let a' = (get a) 
+    let b' = (get b)
+    let! c = f a' b'
+    let dc = create c
+    subs a <| fun a ->       
+      let c = f a (get b)
+      putAsync c dc
+    subs b <| fun b ->       
+      let c = f (get a) b
+      putAsync c dc
+    return dc }
