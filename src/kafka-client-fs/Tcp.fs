@@ -117,21 +117,21 @@ module Socket =
   let disconnect (socket:Socket) (reuse:bool) =
     exec argsAlloc (fun a -> a.DisconnectReuseSocket <- reuse) socket.DisconnectAsync (ignore)
 
-  /// Returns an async sequence each item of which corresponds to a receive on the specified socket.
+  /// Returns an async sequence where each element corresponds to a receive operation.
   /// The sequence finishes when a receive operation completes transferring 0 bytes.
   /// Socket errors are propagated as exceptions.
-  let receiveStream (socket:Socket) : AsyncSeq<ArraySeg<byte>> =
+  let receiveStreamFrom (bufferSize:int) (receive:ArraySeg<byte> -> Async<int>) : AsyncSeq<ArraySeg<byte>> =
 
     let remBuff = ref None
 
     let inline getBuffer () =
       match !remBuff with
       | Some rem -> rem
-      | None -> socket.ReceiveBufferSize |> ArraySeg.ofCount
+      | None -> bufferSize |> ArraySeg.ofCount
 
     let rec go () = asyncSeq {
       let buff = getBuffer ()
-      let! received = receive socket buff
+      let! received = receive buff
       if received = 0 then ()
       else
         let remainder = buff.Count - received
@@ -143,6 +143,12 @@ module Socket =
         yield! go () }
 
     go ()
+
+  /// Returns an async sequence each item of which corresponds to a receive on the specified socket.
+  /// The sequence finishes when a receive operation completes transferring 0 bytes.
+  /// Socket errors are propagated as exceptions.
+  let receiveStream (socket:Socket) : AsyncSeq<ArraySeg<byte>> =
+    receiveStreamFrom socket.ReceiveBufferSize (receive socket)
 
 
 
@@ -290,7 +296,7 @@ type ReqRepSession<'a, 'b, 's> internal
     /// Sends a byte array to the remote host.
     send:ArraySeg<byte> -> Async<int>) =
 
-  static let Log = Log.create "KafkaFs.Session"
+  static let Log = Log.create "KafkaFunk.TcpSession"
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()

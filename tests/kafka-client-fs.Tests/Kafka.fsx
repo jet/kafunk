@@ -24,7 +24,7 @@ let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchrono
 
 metadata.brokers
 |> Seq.iter (fun b ->
-  Log.info "broker|host=%s port=%i nodeId=%i" b.host b.nodeId b.port
+  Log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId 
 )
 
 metadata.topicMetadata

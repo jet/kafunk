@@ -180,18 +180,73 @@ module internal Api =
 /// Request routing to brokers.
 module internal Route =
 
+  /// Gets an IPv4 IPEndPoint given a host and port.
   let private hostEndpoint (host:string, port:int) =
     let ipv4 = Dns.GetHostAddresses host |> Seq.find (fun ip -> ip.AddressFamily = AddressFamily.InterNetwork)
     IPEndPoint(ipv4, port)
   
-  let private concatFetchResponses (rs:FetchResponse[]) =
-    new FetchResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse
+  /// Partitions a fetch request by topic/partition and wraps each one in a request.
+  let private partitionFetchReq (req:FetchRequest) =
+    req.topics
+    |> Seq.collect (fun (tn,ps) -> ps |> Array.map (fun (p,o,mb) -> tn,p,o,mb))
+    |> Seq.groupBy (fun (tn,ps,_,_) ->  tn,ps)
+    |> Seq.map (fun (tp,reqs) ->
+      let topics = 
+        reqs 
+        |> Seq.groupBy (fun (t,_,_,_) -> t)
+        |> Seq.map (fun (t,(ps)) -> t, ps |> Seq.map (fun (_,p,o,mb) -> p,o,mb) |> Seq.toArray)
+        |> Seq.toArray
+      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
+      tp,RequestMessage.Fetch req)
+    |> Seq.toArray
 
-  let private concatProduceResponses (rs:ProduceResponse[]) =
-    new ProduceResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.ProduceResponse
+  /// Unwraps a set of responses as fetch responses and joins them into a single response.
+  let private concatFetchRes (rs:ResponseMessage[]) =
+    rs
+    |> Array.map ResponseMessage.toFetch 
+    |> (fun rs -> new FetchResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse)
 
-  let private concatOffsetResponses (rs:OffsetResponse[]) =
-    new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse
+
+  let private partitionProduceReq (req:ProduceRequest) =
+    req.topics
+    |> Seq.collect (fun (t,ps) -> ps |> Array.map (fun (p,mss,ms) -> t,p,mss,ms))
+    |> Seq.groupBy (fun (t,p,_,_) -> t,p)
+    |> Seq.map (fun (tp,reqs) ->
+      let topics =
+        reqs
+        |> Seq.groupBy (fun (t,_,_,_) -> t)
+        |> Seq.map (fun (t,ps) -> t, ps |> Seq.map (fun (_,p,mss,ms) -> p,mss,ms) |> Seq.toArray)
+        |> Seq.toArray
+      let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
+      tp,RequestMessage.Produce req)
+    |> Seq.toArray
+
+  let private concatProduceResponses (rs:ResponseMessage[]) =
+    rs
+    |> Array.map ResponseMessage.toProduce
+    |> (fun rs -> new ProduceResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.ProduceResponse)
+
+
+  let private partitionOffsetReq (req:OffsetRequest) =
+    req.topics
+    |> Seq.collect (fun (t,ps) -> ps |> Array.map (fun (p,tm,mo) -> t,p,tm,mo))
+    |> Seq.groupBy (fun (t,p,_,_) -> t,p)
+    |> Seq.map (fun (tp,reqs) ->
+      let topics =
+        reqs
+        |> Seq.groupBy (fun (t,_,_,_) -> t)
+        |> Seq.map (fun (t,ps) -> t, ps |> Seq.map (fun (_,p,mss,ms) -> p,mss,ms) |> Seq.toArray)
+        |> Seq.toArray
+      let req = new OffsetRequest(req.replicaId, topics)
+      tp,RequestMessage.Offset req)
+    |> Seq.toArray
+
+  let private concatOffsetResponses (rs:ResponseMessage[]) =
+    rs
+    |> Array.map ResponseMessage.toOffset
+    |> (fun rs -> new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse)
+
+
 
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
@@ -220,64 +275,36 @@ module internal Route =
 
       | Fetch req ->
         return!
-          req.topics
-          |> Seq.collect (fun (tn,ps) -> ps |> Array.map (fun (p,o,mb) -> tn,p,o,mb))
-          |> Seq.groupBy (fun (tn,ps,_,_) ->  tn,ps)
-          |> Seq.map (fun (tp,reqs) ->
+          req
+          |> partitionFetchReq 
+          |> Seq.map (fun (tp,req) ->
             match topicPartitions |> Dict.tryGet tp with
-            | Some send -> 
-              let topics = 
-                reqs 
-                |> Seq.groupBy (fun (t,_,_,_) -> t)
-                |> Seq.map (fun (t,(ps)) -> t, ps |> Seq.map (fun (_,p,o,mb) -> p,o,mb) |> Seq.toArray)
-                |> Seq.toArray
-              let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
-              send (RequestMessage.Fetch req)
-            | None -> 
-              failwith ""
-          )
+            | Some send -> send req
+            | None -> failwith "Unable to find route!")
           |> Async.Parallel
-          |> Async.map (Array.map ResponseMessage.toFetch >> concatFetchResponses)
+          |> Async.map concatFetchRes
 
       | Produce req ->
         return!
-          req.topics
-          |> Seq.collect (fun (t,ps) -> ps |> Array.map (fun (p,mss,ms) -> t,p,mss,ms))
-          |> Seq.groupBy (fun (t,p,_,_) -> t,p)
-          |> Seq.map (fun (tp,reqs) ->
+          req
+          |> partitionProduceReq
+          |> Seq.map (fun (tp,req) ->
             match topicPartitions |> Dict.tryGet tp with
-            | Some send ->
-              let topics =
-                reqs
-                |> Seq.groupBy (fun (t,_,_,_) -> t)
-                |> Seq.map (fun (t,ps) -> t, ps |> Seq.map (fun (_,p,mss,ms) -> p,mss,ms) |> Seq.toArray)
-                |> Seq.toArray
-              let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
-              send (RequestMessage.Produce req)
-            | None ->
-              failwith "")
+            | Some send -> send req
+            | None -> failwith "")
           |> Async.Parallel
-          |> Async.map (Array.map ResponseMessage.toProduce >> concatProduceResponses)
+          |> Async.map (concatProduceResponses)
              
       | Offset req ->
         return!
-          req.topics
-          |> Seq.collect (fun (t,ps) -> ps |> Array.map (fun (p,tm,mo) -> t,p,tm,mo))
-          |> Seq.groupBy (fun (t,p,_,_) -> t,p)
-          |> Seq.map (fun (tp,reqs) ->
+          req
+          |> partitionOffsetReq
+          |> Seq.map (fun (tp,req) ->
             match topicPartitions |> Dict.tryGet tp with
-            | Some send ->
-              let topics =
-                reqs
-                |> Seq.groupBy (fun (t,_,_,_) -> t)
-                |> Seq.map (fun (t,ps) -> t, ps |> Seq.map (fun (_,p,mss,ms) -> p,mss,ms) |> Seq.toArray)
-                |> Seq.toArray
-              let req = new OffsetRequest(req.replicaId, topics)
-              send (RequestMessage.Offset req)
-            | None ->
-              failwith "")
+            | Some send -> send req
+            | None -> failwith "")
           |> Async.Parallel
-          |> Async.map (Array.map ResponseMessage.toOffset >> concatOffsetResponses)
+          |> Async.map (concatOffsetResponses)
       
       | GroupCoordinator _ ->
         return! bootstrap req
@@ -337,79 +364,403 @@ module internal Conn =
   let private decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
     let res = ResponseMessage.readApiKey (data, apiKey)
     res   
+        
+
+  type AsyncFunc<'a, 'b> = 'a -> Async<'b>
+
+  module AsyncFunc =
+
+    let recover2 (recoverOp:'b -> Async<('a -> Async<'b>)> option) (op:'a -> Async<'b>) : 'a -> Async<'b> =
+      let rwl = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion)
+      let mutable op = op
+      let mutable state = 0 // 0 = ok | 1 = error | 2 = recovering
+      let rec go a = async {
+        rwl.EnterReadLock()
+        let! b = op a
+        rwl.ExitReadLock()
+        match recoverOp b with
+        | None ->
+          return b
+        | Some recover ->          
+          rwl.EnterWriteLock()
+          if Interlocked.CompareExchange(&state, 2, 2) = 2 then
+            let! op' = recover
+            op <- op'
+            rwl.ExitWriteLock()
+          else
+            rwl.ExitWriteLock()
+
+            ()
+          return! go a }
+      go
+
+    /// Given an operation which possibly returns a failure, returns an operation which attempts to recover from failures
+    /// using the specified recovery function. If the recovery function throws an exception, the exception is escalated.
+    /// The pattern is to mask explicit failures with recovery, escalating using exceptions during exceptional cases.
+    let recover (recoverOp:'e -> Async<('a -> Async<Choice<'b, 'e>>)>) (op:'a -> Async<Choice<'b, 'e>>) : 'a -> Async<'b> =
+      let rwl = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion)
+      let mutable op = op      
+      let rec go a = async {
+        rwl.EnterReadLock()
+        let! r = op a
+        rwl.ExitReadLock()
+        match r with
+        | Choice1Of2 b -> 
+          return b
+        | Choice2Of2 e ->
+          rwl.EnterWriteLock()
+          let! op' = recoverOp e
+          op <- op'
+          rwl.ExitWriteLock()
+          return! go a }
+      go
+    
+    let catchRecover (recoverOp:exn -> Async<('a -> Async<'b>)>) (op:'a -> Async<'b>) : 'a -> Async<'b> =
+      recover (recoverOp >> Async.map (fun x -> x >> Async.Catch)) (op >> Async.Catch) 
+
+    let recoverSelf (recoverOp:'e -> Async<unit>) (op:'a -> Async<Choice<'b, 'e>>) : 'a -> Async<'b> =
+      recover (recoverOp >> Async.map (fun _ -> op)) op
+
+    
+    let joinRecover (recoverfg:'e -> Async<('a -> Async<Choice<'b, 'e>>) * ('a -> Async<Choice<'b, 'e>>)>) (f:'a -> Async<Choice<'b, 'e>>) (g:'a -> Async<Choice<'b, 'e>>) : ('a -> Async<'b>) * ('a -> Async<'b>) =
+      let rwl = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion)
+      let mutable f = f
+      let mutable g = g
+      let rec go fn a = async {
+        rwl.EnterReadLock()
+        let! r = fn a
+        rwl.ExitReadLock()
+        match r with
+        | Choice1Of2 b -> 
+          return b
+        | Choice2Of2 e ->
+          rwl.EnterWriteLock()
+          let! f',g' = recoverfg e
+          f <- f'
+          g <- g'
+          rwl.ExitWriteLock()
+          return! go fn a }
+      (go f),(go g)
+      
+  
+
+    /// Maps over the input to an arrow.
+    let mapInAsync (f:AsyncFunc<'c, 'a>) (a:AsyncFunc<'a, 'b>) : AsyncFunc<'c, 'b> =
+      f >> Async.bind a
+
+    /// Maps over the output of an arrow.
+    let mapOut (f:'b -> 'c) (a:AsyncFunc<'a, 'b>) : AsyncFunc<'a, 'c> =
+      a >> Async.map f
+
+    /// Maps over the output of an arrow.
+    let mapOutAsync (f:AsyncFunc<'b, 'c>) (a:AsyncFunc<'a, 'b>) : AsyncFunc<'a, 'c> =
+      a >> Async.bind f
+    
+    let mapSuccess (f:'b -> 'c) (func:'a -> Async<Choice<'b, 'e>>) : 'a -> Async<Choice<'c, 'e>> =
+      func >> Async.map (Choice.mapSuccess f)
+
+    let mapSuccessAsync (f:'b -> Async<'c>) (func:'a -> Async<Choice<'b, 'e>>) : 'a -> Async<Choice<'c, 'e>> =
+      func >> AsyncChoice.bindSuccess f
+
+    let choice (f:'a -> Async<'b>) (g:'c -> Async<'d>) : Choice<'a, 'c> -> Async<Choice<'b, 'd>> =
+      function
+      | Choice1Of2 a -> f a |> Async.map Choice1Of2
+      | Choice2Of2 b -> g b |> Async.map Choice2Of2
+
+
+  type Reader<'r, 'a> = 'r -> 'a
+
+  module Reader =
+
+    let create a : Reader<'r, 'a> = 
+      fun _ -> a
+    
+    let run : 'r -> Reader<'r, 'a> -> 'a = 
+      (|>)
+
+    let inline map (f:'a -> 'b) (r:Reader<'r, 'a>) : Reader<'r, 'b> =
+      r >> f
+
+    let inline bind (f:'a -> Reader<'r, 'b>) (r:Reader<'r, 'a>) : Reader<'r, 'b> =
+      fun c -> let a = r c in (f a) c
+
+    let inline ap (rf:Reader<'r, 'a -> 'b>) (r:Reader<'r, 'a>) : Reader<'r, 'b> =
+      fun c ->
+        let f = rf c in
+        let a = r c in
+        f a
+
+    let inline zip (ra:Reader<'r, 'a>) (rb:Reader<'r, 'b>) : Reader<'r, 'a * 'b> =
+      fun c ->
+        let a = ra c in
+        let b = rb c in
+        a,b
+
+    let inline zip3 (ra:Reader<'r, 'a>) (rb:Reader<'r, 'b>) (rc:Reader<'r, 'c>) : Reader<'r, 'a * 'b * 'c> =
+      fun c ->
+        let a = ra c in
+        let b = rb c in
+        let c = rc c in
+        a,b,c
+
+    
+
+
+
+
+  type AsyncStream<'a> = Async<AsyncStreamCons<'a>>
+
+  and AsyncStream<'a, 'b> = Async<AsyncStreamCons<'a, 'b>>
+
+  and AsyncStreamCons<'a> = AsyncStreamCons of 'a * AsyncStream<'a>
+ 
+  and AsyncStreamCons<'a, 'b> = AsyncStreamCons2 of 'a * AsyncStream<'b>
+
+  module AsyncStreamCons =
+    
+    let inline extract (AsyncStreamCons (a,_)) = a
+
+    let rec repeat a = 
+      AsyncStreamCons (a, async.Delay (fun () -> async.Return (repeat a)))
+
+    let rec repeatAsync a : AsyncStream<'a> =
+      a |> Async.map (fun a' -> AsyncStreamCons (a', repeatAsync a))
+
+    let rec map (f:'a -> 'b) (AsyncStreamCons (a,tl)) =
+      AsyncStreamCons (f a, tl |> Async.map (map f))
+
+    let rec mapAsync (f:'a -> Async<'b>) (AsyncStreamCons (a,tl)) =
+      f a |> Async.map (fun b -> AsyncStreamCons (b, tl |> Async.bind (mapAsync f)))
+
+    let rec unfold (f:'s -> ('a * 's)) (s:'s) : AsyncStreamCons<'a> =
+      let a,s' = f s in
+      AsyncStreamCons (a, async.Delay (fun () -> async.Return (unfold f s')))
+      
+    let rec unfoldAsync (f:'s -> Async<('a * 's)>) (s:'s) : AsyncStream<'a> =
+      f s |> Async.map (fun (a,s') -> AsyncStreamCons (a, async.Delay (fun () -> unfoldAsync f s')))
+
+    let rec iterAsync (f:'a -> Async<unit>) (AsyncStreamCons (a,tl)) : Async<unit> =
+      f a |> Async.bind (fun _ -> tl |> Async.bind (iterAsync f))
+
+    let rec chooseAsync (f:'a -> Async<'b option>) (AsyncStreamCons (a,tl)) : AsyncStream<'b> =
+      f a |> Async.bind (function 
+        | Some b -> AsyncStreamCons (b, tl |> Async.bind (chooseAsync f)) |> async.Return
+        | None -> tl |> Async.bind (chooseAsync f))
+
+    let rec pickAsync (f:'a -> Async<'b option>) (AsyncStreamCons (a,tl)) : Async<'b * AsyncStream<'a>> =
+      f a |> Async.bind (function 
+        | Some b -> async.Return (b, tl)
+        | None -> tl |> Async.bind (pickAsync f))
+
+    //let rec trace (f:'s * 'a -> Async<'b * 's>)
+
+    let rec zapAsync (AsyncStreamCons (f,tlf)) (AsyncStreamCons (a,tla)) : AsyncStreamCons<'b> =
+      AsyncStreamCons (f a, Async.Parallel (tlf,tla) |> Async.map ((<||) zapAsync))
+
+    let rec zipAsync (AsyncStreamCons (a,tla)) (AsyncStreamCons (b,tlb)) : AsyncStreamCons<'a * 'b> =
+      AsyncStreamCons ((a,b), Async.Parallel (tla,tlb) |> Async.map ((<||) zipAsync))
+
+
+
+  type AsyncAlt<'a> = 
+    private
+    | Now of 'a
+    | Await of Async<'a>
+
+
+
+  /// A recoverable operation.
+  /// For example: Socket -> (byte[] -> Async<int>)
+  type Recover<'c, 'i, 'o, 'e> = Reader<'c, 'i -> Async<Choice<'o, 'e>>>
+
+  type RecoverAsync<'a, 'b> = ('a -> Async<'b>) * Async<unit>
+
+  module Recover =
+    
+    let mapSuccess (f:'o -> 'o2) (r:Recover<'c, 'i, 'o, 'e>) : Recover<'c, 'i, 'o2, 'e> =
+      r |> Reader.map (AsyncFunc.mapSuccess f)
+
+    let mapSuccessAsync (f:'o -> Async<'o2>) (r:Recover<'c, 'i, 'o, 'e>) : Recover<'c, 'i, 'o2, 'e> =
+      r |> Reader.map (AsyncFunc.mapSuccessAsync f)
+
+    //let recover ()
+
+    let zip (r:'e -> Async<unit>) (r1:Recover<'c, 'i1, 'o1, 'e>) (r2:Recover<'c, 'i2, 'o2, 'e>) : Recover<'c, Choice<'i1, 'i2>, Choice<'o1, 'o2>, 'e> =
+      failwith ""
+
+    
+    let joinRecover (re:'e -> Async<unit>) (r1:Recover<'c, 'i1, 'o1, 'e>) (r2:Recover<'c, 'i2, 'o2, 'e>) : 'c -> ('i1 -> Async<'o1>) * ('i2 -> Async<'o2>) =
+      // recover: (Socket * exn) -> Async<Socket>
+      // op1: Socket -> (byte[] -> Async<Choice<int, exn>>)
+      // op2: Socket -> (byte[] -> Async<Choice<int, exn>>)      
+      // Socket -> (byte[] -> Async<int>) * (byte[] -> Async<int>)
+      failwith ""
+
+
+    let trace (f:'a * Lazy<'c> -> Async<'b * 'c>) : 'a -> Async<'b> =
+      let cc = ref Unchecked.defaultof<_>
+      let c = lazy (!cc)
+      fun a -> async {
+        let! (b,c) = f (a, c)
+        cc := c
+        return b }
+
+    let trace2 (f:'a * 'c option -> Async<'b * 'c>) : 'a -> Async<'b> =
+      let cc = ref None
+      fun a -> async {
+        let! (b,c) = f (a,!cc)
+        cc := (Some c)
+        return b }
+      
+    
+
 
 
   /// Establishes a fault-tolerant connection to the specified endpoint.
-  let connect (ep:IPEndPoint, clientId:ClientId) = async {
-       
-    let ep = DVar.create ep
-    
-    let connSocket =
-      ep
-      |> DVar.map (fun ep ->
-        let s = new Socket(ep.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
-        //s.ReceiveBufferSize <- 8192
-        //s.SendBufferSize <- 8192
-        s.NoDelay <- true
-        s.ExclusiveAddressUse <- true
-        s)
-    
-    Log.info "connecting...|client_id=%s" clientId
+  (*
+    # PROTOCOL
 
-    let! sendRcvSocket =  
-      (connSocket,ep)
-      ||> DVar.zipWithAsync (Socket.connect)
+    - Intercept Socket exceptions
+    - If recoverable, then recover (in this case, reconnect).
+    - Otherwise, throw exception.
+
+    ## Q&A
+
+    - What is the recovery (and cleanup) for a connection?
+
+
+  *)
+
+  type AsyncFuncError<'a, 'b, 'e> = 'a -> Async<Choice<'b, 'e>>
+
+  type AsyncFuncExn<'a, 'b> = 'a -> AsyncFuncError<'a, 'b, exn>
+
+  
+
+  let disposeAll (ds:#IDisposable list) : unit -> unit =
+    fun () -> ds |> Seq.iter (fun d -> d.Dispose())
+
+  let disposer (d:#IDisposable) : unit -> unit =
+    fun () -> d.Dispose()
+
+
+  let rec connect (ep:IPEndPoint) = async {
+   
+    let clientId : ClientId = Guid.NewGuid().ToString("N")
+    let receiveBufferSize = 8192
+
+    /// Builds the resource.
+    let conn () = async {
+      let connSocket =
+        new Socket(
+          ep.AddressFamily, 
+          SocketType.Stream, 
+          ProtocolType.Tcp, 
+          NoDelay=true, 
+          ExclusiveAddressUse=true)
+      Log.info "connecting...|client_id=%s" clientId
+      let! sendRcvSocket = Socket.connect connSocket ep // TODO: dispose
+      connSocket.Dispose()
+      Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint     
+      return sendRcvSocket }
+
+    let! sendRcvSocket = conn ()
+    let sendRcvSocket = DVar.create sendRcvSocket
+    //let dispose = DVar.create dispose
       
-    sendRcvSocket 
-    |> DVar.iter (fun sendRcvSocket -> 
-      Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint)
+    let receive = 
+      sendRcvSocket 
+      |> DVar.mapFun Socket.receive
     
+    let sendAll = 
+      sendRcvSocket 
+      |> DVar.mapFun Socket.sendAll 
+      
+    
+
+
+    let recover (s:Socket) = async {
+      Log.warn "Received 0 bytes. TCP connection was closed. Reconnecting..."
+      s.Dispose()
+      // dispose
+      return () }
+
+    let reset () = async {
+      Log.warn "Received 0 bytes. TCP connection was closed. Reconnecting..."
+      //let disp = DVar.get dispose
+      //disp ()
+      // TODO: check retry count and possibly escalate
+      let! sendRcvSocket' = conn ()
+      DVar.put sendRcvSocket' sendRcvSocket }
+
+    
+    let magic = failwith ""
+
+
+    // to allow on-demand recovery, the recoverable entity must be accompanied by a recovery function
+    // the recovery function is to be accessed from a higher-layer
+
+
+
+    let receiveError buf = 
+      receive buf
+      |> Async.map (fun received -> 
+        if received = 0 then Choice2Of2 SocketError.Success 
+        else Choice1Of2 received)
+      
+    let sendAllError data =
+      sendAll data
+      |> Async.Catch
+
+    // ((c -> Async<(i1 -> Async<Choice<o2, e1>>)>) * (e1 -> Async<unit>)) *
+    // ((c -> Async<(i2 -> Async<Choice<o2, e2>>)>) * (e2 -> Async<unit>)) :
+    // ((c -> Async<(i1 -> Async<o1>) * (i2 -> Async<o2>)>)
+
+
+
+
+
+
+    let (sendAll:ArraySeg<byte>[] -> Async<int>, receive:ArraySeg<byte> -> Async<int>) =
+      magic Socket.sendAll Socket.receive
+
+
+    // a fault-tolerance receive operation
+    // on error, reconnects and retries
+    let receive buf =
+      receive buf
+      |> Async.bind (fun received -> async {
+        if received = 0 then
+          do! reset ()
+          return! receive buf
+        else 
+          return received })
+
+
     /// An unframed input stream.  
     let inputStream =
-      sendRcvSocket
-      |> DVar.map (fun sendRcvSocket -> 
-        Socket.receiveStream sendRcvSocket 
-        |> Framing.LengthPrefix.unframe
-        |> Async.tryFinally (fun () ->
-          Log.info "TCP connection closed."
-        ))
-
-    let rec send =
-      sendRcvSocket
-      |> DVar.map (fun sendRcvSocket ->
-          fun (data:ArraySeg<byte>) ->
-            let framed = data |> Framing.LengthPrefix.frame
-            Socket.sendAll sendRcvSocket framed
-            |> Async.Catch
-            |> Async.bind (function
-              | Choice1Of2 sent -> async.Return sent
-              | Choice2Of2 ex -> async {
-                // TODO: check error, restart workflow
-                DVar.ping ep
-                return! send data }))
-      |> DVar.toFun
+      Socket.receiveStreamFrom receiveBufferSize receive
+      |> Framing.LengthPrefix.unframe
 
     /// A framing sender.
-    let rec send =
-      sendRcvSocket
-      |> DVar.map (fun sendRcvSocket ->
-          fun (data:ArraySeg<byte>) ->
-            let framed = data |> Framing.LengthPrefix.frame
-            Socket.sendAll sendRcvSocket framed
-            |> Async.Catch
-            |> Async.bind (function
-              | Choice1Of2 sent -> async.Return sent
-              | Choice2Of2 ex -> async {
-                // TODO: check error, restart workflow
-                DVar.ping ep
-                let! s = DVar.nextAsync send
-                return! s data }))
+    let send (data:ArraySeg<byte>) =
+      let framed = data |> Framing.LengthPrefix.frame
+      sendAll framed
+
+    /// Encodes the request into a session layer request, keeping ApiKey as state.
+    let encode (req:RequestMessage, correlationId:CorrelationId) =
+      let req = Request(ApiVersion, correlationId, clientId, req)  
+      let sessionData = toArraySeg req 
+      sessionData,req.apiKey
+      
+    /// Decodes the session layer input and session state into a response.
+    let decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
+      let res = ResponseMessage.readApiKey (data, apiKey)
+      res   
 
     let session = 
-      (inputStream,send)
-      ||> DVar.zipWith (fun inputStream send ->
-        Session.requestReply
-          Session.corrId (encode clientId) decode inputStream send)
+      Session.requestReply
+        Session.corrId encode decode inputStream send
 
     return session }
 
@@ -463,51 +814,50 @@ and KafkaConn internal (reqRepSession:ReqRepSession<_,_,_>) =
     
   static let ApiVersion : ApiVersion = 0s
 
-  static let Log = Log.create "Marvel.Kafka"
+  static let Log = Log.create "KafkaFunc.Conn"
 
   member internal x.Send (req:RequestMessage) : Async<ResponseMessage> =
     reqRepSession.Send req
 
   static member internal connect (ep:IPEndPoint) = async {
    
-    let clientId : ClientId = Guid.NewGuid().ToString("N")
+    let! session = Conn.connect ep
 
-    let connSocket =
-      let s = new Socket(ep.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
-      //s.ReceiveBufferSize <- 8192
-      //s.SendBufferSize <- 8192
-      s.NoDelay <- true
-      s.ExclusiveAddressUse <- true
-      s
-
-    Log.info "connecting...|client_id=%s" clientId
-    let! sendRcvSocket = Socket.connect connSocket ep
-    Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint     
-
-    /// Encodes the request into a session layer request, keeping ApiKey as state.
-    let encode (req:RequestMessage, correlationId:CorrelationId) =
-      let req = Request(ApiVersion, correlationId, clientId, req)  
-      let sessionData = toArraySeg req 
-      sessionData,req.apiKey
-      
-    /// Decodes the session layer input and session state into a response.
-    let decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
-      let res = ResponseMessage.readApiKey (data, apiKey)
-      res   
-
-    /// An unframed input stream.  
-    let inputStream =
-      Socket.receiveStream sendRcvSocket
-      |> Framing.LengthPrefix.unframe
-
-    /// A framing sender.
-    let send (data:ArraySeg<byte>) =
-      let framed = data |> Framing.LengthPrefix.frame
-      Socket.sendAll sendRcvSocket framed
-
-    let session = 
-      Session.requestReply
-        Session.corrId encode decode inputStream send
+//    let clientId : ClientId = Guid.NewGuid().ToString("N")
+//
+//    let connSocket =
+//      let s = new Socket(ep.AddressFamily, SocketType.Stream, ProtocolType.Tcp, NoDelay=true)
+//      s.ExclusiveAddressUse <- true
+//      s
+//
+//    Log.info "connecting...|client_id=%s" clientId
+//    let! sendRcvSocket = Socket.connect connSocket ep
+//    Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint     
+//
+//    /// Encodes the request into a session layer request, keeping ApiKey as state.
+//    let encode (req:RequestMessage, correlationId:CorrelationId) =
+//      let req = Request(ApiVersion, correlationId, clientId, req)  
+//      let sessionData = toArraySeg req 
+//      sessionData,req.apiKey
+//      
+//    /// Decodes the session layer input and session state into a response.
+//    let decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
+//      let res = ResponseMessage.readApiKey (data, apiKey)
+//      res   
+//
+//    /// An unframed input stream.  
+//    let inputStream =
+//      Socket.receiveStream sendRcvSocket
+//      |> Framing.LengthPrefix.unframe
+//
+//    /// A framing sender.
+//    let send (data:ArraySeg<byte>) =
+//      let framed = data |> Framing.LengthPrefix.frame
+//      Socket.sendAll sendRcvSocket framed
+//
+//    let session = 
+//      Session.requestReply
+//        Session.corrId encode decode inputStream send
 
     return KafkaConn(session) }
 

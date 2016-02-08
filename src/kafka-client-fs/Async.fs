@@ -7,6 +7,7 @@ open System
 open System.Threading
 open System.Threading.Tasks
 open System.Collections.Generic
+open System.Collections.Concurrent
 
 type internal MbReq<'a> =
   | Put of 'a
@@ -69,6 +70,78 @@ module Mb =
 
 
 
+
+
+type AsyncCh<'a> () =
+
+  let readers = ConcurrentQueue<'a -> unit>()
+  let writers = ConcurrentQueue<'a * (unit -> unit)>()
+  let spawn k = ThreadPool.QueueUserWorkItem(fun _ -> k ()) |> ignore
+
+  member __.Take readerOk =
+    let w = ref Unchecked.defaultof<_>
+    if writers.TryDequeue w then
+      let (value,writerOk) = !w
+      spawn writerOk
+      readerOk value
+    else
+      readers.Enqueue readerOk
+
+  member __.Fill (x:'a, writerOk:unit -> unit) =
+    let r = ref Unchecked.defaultof<_>
+    if readers.TryDequeue r then
+      let readerOk = !r
+      spawn writerOk
+      readerOk x
+    else
+      writers.Enqueue(x, writerOk)
+
+  /// Creates an async computation which completes when a value is available in the channel.
+  member inline this.Take() =
+    Async.FromContinuations <| fun (ok, _, _) -> this.Take ok
+
+  /// Creates an async computation which completes when the provided value is read from the channel.
+  member inline this.Fill x =
+    Async.FromContinuations <| fun (ok, _, _) -> this.Fill(x, ok)
+
+  /// Queues a write to the channel.
+  member this.EnqueueFill x =
+    writers.Enqueue(x, id)
+
+
+/// Operations on channels.
+module AsyncCh =
+
+  /// Creates an empty channel.
+  let inline create() = AsyncCh<'a>()
+
+  /// Creates a channel initialized with a value.
+  let inline createFull a =
+    let ch = create()
+    ch.EnqueueFill a
+    ch
+
+  /// Creates an async computation which completes when a value is available in the channel.
+  let inline take (ch:AsyncCh<'a>) = ch.Take()
+
+  /// Blocks until a value is available in the channel.
+  let inline takeNow (ch:AsyncCh<'a>) = take ch |> Async.RunSynchronously
+
+  /// Creates an async computation which completes when the provided value is read from the channel.
+  let inline fill a (ch:AsyncCh<'a>) = ch.Fill a
+
+  /// Starts an async computation which writes a value to a channel.
+  let inline fillNow a (ch:AsyncCh<'a>) = fill a ch |> Async.Start
+
+  /// Creates an async computation which completes when the provided value is read from the channel.
+  let inline enqueueFill a (ch:AsyncCh<'a>) = ch.EnqueueFill a
+
+
+
+
+
+
+
 [<AutoOpen>]
 module AsyncEx =
 
@@ -82,9 +155,7 @@ module AsyncEx =
         if t.IsFaulted then err(t.Exception)
         elif t.IsCanceled then cnc(OperationCanceledException("Task wrapped with Async.AwaitTask has been cancelled.",  t.Exception))
         elif t.IsCompleted then ok()
-        else failwith "invalid Task state!"
-      )
-      |> ignore
+        else failwith "invalid Task state!") |> ignore
 
   let awaitTaskCancellationAsError (t:Task<'a>) : Async<'a> =
     Async.FromContinuations <| fun (ok,err,_) ->
@@ -92,9 +163,7 @@ module AsyncEx =
         if t.IsFaulted then err t.Exception
         elif t.IsCanceled then err (OperationCanceledException("Task wrapped with Async has been cancelled."))
         elif t.IsCompleted then ok t.Result
-        else failwith "invalid Task state!"
-      )
-      |> ignore
+        else failwith "invalid Task state!") |> ignore
 
   let awaitTaskUnitCancellationAsError (t:Task) : Async<unit> =
     Async.FromContinuations <| fun (ok,err,_) ->
@@ -102,9 +171,7 @@ module AsyncEx =
         if t.IsFaulted then err t.Exception
         elif t.IsCanceled then err (OperationCanceledException("Task wrapped with Async has been cancelled."))
         elif t.IsCompleted then ok ()
-        else failwith "invalid Task state!"
-      )
-      |> ignore
+        else failwith "invalid Task state!") |> ignore
 
 
   type Async with
@@ -359,3 +426,27 @@ module AsyncEx =
       match r with
       | Choice1Of2 a -> return a
       | Choice2Of2 ex -> return raise (f ex) }
+
+
+module AsyncChoice =
+  
+  let mapSuccessAsync (f:'a -> Async<'c>) (c:Choice<'a, 'b>) : Async<Choice<'c, 'b>> =
+    match c with
+    | Choice1Of2 a -> f a |> Async.map Choice1Of2
+    | Choice2Of2 b -> async.Return (Choice2Of2 b)
+
+  let mapSuccess (f:'a -> 'c) (a:Async<Choice<'a, 'b>>) : Async<Choice<'c, 'b>> =
+    a |> Async.map (Choice.mapSuccess f)
+
+  let bindSuccess (f:'a -> Async<'c>) (a:Async<Choice<'a, 'b>>) : Async<Choice<'c, 'b>> =
+    a |> Async.bind (function 
+      | Choice1Of2 a -> f a |> Async.map Choice1Of2 
+      | Choice2Of2 b -> async.Return (Choice2Of2 b))
+
+  let mapError (f:'b -> 'c) (a:Async<Choice<'a, 'b>>) : Async<Choice<'a, 'c>> =
+    a |> Async.map (Choice.mapError f)
+
+  let bindError (f:'b -> Async<'c>) (a:Async<Choice<'a, 'b>>) : Async<Choice<'a, 'c>> =
+    a |> Async.bind (function 
+      | Choice1Of2 a -> async.Return (Choice1Of2 a)
+      | Choice2Of2 b -> f b |> Async.map Choice2Of2)
