@@ -450,3 +450,461 @@ module AsyncChoice =
     a |> Async.bind (function 
       | Choice1Of2 a -> async.Return (Choice1Of2 a)
       | Choice2Of2 b -> f b |> Async.map Choice2Of2)
+
+
+
+
+type IVar<'a> = TaskCompletionSource<'a>
+
+module IVar =
+    
+  let create<'a> = IVar<'a>()
+
+  let createFull (a:'a) : IVar<'a> = 
+    let iv = create<'a>
+    iv.SetResult(a)
+    iv
+
+  let put (a:'a) (iv:IVar<'a>) = 
+    iv.SetResult a |> ignore
+
+  let error (e:exn) (iv:IVar<'a>) =
+    iv.SetException e |> ignore
+
+  let get (iv:IVar<'a>) : Async<'a> =
+    iv.Task |> Async.AwaitTask
+
+
+
+
+
+type AsyncObs<'a> = 'a option -> Async<unit>
+
+module AsyncObs =
+  
+  let mapIn (f:'b option -> 'a) : AsyncObs<'a> -> AsyncObs<'b> =
+    failwith ""
+
+  let tryFinallyAsync (f:Async<unit>) (o:AsyncObs<'a>) : AsyncObs<'a> =
+    function 
+    | Some a -> o (Some a) 
+    | None -> o (None) |> Async.bind (fun _ -> f)
+
+  let tryFinally (comp:unit -> unit) (o:AsyncObs<'a>) : AsyncObs<'a> =
+    tryFinallyAsync (async { do comp () }) o
+    
+  
+
+
+type AsyncEvt<'a> = AsyncObs<'a> -> Async<unit>
+
+module AsyncEvt = 
+
+  open System.Threading    
+
+  let internal create (f:AsyncObs<'a> -> Async<unit>) : AsyncEvt<'a> =
+    f
+
+  let internal apply (xs:AsyncEvt<'a>) (obs:AsyncObs<'a>) : Async<unit> =
+    xs obs
+
+  let internal delayAsync (xs:Async<AsyncEvt<'a>>) : AsyncEvt<'a> =
+    create <| fun obs -> async {
+      let! xs = xs
+      do! apply xs obs }
+
+  let foldAsync (f:'b -> 'a -> Async<'b>) (z:'b) (xs:AsyncEvt<'a>) : Async<'b> = async {
+    let tcs = TaskCompletionSource<'b>()
+    let mutable b = z
+    do! xs (function 
+      | Some a -> f b a |> Async.map (fun b' -> Interlocked.Exchange(&b, b') |> ignore)
+      | None -> tcs.SetResult(b) ; Async.empty)
+    return! tcs.Task |> Async.AwaitTask }
+
+  let unfoldAsync (f:'s -> Async<('a * 's) option>) (s:'s) : AsyncEvt<'a> =
+    create (fun obs -> async {      
+      let rec go (s:'s) =
+        f s
+        |> Async.bind (function 
+          | Some (a,s') -> 
+            Async.Parallel (obs (Some a), go s')                        
+          | None ->  
+            obs None)      
+      return! go s })
+
+  let mapObs (f:AsyncObs<'b> -> AsyncObs<'a>) (xs:AsyncEvt<'a>) : AsyncEvt<'b> =
+    create (fun obsA -> f obsA |> xs)
+    
+  let append (xs1:AsyncEvt<'a>) (xs2:AsyncEvt<'a>) : AsyncEvt<'a> =
+    create (fun obs -> apply xs1 (function Some a -> obs (Some a) | None -> apply xs2 obs))
+      
+  let empty<'a> : AsyncEvt<'a> =
+    create ((|>) None)
+  
+  let tryPick (f:'a -> Async<'b option>) (xs:AsyncEvt<'a>) : Async<'b option> = async {
+    let tcs = IVar.create
+    do! apply xs (function 
+      | Some a -> async {
+        let! b = f a          
+        match b with
+        | Some b -> IVar.put (Some b) tcs 
+        | None -> ()
+        return () }
+      | None -> async { IVar.put None tcs })
+    return! tcs.Task |> Async.AwaitTask }
+          
+  let take (count:int) (xs:AsyncEvt<'a>) : AsyncEvt<'a> =
+    create <| fun obs ->
+      let mutable i = 0
+      apply xs (function
+        | Some a -> async {
+          do! obs (Some a)
+          if Interlocked.Increment &i = count then
+            do! obs None }
+        | None -> async {
+          do! obs None })
+      
+  let singleton (a:'a) : AsyncEvt<'a> =
+    create (fun obs -> obs (Some a))
+
+  let singletonAsync (a:Async<'a>) : AsyncEvt<'a> =
+    delayAsync (a |> Async.map singleton)
+
+  let cons (a:'a) (xs:AsyncEvt<'a>) =
+    append (singleton a) (xs)
+
+  let interval (periodMs:int) : AsyncEvt<DateTime> =
+    create <| fun obs -> async {
+      while true do
+        do! Async.Sleep periodMs
+        do! obs (Some (DateTime.UtcNow)) }      
+
+
+
+
+
+type AsyncObs<'a, 'b> = 'a option -> Async<'b option>
+
+type AsyncPipe<'a, 'b> = AsyncObs<'a, 'b> -> Async<'b option>
+
+type AsyncPipe<'a> = AsyncPipe<'a, unit>
+
+module AysncPipe =
+  
+  let internal create (f:AsyncObs<'a, 'b> -> Async<'b option>) : AsyncPipe<'a, 'b> =    
+    f
+
+  let internal apply (xs:AsyncPipe<'a, 'b>) (obs:AsyncObs<'a, 'b>) : Async<'b option> =
+    xs obs
+
+  let unfoldAsync (f:'s -> Async<('a * 's) option>) (s:'s) : AsyncPipe<'a, 'b> =
+    create (fun obs -> async {      
+      let rec go (s:'s) =
+        f s
+        |> Async.bind (function 
+          | Some (a,s') -> async {            
+            let! r = obs (Some a)
+            match r with
+            | Some b -> return Some b
+            | None -> return! go s' }
+          | None ->  
+            obs None)
+      return! go s })
+
+  
+
+  
+
+
+
+
+
+type AsyncEvtSrc<'a> = AsyncEvtSrc of IVar<('a * AsyncEvtSrc<'a>) option>
+  
+module AsyncEvtSrc =
+    
+  let inline un (AsyncEvtSrc(iv)) = iv
+
+  let create<'a> : AsyncEvtSrc<'a> = 
+    AsyncEvtSrc (IVar.create)
+
+  let createFull (a:'a) : AsyncEvtSrc<'a> =
+    AsyncEvtSrc (IVar.createFull (Some (a, create)))
+
+  let put (a:'a) (xs:AsyncEvtSrc<'a>) : unit = 
+    (un xs) |> IVar.put (Some (a, create))
+
+  let error (e:exn) (xs:AsyncEvtSrc<'a>) : unit = 
+    (un xs) |> IVar.error e
+
+  let close (xs:AsyncEvtSrc<'a>) : unit =
+    (un xs) |> IVar.put None
+
+  let asAsyncEvt (xs:AsyncEvtSrc<'a>) : AsyncEvt<'a> =
+    AsyncEvt.create (fun obs ->
+      let rec go xs =
+        xs 
+        |> un 
+        |> IVar.get 
+        |> Async.bind (function
+          | Some (hd,tl) -> 
+            obs (Some hd) |> Async.bind (fun _ -> go tl)
+          | None -> obs None)
+      go xs)
+
+  let groupByAsync (f:'a -> Async<'k>) (xs:AsyncEvt<'a>) : AsyncEvt<'k * AsyncEvt<'a>> =
+    AsyncEvt.create <| fun obs -> async {      
+      let groups = ConcurrentDictionary<'k, AsyncEvtSrc<'a>>()
+      do! AsyncEvt.apply xs (function
+        | Some a -> async {
+          let! k = f a            
+          let mutable evtSrc : AsyncEvtSrc<'a> = Unchecked.defaultof<_>
+          if groups.TryGetValue(k, &evtSrc) then
+            put a evtSrc
+          else              
+            evtSrc <- createFull a
+            if groups.TryAdd (k, evtSrc) then
+              do! obs (Some (k, asAsyncEvt evtSrc)) }
+        | None -> 
+          groups.Values |> Seq.iter close            
+          Async.empty) }
+
+  let bufferByCountAndTime (count:int) (timeMs:int) (xs:AsyncEvt<'a>) : AsyncEvt<'a[]> =
+    AsyncEvt.create <| fun obs -> async {
+        return () 
+      }
+
+  let tryFirstAsync (xs:AsyncEvt<'a>) : Async<'a option> = async {
+    let iv = IVar.create
+    do! AsyncEvt.apply xs (function
+      | Some a ->  IVar.put (Some a) iv |> async.Return
+      | None -> IVar.put None iv |> async.Return)
+    return! IVar.get iv }
+
+  let tryLastAsync (xs:AsyncEvt<'a>) : Async<'a option> = async {
+    let mutable last = None
+    let iv = IVar.create
+    do! AsyncEvt.apply xs (function
+      | Some a -> Interlocked.Exchange(&last, Some a) |> ignore |> async.Return
+      | None ->
+        match last with
+        | None -> IVar.put None iv |> async.Return
+        | Some a -> IVar.put (Some a) iv |> async.Return)
+    return! IVar.get iv }
+
+  let scanAsync (f:'b -> 'a -> Async<'b>) (z:'b) (xs:AsyncEvt<'a>) : AsyncEvt<'b> =
+    AsyncEvt.delayAsync <| async {
+      let src = create
+      let mutable b = z
+      do! AsyncEvt.apply xs (function
+        | Some a -> async {
+          let! b' = f b a
+          b <- b'
+          put b' src }
+        | None -> async {
+          close src })
+      return asAsyncEvt src }
+
+  let tryFinally (comp:unit -> unit) (xs:AsyncEvt<'a>) : AsyncEvt<'a> =
+    xs |> AsyncEvt.mapObs (AsyncObs.tryFinally comp) 
+
+  let iterAsync (f:'a -> Async<unit>) (xs:AsyncEvt<'a>) : Async<unit> =
+    xs (function Some a -> f a | None -> Async.empty)
+
+
+
+
+
+  type AsyncStream<'a> = Async<AsyncStreamCons<'a>>
+
+  and AsyncStream<'a, 'b> = Async<AsyncStreamCons<'a, 'b>>
+
+  and AsyncStreamCons<'a> = AsyncStreamCons of 'a * AsyncStream<'a>
+ 
+  and AsyncStreamCons<'a, 'b> = AsyncStreamCons2 of 'a * AsyncStream<'b>
+
+  module AsyncStreamCons =
+    
+    let inline head (AsyncStreamCons (a,_)) = a
+
+    let inline tail (AsyncStreamCons (_,tl)) = tl
+
+    let rec repeat a = 
+      AsyncStreamCons (a, async.Delay (fun () -> async.Return (repeat a)))
+
+    let rec repeatAsync a : AsyncStream<'a> =
+      a |> Async.map (fun a' -> AsyncStreamCons (a', repeatAsync a))
+
+    let rec map (f:'a -> 'b) (AsyncStreamCons (a,tl)) =
+      AsyncStreamCons (f a, tl |> Async.map (map f))
+
+    let rec mapAsync (f:'a -> Async<'b>) (AsyncStreamCons (a,tl)) =
+      f a |> Async.map (fun b -> AsyncStreamCons (b, tl |> Async.bind (mapAsync f)))
+
+    let rec unfold (f:'s -> ('a * 's)) (s:'s) : AsyncStreamCons<'a> =
+      let a,s' = f s in
+      AsyncStreamCons (a, async.Delay (fun () -> async.Return (unfold f s')))
+      
+    let rec unfoldAsync (f:'s -> Async<('a * 's)>) (s:'s) : AsyncStream<'a> =
+      f s |> Async.map (fun (a,s') -> AsyncStreamCons (a, async.Delay (fun () -> unfoldAsync f s')))
+
+    let rec iterAsync (f:'a -> Async<unit>) (AsyncStreamCons (a,tl)) : Async<unit> =
+      f a |> Async.bind (fun _ -> tl |> Async.bind (iterAsync f))
+
+    let rec chooseAsync (f:'a -> Async<'b option>) (AsyncStreamCons (a,tl)) : AsyncStream<'b> =
+      f a |> Async.bind (function 
+        | Some b -> AsyncStreamCons (b, tl |> Async.bind (chooseAsync f)) |> async.Return
+        | None -> tl |> Async.bind (chooseAsync f))
+
+    let rec pickAsync (f:'a -> Async<'b option>) (AsyncStreamCons (a,tl)) : Async<'b * AsyncStream<'a>> =
+      f a |> Async.bind (function 
+        | Some b -> async.Return (b, tl)
+        | None -> tl |> Async.bind (pickAsync f))
+
+    let rec zapAsync (AsyncStreamCons (f,tlf)) (AsyncStreamCons (a,tla)) : AsyncStreamCons<'b> =
+      AsyncStreamCons (f a, Async.Parallel (tlf,tla) |> Async.map ((<||) zapAsync))
+
+    let rec zipAsync (AsyncStreamCons (a,tla)) (AsyncStreamCons (b,tlb)) : AsyncStreamCons<'a * 'b> =
+      AsyncStreamCons ((a,b), Async.Parallel (tla,tlb) |> Async.map ((<||) zipAsync))
+
+//
+//module AsyncStream =
+//  
+//  let whenever (a:AsyncStream<'a>) (tf:AsyncStream<bool>) : AsyncStream<'a> =
+//    failwith ""  
+
+  
+
+
+
+  type AsyncAlt<'a> = 
+    private
+    | Now of 'a
+    | Never
+    | AwaitComp of Async<'a> * (unit -> unit)
+    | Await of Async<'a>
+
+  module AsyncAlt =
+    
+    [<GeneralizableValue>]
+    let never<'a> : AsyncAlt<'a> = 
+      // activate all / commit one / undo others
+      Never
+
+    let now (a:'a) : AsyncAlt<'a> =
+      Now a
+
+    /// Creates an async alternative which evaluates the async computation
+    /// produced by a function which accepts a nack promise as an argument
+    /// which completes when a different alternative is committed to in a 
+    /// synchronization.
+    let withNackAsync (f:Async<unit> -> Async<'a>) : AsyncAlt<'a> =
+      let tcs = TaskCompletionSource<unit>()
+      let a = f (tcs.Task |> Async.AwaitTask)
+      let comp () = tcs.SetResult()
+      AwaitComp (a, comp)
+
+    /// 
+    let ofAsync (a:Async<'a>) : AsyncAlt<'a> =
+      withNackAsync <| fun (nack:Async<unit>) -> 
+        let tcs = TaskCompletionSource<'a>()
+        let cts = new CancellationTokenSource()
+        let op = async {
+          try
+            let! a = a
+            tcs.SetResult a
+          with ex ->
+            tcs.SetException ex }
+        Async.Start (op, cts.Token)
+        nack
+        |> Async.map (fun _ -> cts.Cancel() ; cts.Dispose())
+        |> Async.StartChild
+        |> Async.bind (fun _ ->
+          tcs.Task
+          |> Async.AwaitTask
+          |> (fun a -> async.TryFinally(a, fun () -> cts.Dispose())))
+
+    type ChMsg<'a> = 
+      | Take of AsyncReplyChannel<'a>
+      | Give of 'a * AsyncReplyChannel<'a>
+
+
+
+    let distAsyncOpt (ac:Async<'a option>) : Async<'a> option =
+      match ac |> Async.RunSynchronously with
+      | Some a -> Some (async.Return a)
+      | None -> None
+    
+    let distOptAsync (oa:Async<'a> option) : Async<'a option> = async {
+      match oa with
+      | Some oa -> return! oa |> Async.map Some
+      | None -> return None }
+
+    let distChoiceAsync (ca:Choice<Async<'a>, Async<'b>>) : Async<Choice<'a, 'b>> = async {
+      match ca with
+      | Choice1Of2 a -> return! a |> Async.map Choice1Of2
+      | Choice2Of2 b -> return! b |> Async.map Choice2Of2 }
+
+    let distTupleAsync (a:Async<'a>, b:Async<'b>) : Async<'a * 'b> =
+      Async.Parallel (a,b)
+
+
+
+
+    
+  
+
+
+    // prepare/commit
+    let commit (a:Async<Async<unit> option>) =
+      failwith ""
+
+//    let ch<'a> =    
+//      // Take : Ch<'a> -> AsyncAlt<'a> / Give : Ch<'a> -> 'a -> AsyncAlt<unit>               
+//      let agent = 
+//        MailboxProcessor.Start <| fun agent -> async {
+//            
+//            let rec loop () = async {
+//              let! msg = agent.Receive()
+//              match msg with
+//              | Take reply -> }
+//
+//            let rec full (a:'a) =
+//              agent.Scan (function 
+//                | Take reply -> Some (async { reply.Reply a })
+//                | _ -> None)
+//
+//            and empty (repply:) =
+//              agent.Scan (function
+//                | Give (a,reply) ->
+//                   
+//                )
+//
+//            //
+//            return () }
+//      ()
+
+
+
+//    let choose (a:AsyncAlt<'a>) (b:AsyncAlt<'a>) : AsyncAlt<'a> =
+//      match a,b with
+//      | Now a, _ -> AsyncAlt.Now a
+//      | _, Now b -> AsyncAlt.Now b
+//      | Never, Never -> AsyncAlt.Never
+//      | Never, b -> b
+//      | a, Never -> a
+//      | Await a, Await b -> AsyncAlt.Await (Async.choose a b)
+//      | Await a, AwaitComp (b,comp) ->        
+//        let await () = async {
+//          let! chosen : Async<'a> = Async.choose a b }
+
+
+
+
+
+
+//        failwith ""
+//      | AwaitComp (a,comp), Await b ->
+//        failwith ""
+//      | AwaitComp (a,comp1), AwaitComp (b,comp2) ->
+//        failwith ""

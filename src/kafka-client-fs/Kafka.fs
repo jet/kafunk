@@ -426,6 +426,7 @@ module internal Conn =
       let rwl = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion)
       let mutable f = f
       let mutable g = g
+      // TODO: bound recursion
       let rec go fn a = async {
         rwl.EnterReadLock()
         let! r = fn a
@@ -441,8 +442,7 @@ module internal Conn =
           rwl.ExitWriteLock()
           return! go fn a }
       (go f),(go g)
-      
-  
+        
 
     /// Maps over the input to an arrow.
     let mapInAsync (f:AsyncFunc<'c, 'a>) (a:AsyncFunc<'a, 'b>) : AsyncFunc<'c, 'b> =
@@ -466,6 +466,8 @@ module internal Conn =
       function
       | Choice1Of2 a -> f a |> Async.map Choice1Of2
       | Choice2Of2 b -> g b |> Async.map Choice2Of2
+
+
 
 
   type Reader<'r, 'a> = 'r -> 'a
@@ -506,66 +508,8 @@ module internal Conn =
     
 
 
-
-
-  type AsyncStream<'a> = Async<AsyncStreamCons<'a>>
-
-  and AsyncStream<'a, 'b> = Async<AsyncStreamCons<'a, 'b>>
-
-  and AsyncStreamCons<'a> = AsyncStreamCons of 'a * AsyncStream<'a>
- 
-  and AsyncStreamCons<'a, 'b> = AsyncStreamCons2 of 'a * AsyncStream<'b>
-
-  module AsyncStreamCons =
-    
-    let inline extract (AsyncStreamCons (a,_)) = a
-
-    let rec repeat a = 
-      AsyncStreamCons (a, async.Delay (fun () -> async.Return (repeat a)))
-
-    let rec repeatAsync a : AsyncStream<'a> =
-      a |> Async.map (fun a' -> AsyncStreamCons (a', repeatAsync a))
-
-    let rec map (f:'a -> 'b) (AsyncStreamCons (a,tl)) =
-      AsyncStreamCons (f a, tl |> Async.map (map f))
-
-    let rec mapAsync (f:'a -> Async<'b>) (AsyncStreamCons (a,tl)) =
-      f a |> Async.map (fun b -> AsyncStreamCons (b, tl |> Async.bind (mapAsync f)))
-
-    let rec unfold (f:'s -> ('a * 's)) (s:'s) : AsyncStreamCons<'a> =
-      let a,s' = f s in
-      AsyncStreamCons (a, async.Delay (fun () -> async.Return (unfold f s')))
-      
-    let rec unfoldAsync (f:'s -> Async<('a * 's)>) (s:'s) : AsyncStream<'a> =
-      f s |> Async.map (fun (a,s') -> AsyncStreamCons (a, async.Delay (fun () -> unfoldAsync f s')))
-
-    let rec iterAsync (f:'a -> Async<unit>) (AsyncStreamCons (a,tl)) : Async<unit> =
-      f a |> Async.bind (fun _ -> tl |> Async.bind (iterAsync f))
-
-    let rec chooseAsync (f:'a -> Async<'b option>) (AsyncStreamCons (a,tl)) : AsyncStream<'b> =
-      f a |> Async.bind (function 
-        | Some b -> AsyncStreamCons (b, tl |> Async.bind (chooseAsync f)) |> async.Return
-        | None -> tl |> Async.bind (chooseAsync f))
-
-    let rec pickAsync (f:'a -> Async<'b option>) (AsyncStreamCons (a,tl)) : Async<'b * AsyncStream<'a>> =
-      f a |> Async.bind (function 
-        | Some b -> async.Return (b, tl)
-        | None -> tl |> Async.bind (pickAsync f))
-
-    //let rec trace (f:'s * 'a -> Async<'b * 's>)
-
-    let rec zapAsync (AsyncStreamCons (f,tlf)) (AsyncStreamCons (a,tla)) : AsyncStreamCons<'b> =
-      AsyncStreamCons (f a, Async.Parallel (tlf,tla) |> Async.map ((<||) zapAsync))
-
-    let rec zipAsync (AsyncStreamCons (a,tla)) (AsyncStreamCons (b,tlb)) : AsyncStreamCons<'a * 'b> =
-      AsyncStreamCons ((a,b), Async.Parallel (tla,tlb) |> Async.map ((<||) zipAsync))
-
-
-
-  type AsyncAlt<'a> = 
-    private
-    | Now of 'a
-    | Await of Async<'a>
+        
+  
 
 
 
@@ -643,7 +587,7 @@ module internal Conn =
   let disposer (d:#IDisposable) : unit -> unit =
     fun () -> d.Dispose()
 
-
+  
   let rec connect (ep:IPEndPoint) = async {
    
     let clientId : ClientId = Guid.NewGuid().ToString("N")
