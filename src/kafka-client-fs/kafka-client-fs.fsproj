@@ -67,6 +67,7 @@
     <Compile Include="Kafka.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
+    <Compile Include="Compression.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
