@@ -14,12 +14,12 @@ open System.Threading.Tasks
 /// https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
 [<AutoOpen>]
 module Protocol =
-  
+
   // -------------------------------------------------------------------------------------------------------------------------------------
   // Shared
 
   type ApiKey =
-    | ProduceRequest = 0s    
+    | ProduceRequest = 0s
     | FetchRequest = 1s
     | OffsetRequest = 2s
     | MetadataRequest = 3s
@@ -47,17 +47,12 @@ module Protocol =
 
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module Compression =
-    [<Literal>]
-    let None = 0y
-    [<Literal>]
-    let GZIP = 2y
-    [<Literal>]
-    let Snappy = 3y
-    // TODO: perhaps another module?
-    [<Literal>]
-    let CompressionMask = 3y
 
-  type CompressionCodecs = 
+    let [<Literal>] None = 0uy
+    let [<Literal>] GZIP = 1uy
+    let [<Literal>] Snappy = 2uy
+
+  type CompressionCodecs =
     NoCompressionCodec = 0y
     | DefaultCompressoinCodec = 1y
     | GZIPCompressionCodec = 2y
@@ -69,24 +64,26 @@ module Protocol =
 
   type TopicName = string
 
-  /// This field indicates how many acknowledgements the servers should receive before responding to the request.
+  /// This field indicates how many acknowledgements the servers should receive
+  /// before responding to the request.
   type RequiredAcks = int16
- 
-  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>] 
+
+  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module RequiredAcks =
-    
+
     let None : RequiredAcks = 0s
     let Local : RequiredAcks = 1s
     let AllInSync : RequiredAcks = -1s
 
-  /// This provides a maximum time in milliseconds the server can await the receipt of the number of acknowledgements in RequiredAcks.
+  /// This provides a maximum time in milliseconds the server can await the
+  /// receipt of the number of acknowledgements in RequiredAcks.
   type Timeout = int32
 
   type Partition = int32
 
   /// The size, in bytes, of the message set that follows.
   type MessageSetSize = int32
-     
+
   type MessageSize = int32
 
   type Offset = int64
@@ -112,7 +109,7 @@ module Protocol =
 
   type ErrorCode = int16
 
-  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]     
+  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module ErrorCode =
 
     let [<Literal>] NoError = 0s
@@ -148,24 +145,29 @@ module Protocol =
     let [<Literal>] GroupAuthorizationFailedCode = 30s
     let [<Literal>] ClusterAuthorizationFailedCode = 31s
 
-  /// The replica id indicates the node id of the replica initiating this request.
-  /// Normal client consumers should always specify this as -1.
+  /// The replica id indicates the node id of the replica initiating this
+  /// request. Normal client consumers should always specify this as -1.
   type ReplicaId = int32
 
-  /// The max wait time is the maximum amount of time in milliseconds to block waiting if insufficient data is available at the time the request is issued.
+  /// The max wait time is the maximum amount of time in milliseconds to block
+  /// waiting if insufficient data is available at the time the request is
+  /// issued.
   type MaxWaitTime = int32
 
-  /// This is the minimum number of bytes of messages that must be available to give a response.
+  /// This is the minimum number of bytes of messages that must be available to
+  /// give a response.
   type MinBytes = int32
 
   /// The offset to begin this fetch from.
   type FetchOffset = int64
 
-  /// The maximum bytes to include in the message set for this partition. This helps bound the size of the response.
+  /// The maximum bytes to include in the message set for this partition. This
+  /// helps bound the size of the response.
   type MaxBytes = int32
 
-  /// The offset at the end of the log for this partition. 
-  /// This can be used by the client to determine how many messages behind the end of the log they are.
+  /// The offset at the end of the log for this partition. This can be used by
+  /// the client to determine how many messages behind the end of the log they
+  /// are.
   type HighwaterMarkOffset = int64
 
   type Time = int64
@@ -206,7 +208,6 @@ module Protocol =
 
   type MemberAssignment = ArraySeg<byte>
 
-
   type Message =
     struct
       val crc : Crc
@@ -214,17 +215,16 @@ module Protocol =
       val attributes : Attributes
       val key : Key
       val value : Value
-      new (crc,magicByte,attributes,key,value) = { crc = crc ; magicByte = magicByte ; attributes = attributes ; key = key ; value = value }
+      new (crc,magicByte,attributes,key,value) =
+        { crc = crc ; magicByte = magicByte ; attributes = attributes ; key = key ; value = value }
     end
 
-  and MessageSet = 
+  and MessageSet =
     struct
       val messages : (Offset * MessageSize * Message)[]
-      new (set) = { messages = set } 
+      new (set) = { messages = set }
     end
-  
 
-  // --------------------------------------------------------------------------------------------------------------
   // Metadata API
 
   type MetadataRequest =
@@ -240,7 +240,7 @@ module Protocol =
       new (brokers, topicMetadata) =  { brokers = brokers ; topicMetadata = topicMetadata }
     end
 
-  and Broker = 
+  and Broker =
     struct
       val nodeId : NodeId
       val host : Host
@@ -253,7 +253,8 @@ module Protocol =
       val topicErrorCode : TopicErrorCode
       val topicName : TopicName
       val partitionMetadata : PartitionMetadata[]
-      new (topicErrorCode,topicName,partitionMetadata) = { topicErrorCode = topicErrorCode ; topicName = topicName ; partitionMetadata = partitionMetadata }
+      new (topicErrorCode,topicName,partitionMetadata) =
+        { topicErrorCode = topicErrorCode ; topicName = topicName ; partitionMetadata = partitionMetadata }
     end
 
   and PartitionMetadata =
@@ -266,8 +267,6 @@ module Protocol =
       new (partitionErrorCode,partitionId,leader,replicas,isr) = { partitionErrorCode = partitionErrorCode ; partitionId = partitionId ; leader = leader ; replicas = replicas ; isr = isr }
     end
 
-  
-  // --------------------------------------------------------------------------------------------------------------
   // Produce API
 
   type ProduceRequest =
@@ -278,14 +277,12 @@ module Protocol =
       new (requiredAcks,timeout,topics) = { requiredAcks = requiredAcks ; timeout = timeout ; topics = topics }
     end
 
-  and ProduceResponse = 
+  and ProduceResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode * Offset)[])[]
       new (topics) = { topics = topics }
     end
 
-
-  // --------------------------------------------------------------------------------------------------------------
   // Fetch API
 
   type FetchRequest =
@@ -297,14 +294,12 @@ module Protocol =
       new (replicaId, maxWaitTime, minBytes, topics) = { replicaId = replicaId ; maxWaitTime = maxWaitTime ; minBytes = minBytes ; topics = topics }
     end
 
-  and FetchResponse = 
+  and FetchResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * MessageSetSize * MessageSet)[])[]
-      new (topics) = { topics = topics } 
+      new (topics) = { topics = topics }
     end
 
-
-  // --------------------------------------------------------------------------------------------------------------
   // Offset API
 
   type OffsetRequest =
@@ -313,7 +308,7 @@ module Protocol =
       val topics : (TopicName * (Partition * Time * MaxNumberOfOffsets)[])[]
       new (replicaId, topics) = { replicaId = replicaId ; topics = topics }
     end
-  
+
   and OffsetResponse =
     struct
       val topics : (TopicName * PartitionOffsets[])[]
@@ -327,9 +322,7 @@ module Protocol =
       val offsets : Offset[]
       new (partition,errorCode,offsets) = { partition = partition ; errorCode = errorCode ; offsets = offsets }
     end
-  
 
-  // --------------------------------------------------------------------------------------------------------------
   // Offset Commit/Fetch API
 
   type OffsetCommitRequest =
@@ -343,7 +336,7 @@ module Protocol =
         { consumerGroup = consumerGroup ; consumerGroupGenerationId = consumerGroupGenerationId ; consumerId = consumerId ; retentionTime = retentionTime ; topics = topics }
     end
 
-  and OffsetCommitResponse = 
+  and OffsetCommitResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode)[])[]
       new (topics) = { topics = topics }
@@ -363,12 +356,12 @@ module Protocol =
       new (topics) = { topics = topics }
     end
 
-
-  // --------------------------------------------------------------------------------------------------------------
   // Group Membership API
 
-  /// The offsets for a given consumer group are maintained by a specific broker called the group coordinator. i.e., a consumer needs to issue its offset commit and fetch requests to this specific broker. 
-  /// It can discover the current coordinator by issuing a group coordinator request.
+  /// The offsets for a given consumer group are maintained by a specific
+  /// broker called the group coordinator. i.e., a consumer needs to issue its
+  /// offset commit and fetch requests to this specific broker. It can discover
+  /// the current coordinator by issuing a group coordinator request.
   type GroupCoordinatorRequest =
     struct
       val groupId : GroupId
@@ -381,7 +374,7 @@ module Protocol =
       val coordinatorId : CoordinatorId
       val coordinatorHost : CoordinatorHost
       val coordinatorPort : CoordinatorPort
-      new (errorCode,coordinatorId,coordinatorHost,coordinatorPort) = 
+      new (errorCode,coordinatorId,coordinatorHost,coordinatorPort) =
         { errorCode = errorCode ; coordinatorId = coordinatorId ; coordinatorHost = coordinatorHost ; coordinatorPort = coordinatorPort }
     end
 
@@ -414,7 +407,7 @@ module Protocol =
       val leaderId : LeaderId
       val memberId : MemberId
       val members : Members
-      new (errorCode,generationId,groupProtocol,leaderId,memberId,members) = 
+      new (errorCode,generationId,groupProtocol,leaderId,memberId,members) =
         { errorCode = errorCode ; generationId = generationId ; groupProtocol = groupProtocol ; leaderId = leaderId ; memberId = memberId ; members = members }
     end
 
@@ -426,15 +419,17 @@ module Protocol =
 
   and ProtocolType = string
 
-  /// The sync group request is used by the group leader to assign state (e.g. partition assignments) to all members of the current generation.
-  /// All members send SyncGroup immediately after joining the group, but only the leader provides the group's assignment.
+  /// The sync group request is used by the group leader to assign state (e.g.
+  /// partition assignments) to all members of the current generation. All
+  /// members send SyncGroup immediately after joining the group, but only the
+  /// leader provides the group's assignment.
   type SyncGroupRequest =
     struct
       val groupId : GroupId
       val generationId : GenerationId
       val memberId : MemberId
       val groupAssignment : GroupAssignment
-      new (groupId, generationId, memberId, groupAssignment) = 
+      new (groupId, generationId, memberId, groupAssignment) =
         { groupId = groupId ; generationId = generationId ; memberId = memberId ; groupAssignment = groupAssignment }
     end
 
@@ -457,7 +452,8 @@ module Protocol =
       val groupId : GroupId
       val generationId : GenerationId
       val memberId : MemberId
-      new (groupId,generationId,memberId) = { groupId = groupId ; generationId = generationId ; memberId = memberId }
+      new (groupId,generationId,memberId) =
+        { groupId = groupId ; generationId = generationId ; memberId = memberId }
     end
 
   and HeartbeatResponse =
@@ -480,26 +476,24 @@ module Protocol =
       new (errorCode) = { errorCode = errorCode }
     end
 
-
-  // --------------------------------------------------------------------------------------------------------------  
   // Consumer groups
   // https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Client-side+Assignment+Proposal
   // https://cwiki.apache.org/confluence/display/KAFKA/Kafka+0.9+Consumer+Rewrite+Design
-  // http://people.apache.org/~nehanarkhede/kafka-0.9-consumer-javadoc/doc/  
+  // http://people.apache.org/~nehanarkhede/kafka-0.9-consumer-javadoc/doc/
 
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module ProtocolType =
-    
+
     let consumer = "consumer"
-    
-  
+
   /// ProtocolMetadata for the consumer group protocol.
   type ConsumerGroupProtocolMetadata =
     struct
       val version : Version
       val subscription : TopicName[]
       val userData : UserData
-      new (version,subscription,userData) = { version = version ; subscription = subscription ; userData = userData }
+      new (version,subscription,userData) =
+        { version = version ; subscription = subscription ; userData = userData }
     end
 
   and Version = int16
@@ -510,7 +504,7 @@ module Protocol =
   and AssignmentStrategy = string
 
   /// MemberAssignment for the consumer group protocol.
-  /// Each member in the group will receive the assignment from the leader in the sync group response. 
+  /// Each member in the group will receive the assignment from the leader in the sync group response.
   type ConsumerGroupMemberAssignment =
     struct
       val version : Version
@@ -524,14 +518,12 @@ module Protocol =
       new (assignments) = { assignments = assignments }
     end
 
-
-  // --------------------------------------------------------------------------------------------------------------   
   // Administrative API
 
   type ListGroupsRequest =
     struct
     end
-  
+
   and ListGroupsResponse =
     struct
       val errorCode : ErrorCode
@@ -539,7 +531,7 @@ module Protocol =
       new (errorCode,groups) = { errorCode = errorCode ; groups = groups }
     end
 
-  
+
   type DescribeGroupsRequest =
     struct
       val groupIds : GroupId[]
@@ -550,7 +542,7 @@ module Protocol =
     struct
       val groups : (ErrorCode * GroupId * State * ProtocolType * Protocol * GroupMembers)[]
       new (groups) = { groups = groups }
-    end 
+    end
 
   and GroupMembers =
     struct
@@ -564,9 +556,6 @@ module Protocol =
 
   and ClientHost = string
 
-
-
-  // --------------------------------------------------------------------------------------------------------------   
   // Envelopes
 
   /// A Kafka request envelope.
@@ -577,12 +566,12 @@ module Protocol =
       val correlationId : CorrelationId
       val clientId : ClientId
       val message : RequestMessage
-      new (apiVersion,correlationId,clientId,message:RequestMessage) = 
+      new (apiVersion,correlationId,clientId,message:RequestMessage) =
         { apiKey = message.ApiKey ; apiVersion = apiVersion ; correlationId = correlationId ; clientId = clientId ; message = message }
     end
 
   /// A Kafka request message.
-  and RequestMessage =     
+  and RequestMessage =
     | Metadata of MetadataRequest
     | Fetch of FetchRequest
     | Produce of ProduceRequest
@@ -598,7 +587,7 @@ module Protocol =
     | DescribeGroups of DescribeGroupsRequest
   with
     member x.ApiKey =
-      match x with      
+      match x with
       | Metadata _ -> ApiKey.MetadataRequest
       | Fetch _ -> ApiKey.FetchRequest
       | Produce _ -> ApiKey.ProduceRequest
@@ -623,7 +612,7 @@ module Protocol =
     end
 
   /// A Kafka response message.
-  and ResponseMessage =    
+  and ResponseMessage =
     | MetadataResponse of MetadataResponse
     | FetchResponse of FetchResponse
     | ProduceResponse of ProduceResponse
@@ -637,51 +626,24 @@ module Protocol =
     | LeaveGroupResponse of LeaveGroupResponse
     | ListGroupsResponse of ListGroupsResponse
     | DescribeGroupsResponse of DescribeGroupsResponse
-//  with
-//    member x.ErrorCodes =
-//      match x with
-//      | ResponseMessage.MetadataResponse x -> 
-//        x.topicMetadata 
-//        |> Seq.choose (fun t -> seq {
-//          if t.topicErrorCode <> ErrorCode.NoError then 
-//            yield Some t.topicErrorCode  
-//          yield!
-//            t.partitionMetadata
-//            |> Seq.choose (fun p ->
-//              if p.partitionErrorCode <> ErrorCode.NoError then Some t.partitionErrorCode
-//              else None)
-//        })
-//      | _ -> Seq.empty
-
-  // -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-  // -------------------------------------------------------------------------------------------------------------------------------------
-  // codecs
 
   type Codecs = Codecs
 
   let CodecsInst = Codecs
 
-  let inline _write< ^a, ^b when (^a or ^b) : (static member write : ArraySeg<byte> * ^a -> ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
+  let inline _write< ^a, ^b when (^b or ^a) : (static member write : ArraySeg<byte> * ^a -> ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
     let buf = ((^a or ^b) : (static member write : ArraySeg<byte> -> ^a -> ArraySeg<byte>) (buf,x))
     buf
 
   let inline write buf x = _write buf x (CodecsInst)
 
-  let inline _read< ^a, ^b when (^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
+  let inline _read< ^a, ^b when (^b or ^a) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
     let a,buf = ((^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>) (buf,x))
     a,buf
 
   let inline read buf = _read buf Unchecked.defaultof<_> (CodecsInst)
 
-  let inline _size< ^a, ^b when (^a or ^b) : (static member size : ^a -> int)> (x:^a) (_:^b) =
+  let inline _size< ^a, ^b when (^b or ^a) : (static member size : ^a -> int)> (x:^a) (_:^b) =
     let size = ((^a or ^b) : (static member size : ^a -> int) x)
     size
 
@@ -693,174 +655,132 @@ module Protocol =
     write buf x |> ignore
     buf
 
+  let inline writeInt8 b (buf : ArraySeg<byte>) =
+    buf.Array.[buf.Offset] <- byte b
+    buf |> ArraySeg.shiftOffset 1
+
+  let inline readInt8 (buf : ArraySeg<byte>) : int8 * ArraySeg<byte> =
+    let n = int8 buf.Array.[buf.Offset]
+    (n, buf |> ArraySeg.shiftOffset 1)
+
+  let inline writeInt16 (s : int16) (buf : ArraySeg<byte>) =
+    BitConverter.GetBytesBigEndian(s, buf.Array, buf.Offset)
+    buf |> ArraySeg.shiftOffset 2
+
+  let inline readInt16 (buf : ArraySeg<byte>) : int16 * ArraySeg<byte> =
+    let n = BitConverter.ToInt16BigEndian(buf.Array, buf.Offset)
+    (n, buf |> ArraySeg.shiftOffset 2)
+
+  let inline writeInt32 (i : int32) (buf : ArraySeg<byte>) : ArraySeg<byte> =
+    BitConverter.GetBytesBigEndian(i, buf.Array, buf.Offset)
+    buf |> ArraySeg.shiftOffset 4
+
+  let inline readInt32 (buf : ArraySeg<byte>) : int32 * ArraySeg<byte> =
+    let n = BitConverter.ToInt32BigEndian(buf.Array, buf.Offset)
+    (n, buf |> ArraySeg.shiftOffset 4)
+
+  let inline writeInt64 (w : int64) (buf : ArraySeg<byte>) =
+    BitConverter.GetBytesBigEndian(w, buf.Array, buf.Offset)
+    buf |> ArraySeg.shiftOffset 8
+
+  let inline readInt64 (buf : ArraySeg<byte>) : int64 * ArraySeg<byte> =
+    let n = BitConverter.ToInt64BigEndian(buf.Array, buf.Offset)
+    (n, buf |> ArraySeg.shiftOffset 8)
+
+  let inline writeFramedBytes (bytes : ArraySeg<byte>) buf =
+    if isNull bytes.Array then
+      writeInt32 -1 buf
+    else
+      let buf = writeInt32 bytes.Count buf
+      Array.Copy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
+      buf |> ArraySeg.shiftOffset bytes.Count
+
+  let inline readFramedBytes (buf : ArraySeg<byte>) : ArraySeg<byte> * ArraySeg<byte> =
+    let length, buf = readInt32 buf
+    if length = -1 then ArraySeg<_>(), buf
+    else
+      let arr = ArraySeg<_>(buf.Array, buf.Offset, length)
+      (arr, buf |> ArraySeg.shiftOffset length)
+
+  let writeFramedString (str : string) (buf : ArraySeg<byte>) =
+    if isNull str then
+      writeInt16 -1s buf
+    else
+      let buf = writeInt16 (int16 str.Length) buf
+      let read = Encoding.UTF8.GetBytes(str, 0, str.Length, buf.Array, buf.Offset)
+      buf |> ArraySeg.shiftOffset read
+
+  let readFramedString (data : ArraySeg<byte>) : string * ArraySeg<byte> =
+    let length, data = readInt16 data
+    let length = int length
+    if length = -1 then
+      (null, data)
+    else
+      let str = Encoding.UTF8.GetString (data.Array, data.Offset, length)
+      (str, data |> ArraySeg.shiftOffset length)
+
+  let writeFramedArray (arr : 'a[]) (write : 'a -> ArraySeg<byte> -> ArraySeg<byte>) (buf : ArraySeg<byte>) : ArraySeg<byte> =
+    if isNull arr then
+      let buf = writeInt32 -1 buf
+      buf
+    else
+      let n = arr.Length
+      let buf = writeInt32 n buf
+      Array.fold (fun buf elem -> write elem buf) buf arr
+
+  let readFramedArray (read : ArraySeg<byte> -> 'a * ArraySeg<byte>) (buf : ArraySeg<byte>) : 'a[] * ArraySeg<byte> =
+    let n = BitConverter.ToInt32BigEndian(buf.Array, buf.Offset)
+    let mutable buf = buf |> ArraySeg.shiftOffset 4
+    let arr = [|
+      for i = 0 to n - 1 do
+        let elem, buf' = read buf
+        yield elem
+        buf <- buf' |]
+    (arr, buf)
 
   /// Codecs for primitive and generic types.
   type Codecs with
-    
+
     // numbers
 
-    static member write (buf:ArraySeg<byte>, x:int8) =
-      buf.Array.[buf.Offset] <- byte x
-      buf |> ArraySeg.shiftOffset 1
-    static member read (data:ArraySeg<byte>, _:int8) =
-      let n = int8 data.Array.[data.Offset]
-      n, data |> ArraySeg.shiftOffset 1
     static member inline size (_:int8) = 1
-
-    static member write (buf:ArraySeg<byte>, x:int16) =
-      BitConverter.GetBytesBigEndian(x, buf.Array, buf.Offset)
-      buf |> ArraySeg.shiftOffset 2
-    static member read (data:ArraySeg<byte>, _:int16) =
-      let n = BitConverter.ToInt16BigEndian (data.Array, data.Offset)
-      n, data |> ArraySeg.shiftOffset 2
     static member inline size (_:int16) = 2
-    
-    static member write (buf:ArraySeg<byte>, x:int32) =
-      BitConverter.GetBytesBigEndian(x, buf.Array, buf.Offset)
-      buf |> ArraySeg.shiftOffset 4
-    static member read (data:ArraySeg<byte>, _:int32) =
-      let n = BitConverter.ToInt32BigEndian (data.Array, data.Offset)
-      n, data |> ArraySeg.shiftOffset 4
     static member inline size (_:int32) = 4
-    
-    static member write (buf:ArraySeg<byte>, x:int64) =
-      BitConverter.GetBytesBigEndian(x, buf.Array, buf.Offset)
-      buf |> ArraySeg.shiftOffset 8
-    static member read (data:ArraySeg<byte>, _:int64) =
-      let n = BitConverter.ToInt64BigEndian (data.Array, data.Offset)
-      n, data |> ArraySeg.shiftOffset 8
     static member inline size (_:int64) = 8
-       
-    
+
+
     // strings
 
     static member size (str:string) =
       if isNull str then 2
-      else 2 + str.Length
-    static member write (buf:ArraySeg<byte>, str:string) =
-      if isNull str then
-        write buf (int16 -1)
-      else
-        let buf = write buf (int16 str.Length)
-        let read = Encoding.UTF8.GetBytes(str, 0, str.Length, buf.Array, buf.Offset)
-        buf |> ArraySeg.shiftOffset read
-    static member read (data:ArraySeg<byte>, _:string) =
-      let (length:int16),data = read data
-      let length = int length
-      if length = -1 then null,data
-      else
-        let str = Encoding.UTF8.GetString (data.Array, data.Offset, length)
-        str, data |> ArraySeg.shiftOffset length
-
+      else 2 + str.Length // TODO: Do we need to support non-ascii values here?
 
     // byte arrays
 
-    static member write (buf, bytes:ArraySeg<byte>) =
-      if isNull bytes.Array then
-        let buf = write buf -1
-        buf
-      else
-        let buf = write buf bytes.Count
-        Array.Copy (bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
-        buf |> ArraySeg.shiftOffset bytes.Count
-    static member read (data:ArraySeg<byte>, _:ArraySeg<byte>) =
-      let length,data = read data
-      if length = -1 then ArraySeg<_>(),data
-      else 
-        let arr = ArraySeg<_>(data.Array, data.Offset, length)
-        arr,data |> ArraySeg.shiftOffset length
     static member inline size (bytes:ArraySeg<byte>) =
       (size bytes.Count) + bytes.Count
 
-
     // tuples
 
-    static member inline write (data:ArraySeg<byte>, x:'a * 'b) =
-      let a,b = x in
-      let data = write data a
-      let data = write data b
-      data
-    static member inline read (buf:ArraySeg<byte>, _:_ * _) =
-      let a,buf = read buf
-      let b,buf = read buf
-      (a,b),buf
     static member inline size (x:_ * _) =
       let a,b = x in
       size a + size b
 
-    static member inline write (data:ArraySeg<byte>, x:_ * _ * _) =
-      let a,b,c = x in
-      let data = write data a
-      let data = write data b
-      let data = write data c
-      data
-    static member inline read (buf:ArraySeg<byte>, _:_ * _ * _) =
-      let a,buf = read buf
-      let b,buf = read buf
-      let c,buf = read buf
-      (a,b,c),buf
     static member inline size (x:_ * _ * _) =
       let a,b,c = x in
       size a + size b + size c
 
-    static member inline write (data:ArraySeg<byte>, x:_ * _ * _ * _) =
-      let a,b,c,d = x in
-      let data = write data a
-      let data = write data b
-      let data = write data c
-      let data = write data d
-      data
-    static member inline read (buf:ArraySeg<byte>, _:_ * _ * _ * _) =
-      let a,buf = read buf
-      let b,buf = read buf
-      let c,buf = read buf
-      let d,buf = read buf
-      (a,b,c,d),buf
     static member inline size (x:_ * _ * _ * _) =
       let a,b,c,d = x in
       size a + size b + size c + size d
 
-    static member inline write (data:ArraySeg<byte>, x:_ * _ * _ * _ * _) =
-      let a,b,c,d,e = x in
-      let data = write data a
-      let data = write data b
-      let data = write data c
-      let data = write data d
-      let data = write data e
-      data
-    static member inline read (buf:ArraySeg<byte>, _:_ * _ * _ * _ * _) =
-      let a,buf = read buf
-      let b,buf = read buf
-      let c,buf = read buf
-      let d,buf = read buf
-      let e,buf = read buf
-      (a,b,c,d,e),buf
     static member inline size (x:_ * _ * _ * _ * _) =
       let a,b,c,d,e = x in
       size a + size b + size c + size d + size e
 
-    static member inline write (data:ArraySeg<byte>, x:_ * _ * _ * _ * _ * _) =
-      let a,b,c,d,e,f = x in
-      let data = write data a
-      let data = write data b
-      let data = write data c
-      let data = write data d
-      let data = write data e
-      let data = write data f
-      data
-    static member inline read (buf:ArraySeg<byte>, _:_ * _ * _ * _ * _ * _) =
-      let a,buf = read buf
-      let b,buf = read buf
-      let c,buf = read buf
-      let d,buf = read buf
-      let e,buf = read buf
-      let f,buf = read buf
-      (a,b,c,d,e,f),buf
     static member inline size (x:_ * _ * _ * _ * _ * _) =
       let a,b,c,d,e,f = x in
       size a + size b + size c + size d + size e + size f
-            
-
 
 
   let writeArrayNoSize (buf:ArraySeg<byte>) (arr:'a[]) (writeElem:ArraySeg<byte> -> 'a -> ArraySeg<byte>) =
@@ -868,15 +788,6 @@ module Protocol =
     for a in arr do
       buf <- writeElem buf a
     buf
-
-  let writeArray (buf:ArraySeg<byte>) (arr:'a[]) (writeElem:ArraySeg<byte> -> 'a -> ArraySeg<byte>) =
-    if isNull arr then
-      let buf = write buf -1
-      buf
-    else
-      let n = arr.Length
-      let mutable buf = write buf n
-      writeArrayNoSize buf arr writeElem
 
   let readArraySize (size:int) (data:ArraySeg<byte>) (readElem:ArraySeg<byte> -> 'a * ArraySeg<byte>) =
     let mutable data = data
@@ -889,76 +800,48 @@ module Protocol =
         data <- data' |]
     arr,data
 
-  let readArray (data:ArraySeg<byte>) (readElem:ArraySeg<byte> -> 'a * ArraySeg<byte>) =
-    let n = BitConverter.ToInt32BigEndian (data.Array, data.Offset)
-    let mutable data = data |> ArraySeg.shiftOffset 4
-    let arr = [|
-      for i = 0 to n - 1 do
-        let message,data' = readElem data
-        yield message
-        data <- data' |]
-    arr,data
-
   let getArraySize (arr:'a[]) (elementSize:'a -> int) =
     (size arr.Length) + (arr |> Array.sumBy elementSize)
 
 
-
-
+  // arrays
   type Codecs with
-
-    // arrays
-
-    static member inline read (data:ArraySeg<byte>, _:'a[]) : 'a[] * ArraySeg<byte> =
-      let n = BitConverter.ToInt32BigEndian (data.Array, data.Offset)
-      let mutable data = data |> ArraySeg.shiftOffset 4
-      let arr = [|
-        for i = 0 to n - 1 do
-          let message,data' = read data
-          yield message
-          data <- data' |]
-      arr,data
-    static member inline write (data:ArraySeg<byte>, arr:'a[]) =
-      writeArray data arr write
     static member inline size (arr:'a[]) =
       getArraySize arr size
-  
-
 
   type Message with
     static member size (m:Message) =
       size m.crc + size m.magicByte + size m.attributes + size m.key + size m.value
-    static member write (buf:ArraySeg<byte>, m:Message) =      
+    static member write (buf:ArraySeg<byte>, m:Message) =
       let buf = buf |> ArraySeg.shiftOffset 4 // crc32
       let offset = buf.Offset
-      let buf = write buf m.magicByte
-      let buf = write buf m.attributes
-      let buf = write buf m.key
-      let buf = write buf m.value
+      let buf = writeInt8 m.magicByte buf
+      let buf = writeInt8 m.attributes buf
+      let buf = writeFramedBytes m.key buf
+      let buf = writeFramedBytes m.value buf
       let crc = Crc.crc32 (buf.Array, offset, buf.Offset - offset)
       BitConverter.GetBytesBigEndian (int crc, buf.Array, offset - 4)
       buf
     static member read (data, _:Message) =
-      let crc,data = read data
+      let crc,data = readInt32 data
       let offset = data.Offset
-      let magicByte,data = read data
-      let attrs,data = read data
-      let key,data = read data
-      let value,data = read data
+      let magicByte,data = readInt8 data
+      let attrs,data = readInt8 data
+      let key,data = readFramedBytes data
+      let value,data = readFramedBytes data
       let crc' = int (Crc.crc32 (data.Array, offset, data.Offset - offset))
       if crc <> crc' then
         failwith (sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc)
-      Message(crc,magicByte,attrs,key,value),data
-      
+      (Message(crc, magicByte, attrs, key, value), data)
 
   type MessageSet with
     static member size (x:MessageSet) =
       x.messages |> Array.sumBy size
     static member write (buf, ms:MessageSet) =
-      writeArrayNoSize buf ms.messages 
+      writeArrayNoSize buf ms.messages
         (fun buf (o,ms,m) ->
-          let buf = write buf o
-          let buf = write buf ms
+          let buf = writeInt64 o buf
+          let buf = writeInt32 ms buf
           let buf = write buf m
           buf)
     /// Reads a message set given the size in bytes.
@@ -966,314 +849,364 @@ module Protocol =
       let set,data =
         readArraySize size data
           (fun data ->
-            let os,data = read data
-            let ms,data = read data
+            let os,data = readInt64 data
+            let ms,data = readInt32 data
             let m,data = read data
             (os,ms,m),data)
-      MessageSet(set),data
-
-
-        
-
-
+      (MessageSet(set), data)
 
   type MetadataRequest with
-    static member size (x:MetadataRequest) = 
+    static member size (x:MetadataRequest) =
       size x.topicNames
-    static member write (buf, x:MetadataRequest) = 
-      write buf x.topicNames
-          
+    static member write (buf, x:MetadataRequest) =
+      buf |> writeFramedArray x.topicNames writeFramedString
+
   type Broker with
     static member read (data:ArraySeg<_>, _:Broker) =
-      let nodeId,data = read data
-      let host,data = read data
-      let port,data = read data
-      Broker(nodeId,host,port),data
+      let nodeId, data = readInt32 data
+      let host, data = readFramedString data
+      let port, data = readInt32 data
+      (Broker(nodeId, host, port), data)
 
   type PartitionMetadata with
     static member read (data:ArraySeg<_>, _:PartitionMetadata) =
-      let partitionErrorCode,data = read data
-      let partitionId,data = read data
-      let leader,data = read data
-      let replicas,data = read data
-      let isr,data = read data
-      PartitionMetadata(partitionErrorCode,partitionId,leader,replicas,isr),data
+      let partitionErrorCode, data = readInt16 data
+      let partitionId, data = readInt32 data
+      let leader, data = readInt32 data
+      let replicas, data = readFramedArray readInt32 data
+      let isr, data = readFramedArray readInt32 data
+      (PartitionMetadata(partitionErrorCode, partitionId, leader, replicas, isr), data)
 
   type TopicMetadata with
     static member read (data:ArraySeg<_>, _:TopicMetadata) =
-      let errorCode,data = read data
-      let topicName,data = read data
-      let partitionMetadata,data = readArray data read
-      TopicMetadata(errorCode,topicName,partitionMetadata),data
+      let errorCode, data = readInt16 data
+      let topicName, data = readFramedString data
+      let partitionMetadata, data = readFramedArray read data
+      (TopicMetadata(errorCode, topicName, partitionMetadata), data)
 
   type MetadataResponse with
     static member read (data:ArraySeg<_>, _:MetadataResponse) =
-      let brokers,data = read data
-      let topicMetadata,data = read data
-      MetadataResponse(brokers,topicMetadata) ,data
-
-
- 
+      let brokers, data = readFramedArray read data
+      let topicMetadata, data = readFramedArray read data
+      (MetadataResponse(brokers, topicMetadata), data)
 
   type ProduceRequest with
     static member size (x:ProduceRequest) =
-      (size x.requiredAcks) 
+      (size x.requiredAcks)
       + (size x.timeout)
       + (getArraySize x.topics (fun (tn,ps) -> size tn + (getArraySize ps (fun (p,mss,ms) -> (size p) + 4 + mss))))
     static member write (buf, x:ProduceRequest) =
-      let buf = write buf x.requiredAcks
-      let buf = write buf x.timeout
+      let buf = writeInt16 x.requiredAcks buf
+      let buf = writeInt32 x.timeout buf
       let buf =
-        writeArray buf x.topics 
-          (fun buf (tn,ps) ->
-            let buf = write buf tn
-            let buf = 
-              writeArray buf ps 
-                (fun buf (p,mss,ms) -> 
-                  let buf = write buf p
-                  let buf = write buf mss
+        buf |> writeFramedArray x.topics
+          (fun (tn,ps) buf ->
+            let buf = writeFramedString tn buf
+            let buf =
+              buf |> writeFramedArray ps
+                (fun (p,mss,ms) buf ->
+                  let buf = writeInt32 p buf
+                  let buf = writeInt32 mss buf
                   let buf = write buf ms
                   buf)
             buf)
       buf
-      
+
   type ProduceResponse with
     static member read (data, _:ProduceResponse) =
-      let topics,data =
-        readArray data
-          (fun data ->
-            let topicName,data = read data
+      let topics, data =
+        data |> readFramedArray (fun data ->
+            let topicName, data = readFramedString data
             let ps,data =
-              readArray data
-                (fun data ->
-                  let partition,data = read data
-                  let errorCode,data = read data
-                  let offset,data = read data
-                  (partition,errorCode,offset),data)
-            (topicName,ps),data) 
-      ProduceResponse(topics),data
-
- 
+              data |> readFramedArray (fun data ->
+                  let partition, data = readInt32 data
+                  let errorCode, data = readInt16 data
+                  let offset, data = readInt64 data
+                  ((partition, errorCode, offset), data))
+            (topicName, ps), data)
+      (ProduceResponse(topics), data)
 
   type FetchRequest with
     static member size (x:FetchRequest) =
       (size x.replicaId) + (size x.maxWaitTime) + (size x.minBytes) + (size x.topics)
     static member write (buf, x:FetchRequest) =
-      let buf = write buf x.replicaId
-      let buf = write buf x.maxWaitTime
-      let buf = write buf x.minBytes
-      let buf = write buf x.topics
+      let buf = writeInt32 x.replicaId buf
+      let buf = writeInt32 x.maxWaitTime buf
+      let buf = writeInt32 x.minBytes buf
+      let buf =
+        buf |> writeFramedArray x.topics
+          (fun (tn,ps) buf ->
+            let buf = writeFramedString tn buf
+            let buf =
+              buf |> writeFramedArray ps
+                (fun (p,mss,ms) buf ->
+                  let buf = writeInt32 p buf
+                  let buf = writeInt64 mss buf
+                  let buf = writeInt32 ms buf
+                  buf)
+            buf)
       buf
 
   type FetchResponse with
     static member read (data, _:FetchResponse) =
-      let topics,data =
-        readArray data 
+      let topics, data =
+        data |> readFramedArray
           (fun data ->
-            let topicName,data = read data
-            let ps,data =
-              readArray data
+            let topicName, data = readFramedString data
+            let ps, data =
+              data |> readFramedArray
                 (fun data ->
-                  let partition,data = read data
-                  let errorCode,data = read data
-                  let hwo,data = read data
-                  let mss,data = read data
-                  let ms,data = MessageSet.read (data,mss)
-                  (partition,errorCode,hwo,mss,ms),data)
-            (topicName,ps),data)
-      FetchResponse(topics),data
-
-      
+                  let partition,data = readInt32 data
+                  let errorCode,data = readInt16 data
+                  let hwo,data = readInt64 data
+                  let mss,data = readInt32 data
+                  let ms,data = MessageSet.read (data, mss)
+                  ((partition, errorCode, hwo, mss, ms), data))
+            (topicName, ps), data)
+      (FetchResponse(topics), data)
 
   type OffsetRequest with
     static member size (x:OffsetRequest) =
       (size x.replicaId) + (size x.topics)
     static member write (buf, x:OffsetRequest) =
-      let buf = write buf x.replicaId
-      let buf = write buf x.topics
+      let buf = writeInt32 x.replicaId buf
+      let buf =
+        buf |> writeFramedArray x.topics
+          (fun (tn,ps) buf ->
+            let buf = writeFramedString tn buf
+            let buf =
+              buf |> writeFramedArray ps
+                (fun (p,mss,ms) buf ->
+                  let buf = writeInt32 p buf
+                  let buf = writeInt64 mss buf
+                  let buf = writeInt32 ms buf
+                  buf)
+            buf)
       buf
 
   type PartitionOffsets with
     static member read (buf, _:PartitionOffsets) =
-      let p,buf = read buf
-      let ec,buf = read buf
-      let offs,buf = read buf
-      PartitionOffsets(p,ec,offs),buf
+      let p,buf = readInt32 buf
+      let ec,buf = readInt16 buf
+      let offs,buf = readFramedArray readInt64 buf
+      (PartitionOffsets(p, ec, offs), buf)
 
   type OffsetResponse with
     static member read (buf, _:OffsetResponse) =
-      let topics,buf = read buf
-      OffsetResponse(topics),buf
-
-
+      let topics, buf = buf |> readFramedArray (fun buf ->
+        let topicName, buf = readFramedString buf
+        let partitionOffsets, buf = buf |> readFramedArray (fun buf ->
+          let partition, buf = readInt32 buf
+          let errorCode, buf = readInt16 buf
+          let offsets, buf = readFramedArray readInt64 buf
+          (PartitionOffsets(partition, errorCode, offsets), buf))
+        ((topicName, partitionOffsets), buf))
+      (OffsetResponse(topics), buf)
 
   type GroupCoordinatorRequest with
     static member size (x:GroupCoordinatorRequest) =
       (size x.groupId)
     static member write (buf, x:GroupCoordinatorRequest) =
-      let buf = write buf x.groupId
+      let buf = writeFramedString x.groupId buf
       buf
 
   type GroupCoordinatorResponse with
     static member read (buf, _:GroupCoordinatorResponse) =
-      let ec,buf = read buf
-      let cid,buf = read buf
-      let ch,buf = read buf
-      let cp,buf = read buf
-      GroupCoordinatorResponse(ec,cid,ch,cp),buf
-
-
+      let ec, buf = readInt16 buf
+      let cid, buf = readInt32 buf
+      let ch, buf = readFramedString buf
+      let cp, buf = readInt32 buf
+      (GroupCoordinatorResponse(ec, cid, ch, cp), buf)
 
   type OffsetCommitRequest with
     static member size (x:OffsetCommitRequest) =
       (size x.consumerGroup) + (size x.consumerGroupGenerationId) + (size x.consumerId) + (size x.retentionTime) + (size x.topics)
     static member write (buf, x:OffsetCommitRequest) =
-      let buf = write buf x.consumerGroup
-      let buf = write buf x.consumerGroupGenerationId
-      let buf = write buf x.consumerId
-      let buf = write buf x.retentionTime
-      let buf = write buf x.topics
-      buf
+        buf
+        |> writeFramedString x.consumerGroup
+        |> writeInt32 x.consumerGroupGenerationId
+        |> writeFramedString x.consumerId
+        |> writeInt64 x.retentionTime
+        |> writeFramedArray x.topics (fun (topicName, partitions) buf ->
+            buf
+            |> writeFramedString topicName
+            |> writeFramedArray partitions (fun (partition, offset, metadata) buf ->
+                buf
+                |> writeInt32 partition
+                |> writeInt64 offset
+                |> writeFramedString metadata ))
 
   type OffsetCommitResponse with
     static member read (buf, _:OffsetCommitResponse) =
-      let topics,buf = read buf
-      OffsetCommitResponse(topics),buf
-
+      let topics, buf = buf |> readFramedArray (fun buf ->
+        let topicName, buf = readFramedString buf
+        let partitions, buf = buf |> readFramedArray (fun buf ->
+          let partition, buf = readInt32 buf
+          let errorCode, buf = readInt16 buf
+          ((partition, errorCode), buf))
+        ((topicName, partitions), buf))
+      (OffsetCommitResponse(topics), buf)
 
   type OffsetFetchRequest with
     static member size (x:OffsetFetchRequest) =
       (size x.consumerGroup) + (size x.topics)
     static member write (buf, x:OffsetFetchRequest) =
-      let buf = write buf x.consumerGroup
-      let buf = write buf x.topics
+      let buf = buf |> writeFramedString x.consumerGroup
+      let buf =
+        buf |> writeFramedArray x.topics
+          (fun (tn,ps) buf ->
+            let buf = writeFramedString tn buf
+            let buf =
+              buf |> writeFramedArray ps writeInt32
+            buf)
       buf
 
   type OffsetFetchResponse with
     static member read (buf, _:OffsetFetchResponse) =
-      let topics,buf = read buf
-      OffsetFetchResponse(topics),buf
-  
-
+      let topics, buf = buf |> readFramedArray (fun buf ->
+        let topicName, buf = readFramedString buf
+        let partitions, buf = buf |> readFramedArray (fun buf ->
+          let partition, buf = readInt32 buf
+          let offset, buf = readInt64 buf
+          let metadata, buf = readFramedString buf
+          let errorCode, buf = readInt16 buf
+          ((partition, offset, metadata, errorCode), buf))
+        ((topicName, partitions), buf))
+      (OffsetFetchResponse(topics), buf)
 
   type HeartbeatRequest with
     static member size (x:HeartbeatRequest) =
       (size x.groupId) + (size x.generationId) + (size x.memberId)
     static member write (buf, x:HeartbeatRequest) =
-      let buf = write buf x.groupId
-      let buf = write buf x.generationId
-      let buf = write buf x.memberId
+      let buf = writeFramedString x.groupId buf
+      let buf = writeInt32 x.generationId buf
+      let buf = writeFramedString x.memberId buf
       buf
 
   type HeartbeatResponse with
     static member read (buf, _:HeartbeatResponse) =
-      let errorCode,buf = read buf
-      HeartbeatResponse(errorCode),buf
-
-
+      let errorCode,buf = readInt16 buf
+      (HeartbeatResponse(errorCode), buf)
 
   type GroupProtocols with
     static member size (x:GroupProtocols) =
       (size x.protocols)
     static member write (buf, x:GroupProtocols) =
-      let buf = write buf x.protocols
-      buf
-    
+      buf |> writeFramedArray x.protocols (fun (protoName, protoMeta) ->
+        writeFramedString protoName >> writeFramedBytes protoMeta)
+
   type JoinGroupRequest with
     static member size (x:JoinGroupRequest) =
       (size x.groupId) + (size x.sessionTimeout) + (size x.memberId) + (size x.protocolType) + (size x.groupProtocols)
     static member write (buf, x:JoinGroupRequest) =
-      let buf = write buf x.groupId
-      let buf = write buf x.sessionTimeout
-      let buf = write buf x.memberId
-      let buf = write buf x.protocolType
-      let buf = write buf x.groupProtocols
+      let buf = writeFramedString x.groupId buf
+      let buf = writeInt32 x.sessionTimeout buf
+      let buf = writeFramedString x.memberId buf
+      let buf = writeFramedString x.protocolType buf
+      let buf = buf |> writeFramedArray x.groupProtocols.protocols (fun (protoName, protoMeta) ->
+                          writeFramedString protoName >> writeFramedBytes protoMeta)
       buf
 
   type Members with
     static member read (buf, _:Members) =
-      let xs,buf = read buf
-      Members(xs),buf
+      let xs, buf = buf |> readFramedArray (fun buf ->
+        let memberId, buf = readFramedString buf
+        let memberMeta, buf = readFramedBytes buf
+        ((memberId, memberMeta), buf))
+      (Members(xs), buf)
 
   type JoinGroupResponse with
     static member read (buf, _:JoinGroupResponse) =
-      let errorCode,buf = read buf
-      let gid,buf = read buf
-      let gp,buf = read buf
-      let lid,buf = read buf
-      let mid,buf = read buf
+      let errorCode,buf = readInt16 buf
+      let gid,buf = readInt32 buf
+      let gp,buf = readFramedString buf
+      let lid,buf = readFramedString buf
+      let mid,buf = readFramedString buf
       let ms,buf = read buf
-      JoinGroupResponse(errorCode,gid,gp,lid,mid,ms),buf
-      
+      (JoinGroupResponse(errorCode, gid, gp, lid, mid, ms), buf)
 
   type LeaveGroupRequest with
     static member size (x:LeaveGroupRequest) =
       (size x.groupId) + (size x.memberId)
     static member write (buf, x:LeaveGroupRequest) =
-      let buf = write buf x.groupId
-      let buf = write buf x.memberId
+      let buf = writeFramedString x.groupId buf
+      let buf = writeFramedString x.memberId buf
       buf
-  
+
   type LeaveGroupResponse with
     static member read (buf, _:LeaveGroupResponse) =
-      let errorCode,buf = read buf
-      LeaveGroupResponse(errorCode),buf
-
+      let errorCode,buf = readInt16 buf
+      (LeaveGroupResponse(errorCode), buf)
 
   type GroupAssignment with
     static member size (x:GroupAssignment) =
       (size x.members)
     static member write (buf, x:GroupAssignment) =
-      let buf = write buf x.members
+      let buf = buf |> writeFramedArray x.members (fun (memberId, memberAssignment) buf ->
+        let buf = writeFramedString memberId buf
+        let buf = writeFramedBytes memberAssignment buf
+        buf)
       buf
 
   type SyncGroupRequest with
     static member size (x:SyncGroupRequest) =
       (size x.groupId) + (size x.generationId) + (size x.memberId) + (size x.groupAssignment)
     static member write (buf, x:SyncGroupRequest) =
-      let buf = write buf x.groupId
-      let buf = write buf x.generationId
-      let buf = write buf x.memberId
+      let buf = writeFramedString x.groupId buf
+      let buf = writeInt32 x.generationId buf
+      let buf = writeFramedString x.memberId buf
       let buf = write buf x.groupAssignment
       buf
-  
+
   type SyncGroupResponse with
     static member read (buf, _:SyncGroupResponse) =
-      let errorCode,buf = read buf
-      let ma,buf = read buf
-      SyncGroupResponse(errorCode,ma),buf
-
+      let errorCode, buf = readInt16 buf
+      let ma, buf = readFramedBytes buf
+      (SyncGroupResponse(errorCode, ma), buf)
 
   type ListGroupsRequest with
     static member size (x:ListGroupsRequest) = 0
     static member write (buf, x:ListGroupsRequest) = buf
-  
+
   type ListGroupsResponse with
     static member read (buf, _:ListGroupsResponse) =
-      let errorCode,buf = read buf
-      let gs,buf = read buf
-      ListGroupsResponse(errorCode,gs),buf
-
+      let errorCode,buf = readInt16 buf
+      // (GroupId * ProtocolType) []
+      let gs, buf = buf |> readFramedArray (fun buf ->
+        let groupId, buf = readFramedString buf
+        let protoType, buf = readFramedString buf
+        ((groupId, protoType), buf))
+      (ListGroupsResponse(errorCode, gs), buf)
 
   type DescribeGroupsRequest with
-    static member size (x:DescribeGroupsRequest) = 
+    static member size (x:DescribeGroupsRequest) =
       (size x.groupIds)
-    static member write (buf, x:DescribeGroupsRequest) = 
-      let buf = write buf x.groupIds
+    static member write (buf, x:DescribeGroupsRequest) =
+      let buf = buf |> writeFramedArray x.groupIds writeFramedString
       buf
-  
+
   type GroupMembers with
     static member read (buf, _:GroupMembers) =
-      let xs,buf = read buf
-      GroupMembers(xs),buf    
+      let xs, buf = buf |> readFramedArray (fun buf ->
+        let memberId, buf = readFramedString buf
+        let clientId, buf = readFramedString buf
+        let clientHost, buf = readFramedString buf
+        let memberMeta, buf = readFramedBytes buf
+        let memberAssignment, buf = readFramedBytes buf
+        ((memberId, clientId, clientHost, memberMeta, memberAssignment), buf))
+      (GroupMembers(xs), buf)
 
   type DescribeGroupsResponse with
     static member read (buf, _:DescribeGroupsResponse) =
-      let xs,buf = read buf
-      DescribeGroupsResponse(xs),buf
-
-
-
+      let xs, buf = buf |> readFramedArray (fun buf ->
+        let errorCode, buf = readInt16 buf
+        let groupId, buf = readFramedString buf
+        let state, buf = readFramedString buf
+        let protoType, buf = readFramedString buf
+        let protocol, buf = readFramedString buf
+        let groupMembers, buf = read buf
+        ((errorCode, groupId, state, protoType, protocol, groupMembers), buf))
+      (DescribeGroupsResponse(xs), buf)
 
   type RequestMessage with
     static member size (x:RequestMessage) =
@@ -1308,7 +1241,6 @@ module Protocol =
       | ListGroups x -> write buf x
       | DescribeGroups x -> write buf x
 
-
   type ResponseMessage with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
@@ -1329,48 +1261,47 @@ module Protocol =
       | ApiKey.DescribeGroupsRequest -> let x,buf = read buf in (ResponseMessage.DescribeGroupsResponse x)
       | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
 
-
-
   type Request with
     static member size (x:Request) =
       (size (int16 x.apiKey)) + (size x.apiVersion) + (size x.correlationId) + (size x.clientId) + (size x.message)
     static member inline write (buf, x:Request) =
-      let buf = write buf (int16 x.apiKey)
-      let buf = write buf x.apiVersion
-      let buf = write buf x.correlationId
-      let buf = write buf x.clientId
+      let buf = writeInt16 (int16 x.apiKey) buf
+      let buf = writeInt16 x.apiVersion buf
+      let buf = writeInt32 x.correlationId buf
+      let buf = writeFramedString x.clientId buf
       let buf = write buf x.message
       buf
-      
-  // -------------------------------------------------------------------------------------------------------------------------------------
 
   type ConsumerGroupProtocolMetadata with
     static member size (x:ConsumerGroupProtocolMetadata) =
       (size x.version) + (size x.subscription) + (size x.userData)
     static member write (buf, x:ConsumerGroupProtocolMetadata) =
-      let buf = write buf x.version
-      let buf = write buf x.subscription
-      let buf = write buf x.userData
+      let buf = writeInt16 x.version buf
+      let buf = buf |> writeFramedArray x.subscription writeFramedString
+      let buf = writeFramedBytes x.userData buf
       buf
 
   type PartitionAssignment with
     static member size (x:PartitionAssignment) =
       (size x.assignments)
     static member write (buf, x:PartitionAssignment) =
-      let buf = write buf x.assignments
-      buf
+      buf |> writeFramedArray x.assignments (fun (topicName, partitions) buf ->
+        buf |> writeFramedString topicName |> writeFramedArray partitions writeInt32)
     static member read (data, _:PartitionAssignment) =
-      let assignments,data = read data
-      PartitionAssignment(assignments),data
+      let assignments, data = data |> readFramedArray (fun buf ->
+        let topicName, buf = readFramedString buf
+        let partitions, buf = buf |> readFramedArray readInt32
+        ((topicName, partitions), buf))
+      (PartitionAssignment(assignments), data)
 
   type ConsumerGroupMemberAssignment with
     static member size (x:ConsumerGroupMemberAssignment) =
       (size x.version) + (size x.partitionAssignment)
     static member write (buf, x:ConsumerGroupMemberAssignment) =
-      let buf = write buf x.version
+      let buf = writeInt16 x.version buf
       let buf = write buf x.partitionAssignment
       buf
     static member read (data, _:ConsumerGroupMemberAssignment) =
-      let version,data = read data
-      let assignments,data = read data
-      ConsumerGroupMemberAssignment(version,assignments),data
+      let version, data = readInt16 data
+      let assignments, data = read data
+      (ConsumerGroupMemberAssignment(version, assignments), data)
