@@ -47,10 +47,12 @@ module Protocol =
 
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module Compression =
-    
-    let None = 0uy
-    let GZIP = 1uy
-    let Snappy = 2uy
+    [<Literal>]
+    let None = 0y
+    [<Literal>]
+    let GZIP = 1y
+    [<Literal>]
+    let Snappy = 2y
 
   type Key = ArraySeg<byte>
 
