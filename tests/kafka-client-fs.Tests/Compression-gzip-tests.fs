@@ -10,7 +10,7 @@ open System.Text
 [<Category("Compression")>]
 let ``Message Compression with Gzip`` () =
     let messageBytes = [| 1uy; 2uy; 3uy; 4uy|]
-    let message = Message.create <| ArraySeg.ofArray messageBytes
+    let message = Message.create(value=ArraySeg.ofArray messageBytes, compression=Protocol.CompressionCodecs.GZIPCompressionCodec)
     let message2 = 
         Compression.gzip [message]
 

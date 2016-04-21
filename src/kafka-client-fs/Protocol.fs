@@ -50,9 +50,18 @@ module Protocol =
     [<Literal>]
     let None = 0y
     [<Literal>]
-    let GZIP = 1y
+    let GZIP = 2y
     [<Literal>]
-    let Snappy = 2y
+    let Snappy = 3y
+    // TODO: perhaps another module?
+    [<Literal>]
+    let CompressionMask = 3y
+
+  type CompressionCodecs = 
+    NoCompressionCodec = 0y
+    | DefaultCompressoinCodec = 1y
+    | GZIPCompressionCodec = 2y
+    | SnappyCompressionCodec = 3y
 
   type Key = ArraySeg<byte>
 

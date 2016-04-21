@@ -13,7 +13,7 @@ module Compression =
             let messageSet = messages |> MessageSet.ofMessages
             let inputBytes = messageSet |> MessageSet.size |> Array.zeroCreate
             let segment = ArraySeg.ofArray inputBytes
-            let remainingBuf = MessageSet.write(segment, messageSet)
+            MessageSet.write(segment, messageSet) |> ignore
             try
                 gZipStream.Write(inputBytes, 0, inputBytes.Length)
                 gZipStream.Close() 
@@ -21,12 +21,13 @@ module Compression =
                 // TODO: log this
                 printfn "Couldn't write to gzip stream: %A" ex
                 reraise()
-        Message.create (outputStream.ToArray() |> ArraySeg.ofArray, attrs = Protocol.Compression.GZIP)  
+        Message.create (outputStream.ToArray() |> ArraySeg.ofArray, 
+          compression = Protocol.CompressionCodecs.GZIPCompressionCodec)  
 
     // TODO: is it true that we'll always have the size available here, or do we need to somehow get it out of the MessageSet itself (which may be nontrivial)?
     //       I think in each place that a MessageSet is serialized, the MessageSetSize comes along with it
     let decompress (message:Message) size =
-        match message.attributes &&& 3y with
+        match message.attributes &&& Protocol.Compression.CompressionMask with
         | Protocol.Compression.GZIP ->
             let inputBytes = message.value |> ArraySeg.toArray
             use outputStream = new MemoryStream() 
@@ -48,6 +49,9 @@ module Compression =
         | Protocol.Compression.None ->
             // TODO: logging?
             failwithf "Can't decompress uncompressed message..."
+        | Protocol.Compression.Snappy ->
+            // TODO: snappy implementation
+            failwithf "Snappy codec not implemented..."
         | codec  -> 
             // TODO: logging?
             failwithf "Unknown Codec: %i" codec 
