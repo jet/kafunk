@@ -658,23 +658,35 @@ module Protocol =
 
   let CodecsInst = Codecs
 
-  let inline _write< ^a, ^b when (^a or ^b) : (static member write : ArraySeg<byte> * ^a -> ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
-    let buf = ((^a or ^b) : (static member write : ArraySeg<byte> -> ^a -> ArraySeg<byte>) (buf,x))
-    buf
+//  let inline _write< ^a, ^b when (^a or ^b) : (static member write : ArraySeg<byte> * ^a -> ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
+//    let buf = ((^a or ^b) : (static member write : ArraySeg<byte> -> ^a -> ArraySeg<byte>) (buf,x))
+//    buf
+//
+//  let inline write buf x = 
+//    _write buf x (CodecsInst)
 
-  let inline write buf x = _write buf x (CodecsInst)
+  let write (_:ArraySeg<byte>) (_:'a) : ArraySeg<byte> = 
+    failwith ""
 
-  let inline _read< ^a, ^b when (^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
-    let a,buf = ((^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>) (buf,x))
-    a,buf
+//  let inline _read< ^a, ^b when (^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
+//    let a,buf = ((^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>) (buf,x))
+//    a,buf
+//
+//  let inline read buf = 
+//    _read buf Unchecked.defaultof<_> (CodecsInst)
 
-  let inline read buf = _read buf Unchecked.defaultof<_> (CodecsInst)
+  let read (_:ArraySeg<byte>) : 'a * ArraySeg<byte> = 
+    failwith ""
 
-  let inline _size< ^a, ^b when (^a or ^b) : (static member size : ^a -> int)> (x:^a) (_:^b) =
-    let size = ((^a or ^b) : (static member size : ^a -> int) x)
-    size
+//  let inline _size< ^a, ^b when (^a or ^b) : (static member size : ^a -> int)> (x:^a) (_:^b) =
+//    let size = ((^a or ^b) : (static member size : ^a -> int) x)
+//    size
+//
+//  let inline size x = 
+//    _size x (CodecsInst)
 
-  let inline size x = _size x (CodecsInst)
+  let size (_:'a) : int = 
+    failwith ""
 
   let inline toArraySeg x =
     let size = size x
