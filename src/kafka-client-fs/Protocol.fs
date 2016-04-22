@@ -95,13 +95,11 @@ module Protocol =
 
   type PartitionErrorCode = int16
 
-  //type PartitionId = int32
-
   type Leader = int32
 
   type Replicas = int32[]
 
-  /// In-sync replicas.
+  /// In-sync replicas
   type Isr = int32[]
 
   type ErrorCode = int16

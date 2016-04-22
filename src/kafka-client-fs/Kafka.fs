@@ -13,8 +13,6 @@ open System.Runtime.ExceptionServices
 
 open KafkaFs
 
-
-// -------------------------------------------------------------------------------------------------------------------------------------
 // smart constructors
 
 [<AutoOpen>]
@@ -100,18 +98,6 @@ module Constructors =
     static member ofTopicPartitions (topic:TopicName, ps:(Partition * FetchOffset)[], ?maxWaitTime:MaxWaitTime, ?minBytes:MinBytes, ?maxBytesPerPartition:MaxBytes) =
       FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, ps |> Array.map (fun (p,o) -> p, o, (defaultArg maxBytesPerPartition 1000)) |])
 
-
-// -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-// -------------------------------------------------------------------------------------------------------------------------------------
 // Connection
 
 module internal Conn =
@@ -409,23 +395,6 @@ type KafkaConnCfg = {
   /// The client id.
   clientId : ClientId
 
-//  /// A filter to apply to request/reply interactions.
-//  filter : AsyncFilter<RequestMessage, ResponseMessage> option
-//
-//  /// Receive buffer size on the socket.
-//  /// This is the size of the chunk in which TCP will try to receive data in.
-//  socketReceiveBufferSize : int option
-//
-//  /// Send buffer size on the socket.
-//  /// This is the size of the chunk in which TCP will try to transmit data in.
-//  socketSendBufferSize : int option
-//
-//  /// The maximum number of concurrent request/reply sessions.
-//  maxSessions : int
-//
-//  /// A possible handler to call when a connection is closed.
-//  onConnectionClosed : (KafkaConnCfg -> Async<KafkaConn>) option
-
 }
 with
 
@@ -457,8 +426,6 @@ and KafkaConn internal (reqRepSession:ReqRepSession<_,_,_>) =
 
     let connSocket =
       let s = new Socket(ep.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
-      //s.ReceiveBufferSize <- 8192
-      //s.SendBufferSize <- 8192
       s.NoDelay <- true
       s.ExclusiveAddressUse <- true
       s
@@ -493,9 +460,6 @@ and KafkaConn internal (reqRepSession:ReqRepSession<_,_,_>) =
         Session.corrId encode decode inputStream send
 
     return KafkaConn(session) }
-
-// -----------------------------------------------------------------------------------------------
-
 
 /// Kafka API.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -550,9 +514,6 @@ module Kafka =
   let describeGroups (c:KafkaConn) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
     Api.describeGroups c.Send req
 
-
-
-  // -------------------------------------------------------------------------------------------------------------------------
   // consumer groups
 
   type ConsumerConfig = {
@@ -599,20 +560,6 @@ module Kafka =
     | Anything
 
 
-
-//  type ConsumerState =
-//    | Down
-//    | Discover of GroupId
-//    | GroupFollower of generationId:GenerationId * LeaderId * MemberId * GroupProtocol
-//    | GroupLeader of generationId:GenerationId * LeaderId * MemberId * Members * GroupProtocol
-//    | PartOfGroup
-//    | RediscoverCoordinator
-//    | StoppedConsumption
-//    | Error
-
-
-
-
   /// Domain-specific message set.
   type ConsumerEvent =
 
@@ -650,25 +597,6 @@ module Kafka =
 
     /// 16	Yes	The broker returns this error code if it receives an offset fetch or commit request for a group that it is not a coordinator for.
     | NotCoordinatorForGroup
-
-
-
-//  module AsyncSeq =
-//
-//    let singletonAsync (a:Async<'a>) : AsyncSeq<'a> =
-//      asyncSeq {
-//        let! a = a
-//        yield a }
-//
-//    let repeatAsync (a:Async<'a>) : AsyncSeq<'a> =
-//      asyncSeq {
-//        while true do
-//          let! a = a
-//          yield a }
-//
-//    let mergeChoice (s1:AsyncSeq<'a>) (s2:AsyncSeq<'b>) : AsyncSeq<Choice<'a, 'b>> =
-//      AsyncSeq.merge (s1 |> AsyncSeq.map Choice1Of2) (s2 |> AsyncSeq.map Choice2Of2)
-
 
 
   /// Given a consumer configuration, initiates the consumer group protocol.
@@ -792,8 +720,6 @@ module Kafka =
       // TODO: send commit/fetch requests to groop coord
 
 
-
-
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
       let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
@@ -845,11 +771,3 @@ module Kafka =
     return! go ()
 
   }
-
-
-
-
-// -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
