@@ -60,10 +60,10 @@ module Constructors =
   type MessageSet with
 
     static member ofMessage (m:Message) =
-      MessageSet([| 0L, (size m), m |])
+      MessageSet([| 0L, (Message.size m), m |])
 
     static member ofMessages (ms:Message seq) =
-      MessageSet(ms |> Seq.map (fun m -> 0L, size m, m) |> Seq.toArray)
+      MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
 
     /// Returns the next offset to fetch, by taking the max offset in the
     /// message set and adding one.
@@ -77,19 +77,19 @@ module Constructors =
       ProduceRequest(
         (defaultArg requiredAcks RequiredAcks.Local),
         (defaultArg timeout 1000),
-        [| topic , [| partition, (size ms), ms |] |])
+        [| topic , [| partition, (MessageSet.size ms), ms |] |])
 
     static member ofMessageSets (topic:TopicName, ms:(Partition * MessageSet)[], ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
       ProduceRequest(
         (defaultArg requiredAcks RequiredAcks.Local),
         (defaultArg timeout 1000),
-        [| topic , ms |> Array.map (fun (p,ms) -> p, (size ms), ms ) |])
+        [| topic , ms |> Array.map (fun (p,ms) -> p, (MessageSet.size ms), ms ) |])
 
     static member ofMessageSetTopics (ms:(TopicName * (Partition * MessageSet)[])[], ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
       ProduceRequest(
         (defaultArg requiredAcks RequiredAcks.Local),
         (defaultArg timeout 1000),
-        ms |> Array.map (fun (t,ms) -> t , ms |> Array.map (fun (p,ms) -> p, (size ms), ms )))
+        ms |> Array.map (fun (t,ms) -> t , ms |> Array.map (fun (p,ms) -> p, (MessageSet.size ms), ms )))
 
 
   type FetchRequest with
@@ -126,7 +126,7 @@ module internal Conn =
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
       let req = Request(ApiVersion, correlationId, clientId, req)
-      let sessionData = toArraySeg size Request.write req
+      let sessionData = toArraySeg Request.size Request.write req
       sessionData, req.apiKey
 
     /// Decodes the session layer input and session state into a response.
@@ -470,7 +470,7 @@ and KafkaConn internal (reqRepSession:ReqRepSession<_,_,_>) =
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
       let req = Request(ApiVersion, correlationId, clientId, req)
-      let sessionData = toArraySeg size Request.write req
+      let sessionData = toArraySeg Request.size Request.write req
       sessionData, req.apiKey
 
     /// Decodes the session layer input and session state into a response.
@@ -694,7 +694,7 @@ module Kafka =
     let joinGroup2 =
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
+      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
       let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
       joinGroup conn joinGroupReq
       |> Async.map (fun res ->
@@ -727,7 +727,7 @@ module Kafka =
     // sent to group coordinator
     let leaderSyncGroup (generationId,memberId,members) = async {
       let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-      let members = [| "" (*memberId*), (toArraySeg size ConsumerGroupMemberAssignment.write assignment) |]
+      let members = [| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]
       let req = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment(members))
       let! res = syncGroup conn req
       match res.errorCode with
@@ -796,7 +796,7 @@ module Kafka =
 
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
+      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
 
 
 
@@ -812,7 +812,7 @@ module Kafka =
         // determine assignments
         // send sync request
         let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-        let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg size ConsumerGroupMemberAssignment.write assignment) |]))
+        let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]))
         let! syncRes = syncGroup conn syncReq
 
         // TODO: get metadata?
@@ -841,7 +841,6 @@ module Kafka =
         return Cons ( (generationId,memberId,topicStreams), go ())
 
       }
-
 
     return! go ()
 
