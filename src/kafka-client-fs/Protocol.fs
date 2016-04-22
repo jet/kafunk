@@ -628,29 +628,11 @@ module Protocol =
 
   let CodecsInst = Codecs
 
-  let inline _write< ^a, ^b when (^b or ^a) : (static member write : ArraySeg<byte> * ^a -> ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
-    let buf = ((^a or ^b) : (static member write : ArraySeg<byte> -> ^a -> ArraySeg<byte>) (buf,x))
-    buf
-
-  let inline write buf x = _write buf x (CodecsInst)
-
-  let inline _read< ^a, ^b when (^b or ^a) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>)> (buf:ArraySeg<_>) (x:^a) (_:^b) =
-    let a,buf = ((^a or ^b) : (static member read : ArraySeg<byte> * ^a -> ^a * ArraySeg<byte>) (buf,x))
-    a,buf
-
-  let inline read buf = _read buf Unchecked.defaultof<_> (CodecsInst)
-
   let inline _size< ^a, ^b when (^b or ^a) : (static member size : ^a -> int)> (x:^a) (_:^b) =
     let size = ((^a or ^b) : (static member size : ^a -> int) x)
     size
 
   let inline size x = _size x (CodecsInst)
-
-  let inline toArraySeg x =
-    let size = size x
-    let buf = ArraySeg.ofCount size
-    write buf x |> ignore
-    buf
 
   let inline writeInt8 b (buf : ArraySeg<byte>) =
     buf.Array.[buf.Offset] <- byte b
@@ -861,14 +843,12 @@ module Protocol =
       if crc <> crc' then
         failwith (sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc)
       (Message(crc, magicByte, attrs, key, value), data)
-    static member read (data, _:Message) =
-      Message.read(data)
 
   type MessageSet with
     static member size (x:MessageSet) =
       x.messages |> Array.sumBy size
     static member write (buf, ms:MessageSet) =
-      writeArrayNoSize buf ms.messages (fun buf elem -> write3 writeInt64 writeInt32 (fun message buf -> write buf message) elem buf)
+      writeArrayNoSize buf ms.messages (fun buf elem -> write3 writeInt64 writeInt32 (fun message buf -> Message.write (buf, message)) elem buf)
     /// Reads a message set given the size in bytes.
     static member read (data, size:int) =
       let offset = readInt64
@@ -884,12 +864,12 @@ module Protocol =
       buf |> writeArray x.topicNames writeString
 
   type Broker with
-    static member read (data:ArraySeg<_>, _:Broker) =
+    static member read (data:ArraySeg<_>) =
       let (nodeId, host, port), data = read3 readInt32 readString readInt32 data
       (Broker(nodeId, host, port), data)
 
   type PartitionMetadata with
-    static member read (data:ArraySeg<_>, _:PartitionMetadata) =
+    static member read (data:ArraySeg<_>) =
       let partitionErrorCode, data = readInt16 data
       let partitionId, data = readInt32 data
       let leader, data = readInt32 data
@@ -898,16 +878,16 @@ module Protocol =
       (PartitionMetadata(partitionErrorCode, partitionId, leader, replicas, isr), data)
 
   type TopicMetadata with
-    static member read (data:ArraySeg<_>, _:TopicMetadata) =
+    static member read (data:ArraySeg<_>) =
       let errorCode, data = readInt16 data
       let topicName, data = readString data
-      let partitionMetadata, data = readArray read data
+      let partitionMetadata, data = readArray PartitionMetadata.read data
       (TopicMetadata(errorCode, topicName, partitionMetadata), data)
 
   type MetadataResponse with
-    static member read (data:ArraySeg<_>, _:MetadataResponse) =
-      let brokers, data = readArray read data
-      let topicMetadata, data = readArray read data
+    static member read (data:ArraySeg<_>) =
+      let brokers, data = readArray Broker.read data
+      let topicMetadata, data = readArray TopicMetadata.read data
       (MetadataResponse(brokers, topicMetadata), data)
 
   type ProduceRequest with
@@ -917,7 +897,7 @@ module Protocol =
       + (getArraySize x.topics (fun (tn,ps) -> size tn + (getArraySize ps (fun (p,mss,ms) -> (size p) + 4 + mss))))
     static member write (buf, x:ProduceRequest) =
       let writePartition =
-        write3 writeInt32 writeInt32 (fun msgSet buf -> write buf msgSet)
+        write3 writeInt32 writeInt32 (fun msgSet buf -> MessageSet.write (buf, msgSet))
       let writeTopic =
         write2 writeString (fun ps -> writeArray ps writePartition)
       buf
@@ -926,7 +906,7 @@ module Protocol =
       |> writeArray x.topics writeTopic
 
   type ProduceResponse with
-    static member read (data, _:ProduceResponse) =
+    static member read (data) =
       let topics, data =
         data |> readArray (fun data ->
             let topicName, data = readString data
@@ -954,7 +934,7 @@ module Protocol =
       |> writeArray x.topics writeTopic
 
   type FetchResponse with
-    static member read (data, _:FetchResponse) =
+    static member read (data) =
       let topics, data =
         data |> readArray
           (fun data ->
@@ -984,14 +964,14 @@ module Protocol =
       |> writeArray x.topics writeTopic
 
   type PartitionOffsets with
-    static member read (buf, _:PartitionOffsets) =
+    static member read (buf) =
       let p,buf = readInt32 buf
       let ec,buf = readInt16 buf
       let offs,buf = readArray readInt64 buf
       (PartitionOffsets(p, ec, offs), buf)
 
   type OffsetResponse with
-    static member read (buf, _:OffsetResponse) =
+    static member read (buf) =
       let topics, buf = buf |> readArray (fun buf ->
         let topicName, buf = readString buf
         let partitionOffsets, buf = buf |> readArray (fun buf ->
@@ -1009,7 +989,7 @@ module Protocol =
       writeString x.groupId buf
 
   type GroupCoordinatorResponse with
-    static member read (buf, _:GroupCoordinatorResponse) =
+    static member read (buf) =
       let ec, buf = readInt16 buf
       let cid, buf = readInt32 buf
       let ch, buf = readString buf
@@ -1032,7 +1012,7 @@ module Protocol =
       |> writeArray x.topics writeTopic
 
   type OffsetCommitResponse with
-    static member read (buf, _:OffsetCommitResponse) =
+    static member read (buf) =
       let topics, buf = buf |> readArray (fun buf ->
         let topicName, buf = readString buf
         let partitions, buf = buf |> readArray (fun buf ->
@@ -1053,7 +1033,7 @@ module Protocol =
       |> writeArray x.topics writeTopic
 
   type OffsetFetchResponse with
-    static member read (buf, _:OffsetFetchResponse) =
+    static member read (buf) =
       let topics, buf = buf |> readArray (fun buf ->
         let topicName, buf = readString buf
         let partitions, buf = buf |> readArray (fun buf ->
@@ -1075,7 +1055,7 @@ module Protocol =
       |> writeString x.memberId
 
   type HeartbeatResponse with
-    static member read (buf, _:HeartbeatResponse) =
+    static member read (buf) =
       let errorCode,buf = readInt16 buf
       (HeartbeatResponse(errorCode), buf)
 
@@ -1097,7 +1077,7 @@ module Protocol =
       |> writeArray x.groupProtocols.protocols (write2 writeString writeBytes)
 
   type Members with
-    static member read (buf, _:Members) =
+    static member read (buf) =
       let xs, buf = buf |> readArray (fun buf ->
         let memberId, buf = readString buf
         let memberMeta, buf = readBytes buf
@@ -1105,13 +1085,13 @@ module Protocol =
       (Members(xs), buf)
 
   type JoinGroupResponse with
-    static member read (buf, _:JoinGroupResponse) =
+    static member read (buf) =
       let errorCode,buf = readInt16 buf
       let gid,buf = readInt32 buf
       let gp,buf = readString buf
       let lid,buf = readString buf
       let mid,buf = readString buf
-      let ms,buf = read buf
+      let ms,buf = Members.read buf
       (JoinGroupResponse(errorCode, gid, gp, lid, mid, ms), buf)
 
   type LeaveGroupRequest with
@@ -1121,7 +1101,7 @@ module Protocol =
       buf |> writeString x.groupId |> writeString x.memberId
 
   type LeaveGroupResponse with
-    static member read (buf, _:LeaveGroupResponse) =
+    static member read (buf) =
       let errorCode,buf = readInt16 buf
       (LeaveGroupResponse(errorCode), buf)
 
@@ -1140,10 +1120,10 @@ module Protocol =
         |> writeString x.groupId
         |> writeInt32 x.generationId
         |> writeString x.memberId
-      write buf x.groupAssignment
+      GroupAssignment.write (buf, x.groupAssignment)
 
   type SyncGroupResponse with
-    static member read (buf, _:SyncGroupResponse) =
+    static member read (buf) =
       let errorCode, buf = readInt16 buf
       let ma, buf = readBytes buf
       (SyncGroupResponse(errorCode, ma), buf)
@@ -1153,7 +1133,7 @@ module Protocol =
     static member write (buf, x:ListGroupsRequest) = buf
 
   type ListGroupsResponse with
-    static member read (buf, _:ListGroupsResponse) =
+    static member read (buf) =
       let errorCode,buf = readInt16 buf
       let gs, buf = buf |> readArray (fun buf ->
         let groupId, buf = readString buf
@@ -1168,7 +1148,7 @@ module Protocol =
       buf |> writeArray x.groupIds writeString
 
   type GroupMembers with
-    static member read (buf, _:GroupMembers) =
+    static member read (buf) =
       let xs, buf = buf |> readArray (fun buf ->
         let memberId, buf = readString buf
         let clientId, buf = readString buf
@@ -1179,14 +1159,14 @@ module Protocol =
       (GroupMembers(xs), buf)
 
   type DescribeGroupsResponse with
-    static member read (buf, _:DescribeGroupsResponse) =
+    static member read (buf) =
       let xs, buf = buf |> readArray (fun buf ->
         let errorCode, buf = readInt16 buf
         let groupId, buf = readString buf
         let state, buf = readString buf
         let protoType, buf = readString buf
         let protocol, buf = readString buf
-        let groupMembers, buf = read buf
+        let groupMembers, buf = GroupMembers.read buf
         ((errorCode, groupId, state, protoType, protocol, groupMembers), buf))
       (DescribeGroupsResponse(xs), buf)
 
@@ -1209,38 +1189,38 @@ module Protocol =
 
     static member write (buf, x:RequestMessage) =
       match x with
-      | Heartbeat x -> write buf x
-      | Metadata x -> write buf x
-      | Fetch x -> write buf x
-      | Produce x -> write buf x
-      | Offset x -> write buf x
-      | GroupCoordinator x -> write buf x
-      | OffsetCommit x -> write buf x
-      | OffsetFetch x -> write buf x
-      | JoinGroup x -> write buf x
-      | SyncGroup x -> write buf x
-      | LeaveGroup x -> write buf x
-      | ListGroups x -> write buf x
-      | DescribeGroups x -> write buf x
+      | Heartbeat x -> HeartbeatRequest.write (buf, x)
+      | Metadata x -> MetadataRequest.write (buf, x)
+      | Fetch x -> FetchRequest.write (buf, x)
+      | Produce x -> ProduceRequest.write (buf, x)
+      | Offset x -> OffsetRequest.write (buf, x)
+      | GroupCoordinator x -> GroupCoordinatorRequest.write (buf, x)
+      | OffsetCommit x -> OffsetCommitRequest.write (buf, x)
+      | OffsetFetch x -> OffsetFetchRequest.write (buf, x)
+      | JoinGroup x -> JoinGroupRequest.write (buf, x)
+      | SyncGroup x -> SyncGroupRequest.write (buf, x)
+      | LeaveGroup x -> LeaveGroupRequest.write (buf, x)
+      | ListGroups x -> ListGroupsRequest.write (buf, x)
+      | DescribeGroups x -> DescribeGroupsRequest.write (buf, x)
 
   type ResponseMessage with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
     static member inline readApiKey (buf:ArraySeg<byte>, apiKey:ApiKey) : ResponseMessage =
       match apiKey with
-      | ApiKey.HeartbeatRequest -> let x,buf = read buf in (ResponseMessage.HeartbeatResponse x)
-      | ApiKey.MetadataRequest -> let x,buf = read buf in (ResponseMessage.MetadataResponse x)
-      | ApiKey.FetchRequest -> let x,buf = read buf in (ResponseMessage.FetchResponse x)
-      | ApiKey.ProduceRequest -> let x,buf = read buf in (ResponseMessage.ProduceResponse x)
-      | ApiKey.OffsetRequest -> let x,buf = read buf in (ResponseMessage.OffsetResponse x)
-      | ApiKey.GroupCoordinatorRequest -> let x,buf = read buf in (ResponseMessage.GroupCoordinatorResponse x)
-      | ApiKey.OffsetCommitRequest -> let x,buf = read buf in (ResponseMessage.OffsetCommitResponse x)
-      | ApiKey.OffsetFetchRequest -> let x,buf = read buf in (ResponseMessage.OffsetFetchResponse x)
-      | ApiKey.JoinGroupRequest -> let x,buf = read buf in (ResponseMessage.JoinGroupResponse x)
-      | ApiKey.SyncGroupRequest -> let x,buf = read buf in (ResponseMessage.SyncGroupResponse x)
-      | ApiKey.LeaveGroupRequest -> let x,buf = read buf in (ResponseMessage.LeaveGroupResponse x)
-      | ApiKey.ListGroupsRequest -> let x,buf = read buf in (ResponseMessage.ListGroupsResponse x)
-      | ApiKey.DescribeGroupsRequest -> let x,buf = read buf in (ResponseMessage.DescribeGroupsResponse x)
+      | ApiKey.HeartbeatRequest -> let x,buf = HeartbeatResponse.read buf in (ResponseMessage.HeartbeatResponse x)
+      | ApiKey.MetadataRequest -> let x,buf = MetadataResponse.read buf in (ResponseMessage.MetadataResponse x)
+      | ApiKey.FetchRequest -> let x,buf = FetchResponse.read buf in (ResponseMessage.FetchResponse x)
+      | ApiKey.ProduceRequest -> let x,buf = ProduceResponse.read buf in (ResponseMessage.ProduceResponse x)
+      | ApiKey.OffsetRequest -> let x,buf = OffsetResponse.read buf in (ResponseMessage.OffsetResponse x)
+      | ApiKey.GroupCoordinatorRequest -> let x,buf = GroupCoordinatorResponse.read buf in (ResponseMessage.GroupCoordinatorResponse x)
+      | ApiKey.OffsetCommitRequest -> let x,buf = OffsetCommitResponse.read buf in (ResponseMessage.OffsetCommitResponse x)
+      | ApiKey.OffsetFetchRequest -> let x,buf = OffsetFetchResponse.read buf in (ResponseMessage.OffsetFetchResponse x)
+      | ApiKey.JoinGroupRequest -> let x,buf = JoinGroupResponse.read buf in (ResponseMessage.JoinGroupResponse x)
+      | ApiKey.SyncGroupRequest -> let x,buf = SyncGroupResponse.read buf in (ResponseMessage.SyncGroupResponse x)
+      | ApiKey.LeaveGroupRequest -> let x,buf = LeaveGroupResponse.read buf in (ResponseMessage.LeaveGroupResponse x)
+      | ApiKey.ListGroupsRequest -> let x,buf = ListGroupsResponse.read buf in (ResponseMessage.ListGroupsResponse x)
+      | ApiKey.DescribeGroupsRequest -> let x,buf = DescribeGroupsResponse.read buf in (ResponseMessage.DescribeGroupsResponse x)
       | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
 
   type Request with
@@ -1253,7 +1233,7 @@ module Protocol =
         |> writeInt16 x.apiVersion
         |> writeInt32 x.correlationId
         |> writeString x.clientId
-      write buf x.message
+      RequestMessage.write (buf, x.message)
 
   type ConsumerGroupProtocolMetadata with
     static member size (x:ConsumerGroupProtocolMetadata) =
@@ -1270,7 +1250,7 @@ module Protocol =
     static member write (buf, x:PartitionAssignment) =
       let writePartitions partitions = writeArray partitions writeInt32
       buf |> writeArray x.assignments (write2 writeString writePartitions)
-    static member read (data, _:PartitionAssignment) =
+    static member read (data) =
       let assignments, data = data |> readArray (fun buf ->
         let topicName, buf = readString buf
         let partitions, buf = buf |> readArray readInt32
@@ -1282,8 +1262,14 @@ module Protocol =
       (size x.version) + (size x.partitionAssignment)
     static member write (buf, x:ConsumerGroupMemberAssignment) =
       let buf = writeInt16 x.version buf
-      write buf x.partitionAssignment
-    static member read (data, _:ConsumerGroupMemberAssignment) =
+      PartitionAssignment.write (buf, x.partitionAssignment)
+    static member read (data) =
       let version, data = readInt16 data
-      let assignments, data = read data
+      let assignments, data = PartitionAssignment.read data
       (ConsumerGroupMemberAssignment(version, assignments), data)
+
+  let inline toArraySeg size write x =
+    let size = size x
+    let buf = ArraySeg.ofCount size
+    write (buf, x) |> ignore
+    buf
