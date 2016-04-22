@@ -1,9 +1,10 @@
 ﻿namespace KafkaFs
 
-open Kafka
+open KafkaFs
 open System.IO
 open System.IO.Compression
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Compression =
     // The only thing that can be compressed is a MessageSet, not a single Message; this results in a message containing the compressed set
     let gzip messages =
