@@ -684,7 +684,7 @@ module Protocol =
     let n = BitConverter.ToInt64BigEndian(buf.Array, buf.Offset)
     (n, buf |> ArraySeg.shiftOffset 8)
 
-  let inline writeFramedBytes (bytes : ArraySeg<byte>) buf =
+  let inline writeBytes (bytes : ArraySeg<byte>) buf =
     if isNull bytes.Array then
       writeInt32 -1 buf
     else
@@ -692,7 +692,7 @@ module Protocol =
       Array.Copy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
       buf |> ArraySeg.shiftOffset bytes.Count
 
-  let inline readFramedBytes (buf : ArraySeg<byte>) : ArraySeg<byte> * ArraySeg<byte> =
+  let inline readBytes (buf : ArraySeg<byte>) : ArraySeg<byte> * ArraySeg<byte> =
     let length, buf = readInt32 buf
     if length = -1 then ArraySeg<_>(), buf
     else
@@ -845,8 +845,8 @@ module Protocol =
         buf
         |> writeInt8 m.magicByte
         |> writeInt8 m.attributes
-        |> writeFramedBytes m.key
-        |> writeFramedBytes m.value
+        |> writeBytes m.key
+        |> writeBytes m.value
       let crc = Crc.crc32 (buf.Array, offset, buf.Offset - offset)
       BitConverter.GetBytesBigEndian (int crc, buf.Array, offset - 4)
       buf
@@ -855,8 +855,8 @@ module Protocol =
       let offset = data.Offset
       let magicByte,data = readInt8 data
       let attrs,data = readInt8 data
-      let key,data = readFramedBytes data
-      let value,data = readFramedBytes data
+      let key,data = readBytes data
+      let value,data = readBytes data
       let crc' = int (Crc.crc32 (data.Array, offset, data.Offset - offset))
       if crc <> crc' then
         failwith (sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc)
@@ -1083,7 +1083,7 @@ module Protocol =
     static member size (x:GroupProtocols) =
       (size x.protocols)
     static member write (buf, x:GroupProtocols) =
-      buf |> writeArray x.protocols (write2 writeString writeFramedBytes)
+      buf |> writeArray x.protocols (write2 writeString writeBytes)
 
   type JoinGroupRequest with
     static member size (x:JoinGroupRequest) =
@@ -1094,13 +1094,13 @@ module Protocol =
       |> writeInt32 x.sessionTimeout
       |> writeString x.memberId
       |> writeString x.protocolType
-      |> writeArray x.groupProtocols.protocols (write2 writeString writeFramedBytes)
+      |> writeArray x.groupProtocols.protocols (write2 writeString writeBytes)
 
   type Members with
     static member read (buf, _:Members) =
       let xs, buf = buf |> readArray (fun buf ->
         let memberId, buf = readString buf
-        let memberMeta, buf = readFramedBytes buf
+        let memberMeta, buf = readBytes buf
         ((memberId, memberMeta), buf))
       (Members(xs), buf)
 
@@ -1129,7 +1129,7 @@ module Protocol =
     static member size (x:GroupAssignment) =
       (size x.members)
     static member write (buf, x:GroupAssignment) =
-      buf |> writeArray x.members (write2 writeString writeFramedBytes)
+      buf |> writeArray x.members (write2 writeString writeBytes)
 
   type SyncGroupRequest with
     static member size (x:SyncGroupRequest) =
@@ -1145,7 +1145,7 @@ module Protocol =
   type SyncGroupResponse with
     static member read (buf, _:SyncGroupResponse) =
       let errorCode, buf = readInt16 buf
-      let ma, buf = readFramedBytes buf
+      let ma, buf = readBytes buf
       (SyncGroupResponse(errorCode, ma), buf)
 
   type ListGroupsRequest with
@@ -1173,8 +1173,8 @@ module Protocol =
         let memberId, buf = readString buf
         let clientId, buf = readString buf
         let clientHost, buf = readString buf
-        let memberMeta, buf = readFramedBytes buf
-        let memberAssignment, buf = readFramedBytes buf
+        let memberMeta, buf = readBytes buf
+        let memberAssignment, buf = readBytes buf
         ((memberId, clientId, clientHost, memberMeta, memberAssignment), buf))
       (GroupMembers(xs), buf)
 
@@ -1262,7 +1262,7 @@ module Protocol =
       buf
       |> writeInt16 x.version
       |> writeArray x.subscription writeString
-      |> writeFramedBytes x.userData
+      |> writeBytes x.userData
 
   type PartitionAssignment with
     static member size (x:PartitionAssignment) =
