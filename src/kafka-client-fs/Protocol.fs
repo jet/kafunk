@@ -739,6 +739,23 @@ module Protocol =
     let d, buf = readD buf
     ((a, b, c, d), buf)
 
+  let inline read5 (readA : Reader<'a>) (readB : Reader<'b>) (readC : Reader<'c>) (readD : Reader<'d>)  (readE : Reader<'e>) (buf : ArraySeg<byte>) : ('a * 'b * 'c * 'd * 'e) * ArraySeg<byte> =
+    let a, buf = readA buf
+    let b, buf = readB buf
+    let c, buf = readC buf
+    let d, buf = readD buf
+    let e, buf = readE buf
+    ((a, b, c, d, e), buf)
+
+  let inline read6 (readA : Reader<'a>) (readB : Reader<'b>) (readC : Reader<'c>) (readD : Reader<'d>)  (readE : Reader<'e>) (readF : Reader<'f>) (buf : ArraySeg<byte>) : ('a * 'b * 'c * 'd * 'e * 'f) * ArraySeg<byte> =
+    let a, buf = readA buf
+    let b, buf = readB buf
+    let c, buf = readC buf
+    let d, buf = readD buf
+    let e, buf = readE buf
+    let f, buf = readF buf
+    ((a, b, c, d, e, f), buf)
+
   let inline write2 (writeA : Writer<'a>) (writeB : Writer<'b>) ((a, b) : ('a * 'b)) (buf : ArraySeg<byte>) : ArraySeg<byte> =
     buf |> writeA a |> writeB b
 
@@ -907,16 +924,11 @@ module Protocol =
 
   type ProduceResponse with
     static member read (data) =
-      let topics, data =
-        data |> readArray (fun data ->
-            let topicName, data = readString data
-            let ps,data =
-              data |> readArray (fun data ->
-                  let partition, data = readInt32 data
-                  let errorCode, data = readInt16 data
-                  let offset, data = readInt64 data
-                  ((partition, errorCode, offset), data))
-            (topicName, ps), data)
+      let readPartition =
+        read3 readInt32 readInt16 readInt64
+      let readTopic =
+        read2 readString (readArray readPartition)
+      let topics, data = data |> readArray readTopic
       (ProduceResponse(topics), data)
 
   type FetchRequest with
@@ -935,20 +947,16 @@ module Protocol =
 
   type FetchResponse with
     static member read (data) =
-      let topics, data =
-        data |> readArray
-          (fun data ->
-            let topicName, data = readString data
-            let ps, data =
-              data |> readArray
-                (fun data ->
-                  let partition, data = readInt32 data
-                  let errorCode, data = readInt16 data
-                  let hwo, data = readInt64 data
-                  let mss, data = readInt32 data
-                  let ms, data = MessageSet.read (data, mss)
-                  ((partition, errorCode, hwo, mss, ms), data))
-            (topicName, ps), data)
+      let readPartition data =
+        let partition, data = readInt32 data
+        let errorCode, data = readInt16 data
+        let hwo, data = readInt64 data
+        let mss, data = readInt32 data
+        let ms, data = MessageSet.read (data, mss)
+        ((partition, errorCode, hwo, mss, ms), data)
+      let readTopic =
+        read2 readString (readArray readPartition)
+      let topics, data = data |> readArray readTopic
       (FetchResponse(topics), data)
 
   type OffsetRequest with
@@ -972,14 +980,12 @@ module Protocol =
 
   type OffsetResponse with
     static member read (buf) =
-      let topics, buf = buf |> readArray (fun buf ->
-        let topicName, buf = readString buf
-        let partitionOffsets, buf = buf |> readArray (fun buf ->
-          let partition, buf = readInt32 buf
-          let errorCode, buf = readInt16 buf
-          let offsets, buf = readArray readInt64 buf
-          (PartitionOffsets(partition, errorCode, offsets), buf))
-        ((topicName, partitionOffsets), buf))
+      let readPartition buf =
+        let (partition, errorCode, offsets), buf = buf |> read3 readInt32 readInt16 (readArray readInt64)
+        (PartitionOffsets(partition, errorCode, offsets), buf)
+      let readTopic =
+        read2 readString (readArray readPartition)
+      let topics, buf = buf |> readArray readTopic
       (OffsetResponse(topics), buf)
 
   type GroupCoordinatorRequest with
@@ -1013,13 +1019,11 @@ module Protocol =
 
   type OffsetCommitResponse with
     static member read (buf) =
-      let topics, buf = buf |> readArray (fun buf ->
-        let topicName, buf = readString buf
-        let partitions, buf = buf |> readArray (fun buf ->
-          let partition, buf = readInt32 buf
-          let errorCode, buf = readInt16 buf
-          ((partition, errorCode), buf))
-        ((topicName, partitions), buf))
+      let readPartition =
+        read2 readInt32 readInt16
+      let readTopic =
+        read2 readString (readArray readPartition)
+      let topics, buf = buf |> readArray readTopic
       (OffsetCommitResponse(topics), buf)
 
   type OffsetFetchRequest with
@@ -1034,15 +1038,11 @@ module Protocol =
 
   type OffsetFetchResponse with
     static member read (buf) =
-      let topics, buf = buf |> readArray (fun buf ->
-        let topicName, buf = readString buf
-        let partitions, buf = buf |> readArray (fun buf ->
-          let partition, buf = readInt32 buf
-          let offset, buf = readInt64 buf
-          let metadata, buf = readString buf
-          let errorCode, buf = readInt16 buf
-          ((partition, offset, metadata, errorCode), buf))
-        ((topicName, partitions), buf))
+      let readPartition =
+        read4 readInt32 readInt64 readString readInt16
+      let readTopic =
+        read2 readString (readArray readPartition)
+      let topics, buf = buf |> readArray readTopic
       (OffsetFetchResponse(topics), buf)
 
   type HeartbeatRequest with
@@ -1078,10 +1078,9 @@ module Protocol =
 
   type Members with
     static member read (buf) =
-      let xs, buf = buf |> readArray (fun buf ->
-        let memberId, buf = readString buf
-        let memberMeta, buf = readBytes buf
-        ((memberId, memberMeta), buf))
+      let readMember =
+        read2 readString readBytes
+      let xs, buf = buf |> readArray readMember
       (Members(xs), buf)
 
   type JoinGroupResponse with
@@ -1134,11 +1133,10 @@ module Protocol =
 
   type ListGroupsResponse with
     static member read (buf) =
-      let errorCode,buf = readInt16 buf
-      let gs, buf = buf |> readArray (fun buf ->
-        let groupId, buf = readString buf
-        let protoType, buf = readString buf
-        ((groupId, protoType), buf))
+      let readGroup =
+        read2 readString readString
+      let errorCode, buf = readInt16 buf
+      let gs, buf = buf |> readArray readGroup
       (ListGroupsResponse(errorCode, gs), buf)
 
   type DescribeGroupsRequest with
@@ -1149,25 +1147,16 @@ module Protocol =
 
   type GroupMembers with
     static member read (buf) =
-      let xs, buf = buf |> readArray (fun buf ->
-        let memberId, buf = readString buf
-        let clientId, buf = readString buf
-        let clientHost, buf = readString buf
-        let memberMeta, buf = readBytes buf
-        let memberAssignment, buf = readBytes buf
-        ((memberId, clientId, clientHost, memberMeta, memberAssignment), buf))
+      let readGroupMember =
+        read5 readString readString readString readBytes readBytes
+      let xs, buf = buf |> readArray readGroupMember
       (GroupMembers(xs), buf)
 
   type DescribeGroupsResponse with
     static member read (buf) =
-      let xs, buf = buf |> readArray (fun buf ->
-        let errorCode, buf = readInt16 buf
-        let groupId, buf = readString buf
-        let state, buf = readString buf
-        let protoType, buf = readString buf
-        let protocol, buf = readString buf
-        let groupMembers, buf = GroupMembers.read buf
-        ((errorCode, groupId, state, protoType, protocol, groupMembers), buf))
+      let readGroup =
+        read6 readInt16 readString readString readString readString GroupMembers.read
+      let xs, buf = buf |> readArray readGroup
       (DescribeGroupsResponse(xs), buf)
 
   type RequestMessage with
