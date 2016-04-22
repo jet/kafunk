@@ -20,15 +20,14 @@ module Constructors =
 
   type Message with
 
-    static member create (value:ArraySeg<byte>, ?key:ArraySeg<byte>, ?attrs:Attributes, ?compression:Protocol.CompressionCodecs) =
+    static member create (value:ArraySeg<byte>, ?key:ArraySeg<byte>, ?attrs:Attributes, ?compression: Attributes) =
       let compressionFlag =
-        sbyte (defaultArg compression Protocol.CompressionCodecs.GZIPCompressionCodec) &&& Protocol.Compression.CompressionMask
+        sbyte (defaultArg compression Protocol.Compression.GZIP) &&& Compression.Mask
       let attrs =
         match attrs with
-        | Some(v) -> sbyte v ||| sbyte compressionFlag
+        | Some(v) -> v ||| compressionFlag
         | None -> sbyte compressionFlag
       Message(0, 0y, attrs, (defaultArg key (ArraySeg<_>())), value)
-
 
     static member ofBytes (data:ArraySeg<byte>, ?key:ArraySeg<byte>) =
       Message(0, 0y, 0y, (defaultArg  key (ArraySeg<_>())), data)

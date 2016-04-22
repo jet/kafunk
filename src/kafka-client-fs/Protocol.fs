@@ -45,15 +45,10 @@ module Protocol =
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module Compression =
 
-    let [<Literal>] None = 0uy
-    let [<Literal>] GZIP = 1uy
-    let [<Literal>] Snappy = 2uy
-
-  type CompressionCodecs =
-    NoCompressionCodec = 0y
-    | DefaultCompressoinCodec = 1y
-    | GZIPCompressionCodec = 2y
-    | SnappyCompressionCodec = 3y
+    let [<Literal>] Mask = 7y
+    let [<Literal>] None = 0y
+    let [<Literal>] GZIP = 1y
+    let [<Literal>] Snappy = 2y
 
   type Key = ArraySeg<byte>
 
