@@ -14,17 +14,29 @@ open System.Runtime.ExceptionServices
 
 open KafkaFs
 
-module Dns =
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module internal Dns =
 
-  let ipv4sAsync (host:string) = 
-    Dns.GetHostAddressesAsync(host) 
-    |> Async.AwaitTask
-    |> Async.map (Array.filter (fun ip -> ip.AddressFamily = AddressFamily.InterNetwork))
+  module IPv4 =
 
-  let ipv4Async (host:string) = 
-    ipv4sAsync host |> Async.map (Array.item 0)
+    let getAllAsync (hostOrAddress:string) = 
+      Dns.GetHostAddressesAsync(hostOrAddress) 
+      |> Async.AwaitTask
+      |> Async.map (Array.filter (fun ip -> ip.AddressFamily = AddressFamily.InterNetwork))
 
-  let ipv4 = ipv4Async >> Async.RunSynchronously
+    let getAsync (host:string) = 
+      getAllAsync host |> Async.map (Array.item 0)
+
+    let get = getAsync >> Async.RunSynchronously
+
+    /// Gets an IPv4 IPEndPoint given a host and port.
+    let getEndpointAsync (hostOrAddress:string, port:int) = async {
+      let! ipv4 = getAsync hostOrAddress
+      return IPEndPoint(ipv4, port) }
+
+    /// Gets an IPv4 IPEndPoint given a host and port.
+    let getEndpoint (hostOrAddress:string, port:int) =
+      getEndpointAsync (hostOrAddress, port) |> Async.RunSynchronously
 
 
 /// Operations on Berkley sockets.
