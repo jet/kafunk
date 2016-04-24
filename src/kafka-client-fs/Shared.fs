@@ -467,17 +467,36 @@ module DVar =
   let bindToRef (r:'a ref) (a:DVar<'a>) =
     r := (get a)
     subs a <| fun a -> r := a
-
   
   let update (f:'a -> 'a) (d:DVar<'a>) : unit =
     put (f (get d)) d
 
-  let updateIf (f:'a -> 'a) (d:DVar<'a>) : unit =
-    put (f (get d)) d
+  let updateIfDistinctBy (key:'a -> 'k) (update:'a -> 'a) (d:DVar<'a>) : bool =
+    let current = get d
+    let currentKey = key current
+    let updated = update current
+    let updatedKey = key updated
+    if currentKey <> updatedKey then
+      put updated d
+      true
+    else
+      false
 
+  let updateIfDistinct (update:'a -> 'a) (d:DVar<'a>) : bool =
+    updateIfDistinctBy id update d
 
+  let distinctBy (key:'a -> 'k) (d:DVar<'a>) : DVar<'a> =
+    let a = get d
+    let mutable prevKey = key a
+    let d' = create a
+    subs d <| fun a ->
+      let key = key a
+      if key <> Interlocked.Exchange (&prevKey, key) then
+        put a d'
+    d'
 
-
+  let distinct (d:DVar<'a>) : DVar<'a> =
+    distinctBy id d
 
   let extract = get
 

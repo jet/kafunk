@@ -66,6 +66,7 @@
     <None Include="paket.references" />
     <Compile Include="CodecTests.fs" />
     <None Include="Kafka.fsx" />
+    <None Include="Metadata.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

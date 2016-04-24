@@ -27,16 +27,10 @@ module internal Dns =
     let getAsync (host:string) = 
       getAllAsync host |> Async.map (Array.item 0)
 
-    let get = getAsync >> Async.RunSynchronously
-
     /// Gets an IPv4 IPEndPoint given a host and port.
     let getEndpointAsync (hostOrAddress:string, port:int) = async {
       let! ipv4 = getAsync hostOrAddress
       return IPEndPoint(ipv4, port) }
-
-    /// Gets an IPv4 IPEndPoint given a host and port.
-    let getEndpoint (hostOrAddress:string, port:int) =
-      getEndpointAsync (hostOrAddress, port) |> Async.RunSynchronously
 
 
 /// Operations on Berkley sockets.

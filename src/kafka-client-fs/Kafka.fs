@@ -179,8 +179,11 @@ module internal Api =
 
 
 
-/// Request routing to brokers.
-module internal Route =
+module internal Conn =
+
+  let private Log = Log.create "KafkaFunk.Conn"
+
+  let ApiVersion : ApiVersion = 0s
   
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
   let partitionFetchReq (req:FetchRequest) =
@@ -331,17 +334,7 @@ module internal Route =
         return failwith "" }
 
 
-
-
-
-
-
-
-module internal Conn =
-
-  let private Log = Log.create "KafkaFunk.Conn"
-
-  let ApiVersion : ApiVersion = 0s
+  // -----------------------------------------------------------------------------------------------------------------------
 
   
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -352,14 +345,15 @@ module internal Conn =
 
     /// Builds and connects the socket.
     let conn () = async {
-      use connSocket =
+      // TODO: lifecycle
+      let connSocket =
         new Socket(
           ep.AddressFamily, 
           SocketType.Stream, 
           ProtocolType.Tcp, 
           NoDelay=true, 
           ExclusiveAddressUse=true)
-      Log.info "connecting...|remote_endpoint=%O" ep
+      Log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
       let! sendRcvSocket = Socket.connect connSocket ep
       Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint     
       return sendRcvSocket }
@@ -393,6 +387,10 @@ module internal Conn =
       else
         return lock sendRcvSocket id }
     
+    // TODO: handle specific TCP errors only, otherwise escalate to reconnect
+
+
+
 
     let rec sendErr buf =
       send buf
@@ -400,9 +398,14 @@ module internal Conn =
       |> Async.bind (function
         | Success n -> async.Return n
         | Failure ex -> async {
-          Log.error "error sending on socket|error=%O" ex                                
-          do! reset ()
-          return! sendErr buf })
+          match ex with
+          | :? SocketException as ex ->            
+            Log.error "socket exception|error=%O" ex                                
+            do! reset ()
+            return! sendErr buf 
+          | _ -> 
+            Log.error "exception=%O" ex
+            return raise ex })
 
     let rec receiveErr buf =
       receive buf
@@ -414,16 +417,20 @@ module internal Conn =
           do! reset ()
           return! receiveErr buf }
         | Failure ex -> async {
-          Log.warn "error receiving on socket|error=%O" ex
-          do! reset ()
-          return! receiveErr buf })
+          match ex with
+          | :? SocketException as ex ->
+            Log.warn "error receiving on socket|error=%O" ex
+            do! reset ()
+            return! receiveErr buf 
+          | _ -> 
+            Log.error "exception=%O" ex
+            return raise ex })
 
     let send,receive = sendErr,receiveErr
 
     // --------
 
     
-
     /// An unframed input stream.  
     let inputStream =
       Socket.receiveStreamFrom receiveBufferSize receive
@@ -453,21 +460,14 @@ module internal Conn =
     return session.Send }
 
 
-  let anyCast (chs:Chan[]) : Chan =
-    let i = ref 0
-    let rec go req = async {
-      let ch = chs.[!i]
-      try
-        return! ch req
-      with ex ->
-        Log.error "connection failure, trying another channel..."
-        Interlocked.Increment i |> ignore
-        return! go req }
-    go
 
 
 
-  
+
+
+
+
+
 
 // http://kafka.apache.org/documentation.html#connectconfigs
 
@@ -493,25 +493,37 @@ with
     }
 
 
+
+
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
 /// It acts as a context for API operations, providing filtering and fault tolerance.
-and KafkaConn internal (cfg:KafkaConnCfg, bootstrapChan:Chan) =
+type KafkaConn internal (cfg:KafkaConnCfg) =
   
   static let Log = Log.create "KafkaFunc.Conn"    
 
+  // note: must call Connect first thing!
+  let [<VolatileField>] mutable bootstrapChanField : Chan = 
+    Unchecked.defaultof<_>
+
+  let bootstrapChan : Chan = 
+    fun req -> bootstrapChanField req
+
   // routing tables
 
-  // TODO: add bootstrap
   let chanByHost : DVar<Map<Host * Port, Chan>> =
-    failwith ""
- 
-  
+    DVar.create Map.empty
+   
   let hostByNode : DVar<Map<NodeId, Host * Port>> =
-    failwith ""
+    DVar.create Map.empty
 
   let nodeByTopic : DVar<Map<TopicName * Partition, NodeId>> = 
-    failwith ""
+    DVar.create Map.empty
+
+  let hostByGroup : DVar<Map<GroupId, Host * Port>> =
+    DVar.create Map.empty
+
+  // derived routing tables
 
   let hostByTopic : DVar<Map<TopicName * Partition, Host * Port>> =
     DVar.combineLatestWith
@@ -525,6 +537,7 @@ and KafkaConn internal (cfg:KafkaConnCfg, bootstrapChan:Chan) =
        |> Map.ofSeq)
       nodeByTopic
       hostByNode
+    |> DVar.distinct
 
   let chanByTopic : DVar<Map<(TopicName * Partition), Chan>> =
     DVar.combineLatestWith
@@ -538,11 +551,6 @@ and KafkaConn internal (cfg:KafkaConnCfg, bootstrapChan:Chan) =
       hostByTopic
       chanByHost
 
-
-
-  let hostByGroup : DVar<Map<GroupId, Host * Port>> =
-    failwith ""
-
   let chanByGroupId : DVar<Map<GroupId, Chan>> =
     DVar.combineLatestWith
       (fun groupHosts hostChans -> 
@@ -554,64 +562,92 @@ and KafkaConn internal (cfg:KafkaConnCfg, bootstrapChan:Chan) =
         |> Map.ofSeq)
       hostByGroup
       chanByHost
-  
-  
-  let routedChan = 
+    
+  let routedChan : Chan = 
     DVar.combineLatestWith 
-      (Route.route bootstrapChan)
+      (fun chanByTopic chanByGroup -> Conn.route bootstrapChan chanByTopic chanByGroup)
       chanByTopic
       chanByGroupId
     |> DVar.toFun
-          
-    
-  /// Connects to a Kafka cluster.
-  static member internal connect (cfg:KafkaConnCfg) = async {
-   
-    let clientId : ClientId = Guid.NewGuid().ToString("N")
-    Log.info "connecting...|client_id=%s" clientId
 
-    Log.info "resolving bootstrap broker IP endpoints..."
-    let! bootstrapIPs = 
-      cfg.bootstrapServers
-      |> Seq.map (fun uri -> Dns.IPv4.getEndpointAsync (uri.Host, uri.Port))
-      |> Async.Parallel
-    
-    Log.info "creating fault-tolerant communication channels to bootstrap brokers..."      
-    let! chs =
-      bootstrapIPs
-      |> Seq.map (fun ip -> Conn.connect (ip, clientId))
-      |> Async.Parallel
-      
-    let ch = Conn.anyCast chs
+  // -----------------------------------------------------------------
+
   
-    return KafkaConn(cfg, ch) }
+  /// Connects to the specified host and adds to routing table.
+  let connHost (host:Host, port:Port, nodeId:NodeId option) = async {        
+    let! ep = Dns.IPv4.getEndpointAsync (host, port)
+    let! ch = Conn.connect (ep, cfg.clientId)
+    chanByHost |> DVar.update (Map.add (host,port) ch)
+    nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host,port)))
+    return ch }
 
-  /// Gets the configuration used to create this connection.
-  member __.Cfg = 
-    cfg
+  /// Connects to the specified host unless already connected.
+  let connHostNew (host:Host, port:Port, nodeId:NodeId option) = async {
+    match chanByHost |> DVar.get |> Map.tryFind (host,port) with
+    | Some ch -> 
+      nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host,port)))
+      return ch
+    | None -> return! connHost (host,port,nodeId) }
+
+  /// Connects to the first broker in the bootstrap list.
+  let connectBootstrap () = async {
+    Log.info "discovering bootstrap brokers...|client_id=%s" cfg.clientId
+    let! bootstrapChan =
+      cfg.bootstrapServers
+      |> AsyncSeq.ofSeq
+      |> AsyncSeq.tryPickAsync (fun uri -> async {
+        //Log.info "connecting....|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
+        try
+          let! ch = connHost (uri.Host,uri.Port,None)
+          return Some ch
+        with ex ->
+          Log.error "error connecting to bootstrap host=%s port=%i error=%O" uri.Host uri.Port ex
+          return None })
+    match bootstrapChan with
+    | Some bootstrapChan -> 
+      return bootstrapChan
+    | None ->
+      return failwith "unable to connect to bootstrap brokers" }    
+  
+  /// Connects to the coordinator broker for the specified group and adds to routing table
+  let connectGroupCoordinator (groupId:GroupId) = async {    
+    let! res = Api.groupCoordinator bootstrapChan (GroupCoordinatorRequest(groupId))
+    let! ch = connHostNew (res.coordinatorHost,res.coordinatorPort,Some res.coordinatorId)
+    hostByGroup |> DVar.updateIfDistinct (Map.add groupId (res.coordinatorHost,res.coordinatorPort)) |> ignore
+    return ch }
+
   
   /// Gets the channel.
-  member internal __.Chan : Chan = 
+  member internal __.Chan : Chan =
+    if isNull routedChan then
+      invalidOp "The connection has not been established!"
     routedChan
+
+  /// Connects to a broker from the bootstrap list.
+  member internal __.Connect () = async {
+    let! ch = connectBootstrap ()
+    bootstrapChanField <- ch }
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal __.GetMetadata (topics:TopicName[]) = async {
-    let! metadata = Api.metadata bootstrapChan (MetadataRequest(topics))
-    //nodeByHost |> DVar.update (Map.addMany (metadata.brokers |> Seq.map (fun b -> (b.host,b.port),b.nodeId)))    
-    return () }
- 
-  member internal __.MetadataForTopic (t:TopicName) : TopicMetadata =
-    failwith ""
+    let! metadata = Api.metadata bootstrapChan (MetadataRequest(topics))    
+    let hostByNode' = 
+      metadata.brokers
+      |> Seq.map (fun b -> b.nodeId, (b.host,b.port))
+      |> Map.ofSeq
+    for tmd in metadata.topicMetadata do
+      for pmd in tmd.partitionMetadata do       
+        let (host,port) = hostByNode' |> Map.find pmd.leader // TODO: handle error, but shouldn't happen
+        let! _ = connHostNew (host,port, Some pmd.leader)
+        nodeByTopic |> DVar.update (Map.add (tmd.topicName,pmd.partitionId) (pmd.leader))
+    return metadata }
 
-  /// Gets the group coordinator for the specified group.
-  /// Adds the group coordinator to the routing table, such that subsequent group requests
-  /// are routed to the correct broker.
-  member internal __.GetGroupCoordinator (groupId:GroupId) = async {    
-    let! res = Api.groupCoordinator bootstrapChan (GroupCoordinatorRequest(groupId))
-    
-    hostByGroup |> DVar.update (Map.add groupId (res.coordinatorHost,res.coordinatorPort))
-    //nodeByHost |> DVar.update (Map.add (res.coordinatorHost, res.coordinatorPort) res.coordinatorId)
-    return () }
+  /// Gets the group coordinator for the specified group, connects to it, adds to routing table.
+  member internal __.ConnectGroupCoordinator (groupId:GroupId) = 
+    connectGroupCoordinator groupId
+  
+  interface IDisposable with
+    member __.Dispose () = ()
 
 
 // -------------------------------------------------------------------------------------------------------------------------------------
@@ -625,14 +661,17 @@ module Kafka =
     
   let [<Literal>] DefaultPort = 9092
 
-  let connAsync (cfg:KafkaConnCfg) =
-    KafkaConn.connect cfg
+  let connAsync (cfg:KafkaConnCfg) = async {
+    let conn = new KafkaConn(cfg)
+    do! conn.Connect ()
+    return conn }
 
   let conn cfg =
     connAsync cfg |> Async.RunSynchronously
 
   let connHostAsync (host:string) =
-    let cfg = KafkaConnCfg.ofBootstrapServers ([Uri(host + ":" + string DefaultPort)])
+    let ub = UriBuilder("kafka", host, DefaultPort)
+    let cfg = KafkaConnCfg.ofBootstrapServers [ub.Uri]
     connAsync cfg
 
   let connHost host = 
@@ -676,443 +715,3 @@ module Kafka =
 
   let describeGroups (c:KafkaConn) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
     Api.describeGroups c.Chan req
-
-  // -------------------------------------------------------------------------------------------------------------------------
-
-
-  
-
-
-  /// A producer message.
-  type ProducerMessage =
-    struct
-
-      /// The message payload.
-      val value : ArraySeg<byte>
-      
-      /// The optional message key.
-      val key : ArraySeg<byte>
-
-      /// The optional routing key.
-      val routeKey : ProducerMessageRouteKey
-                 
-      new (value:ArraySeg<byte>, key:ArraySeg<byte>, routeKey:string) = 
-        { value = value ; key = key ; routeKey = routeKey }
-    end      
-      with
-        
-        /// Creates a producer message.
-        static member ofBytes (value:ArraySeg<byte>, ?key, ?routeKey) =
-          ProducerMessage (value, defaultArg key (ArraySeg<_>()), defaultArg routeKey null)
-      
-        static member ofBytes (value:byte[], ?key, ?routeKey) =
-          ProducerMessage (ArraySeg.ofArray value, defaultArg (key |> Option.map (ArraySeg.ofArray)) (ArraySeg<_>()), defaultArg routeKey null)
-
-  /// A key used for routing to a partition.
-  and ProducerMessageRouteKey = string
-
-  /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
-  type Producer = (TopicName * ProducerMessage[])[] -> Async<ProduceResponse>
-  
-  /// High-level producer API.
-  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-  module Producer =
-    
-    /// Producer configuration.
-    type ProducerCfg = {
-      
-      /// The set of topics to produce to.
-      /// Produce requests must be for a topic in this list.
-      topics : TopicName[]
-      
-      /// The acks required.
-      requiredAcks : RequiredAcks
-      
-      /// The compression method to use.
-      compression : byte
-
-      /// The maximum time to wait for acknowledgement.
-      timeout : Timeout
-
-      /// A partition function which given a topic name, cluster topic metadata and the message payload, returns the partition
-      /// which the message should be written to.
-      partition : TopicName * TopicMetadata[] * ProducerMessageRouteKey -> Partition
-
-    }
-
-    /// Creates a producer.
-    let createAsync (conn:KafkaConn) (cfg:ProducerCfg) : Async<Producer> = async {
-    
-      do! conn.GetMetadata (cfg.topics)
-
-      let! metadata = metadata conn (MetadataRequest(cfg.topics))
-      
-      /// (T * P) -> N
-      let nodeByTopicPartition : Map<(TopicName * Partition), NodeId> =
-        metadata.topicMetadata
-        |> Seq.collect (fun tmd ->
-          tmd.partitionMetadata
-          |> Seq.map (fun pmd -> (tmd.topicName, pmd.partitionId), pmd.leader))
-        |> Map.ofSeq
-
-      /// N -> Chan
-      let! (chanByBroker : Map<NodeId, Chan>) = 
-        metadata.brokers 
-        |> Seq.map (fun b -> async {
-          let! ep = Dns.IPv4.getEndpointAsync (b.host, b.port)
-          let! ch = Conn.connect (ep, conn.Cfg.clientId) // TODO: re-use connection...
-          return b.nodeId,ch })
-        |> Async.Parallel
-        |> Async.map (Map.ofArray)
-      
-
-
-      let produce (ms:(TopicName * ProducerMessage[])[]) = async {
-        return!
-          ms
-          |> Seq.collect (fun (tn,ms) ->
-            ms
-            |> Seq.map (fun m -> 
-              let p = cfg.partition (tn,metadata.topicMetadata,m.routeKey)
-              (tn,p),m))
-          |> Seq.groupBy (fun ((tn,p),_) ->
-            match nodeByTopicPartition |> Map.tryFind (tn,p) with
-            | Some node -> node
-            | None -> failwithf "unable to find broker for topic=%s partition=%i" tn p)
-          |> Seq.map (fun (nodeId,ms) -> async {
-            let ms = 
-              ms
-              |> Seq.groupBy (fun ((m,_),_) -> m)
-              |> Seq.map (fun (tn,ms) -> 
-                let ps =
-                  ms
-                  |> Seq.groupBy (fun ((_,p),_) -> p)
-                  |> Seq.map (fun (p,ms) -> p, ms |> Seq.map (fun (_,m) -> Message.create (m.value, m.key)) |> MessageSet.ofMessages)
-                  |> Seq.toArray
-                tn,ps)
-              |> Seq.toArray
-            let req = ProduceRequest.ofMessageSetTopics (ms, cfg.requiredAcks, cfg.timeout) // TODO: compression
-            match chanByBroker |> Map.tryFind nodeId with
-            | Some ch -> return! Api.produce ch req
-            | None -> return failwithf "unable to find channel for broker=%i" nodeId })
-          |> Async.Parallel
-          |> Async.map (fun rs -> new ProduceResponse(rs |> Array.collect (fun r -> r.topics))) }
-
-      return produce }
-     
-
-  // -------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-  /// High-level consumer API.
-  module Consumer =
-    
-    type ConsumerConfig = {
-      //bootstrapServers : Uri[] // kafka://127.0.0.1:9092
-      groupId : GroupId
-      topics : TopicName[]
-      sessionTimeout : SessionTimeout
-      heartbeatFrequency : int32
-      autoOffsetReset : AutoOffsetReset
-      fetchMinBytes : MinBytes
-      fetchMaxWaitMs : MaxWaitTime
-      metadataFetchTimeoutMs : int32
-      totalBufferMemory : int32
-      fetchBuffer : MaxBytes
-      clientId : string
-      socketReceiveBuffer : int32
-      reconnectBackoffMs : int32
-      offsetRetentionTime : int64
-    }
-      with
-        static member create (groupId:GroupId, topics:TopicName[]) =
-          {
-            //ConsumerConfig.bootstrapServers = bootstrapServers
-            groupId = groupId
-            topics = topics
-            sessionTimeout = 10000
-            heartbeatFrequency = 4
-            autoOffsetReset = AutoOffsetReset.Anything
-            fetchMinBytes = 0
-            fetchMaxWaitMs = 0
-            metadataFetchTimeoutMs = 0
-            totalBufferMemory = 10000
-            fetchBuffer = 1000
-            clientId = Guid.NewGuid().ToString("N")
-            socketReceiveBuffer = 1000
-            reconnectBackoffMs = 0
-            offsetRetentionTime = 0L
-          }
-
-    and AutoOffsetReset =
-      | Smallest
-      | Largest
-      | Disable
-      | Anything
-
-
-
-  //  type ConsumerState =
-  //    | Down
-  //    | Discover of GroupId
-  //    | GroupFollower of generationId:GenerationId * LeaderId * MemberId * GroupProtocol
-  //    | GroupLeader of generationId:GenerationId * LeaderId * MemberId * Members * GroupProtocol
-  //    | PartOfGroup
-  //    | RediscoverCoordinator
-  //    | StoppedConsumption
-  //    | Error
-
-
-  (*
-
-  # Consumer Group Transitions
-
-
-  ## Consumer
-
-  - Coordinator heartbeat timeout -> close channel, then group coordinator re-discovery.
-
-
-  ## Coordinator
-
-  - Invalid generation heartbeat -> invalid generation heartbeat response
-
-
-  *)
-
-
-  
-    /// Possible responses of a consumer group protocol.
-    /// These may be received by several concurrent processes: heartbeating, fetching, committing.
-    type ConsumerGroupResponse =
-            
-      | GroopCoordResponse // start protocol, or retry
-      | JoinResponse // 
-      | SyncResponse
-      | FetchResponse
-
-      // TODO: Choice<OK, Error> ?
-      // TODO: on error, running consumers must be stopped (by closing stream).
-      // Cleanup:
-      // - stop heartbeating
-      // - close fetched streams
-      // - 
-
-      /// GroupLoadInProgressCode	14	Yes	The broker returns this error code for an offset fetch request if it is still loading offsets (after a leader change for that offsets topic partition), or in response to group membership requests (such as heartbeats) when group metadata is being loaded by the coordinator.
-      | GroupLoadInProgress
-
-      /// GroupCoordinatorNotAvailableCode	15	Yes	The broker returns this error code for group coordinator requests, offset commits, and most group management requests if the offsets topic has not yet been created, or if the group coordinator is not active.
-      | GroupCoordinatorNotAvailable
-    
-      /// IllegalGenerationCode	22	 	Returned from group membership requests (such as heartbeats) when the generation id provided in the request is not the current generation.
-      | IllegalGeneration
-    
-      /// InconsistentGroupProtocolCode	23	 	Returned in join group when the member provides a protocol type or set of protocols which is not compatible with the current group.
-      | InconsistentGroupProtocol
-    
-      | InvalidGroupId    
-
-      /// UnknownMemberIdCode	25	 	Returned from group requests (offset commits/fetches, heartbeats, etc) when the memberId is not in the current generation.
-      | UnknownMemberId
-    
-      /// InvalidSessionTimeoutCode	26	 	Return in join group when the requested session timeout is outside of the allowed range on the broker
-      | InvalidSessionTimeout
-    
-      /// RebalanceInProgressCode	27	 	Returned in heartbeat requests when the coordinator has begun rebalancing the group. This indicates to the client that it should rejoin the group.
-      | RebalanceInProgress
-        
-      | SessionTimeout 
-
-      | MetadataChanged
-
-      /// 16	Yes	The broker returns this error code if it receives an offset fetch or commit request for a group that it is not a coordinator for.
-      | NotCoordinatorForGroup
-  
-
-
-    /// Given a consumer configuration, initiates the consumer group protocol.
-    /// Returns an async sequence of states where each state corresponds to a generation in the group protocol.
-    /// The state contains streams for the topics specified in the configuration.
-    /// Whenever there is a change in the consumer group, or a failure, the protocol restarts and returns
-    /// a new generation once successful.
-    /// If there are failures surpassing configured thresholds, the resulting sequence throws an exception.
-    let consume (conn:KafkaConn) (cfg:ConsumerConfig) : AsyncSeq<_> = async {
-    
-      // domain-specific api
-
-      let groopCoord = 
-        groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
-        |> Async.map (fun res ->
-          match res.errorCode with
-          | ErrorCode.NoError -> ConsumerGroupResponse.GroopCoordResponse
-          | ErrorCode.GroupCoordinatorNotAvailableCode -> ConsumerGroupResponse.GroupCoordinatorNotAvailable
-          | ErrorCode.InvalidGroupIdCode -> ConsumerGroupResponse.InvalidGroupId          
-          | _ -> failwith "")
-    
-      // sent to group coordinator
-      let joinGroup2 =
-        let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
-        let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-        let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg consumerProtocolMeta) |])
-        let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
-        joinGroup conn joinGroupReq
-        |> Async.map (fun res ->
-          match res.errorCode with
-          | ErrorCode.NoError -> 
-            //if res.members.members.Length > 0 then            
-            ConsumerGroupResponse.JoinResponse
-          | ErrorCode.GroupCoordinatorNotAvailableCode -> ConsumerGroupResponse.GroupCoordinatorNotAvailable
-          | ErrorCode.InconsistentGroupProtocolCode -> ConsumerGroupResponse.InconsistentGroupProtocol
-          | ErrorCode.InvalidSessionTimeoutCode -> ConsumerGroupResponse.InvalidSessionTimeout
-          | _ -> failwith "")
-
-      // heartbeats: must be sent to group coordinator
-      let rec hb (generationId,memberId) = async {
-        let req = HeartbeatRequest(cfg.groupId, generationId, memberId)
-        let! res = heartbeat conn req
-        match res.errorCode with
-        | ErrorCode.NoError -> 
-          do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
-          return! hb (generationId,memberId)
-        | ErrorCode.IllegalGenerationCode -> 
-          return ConsumerGroupResponse.IllegalGeneration
-        | ErrorCode.UnknownMemberIdCode -> 
-          return ConsumerGroupResponse.UnknownMemberId
-        | ErrorCode.RebalanceInProgressCode -> 
-          return ConsumerGroupResponse.RebalanceInProgress
-        | _ -> 
-          return ConsumerGroupResponse.SessionTimeout }
-      
-      // sent to group coordinator
-      let leaderSyncGroup (generationId,memberId,members) = async {
-        let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-        let members = [| "" (*memberId*), (toArraySeg assignment) |]
-        let req = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment(members))
-        let! res = syncGroup conn req
-        match res.errorCode with
-        | ErrorCode.NoError -> return ConsumerGroupResponse.SyncResponse
-        | ErrorCode.IllegalGenerationCode -> return ConsumerGroupResponse.IllegalGeneration
-        | ErrorCode.UnknownMemberIdCode -> return ConsumerGroupResponse.UnknownMemberId
-        | ErrorCode.RebalanceInProgressCode -> return ConsumerGroupResponse.RebalanceInProgress
-        | _ -> 
-          return ConsumerGroupResponse.SessionTimeout }
-
-      // sent to group coordinator
-      let followerSyncGroup (generationId,memberId) = async {
-        let req = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([||]))
-        let! res = syncGroup conn req
-        match res.errorCode with
-        | ErrorCode.NoError -> return ConsumerGroupResponse.SyncResponse
-        | ErrorCode.IllegalGenerationCode -> return ConsumerGroupResponse.IllegalGeneration
-        | ErrorCode.UnknownMemberIdCode -> return ConsumerGroupResponse.UnknownMemberId
-        | ErrorCode.RebalanceInProgressCode -> return ConsumerGroupResponse.RebalanceInProgress
-        | _ -> 
-          return ConsumerGroupResponse.SessionTimeout }
-
-
-      // sent to group coordinator
-      let commitOffset (generationId,memberId) (topic:TopicName, partition:Partition, offset:Offset) = async {        
-        let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, null |] |])
-        let! res = offsetCommit conn req
-        // TODO: check error
-        return () }
-
-      let fetchOffset (topic:TopicName, partition:Partition) = async {
-        let req = OffsetFetchRequest(cfg.groupId, [| topic, [| partition |] |])
-        let! res = offsetFetch conn req
-        let topic,ps = res.topics.[0]
-        let (p,offset,metadata,ec) = ps.[0]
-        return offset }
-
-      // fetch sent to broker in metadata or coordinator?
-      let stream (generationId,memberId) (topic:TopicName, partition:Partition) =
-        let rec go (offset:FetchOffset) = asyncSeq {
-          let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBuffer |] |])
-          // TODO: wait for state change (kill) signal
-          let! res = fetch conn req
-          // TODO: check error
-          let topic,partitions = res.topics.[0]
-          let partition,ec,hmo,mss,ms = partitions.[0]
-          let nextOffset = MessageSet.nextOffset ms
-          let commit = commitOffset (generationId,memberId) (topic, partition, offset)
-          yield ms,commit          
-          yield! go nextOffset }
-        // TODO: fetch offset
-        go (0L)
-
-      // TODO: period and watch for changes?
-      let! metadata = metadata conn (MetadataRequest(cfg.topics))
-
-
-      let rec go () : AsyncSeq<_> = async {
-
-        // start of session
-        let! groupCoord = groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))    
-        // TODO: send offset commit/fetch requests to groop coord
-
-      
-
-
-        let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
-        let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-        let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg consumerProtocolMeta) |])
-
-
-
-        let memberId : MemberId = "" // assigned by coordinator
-        let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, memberId, ProtocolType.consumer, groupProtocols)
-        let! joinGroupRes = joinGroup conn joinGroupReq
-        // TODO: or failure
-        let generationId = joinGroupRes.generationId
-        let memberId = joinGroupRes.memberId
-
-        // is leader?
-        if (joinGroupRes.leaderId = joinGroupRes.memberId) then
-          // determine assignments
-          // send sync request
-          let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-          let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg assignment) |]))
-          let! syncRes = syncGroup conn syncReq
-
-        
-          // TODO: get metadata?
-                              
-          return failwith ""
-        else
-            
-          let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([||]))
-          let! syncRes = syncGroup conn syncReq
-          let (memberAssignment:ConsumerGroupMemberAssignment,_) = read syncRes.memberAssignment       
-      
-          // the partitions assigned to this member
-          let topicPartitions = memberAssignment.partitionAssignment.assignments
-
-
-          // the topic,partition,stream combinations assigned to this member      
-          let topicStreams =           
-            topicPartitions
-            |> Array.collect (fun (t,ps) -> ps |> Array.map (fun p -> t,p))
-            |> Array.map (fun (t,p) -> t,p, stream (generationId,memberId) (t,p))           
-
-
-          // return and wait for errors, which will stop all child streams
-          // and return a new state
-
-          return Cons ( (generationId,memberId,topicStreams), go ())
-      
-        }
-
-
-      return! go ()
-
-    }
-
-
-    
-
-  // -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
