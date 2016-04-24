@@ -109,6 +109,7 @@ module Constructors =
 
 
 /// A request/reply channel to Kafka.
+// TODO: likely needs to become IDisposable, but we'll see how far we can put that off
 type Chan = RequestMessage -> Async<ResponseMessage>
 
  
@@ -117,6 +118,14 @@ module internal ResponseEx =
 
   let wrongResponse () =
     failwith (sprintf "Wrong response!")
+
+  type RequestMessage with    
+    /// If a request does not expect a response, returns the default response.
+    static member awaitResponse (x:RequestMessage) =
+      match x with
+      | RequestMessage.Produce req when req.requiredAcks = RequiredAcks.None ->         
+        Some (ResponseMessage.ProduceResponse (new ProduceResponse([||])))
+      | _ -> None         
 
   type ResponseMessage with
     static member internal toFetch res = match res with FetchResponse x -> x | _ -> wrongResponse ()
@@ -372,25 +381,27 @@ module internal Conn =
 
     // --------
 
+    
+    // TODO: implement using channels
+    let state = ref 0 // 0 - OK, 1 - recovery in progress
+    let wh = new ManualResetEventSlim()
+
     /// Notify of an error and recovery.
     /// If a recovery is in progress, wait for it to complete and return.
-    let reset () = async {
-      // TODO: cleanup
-      // if first, then recover
-      if Monitor.TryEnter sendRcvSocket then
-        try
-          let! sendRcvSocket' = conn ()
-          DVar.put sendRcvSocket' sendRcvSocket
-        finally
-          Monitor.Exit sendRcvSocket
-      // if not first, wait for lock to be released, then assume recovery and proceed.
+    let reset (ex:exn option) = async {
+      Log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep        
+      if Interlocked.CompareExchange(state, 1, 0) = 0 then
+        wh.Reset()
+        let! sendRcvSocket' = conn ()
+        DVar.put sendRcvSocket' sendRcvSocket
+        wh.Set()
+        Interlocked.Exchange(state, 0) |> ignore
       else
-        return lock sendRcvSocket id }
+        Log.info "recovery alread in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
+        wh.Wait()
+        return () }
     
     // TODO: handle specific TCP errors only, otherwise escalate to reconnect
-
-
-
 
     let rec sendErr buf =
       send buf
@@ -399,9 +410,9 @@ module internal Conn =
         | Success n -> async.Return n
         | Failure ex -> async {
           match ex with
-          | :? SocketException as ex ->            
+          | :? SocketException as x ->            
             Log.error "socket exception|error=%O" ex                                
-            do! reset ()
+            do! reset (Some ex)
             return! sendErr buf 
           | _ -> 
             Log.error "exception=%O" ex
@@ -413,14 +424,14 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          Log.warn "received 0 bytes. recovering..."
-          do! reset ()
+          Log.warn "received 0 bytes indicating a closed TCP connection"
+          do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
-          | :? SocketException as ex ->
+          | :? SocketException as x ->
             Log.warn "error receiving on socket|error=%O" ex
-            do! reset ()
+            do! reset (Some ex)
             return! receiveErr buf 
           | _ -> 
             Log.error "exception=%O" ex
@@ -455,7 +466,7 @@ module internal Conn =
 
     let session = 
       Session.requestReply
-        Session.corrId encode decode inputStream send
+        Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
     return session.Send }
 
@@ -629,8 +640,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     bootstrapChanField <- ch }
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
-  member internal __.GetMetadata (topics:TopicName[]) = async {
-    let! metadata = Api.metadata bootstrapChan (MetadataRequest(topics))    
+  member private __.ApplyMetadata (metadata:MetadataResponse) = async {
     let hostByNode' = 
       metadata.brokers
       |> Seq.map (fun b -> b.nodeId, (b.host,b.port))
@@ -639,7 +649,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       for pmd in tmd.partitionMetadata do       
         let (host,port) = hostByNode' |> Map.find pmd.leader // TODO: handle error, but shouldn't happen
         let! _ = connHostNew (host,port, Some pmd.leader)
-        nodeByTopic |> DVar.update (Map.add (tmd.topicName,pmd.partitionId) (pmd.leader))
+        nodeByTopic |> DVar.update (Map.add (tmd.topicName,pmd.partitionId) (pmd.leader)) }
+
+  /// Gets metadata from the bootstrap channel and updates internal routing tables.
+  member internal this.GetMetadata (topics:TopicName[]) = async {
+    let! metadata = Api.metadata bootstrapChan (MetadataRequest(topics)) 
+    do! this.ApplyMetadata metadata
     return metadata }
 
   /// Gets the group coordinator for the specified group, connects to it, adds to routing table.

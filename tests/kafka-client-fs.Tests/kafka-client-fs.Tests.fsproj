@@ -67,6 +67,7 @@
     <Compile Include="CodecTests.fs" />
     <None Include="Kafka.fsx" />
     <None Include="Metadata.fsx" />
+    <None Include="Producer.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

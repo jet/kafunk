@@ -295,6 +295,9 @@ type ReqRepSession<'a, 'b, 's> internal
      
     /// Decodes a response given the correlatio id, the maintained state and the response byte array.
     decode:CorrelationId * 's * ArraySeg<byte> -> 'b, 
+    
+    /// If a request 'a does not expect a response, return Some with the default response.
+    awaitResponse:'a -> 'b option,
      
     /// A stream of bytes corresponding to the stream received from the remote host.
     receive:AsyncSeq<ArraySeg<byte>>, 
@@ -321,10 +324,14 @@ type ReqRepSession<'a, 'b, 's> internal
     
   let mux (req:'a) =
     let correlationId = correlationId ()
-    let sessionReq,state = encode (req,correlationId)
     let rep = TaskCompletionSource<_>()
-    if not (txs.TryAdd(correlationId, (state,rep))) then
-      Log.error "clash of the sessions!"
+    let sessionReq,state = encode (req,correlationId)
+    match awaitResponse req with
+    | None ->
+      if not (txs.TryAdd(correlationId, (state,rep))) then
+        Log.error "clash of the sessions!"
+    | Some res ->
+      rep.SetResult res
     correlationId,sessionReq,rep
     
   do
@@ -372,8 +379,9 @@ module Session =
     (correlationId:unit -> int) 
     (encode:'a * int -> ArraySeg<byte> * 's) 
     (decode:int * 's * ArraySeg<byte> -> 'b) 
+    (awaitResponse:'a -> 'b option) 
     (receive:AsyncSeq<ArraySeg<byte>>)
     (send:ArraySeg<byte> -> Async<int>) =
-      new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, receive, send)
+      new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, awaitResponse, receive, send)
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

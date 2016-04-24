@@ -71,8 +71,13 @@ module Protocol =
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>] 
   module RequiredAcks =
     
+    /// No acknoweldgement required.
     let None : RequiredAcks = 0s
+
+    /// Acknowledged after the destination broker acknowledges.
     let Local : RequiredAcks = 1s
+    
+    /// Acknowledged after all in-sync replicas acknowledges.
     let AllInSync : RequiredAcks = -1s
 
   /// This provides a maximum time in milliseconds the server can await the receipt of the number of acknowledgements in RequiredAcks.

@@ -62,10 +62,10 @@
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="Shared.fs" />
+    <Compile Include="Protocol.fs" />
     <Compile Include="Async.fs" />
     <Compile Include="AsyncSeq.fs" />
     <Compile Include="Tcp.fs" />
-    <Compile Include="Protocol.fs" />
     <Compile Include="Kafka.fs" />
     <Compile Include="Producer.fs" />
     <Compile Include="Consumer.fs" />

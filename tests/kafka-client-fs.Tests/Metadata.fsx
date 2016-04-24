@@ -10,7 +10,6 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
-
 open KafkaFs
 
 let Log = Log.create __SOURCE_FILE__
