@@ -49,10 +49,10 @@ module Protocol =
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module Compression =
 
-    let [<Literal>] Mask = 7y
-    let [<Literal>] None = 0y
-    let [<Literal>] GZIP = 1y
-    let [<Literal>] Snappy = 2y
+    let [<Literal>] Mask = 7uy
+    let [<Literal>] None = 0uy
+    let [<Literal>] GZIP = 1uy
+    let [<Literal>] Snappy = 2uy
 
   /// A Kafka message key (bytes).
   type Key = ArraySeg<byte>

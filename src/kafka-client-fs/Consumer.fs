@@ -16,7 +16,7 @@ open KafkaFs
 
 /// High-level consumer API.
 module Consumer =
-    
+
   type ConsumerConfig = {
     //bootstrapServers : Uri[] // kafka://127.0.0.1:9092
     groupId : GroupId
@@ -91,13 +91,13 @@ module Consumer =
 *)
 
 
-  
+
   /// Possible responses of a consumer group protocol.
   /// These may be received by several concurrent processes: heartbeating, fetching, committing.
   type ConsumerGroupResponse =
-            
+
     | GroopCoordResponse // start protocol, or retry
-    | JoinResponse // 
+    | JoinResponse //
     | SyncResponse
     | FetchResponse
 
@@ -106,38 +106,38 @@ module Consumer =
     // Cleanup:
     // - stop heartbeating
     // - close fetched streams
-    // - 
+    // -
 
     /// GroupLoadInProgressCode	14	Yes	The broker returns this error code for an offset fetch request if it is still loading offsets (after a leader change for that offsets topic partition), or in response to group membership requests (such as heartbeats) when group metadata is being loaded by the coordinator.
     | GroupLoadInProgress
 
     /// GroupCoordinatorNotAvailableCode	15	Yes	The broker returns this error code for group coordinator requests, offset commits, and most group management requests if the offsets topic has not yet been created, or if the group coordinator is not active.
     | GroupCoordinatorNotAvailable
-    
+
     /// IllegalGenerationCode	22	 	Returned from group membership requests (such as heartbeats) when the generation id provided in the request is not the current generation.
     | IllegalGeneration
-    
+
     /// InconsistentGroupProtocolCode	23	 	Returned in join group when the member provides a protocol type or set of protocols which is not compatible with the current group.
     | InconsistentGroupProtocol
-    
-    | InvalidGroupId    
+
+    | InvalidGroupId
 
     /// UnknownMemberIdCode	25	 	Returned from group requests (offset commits/fetches, heartbeats, etc) when the memberId is not in the current generation.
     | UnknownMemberId
-    
+
     /// InvalidSessionTimeoutCode	26	 	Return in join group when the requested session timeout is outside of the allowed range on the broker
     | InvalidSessionTimeout
-    
+
     /// RebalanceInProgressCode	27	 	Returned in heartbeat requests when the coordinator has begun rebalancing the group. This indicates to the client that it should rejoin the group.
     | RebalanceInProgress
-        
-    | SessionTimeout 
+
+    | SessionTimeout
 
     | MetadataChanged
 
     /// 16	Yes	The broker returns this error code if it receives an offset fetch or commit request for a group that it is not a coordinator for.
     | NotCoordinatorForGroup
-  
+
 
 
   /// Given a consumer configuration, initiates the consumer group protocol.
@@ -147,29 +147,29 @@ module Consumer =
   /// a new generation once successful.
   /// If there are failures surpassing configured thresholds, the resulting sequence throws an exception.
   let consume (conn:KafkaConn) (cfg:ConsumerConfig) : AsyncSeq<_> = async {
-    
+
     // domain-specific api
 
-    let groopCoord = 
+    let groopCoord =
       Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
       |> Async.map (fun res ->
         match res.errorCode with
         | ErrorCode.NoError -> ConsumerGroupResponse.GroopCoordResponse
         | ErrorCode.GroupCoordinatorNotAvailableCode -> ConsumerGroupResponse.GroupCoordinatorNotAvailable
-        | ErrorCode.InvalidGroupIdCode -> ConsumerGroupResponse.InvalidGroupId          
+        | ErrorCode.InvalidGroupIdCode -> ConsumerGroupResponse.InvalidGroupId
         | _ -> failwith "")
-    
+
     // sent to group coordinator
     let joinGroup2 =
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg consumerProtocolMeta) |])
+      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
       let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
       Kafka.joinGroup conn joinGroupReq
       |> Async.map (fun res ->
         match res.errorCode with
-        | ErrorCode.NoError -> 
-          //if res.members.members.Length > 0 then            
+        | ErrorCode.NoError ->
+          //if res.members.members.Length > 0 then
           ConsumerGroupResponse.JoinResponse
         | ErrorCode.GroupCoordinatorNotAvailableCode -> ConsumerGroupResponse.GroupCoordinatorNotAvailable
         | ErrorCode.InconsistentGroupProtocolCode -> ConsumerGroupResponse.InconsistentGroupProtocol
@@ -181,22 +181,22 @@ module Consumer =
       let req = HeartbeatRequest(cfg.groupId, generationId, memberId)
       let! res = Kafka.heartbeat conn req
       match res.errorCode with
-      | ErrorCode.NoError -> 
+      | ErrorCode.NoError ->
         do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
         return! hb (generationId,memberId)
-      | ErrorCode.IllegalGenerationCode -> 
+      | ErrorCode.IllegalGenerationCode ->
         return ConsumerGroupResponse.IllegalGeneration
-      | ErrorCode.UnknownMemberIdCode -> 
+      | ErrorCode.UnknownMemberIdCode ->
         return ConsumerGroupResponse.UnknownMemberId
-      | ErrorCode.RebalanceInProgressCode -> 
+      | ErrorCode.RebalanceInProgressCode ->
         return ConsumerGroupResponse.RebalanceInProgress
-      | _ -> 
+      | _ ->
         return ConsumerGroupResponse.SessionTimeout }
-      
+
     // sent to group coordinator
     let leaderSyncGroup (generationId,memberId,members) = async {
       let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-      let members = [| "" (*memberId*), (toArraySeg assignment) |]
+      let members = [| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]
       let req = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment(members))
       let! res = Kafka.syncGroup conn req
       match res.errorCode with
@@ -204,7 +204,7 @@ module Consumer =
       | ErrorCode.IllegalGenerationCode -> return ConsumerGroupResponse.IllegalGeneration
       | ErrorCode.UnknownMemberIdCode -> return ConsumerGroupResponse.UnknownMemberId
       | ErrorCode.RebalanceInProgressCode -> return ConsumerGroupResponse.RebalanceInProgress
-      | _ -> 
+      | _ ->
         return ConsumerGroupResponse.SessionTimeout }
 
     // sent to group coordinator
@@ -216,12 +216,12 @@ module Consumer =
       | ErrorCode.IllegalGenerationCode -> return ConsumerGroupResponse.IllegalGeneration
       | ErrorCode.UnknownMemberIdCode -> return ConsumerGroupResponse.UnknownMemberId
       | ErrorCode.RebalanceInProgressCode -> return ConsumerGroupResponse.RebalanceInProgress
-      | _ -> 
+      | _ ->
         return ConsumerGroupResponse.SessionTimeout }
 
 
     // sent to group coordinator
-    let commitOffset (generationId,memberId) (topic:TopicName, partition:Partition, offset:Offset) = async {        
+    let commitOffset (generationId,memberId) (topic:TopicName, partition:Partition, offset:Offset) = async {
       let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, null |] |])
       let! res = Kafka.offsetCommit conn req
       // TODO: check error
@@ -245,7 +245,7 @@ module Consumer =
         let partition,ec,hmo,mss,ms = partitions.[0]
         let nextOffset = MessageSet.nextOffset ms
         let commit = commitOffset (generationId,memberId) (topic, partition, offset)
-        yield ms,commit          
+        yield ms,commit
         yield! go nextOffset }
       // TODO: fetch offset
       go (0L)
@@ -257,15 +257,15 @@ module Consumer =
     let rec go () : AsyncSeq<_> = async {
 
       // start of session
-      let! groupCoord = Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))    
+      let! groupCoord = Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
       // TODO: send offset commit/fetch requests to groop coord
 
-      
+
 
 
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg consumerProtocolMeta) |])
+      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
 
 
 
@@ -281,35 +281,35 @@ module Consumer =
         // determine assignments
         // send sync request
         let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-        let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg assignment) |]))
+        let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]))
         let! syncRes = Kafka.syncGroup conn syncReq
 
-        
+
         // TODO: get metadata?
-                              
+
         return failwith ""
       else
-            
+
         let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([||]))
         let! syncRes = Kafka.syncGroup conn syncReq
-        let (memberAssignment:ConsumerGroupMemberAssignment,_) = read syncRes.memberAssignment       
-      
+        let (memberAssignment:ConsumerGroupMemberAssignment,_) = ConsumerGroupMemberAssignment.read syncRes.memberAssignment
+
         // the partitions assigned to this member
         let topicPartitions = memberAssignment.partitionAssignment.assignments
 
 
-        // the topic,partition,stream combinations assigned to this member      
-        let topicStreams =           
+        // the topic,partition,stream combinations assigned to this member
+        let topicStreams =
           topicPartitions
           |> Array.collect (fun (t,ps) -> ps |> Array.map (fun p -> t,p))
-          |> Array.map (fun (t,p) -> t,p, stream (generationId,memberId) (t,p))           
+          |> Array.map (fun (t,p) -> t,p, stream (generationId,memberId) (t,p))
 
 
         // return and wait for errors, which will stop all child streams
         // and return a new state
 
         return Cons ( (generationId,memberId,topicStreams), go ())
-      
+
       }
 
 
@@ -318,7 +318,7 @@ module Consumer =
   }
 
 
-    
+
 
 // -------------------------------------------------------------------------------------------------------------------------------------
 

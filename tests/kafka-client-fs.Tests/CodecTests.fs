@@ -23,7 +23,7 @@ let ``should encode int32 negative``() =
 [<Test>]
 let ``crc32 message``() =
   let m = Message.ofBytes "hello world"B
-  let bytes = toArraySeg m
+  let bytes = toArraySeg Message.size Message.write m
   let crc32 = Crc.crc32 (bytes.Array, bytes.Offset + 4, bytes.Count - 4)
   let expected = 1940715388u
   Assert.AreEqual(expected, crc32)
@@ -36,28 +36,28 @@ let ``crc32 string``() =
   Assert.AreEqual(expected, crc32)
 
 [<Test>]
-let ``should encode MessageSet``() =    
-  let expected = 
+let ``should encode MessageSet``() =
+  let expected =
     [
         0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 45uy; 70uy; 24uy; 62uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 1uy; 48uy; 0uy; 0uy; 0uy;
         0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 90uy; 65uy; 40uy; 168uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy;
         0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 195uy; 72uy; 121uy; 18uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 1uy; 50uy
     ]
-  let ms = 
+  let ms =
     [
       Message.ofString("0", "1")
       Message.ofString("1", "1")
       Message.ofString("2", "1")
     ]
     |> MessageSet.ofMessages
-  let data = toArraySeg ms
-  let encoded = data |> ArraySeg.toArray |> Array.toList    
+  let data = toArraySeg MessageSet.size MessageSet.write ms
+  let encoded = data |> ArraySeg.toArray |> Array.toList
   Assert.True ((expected = encoded))
 
 [<Test>]
 let ``should decode FetchResponse``() =
   let data = ArraySeg.ofArray [| 0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;7uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;114uy;108uy;100uy; |]
-  let (res:FetchResponse,_) = read data
+  let (res:FetchResponse,_) = FetchResponse.read data
   let topicName,ps = res.topics.[0]
   let (p,ec,hwo,mss,ms) = ps.[0]
   let (o,ms,m) = ms.messages.[0]
@@ -72,7 +72,7 @@ let ``should decode FetchResponse``() =
 [<Test>]
 let ``should decode ProduceResponse``() =
   let data = ArraySeg.ofArray [| 0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
-  let (res:ProduceResponse,_) = read data
+  let (res:ProduceResponse,_) = ProduceResponse.read data
   let topicName,ps = res.topics.[0]
   let p,ec,off = ps.[0]
   Assert.AreEqual("test", topicName)
@@ -83,7 +83,7 @@ let ``should decode ProduceResponse``() =
 [<Test>]
 let ``should encode ProduceRequest``() =
   let req = ProduceRequest.ofMessageSet ("test", 0, MessageSet.ofMessage (Message.ofBytes ("hello world"B)))
-  let data = toArraySeg req |> ArraySeg.toArray |> Array.toList
+  let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> ArraySeg.toArray |> Array.toList
   let expected = [0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;114uy;108uy;100uy;]
   Assert.True((expected = data))
-    
+
