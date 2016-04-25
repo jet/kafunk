@@ -766,6 +766,9 @@ module Protocol =
   let inline sizeBytes (bytes:ArraySeg<byte>) =
       sizeInt32 bytes.Count + bytes.Count
 
+  let inline sizeArray (a : 'a []) (size : 'a -> int) =
+    sizeInt32 a.Length + (a |> Array.sumBy size)
+
   let writeArrayNoSize (buf:ArraySeg<byte>) (arr:'a[]) (writeElem:ArraySeg<byte> -> 'a -> ArraySeg<byte>) =
     let mutable buf = buf
     for a in arr do
@@ -782,9 +785,6 @@ module Protocol =
         read <- read + (data'.Offset - data.Offset)
         data <- data' |]
     arr,data
-
-  let getArraySize (arr:'a[]) (elementSize:'a -> int) =
-    sizeInt32 arr.Length + (arr |> Array.sumBy elementSize)
 
   type Message with
     static member size (m:Message) =
@@ -828,8 +828,9 @@ module Protocol =
 
   type MetadataRequest with
     static member size (x:MetadataRequest) =
-      x.topicNames |> Array.sumBy sizeString
+      sizeArray x.topicNames sizeString
     static member write (buf, x:MetadataRequest) =
+      printfn "requesting metadata topics %A" x.topicNames
       buf |> writeArray x.topicNames writeString
 
   type Broker with
@@ -861,8 +862,11 @@ module Protocol =
 
   type ProduceRequest with
     static member size (x:ProduceRequest) =
-      sizeInt16 x.requiredAcks + sizeInt32 x.timeout
-      + (getArraySize x.topics (fun (tn,ps) -> sizeString tn + (getArraySize ps (fun (p,mss,ms) -> (sizeInt32 p) + 4 + mss))))
+      let sizePartition (p, mss, _ms) =
+        sizeInt32 p + 4 + mss
+      let sizeTopic (tn, ps) =
+        sizeString tn + sizeArray ps sizePartition
+      sizeInt16 x.requiredAcks + sizeInt32 x.timeout + sizeArray x.topics sizeTopic
     static member write (buf, x:ProduceRequest) =
       let writePartition =
         write3 writeInt32 writeInt32 (fun msgSet buf -> MessageSet.write (buf, msgSet))
@@ -887,8 +891,11 @@ module Protocol =
       let partitionSize (partition, offset, maxBytes) =
         sizeInt32 partition + sizeInt64 offset + sizeInt32 maxBytes
       let topicSize (name, partitions) =
-        sizeString name + (partitions |> Array.sumBy partitionSize)
-      (sizeInt32 x.replicaId) + (sizeInt32 x.maxWaitTime) + (sizeInt32 x.minBytes) + (x.topics |> Array.sumBy topicSize)
+        sizeString name + sizeArray partitions partitionSize
+      sizeInt32 x.replicaId +
+      sizeInt32 x.maxWaitTime +
+      sizeInt32 x.minBytes +
+      sizeArray x.topics topicSize
     static member write (buf, x:FetchRequest) =
       let writePartition =
         write3 writeInt32 writeInt64 writeInt32
@@ -919,8 +926,8 @@ module Protocol =
       let partitionSize (part, time, maxNumOffsets) =
         sizeInt32 part + sizeInt64 time + sizeInt32 maxNumOffsets
       let topicSize (name, partitions) =
-        sizeString name + (partitions |> Array.sumBy partitionSize)
-      sizeInt32 x.replicaId + (x.topics |> Array.sumBy topicSize)
+        sizeString name + sizeArray partitions partitionSize
+      sizeInt32 x.replicaId + sizeArray x.topics topicSize
     static member write (buf, x:OffsetRequest) =
       let writePartition =
         write3 writeInt32 writeInt64 writeInt32
@@ -949,7 +956,7 @@ module Protocol =
 
   type GroupCoordinatorRequest with
     static member size (x:GroupCoordinatorRequest) =
-      (sizeString x.groupId)
+      sizeString x.groupId
     static member write (buf, x:GroupCoordinatorRequest) =
       writeString x.groupId buf
 
@@ -966,12 +973,12 @@ module Protocol =
       let partitionSize (part, offset, metadata) =
         sizeInt32 part + sizeInt64 offset + sizeString metadata
       let topicSize (name, partitions) =
-        sizeString name + (partitions |> Array.sumBy partitionSize)
+        sizeString name + sizeArray partitions partitionSize
       sizeString x.consumerGroup +
       sizeInt32 x.consumerGroupGenerationId +
       sizeString x.consumerId +
       sizeInt64 x.retentionTime +
-      (x.topics |> Array.sumBy topicSize)
+      sizeArray x.topics topicSize
     static member write (buf, x:OffsetCommitRequest) =
       let writePartition =
         write3 writeInt32 writeInt64 writeString
@@ -996,8 +1003,8 @@ module Protocol =
   type OffsetFetchRequest with
     static member size (x:OffsetFetchRequest) =
       let topicSize (name, parts) =
-        sizeString name + (parts |> Array.sumBy sizeInt32)
-      sizeString x.consumerGroup + (x.topics |> Array.sumBy topicSize)
+        sizeString name + sizeArray parts sizeInt32
+      sizeString x.consumerGroup + sizeArray x.topics topicSize
     static member write (buf, x:OffsetFetchRequest) =
       let writeTopic =
         write2 writeString (fun ps -> writeArray ps writeInt32)
@@ -1032,7 +1039,7 @@ module Protocol =
     static member size (x:GroupProtocols) =
       let protocolSize (name, metadata) =
         sizeString name + sizeBytes metadata
-      x.protocols |> Array.sumBy protocolSize
+      sizeArray x.protocols protocolSize
     static member write (buf, x:GroupProtocols) =
       buf |> writeArray x.protocols (write2 writeString writeBytes)
 
@@ -1081,7 +1088,7 @@ module Protocol =
 
   type GroupAssignment with
     static member size (x:GroupAssignment) =
-      x.members |> Array.sumBy (fun (memId, memAssign) -> sizeString memId + sizeBytes memAssign)
+      sizeArray x.members (fun (memId, memAssign) -> sizeString memId + sizeBytes memAssign)
     static member write (buf, x:GroupAssignment) =
       buf |> writeArray x.members (write2 writeString writeBytes)
 
@@ -1119,7 +1126,7 @@ module Protocol =
 
   type DescribeGroupsRequest with
     static member size (x:DescribeGroupsRequest) =
-      x.groupIds |> Array.sumBy sizeString
+      sizeArray x.groupIds sizeString
     static member write (buf, x:DescribeGroupsRequest) =
       buf |> writeArray x.groupIds writeString
 
@@ -1209,7 +1216,7 @@ module Protocol =
   type ConsumerGroupProtocolMetadata with
     static member size (x:ConsumerGroupProtocolMetadata) =
       sizeInt16 x.version +
-      (x.subscription |> Array.sumBy sizeString) +
+      sizeArray x.subscription sizeString +
       sizeBytes x.userData
     static member write (buf, x:ConsumerGroupProtocolMetadata) =
       buf
@@ -1220,8 +1227,8 @@ module Protocol =
   type PartitionAssignment with
     static member size (x:PartitionAssignment) =
       let topicSize (name, parts) =
-        sizeString name + (parts |> Array.sumBy sizeInt32)
-      x.assignments |> Array.sumBy topicSize
+        sizeString name + sizeArray parts sizeInt32
+      sizeArray x.assignments topicSize
     static member write (buf, x:PartitionAssignment) =
       let writePartitions partitions = writeArray partitions writeInt32
       buf |> writeArray x.assignments (write2 writeString writePartitions)
@@ -1234,7 +1241,7 @@ module Protocol =
 
   type ConsumerGroupMemberAssignment with
     static member size (x:ConsumerGroupMemberAssignment) =
-      (sizeInt16 x.version) + (PartitionAssignment.size x.partitionAssignment)
+      sizeInt16 x.version + PartitionAssignment.size x.partitionAssignment
     static member write (buf, x:ConsumerGroupMemberAssignment) =
       let buf = writeInt16 x.version buf
       PartitionAssignment.write (buf, x.partitionAssignment)
