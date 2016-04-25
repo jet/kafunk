@@ -14,29 +14,47 @@ open System.Runtime.ExceptionServices
 
 open KafkaFs
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module internal Dns =
+
+  module IPv4 =
+
+    let getAllAsync (hostOrAddress:string) = 
+      Dns.GetHostAddressesAsync(hostOrAddress) 
+      |> Async.AwaitTask
+      |> Async.map (Array.filter (fun ip -> ip.AddressFamily = AddressFamily.InterNetwork))
+
+    let getAsync (host:string) = 
+      getAllAsync host |> Async.map (Array.item 0)
+
+    /// Gets an IPv4 IPEndPoint given a host and port.
+    let getEndpointAsync (hostOrAddress:string, port:int) = async {
+      let! ipv4 = getAsync hostOrAddress
+      return IPEndPoint(ipv4, port) }
+
 
 /// Operations on Berkley sockets.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Socket =
 
   /// Executes an async socket operation.
-  let inline exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (prep:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
+  let exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (config:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
     Async.FromContinuations <| fun (ok, error, _) ->
 
       let args = alloc ()
-      prep args
+      config args
 
       let rec k (_:obj) (args:SocketAsyncEventArgs) =
         match args.SocketError with
         | SocketError.Success ->
-            args.remove_Completed(k')
-            let result = map args
-            free args
-            ok result
+          args.remove_Completed(k')
+          let result = map args
+          free args
+          ok result
         | e ->
-            args.remove_Completed(k')
-            free args
-            error (SocketException(int e))
+          args.remove_Completed(k')
+          free args
+          error (SocketException(int e))
 
       and k' = EventHandler<SocketAsyncEventArgs>(k)
 
@@ -105,18 +123,21 @@ module Socket =
   let disconnect (socket:Socket) (reuse:bool) =
     exec argsAlloc (fun a -> a.DisconnectReuseSocket <- reuse) socket.DisconnectAsync (ignore)
 
-  let receiveStream (socket:Socket) : AsyncSeq<ArraySeg<byte>> =
+  /// Returns an async sequence where each element corresponds to a receive operation.
+  /// The sequence finishes when a receive operation completes transferring 0 bytes.
+  /// Socket errors are propagated as exceptions.
+  let receiveStreamFrom (bufferSize:int) (receive:ArraySeg<byte> -> Async<int>) : AsyncSeq<ArraySeg<byte>> =
 
     let remBuff = ref None
 
     let inline getBuffer () =
       match !remBuff with
       | Some rem -> rem
-      | None -> socket.ReceiveBufferSize |> ArraySeg.ofCount
+      | None -> bufferSize |> ArraySeg.ofCount
 
     let rec go () = asyncSeq {
       let buff = getBuffer ()
-      let! received = receive socket buff
+      let! received = receive buff
       if received = 0 then ()
       else
         let remainder = buff.Count - received
@@ -128,6 +149,12 @@ module Socket =
         yield! go () }
 
     go ()
+
+  /// Returns an async sequence each item of which corresponds to a receive on the specified socket.
+  /// The sequence finishes when a receive operation completes transferring 0 bytes.
+  /// Socket errors are propagated as exceptions.
+  let receiveStream (socket:Socket) : AsyncSeq<ArraySeg<byte>> =
+    receiveStreamFrom socket.ReceiveBufferSize (receive socket)
 
 
 
@@ -255,6 +282,9 @@ type SessionMessage =
   new (txId, payload) = { tx_id = txId ; payload = payload }
 
 /// A multiplexed request/reply session.
+/// Note a session is stateful in that it maintains state between requests and responses
+/// and in that starts a process to read the input stream.
+/// Send failures are propagated to the caller who is responsible for recreating the session.
 type ReqRepSession<'a, 'b, 's> internal 
   (
     /// A correlation id generator.
@@ -265,6 +295,9 @@ type ReqRepSession<'a, 'b, 's> internal
      
     /// Decodes a response given the correlatio id, the maintained state and the response byte array.
     decode:CorrelationId * 's * ArraySeg<byte> -> 'b, 
+    
+    /// If a request 'a does not expect a response, return Some with the default response.
+    awaitResponse:'a -> 'b option,
      
     /// A stream of bytes corresponding to the stream received from the remote host.
     receive:AsyncSeq<ArraySeg<byte>>, 
@@ -272,7 +305,7 @@ type ReqRepSession<'a, 'b, 's> internal
     /// Sends a byte array to the remote host.
     send:ArraySeg<byte> -> Async<int>) =
 
-  static let Log = Log.create "KafkaFs.Session"
+  static let Log = Log.create "KafkaFunk.TcpSession"
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
@@ -291,10 +324,14 @@ type ReqRepSession<'a, 'b, 's> internal
     
   let mux (req:'a) =
     let correlationId = correlationId ()
-    let sessionReq,state = encode (req,correlationId)
     let rep = TaskCompletionSource<_>()
-    if not (txs.TryAdd(correlationId, (state,rep))) then
-      Log.error "clash of the sessions!"
+    let sessionReq,state = encode (req,correlationId)
+    match awaitResponse req with
+    | None ->
+      if not (txs.TryAdd(correlationId, (state,rep))) then
+        Log.error "clash of the sessions!"
+    | Some res ->
+      rep.SetResult res
     correlationId,sessionReq,rep
     
   do
@@ -342,8 +379,9 @@ module Session =
     (correlationId:unit -> int) 
     (encode:'a * int -> ArraySeg<byte> * 's) 
     (decode:int * 's * ArraySeg<byte> -> 'b) 
+    (awaitResponse:'a -> 'b option) 
     (receive:AsyncSeq<ArraySeg<byte>>)
     (send:ArraySeg<byte> -> Async<int>) =
-      new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, receive, send)
+      new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, awaitResponse, receive, send)
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

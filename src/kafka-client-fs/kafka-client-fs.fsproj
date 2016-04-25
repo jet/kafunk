@@ -59,15 +59,19 @@
   -->
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
+    <None Include="paket.references" />
+    <None Include="paket.template" />
     <Compile Include="Shared.fs" />
+    <Compile Include="Protocol.fs" />
     <Compile Include="Async.fs" />
     <Compile Include="AsyncSeq.fs" />
     <Compile Include="Tcp.fs" />
-    <Compile Include="Protocol.fs" />
     <Compile Include="Kafka.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="Compression.fs" />
+    <Compile Include="Producer.fs" />
+    <Compile Include="Consumer.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

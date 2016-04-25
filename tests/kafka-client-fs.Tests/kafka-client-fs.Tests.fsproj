@@ -67,6 +67,8 @@
     <Compile Include="CodecTests.fs" />
     <None Include="Kafka.fsx" />
     <Compile Include="Compression-gzip-tests.fs" />
+    <None Include="Metadata.fsx" />
+    <None Include="Producer.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

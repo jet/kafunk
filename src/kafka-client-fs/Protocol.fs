@@ -32,14 +32,18 @@ module Protocol =
 
   type ApiVersion = int16
 
+  /// A correlation id of a Kafka request-response transaction.
   type CorrelationId = int32
 
+  /// A client id.
   type ClientId = string
 
+  /// Crc digest of a Kafka message.
   type Crc = int32
 
   type MagicByte = int8
 
+  /// Kafka message attributes.
   type Attributes = int8
 
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -50,10 +54,13 @@ module Protocol =
     let [<Literal>] GZIP = 1y
     let [<Literal>] Snappy = 2y
 
+  /// A Kafka message key (bytes).
   type Key = ArraySeg<byte>
 
+  /// A Kafka message value (bytes).
   type Value = ArraySeg<byte>
 
+  /// A name of a Kafka topic.
   type TopicName = string
 
   /// This field indicates how many acknowledgements the servers should receive
@@ -63,8 +70,13 @@ module Protocol =
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module RequiredAcks =
 
+    /// No acknoweldgement required.
     let None : RequiredAcks = 0s
+
+    /// Acknowledged after the destination broker acknowledges.
     let Local : RequiredAcks = 1s
+
+    /// Acknowledged after all in-sync replicas acknowledges.
     let AllInSync : RequiredAcks = -1s
 
   /// This provides a maximum time in milliseconds the server can await the
@@ -76,28 +88,36 @@ module Protocol =
   /// The size, in bytes, of the message set that follows.
   type MessageSetSize = int32
 
+  /// The size of a Kafka message.
   type MessageSize = int32
 
+  /// A Kafka topic offset.
   type Offset = int64
 
+  /// An id of a Kafka node.
   type NodeId = int32
 
+  /// A Kafka host name.
   type Host = string
 
+  /// A Kafka host port number
   type Port = int32
 
-  type TopicErrorCode = int16
-
-  type PartitionErrorCode = int16
-
-  type Leader = int32
-
-  type Replicas = int32[]
-
-  /// In-sync replicas
-  type Isr = int32[]
-
+  /// A Kafka error code.
   type ErrorCode = int16
+
+  type TopicErrorCode = ErrorCode
+
+  type PartitionErrorCode = ErrorCode
+
+  /// The id of the leader node.
+  type Leader = NodeId
+
+  /// Node ids of replicas.
+  type Replicas = NodeId[]
+
+  /// Node ids of in-sync replicas.
+  type Isr = NodeId[]
 
   [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module ErrorCode =
@@ -164,14 +184,19 @@ module Protocol =
 
   type MaxNumberOfOffsets = int32
 
+  /// A Kafka group id.
   type GroupId = string
 
+  /// A Kafka group coordinator id.
   type CoordinatorId = int32
 
-  type CoordinatorHost = string
+  /// A Kafka group coordinator host name.
+  type CoordinatorHost = Host
 
-  type CoordinatorPort = int32
+  /// A Kafka group coordinator TCP port.
+  type CoordinatorPort = Port
 
+  ///
   type ConsumerGroup = string
 
   type ConsumerGroupGenerationId = int32
@@ -188,16 +213,21 @@ module Protocol =
 
   type ProtocolMetadata = ArraySeg<byte>
 
+  /// An id of a Kafka group protocol generation.
   type GenerationId = int32
 
   type GroupProtocol = string
 
+  /// The id of a group leader.
   type LeaderId = string
 
+  /// Metadata associated with a Kafka group member.
   type MemberMetadata = ArraySeg<byte>
 
+  /// A byte[] representing member assignment of a particular Kafka group protocol.
   type MemberAssignment = ArraySeg<byte>
 
+  /// A Kafka message type used for producing and fetching.
   type Message =
     struct
       val crc : Crc
@@ -217,12 +247,20 @@ module Protocol =
 
   // Metadata API
 
+  /// Request metadata on all or a specific set of topics.
+  /// Can be routed to any node in the bootstrap list.
   type MetadataRequest =
     struct
       val topicNames : TopicName[]
       new (topicNames) = { topicNames = topicNames }
     end
 
+  /// Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
+  /// The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
+  /// - UnknownTopic
+  /// - LeaderNotAvailable
+  /// - InvalidTopic
+  /// - TopicAuthorizationFailed
   and MetadataResponse =
     struct
       val brokers : Broker[]
@@ -230,6 +268,7 @@ module Protocol =
       new (brokers, topicMetadata) =  { brokers = brokers ; topicMetadata = topicMetadata }
     end
 
+  /// A Kafka broker consists of a node id, host name and TCP port.
   and Broker =
     struct
       val nodeId : NodeId
@@ -238,6 +277,7 @@ module Protocol =
       new (nodeId,host,port) = { nodeId = nodeId ; host = host ; port = port }
     end
 
+  /// Metadata for a specific topic consisting of a set of partition-to-broker assignments.
   and TopicMetadata =
     struct
       val topicErrorCode : TopicErrorCode
@@ -267,6 +307,18 @@ module Protocol =
       new (requiredAcks,timeout,topics) = { requiredAcks = requiredAcks ; timeout = timeout ; topics = topics }
     end
 
+  /// A reponse to a produce request.
+  /// - UnknownTopicOrPartition
+  /// - InvalidMessageSize
+  /// - LeaderNotAvailable
+  /// - NotLeaderForPartition
+  /// - RequestTimedOut
+  /// - MessageSizeTooLarge
+  /// - RecordListTooLargeCode
+  /// - NotEnoughReplicasCode
+  /// - NotEnoughReplicasAfterAppendCode
+  /// - InvalidRequiredAcksCode
+  /// - TopicAuthorizationFailedCode
   and ProduceResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode * Offset)[])[]
@@ -292,6 +344,8 @@ module Protocol =
 
   // Offset API
 
+
+  /// A request to return offset information for a set of topics on a specific replica.
   type OffsetRequest =
     struct
       val replicaId : ReplicaId
@@ -349,9 +403,10 @@ module Protocol =
   // Group Membership API
 
   /// The offsets for a given consumer group are maintained by a specific
-  /// broker called the group coordinator. i.e., a consumer needs to issue its
-  /// offset commit and fetch requests to this specific broker. It can discover
-  /// the current coordinator by issuing a group coordinator request.
+  /// broker called the group coordinator. i.e., a consumer needs to
+  /// issue its offset commit and fetch requests to this specific broker.
+  /// It can discover the current coordinator by issuing a group coordinator request.
+  /// Can be routed to any node in the bootstrap list.
   type GroupCoordinatorRequest =
     struct
       val groupId : GroupId
@@ -370,6 +425,7 @@ module Protocol =
 
 
   /// The join group request is used by a client to become a member of a group.
+  /// https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-JoinGroupRequest
   type JoinGroupRequest =
     struct
       val groupId : GroupId
@@ -389,6 +445,9 @@ module Protocol =
       new (protocols) = { protocols = protocols }
     end
 
+  /// The response to a join group request.
+  /// Indicates whether the member is a leader, in which case it must initiate the particular protocol.
+  /// In case of consume groups, assigns members to partitions.
   and JoinGroupResponse =
     struct
       val errorCode : ErrorCode
@@ -436,7 +495,7 @@ module Protocol =
       new (errorCode,memberAssignment) = { errorCode = errorCode ; memberAssignment = memberAssignment }
     end
 
-
+  /// Sent by a consumer to the group coordinator.
   type HeartbeatRequest =
     struct
       val groupId : GroupId
@@ -446,13 +505,19 @@ module Protocol =
         { groupId = groupId ; generationId = generationId ; memberId = memberId }
     end
 
+  /// Heartbeat response from the group coordinator.
+  /// - GROUP_COORDINATOR_NOT_AVAILABLE
+  /// - ILLEGAL_GENERATION
+  /// - UNKNOWN_MEMBER_ID
+  /// - REBALANCE_IN_PROGRESS
+  /// - GROUP_AUTHORIZATION_FAILED
   and HeartbeatResponse =
     struct
       val errorCode : ErrorCode
       new (errorCode) = { errorCode = errorCode }
     end
 
-
+  /// An explciti request to leave a group. Preferred over session timeout.
   type LeaveGroupRequest =
     struct
       val groupId : GroupId
@@ -460,6 +525,7 @@ module Protocol =
       new (groupId,memberId) = { groupId = groupId ; memberId = memberId }
     end
 
+  ///
   and LeaveGroupResponse =
     struct
       val errorCode : ErrorCode
@@ -703,6 +769,7 @@ module Protocol =
     (arr, buf)
 
   type Reader<'a> = ArraySeg<byte> -> 'a * ArraySeg<byte>
+
 
   type Writer<'a> = 'a -> ArraySeg<byte> -> ArraySeg<byte>
 
