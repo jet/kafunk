@@ -12,6 +12,7 @@ open System.Threading.Tasks
 open System.Runtime.ExceptionServices
 
 open KafkaFs
+open KafkaFs.Prelude
 
 
 // -------------------------------------------------------------------------------------------------------------------------------------
@@ -22,33 +23,33 @@ module Constructors =
 
   type Message with
 
-    static member create (value:ArraySeg<byte>, ?key:ArraySeg<byte>, ?attrs:Attributes) =
-      Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (ArraySeg<_>())), value)
+    static member create (value:Buffer, ?key:Buffer, ?attrs:Attributes) =
+      Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Buffer.empty)), value)
 
-    static member ofBytes (data:ArraySeg<byte>, ?key:ArraySeg<byte>) =
-      Message(0, 0y, 0y, (defaultArg  key (ArraySeg<_>())), data)
+    static member ofBytes (data:Buffer, ?key:Buffer) =
+      Message(0, 0y, 0y, (defaultArg  key (Buffer.empty)), data)
 
     static member ofBytes (value:byte[], ?key:byte[]) =
       let key =
         match key with
-        | Some key -> ArraySeg<_>(key, 0, key.Length)
-        | None -> ArraySeg<_>()
-      Message(0, 0y, 0y, key, ArraySeg<_>(value, 0, value.Length))
+        | Some key -> ArraySegment<byte>(key, 0, key.Length)
+        | None -> ArraySegment<byte>()
+      Message(0, 0y, 0y, key, ArraySegment<byte>(value, 0, value.Length))
 
     static member ofString (value:string, ?key:string) =
-      let value = Encoding.UTF8.GetBytes value |> ArraySeg.ofArray
+      let value = Encoding.UTF8.GetBytes value |> Buffer.ofArray
       let key =
         match key with
-        | Some key -> Encoding.UTF8.GetBytes key |> ArraySeg.ofArray
-        | None -> ArraySeg<_>()
+        | Some key -> Encoding.UTF8.GetBytes key |> Buffer.ofArray
+        | None -> ArraySegment<byte>()
       Message(0, 0y, 0y, key, value)
 
     static member valueString (m:Message) =
-      m.value |> Encoding.UTF8.GetString
+      m.value |> Buffer.toString
 
     static member keyString (m:Message) =
       if isNull m.value.Array then null
-      else m.value |> Encoding.UTF8.GetString
+      else m.value |> Buffer.toString
 
   type MessageSet with
 
@@ -93,18 +94,6 @@ module Constructors =
     static member ofTopicPartitions (topic:TopicName, ps:(Partition * FetchOffset)[], ?maxWaitTime:MaxWaitTime, ?minBytes:MinBytes, ?maxBytesPerPartition:MaxBytes) =
       FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, ps |> Array.map (fun (p,o) -> p, o, (defaultArg maxBytesPerPartition 1000)) |])
 
-
-// -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-// -------------------------------------------------------------------------------------------------------------------------------------
 // Connection
 
 
@@ -183,10 +172,6 @@ module internal Api =
 
   let inline describeGroups (send:Chan) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
     send (RequestMessage.DescribeGroups req) |> Async.map ResponseMessage.toDescribeGroups
-
-
-
-
 
 module internal Conn =
 
@@ -342,10 +327,6 @@ module internal Conn =
         // TODO
         return failwith "" }
 
-
-  // -----------------------------------------------------------------------------------------------------------------------
-
-
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   let rec connect (ep:IPEndPoint, clientId:ClientId) : Async<Chan> = async {
@@ -377,10 +358,6 @@ module internal Conn =
     let send =
       sendRcvSocket
       |> DVar.mapFun Socket.sendAll
-
-
-    // --------
-
 
     // TODO: implement using channels
     let state = ref 0 // 0 - OK, 1 - recovery in progress
@@ -439,16 +416,13 @@ module internal Conn =
 
     let send,receive = sendErr,receiveErr
 
-    // --------
-
-
     /// An unframed input stream.
     let inputStream =
       Socket.receiveStreamFrom receiveBufferSize receive
       |> Framing.LengthPrefix.unframe
 
     /// A framing sender.
-    let send (data:ArraySeg<byte>) =
+    let send (data:Buffer) =
       let framed = data |> Framing.LengthPrefix.frame
       send framed
 
@@ -460,7 +434,7 @@ module internal Conn =
       sessionData,req.apiKey
 
     /// Decodes the session layer input and session state into a response.
-    let decode (_, apiKey:ApiKey, data:ArraySeg<byte>) =
+    let decode (_, apiKey:ApiKey, data:Buffer) =
       let res = ResponseMessage.readApiKey (data, apiKey)
       res
 
@@ -469,15 +443,6 @@ module internal Conn =
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
     return session.Send }
-
-
-
-
-
-
-
-
-
 
 
 // http://kafka.apache.org/documentation.html#connectconfigs
@@ -502,8 +467,6 @@ with
       bootstrapServers = bootstrapServers
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
     }
-
-
 
 
 /// A connection to a Kafka cluster.
@@ -580,8 +543,6 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       chanByTopic
       chanByGroupId
     |> DVar.toFun
-
-  // -----------------------------------------------------------------
 
 
   /// Connects to the specified host and adds to routing table.
@@ -663,12 +624,6 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   interface IDisposable with
     member __.Dispose () = ()
-
-
-// -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
 
 /// Kafka API.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

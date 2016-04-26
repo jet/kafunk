@@ -1,47 +1,36 @@
 ﻿namespace KafkaFs
 
-open System
-open System.IO
-open System.Net
-open System.Net.Sockets
-open System.Text
-open System.Collections.Generic
-open System.Collections.Concurrent
-open System.Threading
-open System.Threading.Tasks
-open System.Runtime.ExceptionServices
 open KafkaFs
-
+open KafkaFs.Prelude
 
 /// A producer message.
 type ProducerMessage =
   struct
 
     /// The message payload.
-    val value : ArraySeg<byte>
-      
+    val value : Buffer
+
     /// The optional message key.
-    val key : ArraySeg<byte>
+    val key : Buffer
 
     /// The optional routing key.
     val routeKey : string
-                 
-    new (value:ArraySeg<byte>, key:ArraySeg<byte>, routeKey:string) = 
-      { value = value ; key = key ; routeKey = routeKey }
-  end      
-    with
-        
-      /// Creates a producer message.
-      static member ofBytes (value:ArraySeg<byte>, ?key, ?routeKey) =
-        ProducerMessage (value, defaultArg key (ArraySeg<_>()), defaultArg routeKey null)
-      
-      static member ofBytes (value:byte[], ?key, ?routeKey) =
-        ProducerMessage (ArraySeg.ofArray value, defaultArg (key |> Option.map (ArraySeg.ofArray)) (ArraySeg<_>()), defaultArg routeKey null)
 
+    new (value:Buffer, key:Buffer, routeKey:string) =
+      { value = value ; key = key ; routeKey = routeKey }
+  end
+    with
+
+      /// Creates a producer message.
+      static member ofBytes (value:Buffer, ?key, ?routeKey) =
+        ProducerMessage (value, defaultArg key (Buffer.empty), defaultArg routeKey null)
+
+      static member ofBytes (value:byte[], ?key, ?routeKey) =
+        ProducerMessage (Buffer.ofArray value, defaultArg (key |> Option.map (Buffer.ofArray)) (Buffer.empty), defaultArg routeKey null)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Partitioner =
-  
+
   /// Constantly returns the same partition.
   let konst (p:Partition) : TopicName * TopicMetadata * ProducerMessage -> Partition =
     konst p
@@ -50,7 +39,7 @@ module Partitioner =
   let routeKeyHash : TopicName * TopicMetadata * ProducerMessage -> Partition =
     fun (_,tmd,pm) ->
       let hc = if isNull pm.routeKey then 0 else pm.routeKey.GetHashCode()
-      let p = tmd.partitionMetadata.[hc % tmd.partitionMetadata.Length]  
+      let p = tmd.partitionMetadata.[hc % tmd.partitionMetadata.Length]
       p.partitionId
 
 
@@ -58,18 +47,18 @@ module Partitioner =
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
 /// TODO: ADT
 type Producer = (TopicName * ProducerMessage[])[] -> Async<ProduceResponse>
-  
+
 
 /// Producer configuration.
 type ProducerCfg = {
-      
+
   /// The set of topics to produce to.
   /// Produce requests must be for a topic in this list.
   topics : TopicName[]
-      
+
   /// The acks required.
   requiredAcks : RequiredAcks
-      
+
   /// The compression method to use.
   compression : byte
 
@@ -81,7 +70,7 @@ type ProducerCfg = {
   partition : TopicName * TopicMetadata * ProducerMessage -> Partition
 
 }
-with  
+with
   static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
     {
       topics = topics
@@ -94,28 +83,28 @@ with
 
 /// High-level producer API.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Producer =    
+module Producer =
 
   /// Creates a producer given a Kafka connection and producer configuration.
   let createAsync (conn:KafkaConn) (cfg:ProducerCfg) : Async<Producer> = async {
-    
+
     let! metadata = conn.GetMetadata (cfg.topics)
 
     let metadataByTopic =
       metadata.topicMetadata
       |> Seq.map (fun tmd -> tmd.topicName,tmd)
-      |> Map.ofSeq      
+      |> Map.ofSeq
 
-    let produce (ms:(TopicName * ProducerMessage[])[]) = async {        
+    let produce (ms:(TopicName * ProducerMessage[])[]) = async {
       let ms =
         ms
         |> Seq.map (fun (tn,pms) ->
-          let ms =           
+          let ms =
             pms
             |> Seq.groupBy (fun pm -> cfg.partition (tn, Map.find tn metadataByTopic, pm))
             |> Seq.map (fun (p,pms) ->
               let ms = pms |> Seq.map (fun pm -> Message.create (pm.value, pm.key)) |> MessageSet.ofMessages
-              p,ms) 
+              p,ms)
             |> Seq.toArray
           tn,ms)
         |> Seq.toArray

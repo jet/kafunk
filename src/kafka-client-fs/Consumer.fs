@@ -161,7 +161,7 @@ module Consumer =
 
     // sent to group coordinator
     let joinGroup2 =
-      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
+      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySegment<byte>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
       let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
       let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
@@ -263,7 +263,7 @@ module Consumer =
 
 
 
-      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySeg<_>())
+      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySegment<byte>())
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
       let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
 

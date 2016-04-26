@@ -61,17 +61,20 @@
   <ItemGroup>
     <None Include="paket.references" />
     <None Include="paket.template" />
-    <Compile Include="Shared.fs" />
+    <Compile Include="Prelude.fs" />
+    <Compile Include="DVar.fs" />
+    <Compile Include="Crc.fs" />
+    <Compile Include="Buffer.fs" />
     <Compile Include="Protocol.fs" />
     <Compile Include="Async.fs" />
     <Compile Include="AsyncSeq.fs" />
     <Compile Include="Tcp.fs" />
     <Compile Include="Kafka.fs" />
-    <None Include="paket.references" />
-    <None Include="paket.template" />
-    <Compile Include="Compression.fs" />
+    <Compile Include="Configuration.fs" />
+    <Compile Include="Cluster.fs" />
     <Compile Include="Producer.fs" />
     <Compile Include="Consumer.fs" />
+    <Compile Include="Compression.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
