@@ -75,15 +75,26 @@ module Buffer =
   let inline copy (src : Buffer) (dest : Buffer) (count : int) =
     System.Buffer.BlockCopy(src.Array, src.Offset, dest.Array, dest.Offset, count)
 
+  let inline peek (read : Buffer -> 'a * Buffer) (buf : Buffer) =
+    let v, _ = read buf
+    v
+
+  let inline poke (write : 'a -> Buffer -> Buffer) (x : 'a) (buf : Buffer) =
+    write x buf |> ignore
+    buf
+
   let inline peekByte (buf : Buffer) : byte =
     buf.Array.[buf.Offset]
 
   let inline readByte (buf : Buffer) : byte * Buffer =
     (peekByte buf, (buf |> shiftOffset 1))
 
-  let inline writeByte (x : byte) (buf : Buffer) =
+  let inline pokeByte (x : byte) (buf : Buffer) =
     buf.Array.[buf.Offset] <- x
-    buf |> shiftOffset 1
+    buf
+
+  let inline writeByte (x : byte) (buf : Buffer) =
+    pokeByte x buf |> shiftOffset 1
 
   let inline peekInt16 (buf : Buffer) : int16 =
     let offset = buf.Offset
@@ -93,12 +104,15 @@ module Buffer =
   let inline readInt16 (buf : Buffer) : int16 * Buffer =
     (peekInt16 buf, buf |> shiftOffset 2)
 
-  let inline writeInt16 (x : int16) (buf : Buffer) =
+  let inline pokeInt16 (x : int16) (buf : Buffer) =
     let offset = buf.Offset
     let array = buf.Array
     array.[offset] <- byte (x >>> 8)
     array.[offset + 1] <- byte x
-    buf |> shiftOffset 2
+    buf
+
+  let inline writeInt16 (x : int16) (buf : Buffer) =
+    pokeInt16 x buf |> shiftOffset 2
 
   let inline peekInt32 (buf : Buffer) : int32 =
     let offset = buf.Offset
@@ -111,14 +125,17 @@ module Buffer =
   let inline readInt32 (buf : Buffer) : int32 * Buffer =
     (peekInt32 buf, (buf |> shiftOffset 4))
 
-  let inline writeInt32 (x : int32) (buf : Buffer) =
+  let inline pokeInt32 (x : int32) (buf : Buffer) =
     let offset = buf.Offset
     let array = buf.Array
     array.[offset + 0] <- byte (x >>> 24)
     array.[offset + 1] <- byte (x >>> 16)
     array.[offset + 2] <- byte (x >>> 8)
     array.[offset + 3] <- byte x
-    buf |> shiftOffset 4
+    buf
+
+  let inline writeInt32 (x : int32) (buf : Buffer) =
+    pokeInt32 x buf |> shiftOffset 4
 
   let inline peekInt64 (buf : Buffer) : int64 =
     let offset = buf.Offset
@@ -135,7 +152,7 @@ module Buffer =
   let inline readInt64 (buf : Buffer) : int64 * Buffer =
     (peekInt64 buf, (buf |> shiftOffset 8))
 
-  let inline writeInt64 (x : int64) (buf : Buffer) =
+  let inline pokeInt64 (x : int64) (buf : Buffer) =
     let offset = buf.Offset
     let array = buf.Array
     array.[offset + 0] <- byte (x >>> 56)
@@ -146,7 +163,10 @@ module Buffer =
     array.[offset + 5] <- byte (x >>> 16)
     array.[offset + 6] <- byte (x >>> 8)
     array.[offset + 7] <- byte x
-    buf |> shiftOffset 8
+    buf
+
+  let inline writeInt64 (x : int64) (buf : Buffer) =
+    pokeInt64 x buf |> shiftOffset 8
 
   let inline read2 (readA : Reader<'a>) (readB : Reader<'b>) (buf : Buffer) : ('a * 'b) * Buffer =
     let a, buf = readA buf

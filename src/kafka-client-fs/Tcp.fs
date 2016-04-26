@@ -173,18 +173,12 @@ module Framing =
       new (remainder:Buffer, length:int, headerBytes:int) = { remainder = remainder ; length = length ; headerBytes = headerBytes }
 
     let frame (data:Buffer) : Buffer[] = [|
-      let buf = Buffer.zeros 4
-      // TODO: add a non-shifting write for cases like this
-      buf |> Buffer.writeInt32 data.Count |> ignore
-      yield buf
+      yield Buffer.zeros 4 |> Buffer.pokeInt32 data.Count
       yield data |]
 
     let frameSeq (data:Buffer seq) : Buffer[] = [|
       let length = data |> Seq.sumBy (fun d -> d.Count)
-      let buf = Buffer.zeros 4
-      // TODO: add a non-shifting write for cases like this
-      buf |> Buffer.writeInt32 length |> ignore
-      yield buf
+      yield Buffer.zeros 4 |> Buffer.pokeInt32 length
       yield! data |]
 
     let private tryReadLength (headerBytes:int) (length:int) (data:Buffer) : ReadResult =
