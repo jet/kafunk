@@ -3,6 +3,7 @@
 open System
 
 open KafkaFs
+open KafkaFs.Protocol
 
 
 /// High-level consumer API.
@@ -141,7 +142,7 @@ module Consumer =
 
     // domain-specific api
 
-    let groopCoord =
+    let _groopCoord =
       Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
       |> Async.map (fun res ->
         match res.errorCode with
@@ -151,7 +152,7 @@ module Consumer =
         | _ -> failwith "")
 
     // sent to group coordinator
-    let joinGroup2 =
+    let _joinGroup2 =
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Buffer.empty)
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
       let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
@@ -185,7 +186,7 @@ module Consumer =
         return ConsumerGroupResponse.SessionTimeout }
 
     // sent to group coordinator
-    let leaderSyncGroup (generationId,memberId,members) = async {
+    let _leaderSyncGroup (generationId,memberId,_members) = async {
       let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
       let members = [| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]
       let req = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment(members))
@@ -199,7 +200,7 @@ module Consumer =
         return ConsumerGroupResponse.SessionTimeout }
 
     // sent to group coordinator
-    let followerSyncGroup (generationId,memberId) = async {
+    let _followerSyncGroup (generationId,memberId) = async {
       let req = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([||]))
       let! res = Kafka.syncGroup conn req
       match res.errorCode with
@@ -214,15 +215,15 @@ module Consumer =
     // sent to group coordinator
     let commitOffset (generationId,memberId) (topic:TopicName, partition:Partition, offset:Offset) = async {
       let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, null |] |])
-      let! res = Kafka.offsetCommit conn req
+      do! Kafka.offsetCommit conn req |> Async.Ignore
       // TODO: check error
       return () }
 
-    let fetchOffset (topic:TopicName, partition:Partition) = async {
+    let _fetchOffset (topic:TopicName, partition:Partition) = async {
       let req = OffsetFetchRequest(cfg.groupId, [| topic, [| partition |] |])
       let! res = Kafka.offsetFetch conn req
-      let topic,ps = res.topics.[0]
-      let (p,offset,metadata,ec) = ps.[0]
+      let _topic,ps = res.topics.[0]
+      let (_p,offset,_metadata,_ec) = ps.[0]
       return offset }
 
     // fetch sent to broker in metadata or coordinator?
@@ -233,7 +234,7 @@ module Consumer =
         let! res = Kafka.fetch conn req
         // TODO: check error
         let topic,partitions = res.topics.[0]
-        let partition,ec,hmo,mss,ms = partitions.[0]
+        let partition,_ec,_hmo,_mss,ms = partitions.[0]
         let nextOffset = MessageSet.nextOffset ms
         let commit = commitOffset (generationId,memberId) (topic, partition, offset)
         yield ms,commit
@@ -242,13 +243,11 @@ module Consumer =
       go (0L)
 
     // TODO: period and watch for changes?
-    let! metadata = Kafka.metadata conn (MetadataRequest(cfg.topics))
-
+    do! Kafka.metadata conn (MetadataRequest(cfg.topics)) |> Async.Ignore
 
     let rec go () : AsyncSeq<_> = async {
-
       // start of session
-      let! groupCoord = Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
+      let! _groupCoord = Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
       // TODO: send offset commit/fetch requests to groop coord
       let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Buffer.empty)
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
@@ -267,7 +266,7 @@ module Consumer =
         // send sync request
         let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
         let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]))
-        let! syncRes = Kafka.syncGroup conn syncReq
+        let! _syncRes = Kafka.syncGroup conn syncReq
 
 
         // TODO: get metadata?

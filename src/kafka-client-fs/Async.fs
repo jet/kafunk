@@ -484,7 +484,7 @@ type AsyncObs<'a> = 'a option -> Async<unit>
 
 module AsyncObs =
 
-  let mapIn (f:'b option -> 'a) : AsyncObs<'a> -> AsyncObs<'b> =
+  let mapIn (_f:'b option -> 'a) : AsyncObs<'a> -> AsyncObs<'b> =
     failwith ""
 
   let tryFinallyAsync (f:Async<unit>) (o:AsyncObs<'a>) : AsyncObs<'a> =
@@ -671,8 +671,8 @@ module AsyncEvtSrc =
           groups.Values |> Seq.iter close
           Async.empty) }
 
-  let bufferByCountAndTime (count:int) (timeMs:int) (xs:AsyncEvt<'a>) : AsyncEvt<'a[]> =
-    AsyncEvt.create <| fun obs -> async {
+  let bufferByCountAndTime (_count:int) (_timeMs:int) (_xs:AsyncEvt<'a>) : AsyncEvt<'a[]> =
+    AsyncEvt.create <| fun _obs -> async {
         return ()
       }
 
@@ -858,7 +858,7 @@ module AsyncEvtSrc =
 
 
     // prepare/commit
-    let commit (a:Async<Async<unit> option>) =
+    let commit (_a:Async<Async<unit> option>) =
       failwith ""
 
 //    let ch<'a> =

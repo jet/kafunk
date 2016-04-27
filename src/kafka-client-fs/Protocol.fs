@@ -53,10 +53,6 @@ module Codecs =
 
 /// The Kafka RPC protocol.
 /// https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
-/// TODO: rid the auto-open on this so we can avoid conflating our wire structs
-/// with API types. In general, none of this should be auto-open outside of
-/// pervasive extensions that we want to provide users of this library.
-[<AutoOpen>]
 module Protocol =
   open Codecs
 
@@ -1081,8 +1077,8 @@ module Protocol =
       (SyncGroupResponse(errorCode, ma), buf)
 
   type ListGroupsRequest with
-    static member size (x:ListGroupsRequest) = 0
-    static member write (buf, x:ListGroupsRequest) = buf
+    static member size (_x:ListGroupsRequest) = 0
+    static member write (buf, _x:ListGroupsRequest) = buf
 
   type ListGroupsResponse with
     static member read (buf) =
@@ -1150,19 +1146,19 @@ module Protocol =
     /// Decodes the response given the specified ApiKey corresponding to the request.
     static member inline readApiKey (buf:Buffer, apiKey:ApiKey) : ResponseMessage =
       match apiKey with
-      | ApiKey.HeartbeatRequest -> let x,buf = HeartbeatResponse.read buf in (ResponseMessage.HeartbeatResponse x)
-      | ApiKey.MetadataRequest -> let x,buf = MetadataResponse.read buf in (ResponseMessage.MetadataResponse x)
-      | ApiKey.FetchRequest -> let x,buf = FetchResponse.read buf in (ResponseMessage.FetchResponse x)
-      | ApiKey.ProduceRequest -> let x,buf = ProduceResponse.read buf in (ResponseMessage.ProduceResponse x)
-      | ApiKey.OffsetRequest -> let x,buf = OffsetResponse.read buf in (ResponseMessage.OffsetResponse x)
-      | ApiKey.GroupCoordinatorRequest -> let x,buf = GroupCoordinatorResponse.read buf in (ResponseMessage.GroupCoordinatorResponse x)
-      | ApiKey.OffsetCommitRequest -> let x,buf = OffsetCommitResponse.read buf in (ResponseMessage.OffsetCommitResponse x)
-      | ApiKey.OffsetFetchRequest -> let x,buf = OffsetFetchResponse.read buf in (ResponseMessage.OffsetFetchResponse x)
-      | ApiKey.JoinGroupRequest -> let x,buf = JoinGroupResponse.read buf in (ResponseMessage.JoinGroupResponse x)
-      | ApiKey.SyncGroupRequest -> let x,buf = SyncGroupResponse.read buf in (ResponseMessage.SyncGroupResponse x)
-      | ApiKey.LeaveGroupRequest -> let x,buf = LeaveGroupResponse.read buf in (ResponseMessage.LeaveGroupResponse x)
-      | ApiKey.ListGroupsRequest -> let x,buf = ListGroupsResponse.read buf in (ResponseMessage.ListGroupsResponse x)
-      | ApiKey.DescribeGroupsRequest -> let x,buf = DescribeGroupsResponse.read buf in (ResponseMessage.DescribeGroupsResponse x)
+      | ApiKey.HeartbeatRequest -> let x,_buf = HeartbeatResponse.read buf in (ResponseMessage.HeartbeatResponse x)
+      | ApiKey.MetadataRequest -> let x,_buf = MetadataResponse.read buf in (ResponseMessage.MetadataResponse x)
+      | ApiKey.FetchRequest -> let x,_buf = FetchResponse.read buf in (ResponseMessage.FetchResponse x)
+      | ApiKey.ProduceRequest -> let x,_buf = ProduceResponse.read buf in (ResponseMessage.ProduceResponse x)
+      | ApiKey.OffsetRequest -> let x,_buf = OffsetResponse.read buf in (ResponseMessage.OffsetResponse x)
+      | ApiKey.GroupCoordinatorRequest -> let x,_buf = GroupCoordinatorResponse.read buf in (ResponseMessage.GroupCoordinatorResponse x)
+      | ApiKey.OffsetCommitRequest -> let x,_buf = OffsetCommitResponse.read buf in (ResponseMessage.OffsetCommitResponse x)
+      | ApiKey.OffsetFetchRequest -> let x,_buf = OffsetFetchResponse.read buf in (ResponseMessage.OffsetFetchResponse x)
+      | ApiKey.JoinGroupRequest -> let x,_buf = JoinGroupResponse.read buf in (ResponseMessage.JoinGroupResponse x)
+      | ApiKey.SyncGroupRequest -> let x,_buf = SyncGroupResponse.read buf in (ResponseMessage.SyncGroupResponse x)
+      | ApiKey.LeaveGroupRequest -> let x,_buf = LeaveGroupResponse.read buf in (ResponseMessage.LeaveGroupResponse x)
+      | ApiKey.ListGroupsRequest -> let x,_buf = ListGroupsResponse.read buf in (ResponseMessage.ListGroupsResponse x)
+      | ApiKey.DescribeGroupsRequest -> let x,_buf = DescribeGroupsResponse.read buf in (ResponseMessage.DescribeGroupsResponse x)
       | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
 
   type Request with

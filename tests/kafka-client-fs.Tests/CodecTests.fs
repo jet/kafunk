@@ -1,10 +1,11 @@
 ﻿module CodecTests
 
 open NUnit.Framework
-open System
+
 open System.Text
 
 open KafkaFs
+open KafkaFs.Protocol
 
 let arraySegToFSharp (arr:Buffer) =
   let sb = StringBuilder()
@@ -41,9 +42,13 @@ let ``crc32 string``() =
 let ``should encode MessageSet``() =
   let expected =
     [
-        0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 45uy; 70uy; 24uy; 62uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 1uy; 48uy; 0uy; 0uy; 0uy;
-        0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 90uy; 65uy; 40uy; 168uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy;
-        0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 195uy; 72uy; 121uy; 18uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 1uy; 50uy
+        0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 45uy;
+        70uy; 24uy; 62uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy; 0uy;
+        1uy; 48uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy;
+        90uy; 65uy; 40uy; 168uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy; 0uy;
+        0uy; 1uy; 49uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy;
+        16uy; 195uy; 72uy; 121uy; 18uy; 0uy; 0uy; 0uy; 0uy; 0uy; 1uy; 49uy; 0uy;
+        0uy; 0uy; 1uy; 50uy
     ]
   let ms =
     [
@@ -58,11 +63,17 @@ let ``should encode MessageSet``() =
 
 [<Test>]
 let ``should decode FetchResponse``() =
-  let data = Buffer.ofArray [| 0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;7uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;114uy;108uy;100uy; |]
+  let data =
+    Buffer.ofArray [|
+      0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
+      0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy;0uy;0uy;0uy;37uy;0uy;0uy;
+      0uy;0uy;0uy;0uy;0uy;7uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;
+      255uy;255uy;255uy;255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;
+      32uy;119uy;111uy;114uy;108uy;100uy; |]
   let (res:FetchResponse,_) = FetchResponse.read data
   let topicName,ps = res.topics.[0]
-  let (p,ec,hwo,mss,ms) = ps.[0]
-  let (o,ms,m) = ms.messages.[0]
+  let (p,ec,_hwo,mss,ms) = ps.[0]
+  let (o,_ms,m) = ms.messages.[0]
   Assert.AreEqual("test", topicName)
   Assert.AreEqual(p, 0)
   Assert.AreEqual(ec, 0s)
@@ -73,7 +84,10 @@ let ``should decode FetchResponse``() =
 
 [<Test>]
 let ``should decode ProduceResponse``() =
-  let data = Buffer.ofArray [| 0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
+  let data =
+    Buffer.ofArray [|
+      0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
+      0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
   let (res:ProduceResponse,_) = ProduceResponse.read data
   let topicName,ps = res.topics.[0]
   let p,ec,off = ps.[0]
@@ -86,6 +100,11 @@ let ``should decode ProduceResponse``() =
 let ``should encode ProduceRequest``() =
   let req = ProduceRequest.ofMessageSet ("test", 0, MessageSet.ofMessage (Message.ofBytes ("hello world"B)))
   let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> Buffer.toArray |> Array.toList
-  let expected = [0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;114uy;108uy;100uy;]
+  let expected = [
+    0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;
+    0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;
+    0uy;0uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;
+    255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;
+    114uy;108uy;100uy; ]
   Assert.True((expected = data))
 

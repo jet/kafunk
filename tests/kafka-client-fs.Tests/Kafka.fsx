@@ -78,9 +78,9 @@ Log.info "id=%i host=%s port=%i error=%i" res.coordinatorId res.coordinatorHost 
 
 
 
-let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, [|"test"|], ArraySeg<_>())
+let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, [|"test"|], Buffer.empty)
 let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg consumerProtocolMeta) |])
+let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
 let joinGroupReq = JoinGroupRequest("test-group", 10000, "", ProtocolType.consumer, groupProtocols)
 let joinGroupRes = Kafka.joinGroup conn joinGroupReq |> Async.RunSynchronously
 
@@ -102,9 +102,9 @@ Log.info "heartbeat error_code=%i" hbRes.errorCode
 
 
 let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([|"test",[|0|]|]))
-let syncReq = SyncGroupRequest("test-group", joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment([| joinGroupRes.memberId, (toArraySeg assignment) |]))
+let syncReq = SyncGroupRequest("test-group", joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment([| joinGroupRes.memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]))
 let syncRes = Kafka.syncGroup conn syncReq |> Async.RunSynchronously
-let (memberAssignment:ConsumerGroupMemberAssignment,_) = read syncRes.memberAssignment
+let (memberAssignment:ConsumerGroupMemberAssignment,_) = ConsumerGroupMemberAssignment.read syncRes.memberAssignment
 
 Log.info "error_code=%i version=%i" syncRes.errorCode memberAssignment.version
 memberAssignment.partitionAssignment.assignments

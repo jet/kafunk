@@ -2,6 +2,7 @@
 
 open KafkaFs
 open KafkaFs.Prelude
+open KafkaFs.Protocol
 
 /// A producer message.
 type ProducerMessage =

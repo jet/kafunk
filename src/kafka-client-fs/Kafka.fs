@@ -8,10 +8,7 @@ open System.Threading
 
 open KafkaFs
 open KafkaFs.Prelude
-
-
-// -------------------------------------------------------------------------------------------------------------------------------------
-// smart constructors
+open KafkaFs.Protocol
 
 [<AutoOpen>]
 module Constructors =
@@ -91,11 +88,9 @@ module Constructors =
 
 // Connection
 
-
 /// A request/reply channel to Kafka.
 // TODO: likely needs to become IDisposable, but we'll see how far we can put that off
 type Chan = RequestMessage -> Async<ResponseMessage>
-
 
 [<AutoOpen>]
 module internal ResponseEx =
@@ -170,7 +165,8 @@ module internal Api =
 
 module internal Conn =
 
-  let private Log = Log.create "KafkaFunk.Conn"
+  // Let's avoid this Log vs Log.create. Just lowercase it. Shadowing the constructor is not cool.
+  let private log = Log.create "KafkaFunk.Conn"
 
   let ApiVersion : ApiVersion = 0s
 
@@ -314,11 +310,11 @@ module internal Conn =
         | Some send -> return! send req
         | None -> return failwith ""
 
-      | DescribeGroups req ->
+      | DescribeGroups _req ->
         // TODO
         return failwith ""
 
-      | ListGroups req ->
+      | ListGroups _req ->
         // TODO
         return failwith "" }
 
@@ -338,9 +334,9 @@ module internal Conn =
           ProtocolType.Tcp,
           NoDelay=true,
           ExclusiveAddressUse=true)
-      Log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
+      log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
       let! sendRcvSocket = Socket.connect connSocket ep
-      Log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint
+      log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint
       return sendRcvSocket }
 
     let! sendRcvSocket = conn ()
@@ -360,8 +356,8 @@ module internal Conn =
 
     /// Notify of an error and recovery.
     /// If a recovery is in progress, wait for it to complete and return.
-    let reset (ex:exn option) = async {
-      Log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
+    let reset (_ex:exn option) = async {
+      log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
       if Interlocked.CompareExchange(state, 1, 0) = 0 then
         wh.Reset()
         let! sendRcvSocket' = conn ()
@@ -369,7 +365,7 @@ module internal Conn =
         wh.Set()
         Interlocked.Exchange(state, 0) |> ignore
       else
-        Log.info "recovery alread in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
+        log.info "recovery alread in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
         wh.Wait()
         return () }
 
@@ -382,12 +378,12 @@ module internal Conn =
         | Success n -> async.Return n
         | Failure ex -> async {
           match ex with
-          | :? SocketException as x ->
-            Log.error "socket exception|error=%O" ex
+          | :? SocketException as _x ->
+            log.error "socket exception|error=%O" ex
             do! reset (Some ex)
             return! sendErr buf
           | _ ->
-            Log.error "exception=%O" ex
+            log.error "exception=%O" ex
             return raise ex })
 
     let rec receiveErr buf =
@@ -396,17 +392,17 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          Log.warn "received 0 bytes indicating a closed TCP connection"
+          log.warn "received 0 bytes indicating a closed TCP connection"
           do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
-          | :? SocketException as x ->
-            Log.warn "error receiving on socket|error=%O" ex
+          | :? SocketException as _x ->
+            log.warn "error receiving on socket|error=%O" ex
             do! reset (Some ex)
             return! receiveErr buf
           | _ ->
-            Log.error "exception=%O" ex
+            log.error "exception=%O" ex
             return raise ex })
 
     let send,receive = sendErr,receiveErr

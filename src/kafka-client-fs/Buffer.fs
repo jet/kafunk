@@ -258,7 +258,7 @@ module Buffer =
     let n, buf = buf |> readInt32
     let mutable buf = buf
     let arr = [|
-      for i = 0 to n - 1 do
+      for _i = 0 to n - 1 do
         let elem, buf' = read buf
         yield elem
         buf <- buf' |]
