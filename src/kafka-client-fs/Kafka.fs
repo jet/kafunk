@@ -1,15 +1,10 @@
 ﻿namespace KafkaFs
 
 open System
-open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Text
-open System.Collections.Generic
-open System.Collections.Concurrent
 open System.Threading
-open System.Threading.Tasks
-open System.Runtime.ExceptionServices
 
 open KafkaFs
 open KafkaFs.Prelude
@@ -32,16 +27,16 @@ module Constructors =
     static member ofBytes (value:byte[], ?key:byte[]) =
       let key =
         match key with
-        | Some key -> ArraySegment<byte>(key, 0, key.Length)
-        | None -> ArraySegment<byte>()
-      Message(0, 0y, 0y, key, ArraySegment<byte>(value, 0, value.Length))
+        | Some key -> Buffer.ofArray(key)
+        | None -> Buffer.empty
+      Message(0, 0y, 0y, key, Buffer.ofArray(value))
 
     static member ofString (value:string, ?key:string) =
       let value = Encoding.UTF8.GetBytes value |> Buffer.ofArray
       let key =
         match key with
         | Some key -> Encoding.UTF8.GetBytes key |> Buffer.ofArray
-        | None -> ArraySegment<byte>()
+        | None -> Buffer.empty
       Message(0, 0y, 0y, key, value)
 
     static member valueString (m:Message) =

@@ -42,8 +42,6 @@ module Partitioner =
       let p = tmd.partitionMetadata.[hc % tmd.partitionMetadata.Length]
       p.partitionId
 
-
-
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
 /// TODO: ADT
 type Producer = (TopicName * ProducerMessage[])[] -> Async<ProduceResponse>

@@ -1,30 +1,18 @@
 ﻿#r "bin/release/KafkaFs.dll"
 
-open System
-open System.IO
-open System.Net
-open System.Net.Sockets
-open System.Text
-open System.Collections.Generic
-open System.Collections.Concurrent
-open System.Threading
-open System.Threading.Tasks
-
 open KafkaFs
 
 
 //Log.To.console "*" NLog.LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
-let conn = Kafka.connHost "localhost"
-
-
+let conn = Kafka.connHost "10.211.55.2"
 
 let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchronously
 
 metadata.brokers
 |> Seq.iter (fun b ->
-  Log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId 
+  Log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId
 )
 
 metadata.topicMetadata
@@ -48,7 +36,7 @@ metadata.topicMetadata
 //  Log.info "topic_name=%s" tn
 //  offsets
 //  |> Array.iter (fun (p,ec,offset) ->
-//    Log.info "partition=%i error_code=%i offset=%i" p ec offset 
+//    Log.info "partition=%i error_code=%i offset=%i" p ec offset
 //  )
 //)
 

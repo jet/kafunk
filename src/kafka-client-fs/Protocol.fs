@@ -1,15 +1,5 @@
 ﻿namespace KafkaFs
 
-open System
-open System.IO
-open System.Net
-open System.Net.Sockets
-open System.Text
-open System.Collections.Generic
-open System.Collections.Concurrent
-open System.Threading
-open System.Threading.Tasks
-
 open KafkaFs
 open KafkaFs.Prelude
 

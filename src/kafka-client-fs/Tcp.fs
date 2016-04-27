@@ -2,15 +2,11 @@
 namespace KafkaFs
 
 open System
-open System.IO
 open System.Net
 open System.Net.Sockets
-open System.Text
-open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
-open System.Runtime.ExceptionServices
 
 open KafkaFs
 
@@ -78,7 +74,7 @@ module Socket =
   let inline setBuffer (buf:Buffer) (args:SocketAsyncEventArgs) =
     args.SetBuffer(buf.Array, buf.Offset, buf.Count)
 
-  let inline setBuffers (bufs:ArraySegment<byte>[]) (args:SocketAsyncEventArgs) =
+  let inline setBuffers (bufs:Buffer[]) (args:SocketAsyncEventArgs) =
     args.BufferList <- bufs
 
   /// Accepts an incoming connection and pass connection info to a separate receive/send socket.
@@ -106,10 +102,10 @@ module Socket =
 
   /// Sends the specified array of buffers to the socket.
   /// Returns the number of bytes sent.
-  let sendAll (socket:Socket) (bufs:ArraySegment<byte>[]) =
+  let sendAll (socket:Socket) (bufs:Buffer[]) =
     exec argsAlloc (setBuffers bufs) socket.SendAsync (fun a -> a.BytesTransferred)
 
-  let sendAllTo (socket:Socket) (remoteEp:IPEndPoint) (bufs:ArraySegment<byte>[]) =
+  let sendAllTo (socket:Socket) (remoteEp:IPEndPoint) (bufs:Buffer[]) =
     exec argsAlloc (fun args -> setBuffers bufs args ; args.RemoteEndPoint <- remoteEp) socket.SendAsync (fun a -> a.BytesTransferred)
 
   /// Connects to a remote host.

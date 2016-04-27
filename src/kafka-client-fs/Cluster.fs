@@ -1,6 +1,7 @@
 ﻿namespace KafkaFs
 
 open System
+
 open KafkaFs.Prelude
 open KafkaFs.Configuration
 

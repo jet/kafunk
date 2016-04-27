@@ -1,15 +1,6 @@
 ﻿namespace KafkaFs
 
 open System
-open System.IO
-open System.Net
-open System.Net.Sockets
-open System.Text
-open System.Collections.Generic
-open System.Collections.Concurrent
-open System.Threading
-open System.Threading.Tasks
-open System.Runtime.ExceptionServices
 
 open KafkaFs
 
@@ -161,7 +152,7 @@ module Consumer =
 
     // sent to group coordinator
     let joinGroup2 =
-      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySegment<byte>())
+      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Buffer.empty)
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
       let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
       let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
@@ -259,15 +250,9 @@ module Consumer =
       // start of session
       let! groupCoord = Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
       // TODO: send offset commit/fetch requests to groop coord
-
-
-
-
-      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, ArraySegment<byte>())
+      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Buffer.empty)
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
       let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
-
-
 
       let memberId : MemberId = "" // assigned by coordinator
       let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, memberId, ProtocolType.consumer, groupProtocols)
