@@ -20,22 +20,22 @@ module Buffer =
 
   /// Create an empty buffer.
   let empty : Buffer =
-    ArraySegment<byte>()
+    Buffer()
 
   /// Create a zero'ed buffer with the specified number of bytes.
   let inline zeros (count : int) : Buffer =
-    ArraySegment<byte>(Array.zeroCreate count)
+    Buffer(Array.zeroCreate count)
 
   /// Create a buffer that is backed by the same array.
   /// TODO: The offset and count are relative to the array, not the buffer,
   /// should we allow this? It'd make more sense to make the offset relative
   /// to the buffer itself.
   let inline segment (offset : int) (count : int) (a : Buffer) =
-    ArraySegment<byte>(a.Array, offset, count)
+    Buffer(a.Array, offset, count)
 
   /// Set a new count for the given buffer by constructing a new buffer.
   let inline resize (count : int) (a : Buffer) =
-    ArraySegment<byte>(a.Array, a.Offset, count)
+    Buffer(a.Array, a.Offset, count)
 
   /// Set the offset of the segment.
   let inline offset (offset : int) (a : Buffer) =
@@ -45,8 +45,8 @@ module Buffer =
   let inline shiftOffset (d : int) (a : Buffer) : Buffer =
     offset (a.Offset + d) a
 
-  let inline ofArray (bytes : 'a[]) =
-    ArraySegment<_>(bytes, 0, bytes.Length)
+  let inline ofArray (bytes : byte[]) =
+    Buffer(bytes, 0, bytes.Length)
 
   /// Create a copy of the byte array backing this buffer.
   let inline toArray (s : Buffer) : byte[] =
@@ -67,9 +67,9 @@ module Buffer =
       ofArray arr
 
   /// Partitions an array segment at the specified index.
-  let partitionAt i (a : ArraySegment<'a>) : ArraySegment<'a> * ArraySegment<'a> =
-    let first = ArraySegment<_>(a.Array, a.Offset, a.Offset + i)
-    let rest = ArraySegment<_>(a.Array, (a.Offset + i), (a.Count - i))
+  let partitionAt i (a : Buffer) : Buffer * Buffer =
+    let first = Buffer(a.Array, a.Offset, a.Offset + i)
+    let rest = Buffer(a.Array, (a.Offset + i), (a.Count - i))
     first, rest
 
   let inline copy (src : Buffer) (dest : Buffer) (count : int) =
@@ -223,7 +223,7 @@ module Buffer =
   let inline readBytes (buf : Buffer) : Buffer * Buffer =
     let length, buf = readInt32 buf
     if length = -1 then
-      Buffer(), buf
+      (empty, buf)
     else
       let arr = Buffer(buf.Array, buf.Offset, length)
       (arr, buf |> shiftOffset length)
