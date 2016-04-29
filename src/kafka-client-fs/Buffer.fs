@@ -291,8 +291,11 @@ module Buffer =
       (arr, buf |> shiftOffset length)
 
   let inline sizeString (str:string) =
-      if isNull str then sizeInt16 (int16 0)
-      else sizeInt16 (int16 str.Length) + str.Length // TODO: Do we need to support non-ascii values here?
+      if isNull str then sizeInt16 0s
+      else
+        // TODO: Do we need to support non-ascii values here? This currently
+        // assumes each character is always encoded in UTF-8 by a single byte.
+        sizeInt16 (int16 str.Length) + str.Length
 
   let inline writeString (str : string) (buf : Buffer) =
     if isNull str then
