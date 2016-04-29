@@ -54,7 +54,7 @@ module Buffer =
   /// Create a copy of the byte array backing this buffer.
   let inline toArray (s : Buffer) : byte[] =
     let arr = Array.zeroCreate s.Count
-    Buffer.BlockCopy(s.Array, s.Offset, arr, 0, s.Count)
+    System.Buffer.BlockCopy(s.Array, s.Offset, arr, 0, s.Count)
     arr
 
   let inline toString (buf : Buffer) : string =
@@ -65,8 +65,8 @@ module Buffer =
     elif b.Count = 0 then a
     else
       let arr = Array.zeroCreate (a.Count + b.Count)
-      Buffer.BlockCopy(a.Array, a.Offset, arr, 0, a.Count)
-      Buffer.BlockCopy(b.Array, b.Offset, arr, a.Count, b.Count)
+      System.Buffer.BlockCopy(a.Array, a.Offset, arr, 0, a.Count)
+      System.Buffer.BlockCopy(b.Array, b.Offset, arr, a.Count, b.Count)
       ofArray arr
 
   /// Partitions an array segment at the specified index.
