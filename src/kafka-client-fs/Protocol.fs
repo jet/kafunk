@@ -360,7 +360,6 @@ module Protocol =
       sizeArray x.topicNames sizeString
 
     static member write (x:MetadataRequest) buf =
-      printfn "requesting metadata topics %A" x.topicNames
       buf |> Buffer.writeArray x.topicNames Buffer.writeString
 
   /// Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.

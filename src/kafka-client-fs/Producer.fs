@@ -7,16 +7,12 @@ open KafkaFs.Protocol
 /// A producer message.
 type ProducerMessage =
   struct
-
     /// The message payload.
     val value : Buffer
-
     /// The optional message key.
     val key : Buffer
-
     /// The optional routing key.
     val routeKey : string
-
     new (value:Buffer, key:Buffer, routeKey:string) =
       { value = value ; key = key ; routeKey = routeKey }
   end

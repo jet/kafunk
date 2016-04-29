@@ -54,7 +54,7 @@ module Constructors =
     /// Returns the next offset to fetch, by taking the max offset in the
     /// message set and adding one.
     static member nextOffset (ms:MessageSet) =
-      let maxOffset = ms.messages |> Seq.map (fun (off,_,_) -> off) |> Seq.max
+      let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
       maxOffset + 1L
 
   type ProduceRequest with
@@ -63,19 +63,19 @@ module Constructors =
       ProduceRequest(
         (defaultArg requiredAcks RequiredAcks.Local),
         (defaultArg timeout 1000),
-        [| topic , [| partition, (MessageSet.size ms), ms |] |])
+        [| topic, [| partition, (MessageSet.size ms), ms |] |])
 
     static member ofMessageSets (topic:TopicName, ms:(Partition * MessageSet)[], ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
       ProduceRequest(
         (defaultArg requiredAcks RequiredAcks.Local),
         (defaultArg timeout 1000),
-        [| topic , ms |> Array.map (fun (p,ms) -> p, (MessageSet.size ms), ms ) |])
+        [| topic, ms |> Array.map (fun (p, ms) -> p, (MessageSet.size ms), ms ) |])
 
     static member ofMessageSetTopics (ms:(TopicName * (Partition * MessageSet)[])[], ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
       ProduceRequest(
         (defaultArg requiredAcks RequiredAcks.Local),
         (defaultArg timeout 1000),
-        ms |> Array.map (fun (t,ms) -> t , ms |> Array.map (fun (p,ms) -> p, (MessageSet.size ms), ms )))
+        ms |> Array.map (fun (t, ms) -> t, ms |> Array.map (fun (p, ms) -> p, (MessageSet.size ms), ms )))
 
 
   type FetchRequest with
@@ -84,7 +84,7 @@ module Constructors =
       FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, [| partition,  offset, (defaultArg maxBytesPerPartition 1000) |] |])
 
     static member ofTopicPartitions (topic:TopicName, ps:(Partition * FetchOffset)[], ?maxWaitTime:MaxWaitTime, ?minBytes:MinBytes, ?maxBytesPerPartition:MaxBytes) =
-      FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, ps |> Array.map (fun (p,o) -> p, o, (defaultArg maxBytesPerPartition 1000)) |])
+      FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, ps |> Array.map (fun (p, o) -> p, o, (defaultArg maxBytesPerPartition 1000)) |])
 
 // Connection
 
@@ -173,16 +173,16 @@ module internal Conn =
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
   let partitionFetchReq (req:FetchRequest) =
     req.topics
-    |> Seq.collect (fun (tn,ps) -> ps |> Array.map (fun (p,o,mb) -> tn,p,o,mb))
-    |> Seq.groupBy (fun (tn,ps,_,_) ->  tn,ps)
-    |> Seq.map (fun (tp,reqs) ->
+    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> tn, p, o, mb))
+    |> Seq.groupBy (fun (tn, ps, _, _) ->  tn, ps)
+    |> Seq.map (fun (tp, reqs) ->
       let topics =
         reqs
-        |> Seq.groupBy (fun (t,_,_,_) -> t)
-        |> Seq.map (fun (t,(ps)) -> t, ps |> Seq.map (fun (_,p,o,mb) -> p,o,mb) |> Seq.toArray)
+        |> Seq.groupBy (fun (t, _, _, _) -> t)
+        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, mb)) |> Seq.toArray)
         |> Seq.toArray
       let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
-      tp,RequestMessage.Fetch req)
+      tp, RequestMessage.Fetch req)
     |> Seq.toArray
 
   /// Unwraps a set of responses as fetch responses and joins them into a single response.
@@ -194,16 +194,16 @@ module internal Conn =
   /// Partitions a produce request by topic/partition.
   let partitionProduceReq (req:ProduceRequest) =
     req.topics
-    |> Seq.collect (fun (t,ps) -> ps |> Array.map (fun (p,mss,ms) -> t,p,mss,ms))
-    |> Seq.groupBy (fun (t,p,_,_) -> t,p)
-    |> Seq.map (fun (tp,reqs) ->
+    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, mss, ms) -> (t, p, mss, ms)))
+    |> Seq.groupBy (fun (t, p, _, _) -> (t, p))
+    |> Seq.map (fun (tp, reqs) ->
       let topics =
         reqs
-        |> Seq.groupBy (fun (t,_,_,_) -> t)
-        |> Seq.map (fun (t,ps) -> t, ps |> Seq.map (fun (_,p,mss,ms) -> p,mss,ms) |> Seq.toArray)
+        |> Seq.groupBy (fun (t, _, _, _) -> t)
+        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
         |> Seq.toArray
       let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
-      tp,RequestMessage.Produce req)
+      (tp, RequestMessage.Produce req))
     |> Seq.toArray
 
   let concatProduceResponses (rs:ResponseMessage[]) =
@@ -216,16 +216,16 @@ module internal Conn =
 
   let partitionOffsetReq (req:OffsetRequest) =
     req.topics
-    |> Seq.collect (fun (t,ps) -> ps |> Array.map (fun (p,tm,mo) -> t,p,tm,mo))
-    |> Seq.groupBy (fun (t,p,_,_) -> t,p)
-    |> Seq.map (fun (tp,reqs) ->
+    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, tm, mo) -> (t, p, tm, mo)))
+    |> Seq.groupBy (fun (t, p, _, _) -> (t, p))
+    |> Seq.map (fun (tp, reqs) ->
       let topics =
         reqs
-        |> Seq.groupBy (fun (t,_,_,_) -> t)
-        |> Seq.map (fun (t,ps) -> t, ps |> Seq.map (fun (_,p,mss,ms) -> p,mss,ms) |> Seq.toArray)
+        |> Seq.groupBy (fun (t, _, _, _) -> t)
+        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
         |> Seq.toArray
       let req = new OffsetRequest(req.replicaId, topics)
-      tp,RequestMessage.Offset req)
+      tp, RequestMessage.Offset req)
     |> Seq.toArray
 
   let concatOffsetResponses (rs:ResponseMessage[]) =
@@ -248,7 +248,7 @@ module internal Conn =
         return!
           req
           |> partitionFetchReq
-          |> Seq.map (fun (tp,req) ->
+          |> Seq.map (fun (tp, req) ->
             match byTopicPartition |> Dict.tryGet tp with
             | Some send -> send req
             | None -> failwith "Unable to find route!")
@@ -259,7 +259,7 @@ module internal Conn =
         return!
           req
           |> partitionProduceReq
-          |> Seq.map (fun (tp,req) ->
+          |> Seq.map (fun (tp, req) ->
             match byTopicPartition |> Dict.tryGet tp with
             | Some send -> send req
             | None -> failwith "")
@@ -270,7 +270,7 @@ module internal Conn =
         return!
           req
           |> partitionOffsetReq
-          |> Seq.map (fun (tp,req) ->
+          |> Seq.map (fun (tp, req) ->
             match byTopicPartition |> Dict.tryGet tp with
             | Some send -> send req
             | None -> failwith "")
@@ -405,7 +405,7 @@ module internal Conn =
             log.error "exception=%O" ex
             return raise ex })
 
-    let send,receive = sendErr,receiveErr
+    let send, receive = sendErr, receiveErr
 
     /// An unframed input stream.
     let inputStream =
@@ -417,17 +417,15 @@ module internal Conn =
       let framed = data |> Framing.LengthPrefix.frame
       send framed
 
-
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
       let req = Request(ApiVersion, correlationId, clientId, req)
       let sessionData = toArraySeg Request.size Request.write req
-      sessionData,req.apiKey
+      sessionData, req.apiKey
 
     /// Decodes the session layer input and session state into a response.
-    let decode (_, apiKey:ApiKey, data:Buffer) =
-      let res = ResponseMessage.readApiKey (data, apiKey)
-      res
+    let decode (_, apiKey:ApiKey, buf:Buffer) =
+      ResponseMessage.readApiKey apiKey buf
 
     let session =
       Session.requestReply
@@ -440,25 +438,18 @@ module internal Conn =
 
 /// Kafka connection configuration.
 type KafkaConnCfg = {
-
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
-
   /// The client id.
   clientId : ClientId
-
-}
-with
+} with
 
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
   static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId) =
-    {
-      bootstrapServers = bootstrapServers
-      clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
-    }
-
+    { bootstrapServers = bootstrapServers
+      clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N") }
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
@@ -493,11 +484,11 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   let hostByTopic : DVar<Map<TopicName * Partition, Host * Port>> =
     DVar.combineLatestWith
       (fun topicNodes nodeHosts ->
-       topicNodes
-       |> Map.toSeq
-       |> Seq.choose (fun (tp,n) ->
+        topicNodes
+        |> Map.toSeq
+        |> Seq.choose (fun (tp, n) ->
          match nodeHosts |> Map.tryFind n with
-         | Some host -> Some (tp,host)
+         | Some host -> Some (tp, host)
          | None -> None)
        |> Map.ofSeq)
       nodeByTopic
@@ -505,52 +496,56 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     |> DVar.distinct
 
   let chanByTopic : DVar<Map<(TopicName * Partition), Chan>> =
-    DVar.combineLatestWith
+    (hostByTopic, chanByHost) ||> DVar.combineLatestWith
       (fun topicHosts hostChans ->
         topicHosts
         |> Map.toSeq
-        |> Seq.map (fun (t,h) ->
+        |> Seq.map (fun (t, h) ->
           let chan = Map.find h hostChans in
-          t,chan)
+          t, chan)
         |> Map.ofSeq)
-      hostByTopic
-      chanByHost
 
   let chanByGroupId : DVar<Map<GroupId, Chan>> =
     DVar.combineLatestWith
       (fun groupHosts hostChans ->
         groupHosts
         |> Map.toSeq
-        |> Seq.map (fun (g,h) ->
+        |> Seq.map (fun (g, h) ->
           let chan = Map.find h hostChans in
-          g,chan)
+          g, chan)
         |> Map.ofSeq)
       hostByGroup
       chanByHost
 
   let routedChan : Chan =
     DVar.combineLatestWith
-      (fun chanByTopic chanByGroup -> Conn.route bootstrapChan chanByTopic chanByGroup)
+      (fun chanByTopic chanByGroup ->
+        Conn.route bootstrapChan chanByTopic chanByGroup)
       chanByTopic
       chanByGroupId
     |> DVar.toFun
 
-
   /// Connects to the specified host and adds to routing table.
   let connHost (host:Host, port:Port, nodeId:NodeId option) = async {
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
-    let! ch = Conn.connect (ep, cfg.clientId)
-    chanByHost |> DVar.update (Map.add (host,port) ch)
-    nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host,port)))
+    let! ch = Conn.connect(ep, cfg.clientId)
+    chanByHost |> DVar.update (Map.add (host, port) ch)
+    // TODO: Reload topics DVar here! This hack is for testing.
+    // This really need to be done by the cluster not here.
+    // Let's establish that the lower level API should always
+    // assume the specific connection has been selected. The
+    // routing should be moved to the cluster API.
+    hostByTopic |> DVar.update (Map.add ("test", 0) (host, port))
+    nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
   /// Connects to the specified host unless already connected.
   let connHostNew (host:Host, port:Port, nodeId:NodeId option) = async {
-    match chanByHost |> DVar.get |> Map.tryFind (host,port) with
+    match chanByHost |> DVar.get |> Map.tryFind (host, port) with
     | Some ch ->
-      nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host,port)))
+      nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
       return ch
-    | None -> return! connHost (host,port,nodeId) }
+    | None -> return! connHost (host, port, nodeId) }
 
   /// Connects to the first broker in the bootstrap list.
   let connectBootstrap () = async {
@@ -561,7 +556,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> AsyncSeq.tryPickAsync (fun uri -> async {
         //Log.info "connecting....|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
         try
-          let! ch = connHost (uri.Host,uri.Port,None)
+          let! ch = connHost (uri.Host, uri.Port, None)
           return Some ch
         with ex ->
           Log.error "error connecting to bootstrap host=%s port=%i error=%O" uri.Host uri.Port ex
@@ -575,8 +570,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   /// Connects to the coordinator broker for the specified group and adds to routing table
   let connectGroupCoordinator (groupId:GroupId) = async {
     let! res = Api.groupCoordinator bootstrapChan (GroupCoordinatorRequest(groupId))
-    let! ch = connHostNew (res.coordinatorHost,res.coordinatorPort,Some res.coordinatorId)
-    hostByGroup |> DVar.updateIfDistinct (Map.add groupId (res.coordinatorHost,res.coordinatorPort)) |> ignore
+    let! ch = connHostNew (res.coordinatorHost, res.coordinatorPort, Some res.coordinatorId)
+    hostByGroup |> DVar.updateIfDistinct (Map.add groupId (res.coordinatorHost, res.coordinatorPort)) |> ignore
     return ch }
 
 
@@ -595,13 +590,13 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   member private __.ApplyMetadata (metadata:MetadataResponse) = async {
     let hostByNode' =
       metadata.brokers
-      |> Seq.map (fun b -> b.nodeId, (b.host,b.port))
+      |> Seq.map (fun b -> b.nodeId, (b.host, b.port))
       |> Map.ofSeq
     for tmd in metadata.topicMetadata do
       for pmd in tmd.partitionMetadata do
-        let (host,port) = hostByNode' |> Map.find pmd.leader // TODO: handle error, but shouldn't happen
-        let! _ = connHostNew (host,port, Some pmd.leader)
-        nodeByTopic |> DVar.update (Map.add (tmd.topicName,pmd.partitionId) (pmd.leader)) }
+        let (host, port) = hostByNode' |> Map.find pmd.leader // TODO: handle error, but shouldn't happen
+        let! _ = connHostNew (host, port, Some pmd.leader)
+        nodeByTopic |> DVar.update (Map.add (tmd.topicName, pmd.partitionId) (pmd.leader)) }
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
@@ -645,7 +640,8 @@ module Kafka =
     Api.fetch c.Chan req
 
   let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> =
-    Api.produce c.Chan req
+    let chan = c.Chan
+    Api.produce chan req
 
   let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> =
     Api.offset c.Chan req
