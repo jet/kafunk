@@ -6,44 +6,12 @@ open KafkaFs.Protocol
 //Log.To.console "*" NLog.LogLevel.Trace
 let log = Log.create __SOURCE_FILE__
 
-// TODO: Replace this host specific connection API
-// with one which creates and manages a cluster.
-// The cluster level API should be self-managing
-// and include a metadata refresh process.
-//
-// The lower level API will be on a per-connection
-// basis. These connections may be pulled from the
-// cluster or created directly. A majority of the
-// API will involve functions parameterized by a
-// cluster rather than a connection. The connection
-// will be used exclusively by the lower level API.
-let conn = Kafka.connHost "10.51.12.4" // "192.168.64.1" // "10.211.55.2"
+let conn = Kafka.connHost "localhost"
 
-// This should be managed by the cluster wrapper. The basic
-// idea would be to have a policy for periodic refresh as
-// well as a fault manager when operations are performed on
-// a stale topology. Cluster coherence should include a back-off
-// strategy as well as backpressure. The only way to avoid the
-// backpressure should be to circumvent the protocols by
-// creating connections directly.
-//
-// IDEA: Avoid exposing connections directly. Instead, create a
-// conceptual broker entity. These brokers could have a connection
-// pool. The reason this is useful is that we may want to merge
-// things like messages into message sets.
-//
-// Likewise, we should have a consumer entity for checkpoint
-// processing at some point. This is almost like the actor
-// model except that we'll be modeling it with Async + functions
-// rather than mailboxes.
 module MetadataDemo =
 
   let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchronously
 
-  // We should have a much richer API for the topology.
-  // This will allow code for things like partition
-  // strategy to be properly expressed (this is not
-  // part of the protocol level concerns).
   let logBroker (b:Broker) =
     log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId
 
