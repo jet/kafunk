@@ -16,17 +16,17 @@ module Constructors =
   type Message with
 
     static member create (value:Buffer, ?key:Buffer, ?attrs:Attributes) =
-      Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Buffer.empty)), value)
+      Message(0, 0uy, (defaultArg attrs 0uy), (defaultArg key (Buffer.empty)), value)
 
     static member ofBytes (data:Buffer, ?key:Buffer) =
-      Message(0, 0y, 0y, (defaultArg  key (Buffer.empty)), data)
+      Message(0, 0uy, 0uy, (defaultArg  key (Buffer.empty)), data)
 
     static member ofBytes (value:byte[], ?key:byte[]) =
       let key =
         match key with
         | Some key -> Buffer.ofArray(key)
         | None -> Buffer.empty
-      Message(0, 0y, 0y, key, Buffer.ofArray(value))
+      Message(0, 0uy, 0uy, key, Buffer.ofArray(value))
 
     static member ofString (value:string, ?key:string) =
       let value = Encoding.UTF8.GetBytes value |> Buffer.ofArray
@@ -34,7 +34,7 @@ module Constructors =
         match key with
         | Some key -> Encoding.UTF8.GetBytes key |> Buffer.ofArray
         | None -> Buffer.empty
-      Message(0, 0y, 0y, key, value)
+      Message(0, 0uy, 0uy, key, value)
 
     static member valueString (m:Message) =
       m.value |> Buffer.toString

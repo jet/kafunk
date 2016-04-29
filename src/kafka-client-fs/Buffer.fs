@@ -6,7 +6,10 @@ open System.Text
 open KafkaFs.Prelude
 
 /// Delimits an array of bytes with operators for operatoring on different
-/// word sizes in big endian format.
+/// word sizes in big endian format. I wish .NET didn't collide with this
+/// name in System but outside of copying data quickly, it's not all that
+/// helpful so we're taking it back and will use System.Buffer to refer to
+/// the other.
 type Buffer = ArraySegment<byte>
 
 /// Operations on array segments.
@@ -45,7 +48,7 @@ module Buffer =
   let inline shiftOffset (d : int) (a : Buffer) : Buffer =
     offset (a.Offset + d) a
 
-  let inline ofArray (bytes : byte[]) =
+  let inline ofArray (bytes : byte[]) : Buffer =
     Buffer(bytes, 0, bytes.Length)
 
   /// Create a copy of the byte array backing this buffer.
@@ -83,6 +86,8 @@ module Buffer =
     write x buf |> ignore
     buf
 
+  let inline sizeByte (_:byte) = 1
+
   let inline peekByte (buf : Buffer) : byte =
     buf.Array.[buf.Offset]
 
@@ -95,6 +100,8 @@ module Buffer =
 
   let inline writeByte (x : byte) (buf : Buffer) =
     pokeByte x buf |> shiftOffset 1
+
+  let inline sizeInt16 (_:int16) = 2
 
   let inline peekInt16 (buf : Buffer) : int16 =
     let offset = buf.Offset
@@ -113,6 +120,8 @@ module Buffer =
 
   let inline writeInt16 (x : int16) (buf : Buffer) =
     pokeInt16 x buf |> shiftOffset 2
+
+  let inline sizeInt32 (_:int32) = 4
 
   let inline peekInt32 (buf : Buffer) : int32 =
     let offset = buf.Offset
@@ -136,6 +145,8 @@ module Buffer =
 
   let inline writeInt32 (x : int32) (buf : Buffer) =
     pokeInt32 x buf |> shiftOffset 4
+
+  let inline sizeInt64 (_:int64) = 8
 
   let inline peekInt64 (buf : Buffer) : int64 =
     let offset = buf.Offset
@@ -168,25 +179,47 @@ module Buffer =
   let inline writeInt64 (x : int64) (buf : Buffer) =
     pokeInt64 x buf |> shiftOffset 8
 
-  let inline read2 (readA : Reader<'a>) (readB : Reader<'b>) (buf : Buffer) : ('a * 'b) * Buffer =
+  let inline read2
+    (readA : Reader<'a>)
+    (readB : Reader<'b>)
+    (buf : Buffer)
+    : ('a * 'b) * Buffer =
     let a, buf = readA buf
     let b, buf = readB buf
     ((a, b), buf)
 
-  let inline read3 (readA : Reader<'a>) (readB : Reader<'b>) (readC : Reader<'c>) (buf : Buffer) : ('a * 'b * 'c) * Buffer =
+  let inline read3
+    (readA : Reader<'a>)
+    (readB : Reader<'b>)
+    (readC : Reader<'c>)
+    (buf : Buffer)
+    : ('a * 'b * 'c) * Buffer =
     let a, buf = readA buf
     let b, buf = readB buf
     let c, buf = readC buf
     ((a, b, c), buf)
 
-  let inline read4 (readA : Reader<'a>) (readB : Reader<'b>) (readC : Reader<'c>) (readD : Reader<'d>) (buf : Buffer) : ('a * 'b * 'c * 'd) * Buffer =
+  let inline read4
+    (readA : Reader<'a>)
+    (readB : Reader<'b>)
+    (readC : Reader<'c>)
+    (readD : Reader<'d>)
+    (buf : Buffer)
+    : ('a * 'b * 'c * 'd) * Buffer =
     let a, buf = readA buf
     let b, buf = readB buf
     let c, buf = readC buf
     let d, buf = readD buf
     ((a, b, c, d), buf)
 
-  let inline read5 (readA : Reader<'a>) (readB : Reader<'b>) (readC : Reader<'c>) (readD : Reader<'d>)  (readE : Reader<'e>) (buf : Buffer) : ('a * 'b * 'c * 'd * 'e) * Buffer =
+  let inline read5
+    (readA : Reader<'a>)
+    (readB : Reader<'b>)
+    (readC : Reader<'c>)
+    (readD : Reader<'d>)
+    (readE : Reader<'e>)
+    (buf : Buffer)
+    : ('a * 'b * 'c * 'd * 'e) * Buffer =
     let a, buf = readA buf
     let b, buf = readB buf
     let c, buf = readC buf
@@ -194,7 +227,15 @@ module Buffer =
     let e, buf = readE buf
     ((a, b, c, d, e), buf)
 
-  let inline read6 (readA : Reader<'a>) (readB : Reader<'b>) (readC : Reader<'c>) (readD : Reader<'d>)  (readE : Reader<'e>) (readF : Reader<'f>) (buf : Buffer) : ('a * 'b * 'c * 'd * 'e * 'f) * Buffer =
+  let inline read6
+    (readA : Reader<'a>)
+    (readB : Reader<'b>)
+    (readC : Reader<'c>)
+    (readD : Reader<'d>)
+    (readE : Reader<'e>)
+    (readF : Reader<'f>)
+    (buf : Buffer)
+    : ('a * 'b * 'c * 'd * 'e * 'f) * Buffer =
     let a, buf = readA buf
     let b, buf = readB buf
     let c, buf = readC buf
@@ -203,14 +244,35 @@ module Buffer =
     let f, buf = readF buf
     ((a, b, c, d, e, f), buf)
 
-  let inline write2 (writeA : Writer<'a>) (writeB : Writer<'b>) ((a, b) : ('a * 'b)) (buf : Buffer) : Buffer =
+  let inline write2
+    (writeA : Writer<'a>)
+    (writeB : Writer<'b>)
+    ((a, b) : ('a * 'b))
+    (buf : Buffer)
+    : Buffer =
     buf |> writeA a |> writeB b
 
-  let inline write3 (writeA : Writer<'a>) (writeB : Writer<'b>) (writeC : Writer<'c>) ((a, b, c) : ('a * 'b * 'c)) (buf : Buffer) : Buffer =
+  let inline write3
+    (writeA : Writer<'a>)
+    (writeB : Writer<'b>)
+    (writeC : Writer<'c>)
+    ((a, b, c) : ('a * 'b * 'c))
+    (buf : Buffer)
+    : Buffer =
     buf |> writeA a |> writeB b |> writeC c
 
-  let inline write4 (writeA : Writer<'a>) (writeB : Writer<'b>) (writeC : Writer<'c>) (writeD : Writer<'d>) ((a, b, c, d) : ('a * 'b * 'c * 'd)) (buf : Buffer) : Buffer =
+  let inline write4
+    (writeA : Writer<'a>)
+    (writeB : Writer<'b>)
+    (writeC : Writer<'c>)
+    (writeD : Writer<'d>)
+    ((a, b, c, d) : ('a * 'b * 'c * 'd))
+    (buf : Buffer)
+    : Buffer =
     buf |> writeA a |> writeB b |> writeC c |> writeD d
+
+  let inline sizeBytes (bytes:Buffer) =
+      sizeInt32 bytes.Count + bytes.Count
 
   let inline writeBytes (bytes : Buffer) buf =
     if isNull bytes.Array then
@@ -228,7 +290,11 @@ module Buffer =
       let arr = Buffer(buf.Array, buf.Offset, length)
       (arr, buf |> shiftOffset length)
 
-  let writeString (str : string) (buf : Buffer) =
+  let inline sizeString (str:string) =
+      if isNull str then sizeInt16 (int16 0)
+      else sizeInt16 (int16 str.Length) + str.Length // TODO: Do we need to support non-ascii values here?
+
+  let inline writeString (str : string) (buf : Buffer) =
     if isNull str then
       writeInt16 -1s buf
     else
@@ -236,7 +302,7 @@ module Buffer =
       let read = Encoding.UTF8.GetBytes(str, 0, str.Length, buf.Array, buf.Offset)
       buf |> shiftOffset read
 
-  let readString (buf : Buffer) : string * Buffer =
+  let inline readString (buf : Buffer) : string * Buffer =
     let length, buf = readInt16 buf
     let length = int length
     if length = -1 then
@@ -245,7 +311,10 @@ module Buffer =
       let str = Encoding.UTF8.GetString (buf.Array, buf.Offset, length)
       (str, buf |> shiftOffset length)
 
-  let writeArray (arr : 'a[]) (write : 'a -> Buffer -> Buffer) (buf : Buffer) : Buffer =
+  let inline sizeArray (a : 'a []) (size : 'a -> int) =
+    sizeInt32 a.Length + (a |> Array.sumBy size)
+
+  let inline writeArray (arr : 'a[]) (write : 'a -> Buffer -> Buffer) (buf : Buffer) : Buffer =
     if isNull arr then
       let buf = writeInt32 -1 buf
       buf
@@ -254,12 +323,29 @@ module Buffer =
       let buf = writeInt32 n buf
       Array.fold (fun buf elem -> write elem buf) buf arr
 
-  let readArray (read : Buffer -> 'a * Buffer) (buf : Buffer) : 'a[] * Buffer =
+  let inline readArray (read : Buffer -> 'a * Buffer) (buf : Buffer) : 'a[] * Buffer =
     let n, buf = buf |> readInt32
     let mutable buf = buf
     let arr = [|
       for _i = 0 to n - 1 do
         let elem, buf' = read buf
         yield elem
+        buf <- buf' |]
+    (arr, buf)
+
+  let inline writeArrayNoSize buf arr (write : Writer<'a>) =
+    let mutable buf = buf
+    for a in arr do
+      buf <- write a buf
+    buf
+
+  let inline readArrayByteSize size buf (read : Reader<'a>) =
+    let mutable buf = buf
+    let mutable consumed = 0
+    let arr = [|
+      while consumed < size do
+        let elem, buf' = read buf
+        yield elem
+        consumed <- consumed + (buf'.Offset - buf.Offset)
         buf <- buf' |]
     (arr, buf)
