@@ -55,7 +55,7 @@ type ProducerCfg = {
   requiredAcks : RequiredAcks
 
   /// The compression method to use.
-  compression : byte
+  compression : sbyte
 
   /// The maximum time to wait for acknowledgement.
   timeout : Timeout
@@ -66,11 +66,11 @@ type ProducerCfg = {
 
 }
 with
-  static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
+  static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:sbyte, ?timeout:Timeout) =
     {
       topics = topics
       requiredAcks = defaultArg requiredAcks RequiredAcks.Local
-      compression = defaultArg compression Compression.None
+      compression = defaultArg compression Compression.None //TODO: gzip should be default
       timeout = defaultArg timeout 0
       partition = partition
     }

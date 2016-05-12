@@ -87,13 +87,13 @@ module Protocol =
   /// Kafka message attributes.
   type Attributes = int8
 
-  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+  //[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
   module Compression =
 
-    let [<Literal>] Mask = 7uy
-    let [<Literal>] None = 0uy
-    let [<Literal>] GZIP = 1uy
-    let [<Literal>] Snappy = 2uy
+    let [<Literal>] Mask = 7y
+    let [<Literal>] None = 0y
+    let [<Literal>] GZIP = 1y
+    let [<Literal>] Snappy = 2y
 
   /// A Kafka message key (bytes).
   type Key = Buffer

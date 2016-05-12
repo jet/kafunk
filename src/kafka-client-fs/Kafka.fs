@@ -15,8 +15,19 @@ module Constructors =
 
   type Message with
 
-    static member create (value:Buffer, ?key:Buffer, ?attrs:Attributes) =
-      Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Buffer.empty)), value)
+//    static member create (value:Buffer, ?key:Buffer, ?attrs:Attributes) =
+//      Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Buffer.empty)), value)
+
+    static member create (value:Buffer, ?key:Buffer, ?attrs:Attributes, ?compression:int8) =
+      let compressionFlag = 
+        sbyte (defaultArg compression Protocol.Compression.GZIP) &&& Protocol.Compression.Mask
+
+      let attrs =
+        match attrs with
+        | Some(v) -> sbyte v ||| sbyte compressionFlag
+        | None -> sbyte compressionFlag
+          
+      Message(0, 0y, attrs, (defaultArg key (Buffer())), value)
 
     static member ofBytes (data:Buffer, ?key:Buffer) =
       Message(0, 0y, 0y, (defaultArg  key (Buffer.empty)), data)
