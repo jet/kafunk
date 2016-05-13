@@ -1,6 +1,4 @@
-﻿namespace KafkaFs
-
-open System
+﻿namespace Kafunk
 
 module Prelude =
 
@@ -77,6 +75,7 @@ type Logger = {
 
 [<AutoOpen>]
 module LoggerEx =
+  open System
 
   type Logger with
 

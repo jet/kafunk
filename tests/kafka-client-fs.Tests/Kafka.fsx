@@ -6,11 +6,11 @@ open KafkaFs.Protocol
 //Log.To.console "*" NLog.LogLevel.Trace
 let log = Log.create __SOURCE_FILE__
 
-let conn = Kafka.connHost "localhost"
+let conn = Kafka.connHostAndPort "10.51.22.43" 32822 //"10.51.22.43" //"10.211.55.2" 32777
 
 module MetadataDemo =
 
-  let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchronously
+  let metadata = Kafka.metadata conn (Metadata.Request([||])) |> Async.RunSynchronously
 
   let logBroker (b:Broker) =
     log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId
@@ -31,8 +31,7 @@ module MetadataDemo =
     |> Seq.iter (logPartition topic))
 
 module ProducerDemo =
-
-  let req = ProduceRequest.ofMessageSet("test", 0, MessageSet.ofMessage (Message.ofBytes ("hello world"B)))
+  let req = ProduceRequest.ofMessageSet "test1" 0 (MessageSet.ofMessage (Message.ofBytes "hello world"B (Some "key"B))) None None
   let res = Kafka.produce conn req |> Async.RunSynchronously
 
   res.topics
@@ -44,7 +43,7 @@ module ProducerDemo =
 
 module ConsumerDemo =
 
-  let req = FetchRequest.ofTopicPartition ("test", 0, 0L)
+  let req = FetchRequest.ofTopicPartition "test1" 0 0L 3600 0 100024
   let res = Kafka.fetch conn req |> Async.RunSynchronously
 
   res.topics
@@ -67,7 +66,7 @@ module ConsumerGroupDemo =
   let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, [|"test"|], Buffer.empty)
   let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
   let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
-  let joinGroupReq = JoinGroupRequest("test-group", 10000, "", ProtocolType.consumer, groupProtocols)
+  let joinGroupReq = JoinGroup.Request("test-group", 10000, "", ProtocolType.consumer, groupProtocols)
   let joinGroupRes = Kafka.joinGroup conn joinGroupReq |> Async.RunSynchronously
 
   log.info "error=%i generation_id=%i leader_id=%s member_id=%s" joinGroupRes.errorCode joinGroupRes.generationId joinGroupRes.leaderId joinGroupRes.memberId
@@ -91,7 +90,7 @@ module ConsumerGroupDemo =
       log.info "topic_name=%s partition=%i" tn p))
 
   let fetchOffset (topic:TopicName, partition:Partition) = async {
-    let req = OffsetFetchRequest("test-group", [|topic, [|partition|]|])
+    let req = OffsetFetchRequest("test-group", [| topic, [|partition|] |])
     let! res = Kafka.offsetFetch conn req
     let topic, ps = res.topics.[0]
     let (p, offset, metadata, ec) = ps.[0]

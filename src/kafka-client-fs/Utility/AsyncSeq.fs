@@ -1,4 +1,4 @@
-﻿namespace KafkaFs
+﻿namespace Kafunk
 
 open System
 open System.Threading
@@ -165,7 +165,7 @@ module AsyncSeq =
       for itm in input do
           let! v = f itm
           yield v }
-    
+
   /// Asynchronously iterates over the input sequence and generates 'x' for
   /// every input element for which the specified asynchronous function
   /// returned 'Some(x)'
@@ -237,7 +237,7 @@ module AsyncSeq =
       for itm in input do
           do! f itm }
 
-  /// Maps an async function over an async sequence in parallel. 
+  /// Maps an async function over an async sequence in parallel.
   /// The output is returned in order, which results in the potential for head-of-line blocking.
   let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = async {
     use mb = Mb.create ()
@@ -249,9 +249,9 @@ module AsyncSeq =
     let rec loop () = async {
       let! b = mb |> Mb.take
       match b with
-      | None -> 
+      | None ->
         return Nil
-      | Some b -> 
+      | Some b ->
         let! b = b
         return Cons (b, loop ()) }
     return! loop () }
@@ -488,7 +488,7 @@ module AsyncSeq =
 
   /// Returns elements from an asynchronous sequence while the specified
   /// predicate holds. The predicate is evaluated synchronously.
-  let rec takeWhile p (input : AsyncSeq<'T>) =
+  let takeWhile p (input : AsyncSeq<'T>) =
       takeWhileAsync (p >> async.Return) input
 
   /// Skips elements from an asynchronous sequence while the specified
@@ -538,7 +538,7 @@ module AsyncSeq =
 
       left
 
-  /// Iterates the async sequence using the specified function. After the first item is retrieved, retrieval of subseqent items runs in parrallel to the 
+  /// Iterates the async sequence using the specified function. After the first item is retrieved, retrieval of subseqent items runs in parrallel to the
   /// function.
   let iterAsyncFetchParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
     let rec go s = async {
@@ -672,7 +672,7 @@ module AsyncSeq =
     let rec go s = asyncSeq {
       let! s = s
       match s with
-      | Nil -> 
+      | Nil ->
         groups.Values |> Seq.toArray |> Array.iter close
       | Cons (a,tl) ->
         let k = p a
@@ -693,7 +693,7 @@ module AsyncSeq =
           yield! go tl }
     return! go s }
 
-  // ---------------------------------------------------------------------------------------------------------------------------------      
+  // ---------------------------------------------------------------------------------------------------------------------------------
 
 [<AutoOpen>]
 module AsyncSeqExtensions =

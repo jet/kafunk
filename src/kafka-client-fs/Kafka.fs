@@ -1,4 +1,4 @@
-﻿namespace KafkaFs
+﻿namespace Kafunk
 
 open System
 open System.Net
@@ -6,85 +6,76 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 
-open KafkaFs
-open KafkaFs.Prelude
-open KafkaFs.Protocol
+open Kafunk
+open Kafunk.Prelude
+open Kafunk.Protocol
 
-[<AutoOpen>]
-module Constructors =
+module Message =
 
-  type Message with
+  let create value key attrs =
+    Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Binary.empty)), value)
 
-    static member create (value:Buffer, ?key:Buffer, ?attrs:Attributes) =
-      Message(0, 0uy, (defaultArg attrs 0uy), (defaultArg key (Buffer.empty)), value)
+  let ofBuffer data key =
+    Message(0, 0y, 0y, (defaultArg  key (Binary.empty)), data)
 
-    static member ofBytes (data:Buffer, ?key:Buffer) =
-      Message(0, 0uy, 0uy, (defaultArg  key (Buffer.empty)), data)
+  let ofBytes value key =
+    let key =
+      match key with
+      | Some key -> Binary.ofArray key
+      | None -> Binary.empty
+    Message(0, 0y, 0y, key, Binary.ofArray value)
 
-    static member ofBytes (value:byte[], ?key:byte[]) =
-      let key =
-        match key with
-        | Some key -> Buffer.ofArray(key)
-        | None -> Buffer.empty
-      Message(0, 0uy, 0uy, key, Buffer.ofArray(value))
+  let ofString (value:string) (key:string) =
+    let value = Encoding.UTF8.GetBytes value |> Binary.ofArray
+    let key = Encoding.UTF8.GetBytes key |> Binary.ofArray
+    Message(0, 0y, 0y, key, value)
 
-    static member ofString (value:string, ?key:string) =
-      let value = Encoding.UTF8.GetBytes value |> Buffer.ofArray
-      let key =
-        match key with
-        | Some key -> Encoding.UTF8.GetBytes key |> Buffer.ofArray
-        | None -> Buffer.empty
-      Message(0, 0uy, 0uy, key, value)
+  let valueString (m:Message) =
+    m.value |> Binary.toString
 
-    static member valueString (m:Message) =
-      m.value |> Buffer.toString
+  let keyString (m:Message) =
+    if isNull m.value.Array then null
+    else m.value |> Binary.toString
 
-    static member keyString (m:Message) =
-      if isNull m.value.Array then null
-      else m.value |> Buffer.toString
+module MessageSet =
 
-  type MessageSet with
+  let ofMessage (m:Message) =
+    MessageSet([| 0L, Message.size m, m |])
 
-    static member ofMessage (m:Message) =
-      MessageSet([| 0L, (Message.size m), m |])
+  let ofMessages ms =
+    MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
 
-    static member ofMessages (ms:Message seq) =
-      MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
+  /// Returns the next offset to fetch, by taking the max offset in the
+  /// message set and adding one.
+  let nextOffset (ms:MessageSet) =
+    let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
+    maxOffset + 1L
 
-    /// Returns the next offset to fetch, by taking the max offset in the
-    /// message set and adding one.
-    static member nextOffset (ms:MessageSet) =
-      let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
-      maxOffset + 1L
+module ProduceRequest =
 
-  type ProduceRequest with
+  let ofMessageSet topic partition ms requiredAcks timeout =
+    ProduceRequest(
+      (defaultArg requiredAcks RequiredAckOptions.Local),
+      (defaultArg timeout 1000),
+      [| topic, [| partition, MessageSet.size ms, ms |] |] )
 
-    static member ofMessageSet (topic:TopicName, partition:Partition, ms:MessageSet, ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
-      ProduceRequest(
-        (defaultArg requiredAcks RequiredAcks.Local),
-        (defaultArg timeout 1000),
-        [| topic, [| partition, (MessageSet.size ms), ms |] |])
+  let ofMessageSets topic ms requiredAcks timeout =
+    ProduceRequest(
+      (defaultArg requiredAcks RequiredAckOptions.Local),
+      (defaultArg timeout 1000),
+      [| topic, ms |> Array.map (fun (p, ms) -> (p, MessageSet.size ms, ms)) |])
 
-    static member ofMessageSets (topic:TopicName, ms:(Partition * MessageSet)[], ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
-      ProduceRequest(
-        (defaultArg requiredAcks RequiredAcks.Local),
-        (defaultArg timeout 1000),
-        [| topic, ms |> Array.map (fun (p, ms) -> p, (MessageSet.size ms), ms ) |])
+  let ofMessageSetTopics ms requiredAcks timeout =
+    ProduceRequest(requiredAcks, timeout,
+      ms |> Array.map (fun (t, ms) -> (t, ms |> Array.map (fun (p, ms) -> (p, MessageSet.size ms, ms)))))
 
-    static member ofMessageSetTopics (ms:(TopicName * (Partition * MessageSet)[])[], ?requiredAcks:RequiredAcks, ?timeout:Protocol.Timeout) =
-      ProduceRequest(
-        (defaultArg requiredAcks RequiredAcks.Local),
-        (defaultArg timeout 1000),
-        ms |> Array.map (fun (t, ms) -> t, ms |> Array.map (fun (p, ms) -> p, (MessageSet.size ms), ms )))
+module FetchRequest =
 
+  let ofTopicPartition topic partition offset maxWaitTime minBytes maxBytesPerPartition =
+    FetchRequest(-1, maxWaitTime, minBytes , [| topic, [| partition,  offset, maxBytesPerPartition |] |])
 
-  type FetchRequest with
-
-    static member ofTopicPartition (topic:TopicName, partition:Partition, offset:FetchOffset, ?maxWaitTime:MaxWaitTime, ?minBytes:MinBytes, ?maxBytesPerPartition:MaxBytes) =
-      FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, [| partition,  offset, (defaultArg maxBytesPerPartition 1000) |] |])
-
-    static member ofTopicPartitions (topic:TopicName, ps:(Partition * FetchOffset)[], ?maxWaitTime:MaxWaitTime, ?minBytes:MinBytes, ?maxBytesPerPartition:MaxBytes) =
-      FetchRequest(-1, (defaultArg maxWaitTime 0), (defaultArg minBytes 0), [| topic, ps |> Array.map (fun (p, o) -> p, o, (defaultArg maxBytesPerPartition 1000)) |])
+  let ofTopicPartitions topic ps maxWaitTime minBytes maxBytesPerPartition =
+    FetchRequest(-1, maxWaitTime, minBytes, [| (topic, ps |> Array.map (fun (p, o) -> (p, o, maxBytesPerPartition))) |])
 
 // Connection
 
@@ -102,8 +93,8 @@ module internal ResponseEx =
     /// If a request does not expect a response, returns the default response.
     static member awaitResponse (x:RequestMessage) =
       match x with
-      | RequestMessage.Produce req when req.requiredAcks = RequiredAcks.None ->
-        Some (ResponseMessage.ProduceResponse (new ProduceResponse([||])))
+      | RequestMessage.Produce req when req.requiredAcks = RequiredAckOptions.None ->
+        Some(ResponseMessage.ProduceResponse(new ProduceResponse([||])))
       | _ -> None
 
   type ResponseMessage with
@@ -124,7 +115,7 @@ module internal ResponseEx =
 /// API operations on a generic request/reply channel.
 module internal Api =
 
-  let inline metadata (send:Chan) (req:MetadataRequest) =
+  let inline metadata (send:Chan) (req:Metadata.Request) =
     send (RequestMessage.Metadata req) |> Async.map (function MetadataResponse x -> x | _ -> wrongResponse ())
 
   let inline fetch (send:Chan) (req:FetchRequest) : Async<FetchResponse> =
@@ -145,7 +136,7 @@ module internal Api =
   let inline offsetFetch (send:Chan) (req:OffsetFetchRequest) : Async<OffsetFetchResponse> =
     send (RequestMessage.OffsetFetch req) |> Async.map ResponseMessage.toOffsetFetch
 
-  let inline joinGroup (send:Chan) (req:JoinGroupRequest) : Async<JoinGroupResponse> =
+  let inline joinGroup (send:Chan) (req:JoinGroup.Request) : Async<JoinGroup.Response> =
     send (RequestMessage.JoinGroup req) |> Async.map ResponseMessage.toJoinGroup
 
   let inline syncGroup (send:Chan) (req:SyncGroupRequest) : Async<SyncGroupResponse> =
@@ -173,8 +164,8 @@ module internal Conn =
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
   let partitionFetchReq (req:FetchRequest) =
     req.topics
-    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> tn, p, o, mb))
-    |> Seq.groupBy (fun (tn, ps, _, _) ->  tn, ps)
+    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> (tn, p, o, mb)))
+    |> Seq.groupBy (fun (tn, ps, _, _) ->  (tn, ps))
     |> Seq.map (fun (tp, reqs) ->
       let topics =
         reqs
@@ -233,7 +224,6 @@ module internal Conn =
     |> Array.map ResponseMessage.toOffset
     |> (fun rs -> new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse)
 
-
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
   /// Group related requests are routed to the respective broker.
@@ -262,7 +252,7 @@ module internal Conn =
           |> Seq.map (fun (tp, req) ->
             match byTopicPartition |> Dict.tryGet tp with
             | Some send -> send req
-            | None -> failwith "")
+            | None -> failwith "Unable to find route!")
           |> Async.Parallel
           |> Async.map (concatProduceResponses)
 
@@ -413,7 +403,7 @@ module internal Conn =
       |> Framing.LengthPrefix.unframe
 
     /// A framing sender.
-    let send (data:Buffer) =
+    let send (data:Binary.Segment) =
       let framed = data |> Framing.LengthPrefix.frame
       send framed
 
@@ -424,7 +414,7 @@ module internal Conn =
       sessionData, req.apiKey
 
     /// Decodes the session layer input and session state into a response.
-    let decode (_, apiKey:ApiKey, buf:Buffer) =
+    let decode (_, apiKey:ApiKey, buf:Binary.Segment) =
       ResponseMessage.readApiKey apiKey buf
 
     let session =
@@ -441,8 +431,8 @@ type KafkaConnCfg = {
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
   /// The client id.
-  clientId : ClientId
-} with
+  clientId : ClientId }
+with
 
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
@@ -535,7 +525,24 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     // Let's establish that the lower level API should always
     // assume the specific connection has been selected. The
     // routing should be moved to the cluster API.
-    hostByTopic |> DVar.update (Map.add ("test", 0) (host, port))
+    Log.info "connecting to a new host"
+    if nodeId.IsSome then
+        Log.info "node id inserted to hostByNode: %A" nodeId.Value
+        hostByNode |> DVar.update (Map.add nodeId.Value (host, port))
+    // Perhaps we can get the metadata here. In a more complete design, we'd
+    // want a metadata manager handling these sorts of things. The state of
+    // fetching metadata matters and failure to get metadata updates needs to
+    // be visible. We'll wrap these into mailbox processors. To this extent
+    // we'll have a reliable way to detect errors in a consistent way rather
+    // than have too many places in our code to pick them up. DVars should be
+    // used to deal with shared state (ETS-like configuration caches). The
+    // library for these caches should effectively look like function calls
+    // or at least simple values. DVars and MailboxProcessors should not
+    // become API.
+    // Let's start a new project in this solution which does only the
+    // publishing side with the basic cluster processor idea (instead of
+    // building on top of the current project, which is overcomplicated).
+    //hostByTopic |> DVar.update (Map.add ("test1", 0) (host, port))
     nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
@@ -600,7 +607,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
-    let! metadata = Api.metadata bootstrapChan (MetadataRequest(topics))
+    let! metadata = Api.metadata bootstrapChan (Metadata.Request(topics))
     do! this.ApplyMetadata metadata
     return metadata }
 
@@ -633,7 +640,14 @@ module Kafka =
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
-  let metadata (c:KafkaConn) (req:MetadataRequest) : Async<MetadataResponse> =
+  let connHostAndPort host port =
+    let ub = UriBuilder("kafka", host, port)
+    let cfg = KafkaConnCfg.ofBootstrapServers [ub.Uri]
+    let conn = new KafkaConn(cfg)
+    conn.Connect() |> Async.RunSynchronously
+    conn
+
+  let metadata (c:KafkaConn) (req:Metadata.Request) : Async<MetadataResponse> =
     Api.metadata c.Chan req
 
   let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> =
@@ -655,7 +669,7 @@ module Kafka =
   let offsetFetch (c:KafkaConn) (req:OffsetFetchRequest) : Async<OffsetFetchResponse> =
     Api.offsetFetch c.Chan req
 
-  let joinGroup (c:KafkaConn) (req:JoinGroupRequest) : Async<JoinGroupResponse> =
+  let joinGroup (c:KafkaConn) (req:JoinGroup.Request) : Async<JoinGroup.Response> =
     Api.joinGroup c.Chan req
 
   let syncGroup (c:KafkaConn) (req:SyncGroupRequest) : Async<SyncGroupResponse> =

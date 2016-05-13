@@ -83,6 +83,8 @@
       <Project>{18629b6b-ace4-4c73-b058-efa494eb42ce}</Project>
       <Private>True</Private>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="nunit.framework">
       <HintPath>..\..\packages\test\NUnit\lib\nunit.framework.dll</HintPath>
       <Private>True</Private>

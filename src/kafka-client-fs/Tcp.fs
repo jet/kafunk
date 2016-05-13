@@ -1,5 +1,5 @@
 ﻿#nowarn "40"
-namespace KafkaFs
+namespace Kafunk
 
 open System
 open System.Net
@@ -7,8 +7,6 @@ open System.Net.Sockets
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
-
-open KafkaFs
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Dns =
@@ -36,10 +34,8 @@ module Socket =
   /// Executes an async socket operation.
   let exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (config:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
     Async.FromContinuations <| fun (ok, error, _) ->
-
       let args = alloc ()
       config args
-
       let rec k (_:obj) (args:SocketAsyncEventArgs) =
         match args.SocketError with
         | SocketError.Success ->
@@ -51,11 +47,8 @@ module Socket =
           args.remove_Completed(k')
           free args
           error (SocketException(int e))
-
       and k' = EventHandler<SocketAsyncEventArgs>(k)
-
       args.add_Completed(k')
-
       if not (op args) then
           k null args
 
@@ -67,14 +60,13 @@ module Socket =
       args.RemoteEndPoint <- null
       args.SetBuffer(null, 0, 0) |> ignore
       args.BufferList <- null
-      //args.UserToken <- null
       pool.Push(args)
     pop,push
 
-  let inline setBuffer (buf:Buffer) (args:SocketAsyncEventArgs) =
+  let inline setBuffer (buf:Binary.Segment) (args:SocketAsyncEventArgs) =
     args.SetBuffer(buf.Array, buf.Offset, buf.Count)
 
-  let inline setBuffers (bufs:Buffer[]) (args:SocketAsyncEventArgs) =
+  let inline setBuffers (bufs:Binary.Segment[]) (args:SocketAsyncEventArgs) =
     args.BufferList <- bufs
 
   /// Accepts an incoming connection and pass connection info to a separate receive/send socket.
@@ -87,25 +79,25 @@ module Socket =
       let! socket = accept socket
       yield socket }
 
-  /// Receives data from the socket into the specified buffer.
-  /// Returns the number of bytes transferred.
-  let receive (socket:Socket) (buf:Buffer) =
+  /// Receives data from the socket into the specified Binary. Returns the
+  /// number of bytes transferred.
+  let receive (socket:Socket) (buf:Binary.Segment) =
     exec argsAlloc (setBuffer buf) socket.ReceiveAsync (fun a -> a.BytesTransferred)
 
-  let receiveFrom (socket:Socket) (remoteEp:IPEndPoint) (buf:Buffer) =
+  let receiveFrom (socket:Socket) (remoteEp:IPEndPoint) (buf:Binary.Segment) =
     exec argsAlloc (fun args -> setBuffer buf args ; args.RemoteEndPoint <- remoteEp) socket.ReceiveAsync (fun a -> a.BytesTransferred)
 
-  /// Sends the specified buffer to the socket.
-  /// Returns the number of bytes sent.
-  let send (socket:Socket) (buf:Buffer) =
+  /// Sends the specified buffer to the socket. Returns the number of bytes
+  /// sent.
+  let send (socket:Socket) (buf:Binary.Segment) =
     exec argsAlloc (setBuffer buf) socket.SendAsync (fun a -> a.BytesTransferred)
 
-  /// Sends the specified array of buffers to the socket.
-  /// Returns the number of bytes sent.
-  let sendAll (socket:Socket) (bufs:Buffer[]) =
+  /// Sends the specified array of buffers to the socket. Returns the number of
+  /// bytes sent.
+  let sendAll (socket:Socket) (bufs:Binary.Segment[]) =
     exec argsAlloc (setBuffers bufs) socket.SendAsync (fun a -> a.BytesTransferred)
 
-  let sendAllTo (socket:Socket) (remoteEp:IPEndPoint) (bufs:Buffer[]) =
+  let sendAllTo (socket:Socket) (remoteEp:IPEndPoint) (bufs:Binary.Segment[]) =
     exec argsAlloc (fun args -> setBuffers bufs args ; args.RemoteEndPoint <- remoteEp) socket.SendAsync (fun a -> a.BytesTransferred)
 
   /// Connects to a remote host.
@@ -115,18 +107,15 @@ module Socket =
   let disconnect (socket:Socket) (reuse:bool) =
     exec argsAlloc (fun a -> a.DisconnectReuseSocket <- reuse) socket.DisconnectAsync (ignore)
 
-  /// Returns an async sequence where each element corresponds to a receive operation.
-  /// The sequence finishes when a receive operation completes transferring 0 bytes.
-  /// Socket errors are propagated as exceptions.
-  let receiveStreamFrom (bufferSize:int) (receive:Buffer -> Async<int>) : AsyncSeq<Buffer> =
-
+  /// Returns an async sequence where each element corresponds to a receive
+  /// operation. The sequence finishes when a receive operation completes
+  /// transferring 0 bytes. Socket errors are propagated as exceptions.
+  let receiveStreamFrom (bufferSize:int) (receive:Binary.Segment -> Async<int>) : AsyncSeq<Binary.Segment> =
     let remBuff = ref None
-
     let inline getBuffer () =
       match !remBuff with
       | Some rem -> rem
-      | None -> bufferSize |> Buffer.zeros
-
+      | None -> bufferSize |> Binary.zeros
     let rec go () = asyncSeq {
       let buff = getBuffer ()
       let! received = receive buff
@@ -134,80 +123,77 @@ module Socket =
       else
         let remainder = buff.Count - received
         if remainder > 0 then
-          remBuff := Some (Buffer.shiftOffset remainder buff)
+          remBuff := Some (Binary.shiftOffset remainder buff)
         else
           remBuff := None
-        yield buff |> Buffer.resize received
+        yield buff |> Binary.resize received
         yield! go () }
-
     go ()
 
-  /// Returns an async sequence each item of which corresponds to a receive on the specified socket.
-  /// The sequence finishes when a receive operation completes transferring 0 bytes.
-  /// Socket errors are propagated as exceptions.
-  let receiveStream (socket:Socket) : AsyncSeq<Buffer> =
+  /// Returns an async sequence each item of which corresponds to a receive on
+  /// the specified socket. The sequence finishes when a receive operation
+  /// completes transferring 0 bytes. Socket errors are propagated as
+  /// exceptions.
+  let receiveStream (socket:Socket) : AsyncSeq<Binary.Segment> =
     receiveStreamFrom socket.ReceiveBufferSize (receive socket)
 
-// framing
-
-/// Stream framing.
+/// Stream framing
 module Framing =
 
-  /// 32 bit length prefix framer.
+  /// 32 bit length prefix framer
   module LengthPrefix =
 
-    let [<Literal>] HeaderLength = 4
+    [<Literal>]
+    let HeaderLength = 4
 
-    let inline allocBuffer length = Buffer.zeros length
+    let inline allocBuffer length = Binary.zeros length
 
     [<Struct>]
     type private ReadResult =
-      val public remainder : Buffer
+      val public remainder : Binary.Segment
       val public length : int
       val public headerBytes : int
-      new (remainder:Buffer, length:int) = { remainder = remainder ; length = length ; headerBytes = 0 }
-      new (remainder:Buffer, length:int, headerBytes:int) = { remainder = remainder ; length = length ; headerBytes = headerBytes }
+      new (remainder:Binary.Segment, length:int) = { remainder = remainder ; length = length ; headerBytes = 0 }
+      new (remainder:Binary.Segment, length:int, headerBytes:int) = { remainder = remainder ; length = length ; headerBytes = headerBytes }
 
-    let frame (data:Buffer) : Buffer[] = [|
-      yield Buffer.zeros 4 |> Buffer.pokeInt32 data.Count
+    let frame (data:Binary.Segment) : Binary.Segment[] = [|
+      yield Binary.zeros 4 |> Binary.pokeInt32 data.Count
       yield data |]
 
-    let frameSeq (data:Buffer seq) : Buffer[] = [|
+    let frameSeq (data:Binary.Segment seq) : Binary.Segment[] = [|
       let length = data |> Seq.sumBy (fun d -> d.Count)
-      yield Buffer.zeros 4 |> Buffer.pokeInt32 length
+      yield Binary.zeros 4 |> Binary.pokeInt32 length
       yield! data |]
 
-    let private tryReadLength (headerBytes:int) (length:int) (data:Buffer) : ReadResult =
+    let private tryReadLength (headerBytes:int) (length:int) (data:Binary.Segment) : ReadResult =
       if data.Count >= HeaderLength then
-        let length = Buffer.peekInt32 data
-        let remainder = Buffer.offset (data.Offset + HeaderLength) data
+        let length = Binary.peekInt32 data
+        let remainder = Binary.offset (data.Offset + HeaderLength) data
         ReadResult(remainder, length)
       else
         let rec loop  (headerBytes:int) (length:int) (i:int) =
           if i = data.Offset + data.Count then
-            new ReadResult(Buffer.empty, length, headerBytes)
+            new ReadResult(Binary.empty, length, headerBytes)
           else
             let length = (int data.Array.[i]) <<< (headerBytes * 8) ||| length // little endian
             let headerBytes = headerBytes + 1
-            if headerBytes = HeaderLength then ReadResult(Buffer.offset (i + 1) data, length)
+            if headerBytes = HeaderLength then ReadResult(Binary.offset (i + 1) data, length)
             else loop headerBytes length (i + 1)
         loop headerBytes length data.Offset
 
     /// Reads 32 bytes of the length prefix, then the length of the message, then yields, then continues.
-    let unframe (s:AsyncSeq<Buffer>) : AsyncSeq<Buffer> =
-
-      let rec go (offset:int) (s:AsyncSeq<Buffer>) =
+    let unframe (s:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =
+      let rec go (offset:int) (s:AsyncSeq<Binary.Segment>) =
         readLength 0 0 offset s
-
-      and readLength (headerBytes:int) (length:int) (offset:int) (s:AsyncSeq<Buffer>) =
+      and readLength (headerBytes:int) (length:int) (offset:int) (s:AsyncSeq<Binary.Segment>) =
         s |> Async.bind (function
           | Nil -> async.Return Nil
-          | Cons (data,tl) as s ->
+          | Cons (data, tl) as s ->
             let data =
-              if offset > 0 then data |> Buffer.shiftOffset (data.Count - offset)
+              if offset > 0 then data |> Binary.shiftOffset (data.Count - offset)
               else data
             let readResult = tryReadLength headerBytes length data
-            let tl,offset =
+            let tl, offset =
               if readResult.remainder.Count = 0 then tl,0
               else (async.Return s),readResult.remainder.Count
             if readResult.headerBytes = 0 then
@@ -215,27 +201,25 @@ module Framing =
               readData readResult.length buffer offset tl
             else
               readLength readResult.headerBytes readResult.length offset tl)
-
-      and readData (length:int) (buffer:Buffer) (offset:int) (s:AsyncSeq<Buffer>) =
+      and readData (length:int) (buffer:Binary.Segment) (offset:int) (s:AsyncSeq<Binary.Segment>) =
         s |> Async.bind (function
           | Nil -> async.Return Nil
-          | Cons (data,tl) as s ->
+          | Cons (data, tl) as s ->
             let data =
-              if offset > 0 then data |> Buffer.shiftOffset (data.Count - offset)
+              if offset > 0 then data |> Binary.shiftOffset (data.Count - offset)
               else data
             let copy = min data.Count (length - buffer.Offset)
-            Buffer.copy data buffer copy
-            let tl,offset =
-              if copy = data.Count then tl,0
-              else async.Return s,(data.Count - copy)
+            Binary.copy data buffer copy
+            let tl, offset =
+              if copy = data.Count then tl, 0
+              else (async.Return s, data.Count - copy)
             let bufferIndex = buffer.Offset + copy
             if bufferIndex = length then
-              let buffer = buffer |> Buffer.offset 0
+              let buffer = buffer |> Binary.offset 0
               Cons (buffer, go offset tl) |> async.Return
             else
-              let buffer = buffer |> Buffer.offset bufferIndex
+              let buffer = buffer |> Binary.offset bufferIndex
               readData length buffer offset tl)
-
       go 0 s
 
 // session layer (layer 5)
@@ -248,8 +232,8 @@ type CorrelationId = int32
 [<Struct>]
 type SessionMessage =
   val public tx_id : CorrelationId
-  val public payload : Buffer
-  new (data:Buffer) = { tx_id = Buffer.peekInt32 data; payload = Buffer.shiftOffset 4 data }
+  val public payload : Binary.Segment
+  new (data:Binary.Segment) = { tx_id = Binary.peekInt32 data; payload = Binary.shiftOffset 4 data }
   new (txId, payload) = { tx_id = txId ; payload = payload }
 
 /// A multiplexed request/reply session.
@@ -262,26 +246,26 @@ type ReqRepSession<'a, 'b, 's> internal
     correlationId:unit -> CorrelationId,
 
     /// Encodes a request with a correlation id into a byte array and a state maintained for the duration of the request.
-    encode:'a * CorrelationId -> Buffer * 's,
+    encode:'a * CorrelationId -> Binary.Segment * 's,
 
     /// Decodes a response given the correlatio id, the maintained state and the response byte array.
-    decode:CorrelationId * 's * Buffer -> 'b,
+    decode:CorrelationId * 's * Binary.Segment -> 'b,
 
     /// If a request 'a does not expect a response, return Some with the default response.
     awaitResponse:'a -> 'b option,
 
     /// A stream of bytes corresponding to the stream received from the remote host.
-    receive:AsyncSeq<Buffer>,
+    receive:AsyncSeq<Binary.Segment>,
 
     /// Sends a byte array to the remote host.
-    send:Buffer -> Async<int>) =
+    send:Binary.Segment -> Async<int>) =
 
   static let Log = Log.create "KafkaFunk.TcpSession"
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
 
-  let demux (data:Buffer) =
+  let demux (data:Binary.Segment) =
     let sessionData = SessionMessage(data)
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
@@ -335,8 +319,8 @@ module Session =
     let tx_id = ref 0
     fun m -> SessionMessage(Interlocked.Increment tx_id, m)
 
-  let encodeSession (m:SessionMessage) : Buffer[] = [|
-    yield BitConverter.GetBytes m.tx_id |> Buffer.ofArray
+  let encodeSession (m:SessionMessage) : Binary.Segment[] = [|
+    yield BitConverter.GetBytes m.tx_id |> Binary.ofArray
     yield m.payload |]
 
   /// A correlation id factory.
@@ -348,9 +332,9 @@ module Session =
   /// sending to the specified output.
   let requestReply
     (correlationId:unit -> int)
-    (encode:'a * int -> Buffer * 's)
-    (decode:int * 's * Buffer -> 'b)
+    (encode:'a * int -> Binary.Segment * 's)
+    (decode:int * 's * Binary.Segment -> 'b)
     (awaitResponse:'a -> 'b option)
-    (receive:AsyncSeq<Buffer>)
-    (send:Buffer -> Async<int>) =
+    (receive:AsyncSeq<Binary.Segment>)
+    (send:Binary.Segment -> Async<int>) =
       new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, awaitResponse, receive, send)

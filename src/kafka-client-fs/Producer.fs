@@ -1,29 +1,30 @@
-﻿namespace KafkaFs
+﻿namespace Kafunk
 
-open KafkaFs
-open KafkaFs.Prelude
-open KafkaFs.Protocol
+open Kafunk
+open Kafunk.Prelude
+open Kafunk.Protocol
 
 /// A producer message.
 type ProducerMessage =
   struct
     /// The message payload.
-    val value : Buffer
+    val value : Binary.Segment
     /// The optional message key.
-    val key : Buffer
+    val key : Binary.Segment
     /// The optional routing key.
     val routeKey : string
-    new (value:Buffer, key:Buffer, routeKey:string) =
+    new (value:Binary.Segment, key:Binary.Segment, routeKey:string) =
       { value = value ; key = key ; routeKey = routeKey }
   end
     with
 
       /// Creates a producer message.
-      static member ofBytes (value:Buffer, ?key, ?routeKey) =
-        ProducerMessage (value, defaultArg key (Buffer.empty), defaultArg routeKey null)
+      static member ofBytes (value:Binary.Segment, ?key, ?routeKey) =
+        ProducerMessage(value, defaultArg key Binary.empty, defaultArg routeKey null)
 
       static member ofBytes (value:byte[], ?key, ?routeKey) =
-        ProducerMessage (Buffer.ofArray value, defaultArg (key |> Option.map (Buffer.ofArray)) (Buffer.empty), defaultArg routeKey null)
+        let keyBuf = defaultArg (key |> Option.map Binary.ofArray) Binary.empty
+        ProducerMessage(Binary.ofArray value, keyBuf, defaultArg routeKey null)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Partitioner =
@@ -39,10 +40,12 @@ module Partitioner =
       let p = tmd.partitionMetadata.[hc % tmd.partitionMetadata.Length]
       p.partitionId
 
-/// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
-/// TODO: ADT
-type Producer = (TopicName * ProducerMessage[])[] -> Async<ProduceResponse>
+type MessageBundle = {
+  topic : TopicName
+  messages : ProducerMessage[] }
 
+/// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
+type Producer = MessageBundle[] -> Async<ProduceResponse>
 
 /// Producer configuration.
 type ProducerCfg = {
@@ -69,7 +72,7 @@ with
   static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
     {
       topics = topics
-      requiredAcks = defaultArg requiredAcks RequiredAcks.Local
+      requiredAcks = defaultArg requiredAcks RequiredAckOptions.Local
       compression = defaultArg compression Compression.None
       timeout = defaultArg timeout 0
       partition = partition
@@ -90,20 +93,20 @@ module Producer =
       |> Seq.map (fun tmd -> tmd.topicName,tmd)
       |> Map.ofSeq
 
-    let produce (ms:(TopicName * ProducerMessage[])[]) = async {
+    let produce (ms:MessageBundle[]) = async {
       let ms =
         ms
-        |> Seq.map (fun (tn,pms) ->
+        |> Seq.map (fun {topic = tn; messages = pms} ->
           let ms =
             pms
             |> Seq.groupBy (fun pm -> cfg.partition (tn, Map.find tn metadataByTopic, pm))
             |> Seq.map (fun (p,pms) ->
-              let ms = pms |> Seq.map (fun pm -> Message.create (pm.value, pm.key)) |> MessageSet.ofMessages
+              let ms = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) |> MessageSet.ofMessages
               p,ms)
             |> Seq.toArray
           tn,ms)
         |> Seq.toArray
-      let req = ProduceRequest.ofMessageSetTopics (ms, cfg.requiredAcks, cfg.timeout)
+      let req = ProduceRequest.ofMessageSetTopics ms cfg.requiredAcks cfg.timeout
       let! res = Kafka.produce conn req
       // TODO: check for errors
       return res }
@@ -118,4 +121,4 @@ module Producer =
     p ms
 
   let produceSingle (p:Producer) (tn:TopicName, pms:ProducerMessage[]) =
-    produce p [|tn,pms|]
+    produce p [| {topic = tn; messages = pms} |]

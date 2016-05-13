@@ -1,5 +1,5 @@
 ﻿#nowarn "40"
-namespace KafkaFs
+namespace Kafunk
 
 // TODO: https://github.com/fsprojects/FSharpx.Async
 
@@ -9,7 +9,7 @@ open System.Threading.Tasks
 open System.Collections.Generic
 open System.Collections.Concurrent
 
-open KafkaFs.Prelude
+open Kafunk.Prelude
 
 type internal MbReq<'a> =
   | Put of 'a
@@ -69,10 +69,6 @@ module Mb =
 
   /// Creates an async computation that completes when a message is available in a mailbox.
   let inline take (mb:Mb<'a>) = mb.Take
-
-
-
-
 
 type AsyncCh<'a> () =
 

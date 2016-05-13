@@ -1,9 +1,9 @@
-﻿namespace KafkaFs
+﻿namespace Kafunk
 
 open System
 
-open KafkaFs
-open KafkaFs.Protocol
+open Kafunk
+open Kafunk.Protocol
 
 
 /// High-level consumer API.
@@ -64,25 +64,19 @@ module Consumer =
 //    | StoppedConsumption
 //    | Error
 
-
 (*
 
 # Consumer Group Transitions
-
 
 ## Consumer
 
 - Coordinator heartbeat timeout -> close channel, then group coordinator re-discovery.
 
-
 ## Coordinator
 
 - Invalid generation heartbeat -> invalid generation heartbeat response
 
-
 *)
-
-
 
   /// Possible responses of a consumer group protocol.
   /// These may be received by several concurrent processes: heartbeating, fetching, committing.
@@ -100,44 +94,60 @@ module Consumer =
     // - close fetched streams
     // -
 
-    /// GroupLoadInProgressCode	14	Yes	The broker returns this error code for an offset fetch request if it is still loading offsets (after a leader change for that offsets topic partition), or in response to group membership requests (such as heartbeats) when group metadata is being loaded by the coordinator.
+    /// GroupLoadInProgressCode	14	Yes	The broker returns this error code for
+    /// an offset fetch request if it is still loading offsets (after a leader
+    /// change for that offsets topic partition), or in response to group
+    /// membership requests (such as heartbeats) when group metadata is being
+    /// loaded by the coordinator.
     | GroupLoadInProgress
 
-    /// GroupCoordinatorNotAvailableCode	15	Yes	The broker returns this error code for group coordinator requests, offset commits, and most group management requests if the offsets topic has not yet been created, or if the group coordinator is not active.
+    /// GroupCoordinatorNotAvailableCode	15	Yes	The broker returns this error
+    /// code for group coordinator requests, offset commits, and most group
+    /// management requests if the offsets topic has not yet been created, or
+    /// if the group coordinator is not active.
     | GroupCoordinatorNotAvailable
 
-    /// IllegalGenerationCode	22	 	Returned from group membership requests (such as heartbeats) when the generation id provided in the request is not the current generation.
+    /// IllegalGenerationCode	22	 	Returned from group membership requests
+    /// (such as heartbeats) when the generation id provided in the request is
+    /// not the current generation.
     | IllegalGeneration
 
-    /// InconsistentGroupProtocolCode	23	 	Returned in join group when the member provides a protocol type or set of protocols which is not compatible with the current group.
+    /// InconsistentGroupProtocolCode	23	 	Returned in join group when the
+    /// member provides a protocol type or set of protocols which is not
+    /// compatible with the current group.
     | InconsistentGroupProtocol
 
     | InvalidGroupId
 
-    /// UnknownMemberIdCode	25	 	Returned from group requests (offset commits/fetches, heartbeats, etc) when the memberId is not in the current generation.
+    /// UnknownMemberIdCode	25	 	Returned from group requests (offset
+    /// commits/fetches, heartbeats, etc) when the memberId is not in the
+    /// current generation.
     | UnknownMemberId
 
-    /// InvalidSessionTimeoutCode	26	 	Return in join group when the requested session timeout is outside of the allowed range on the broker
+    /// InvalidSessionTimeoutCode	26	 	Return in join group when the requested
+    /// session timeout is outside of the allowed range on the broker
     | InvalidSessionTimeout
 
-    /// RebalanceInProgressCode	27	 	Returned in heartbeat requests when the coordinator has begun rebalancing the group. This indicates to the client that it should rejoin the group.
+    /// RebalanceInProgressCode	27	 	Returned in heartbeat requests when the
+    /// coordinator has begun rebalancing the group. This indicates to the
+    /// client that it should rejoin the group.
     | RebalanceInProgress
 
     | SessionTimeout
 
     | MetadataChanged
 
-    /// 16	Yes	The broker returns this error code if it receives an offset fetch or commit request for a group that it is not a coordinator for.
+    /// 16	Yes	The broker returns this error code if it receives an offset
+    /// fetch or commit request for a group that it is not a coordinator for.
     | NotCoordinatorForGroup
 
-
-
   /// Given a consumer configuration, initiates the consumer group protocol.
-  /// Returns an async sequence of states where each state corresponds to a generation in the group protocol.
-  /// The state contains streams for the topics specified in the configuration.
-  /// Whenever there is a change in the consumer group, or a failure, the protocol restarts and returns
-  /// a new generation once successful.
-  /// If there are failures surpassing configured thresholds, the resulting sequence throws an exception.
+  /// Returns an async sequence of states where each state corresponds to a
+  /// generation in the group protocol. The state contains streams for the
+  /// topics specified in the configuration. Whenever there is a change in
+  /// the consumer group, or a failure, the protocol restarts and returns a
+  /// new generation once successful. If there are failures surpassing
+  /// configured thresholds, the resulting sequence throws an exception.
   let consume (conn:KafkaConn) (cfg:ConsumerConfig) : AsyncSeq<_> = async {
 
     // domain-specific api
@@ -153,10 +163,12 @@ module Consumer =
 
     // sent to group coordinator
     let _joinGroup2 =
-      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Buffer.empty)
-      let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
-      let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
+      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Binary.empty)
+      let assignmentStrategy : AssignmentStrategy = "range" // roundrobin
+      let groupProtocols =
+        GroupProtocols(
+          [| assignmentStrategy, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta |])
+      let joinGroupReq = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, "" (* memberId *), ProtocolType.consumer, groupProtocols)
       Kafka.joinGroup conn joinGroupReq
       |> Async.map (fun res ->
         match res.errorCode with
@@ -214,7 +226,9 @@ module Consumer =
 
     // sent to group coordinator
     let commitOffset (generationId,memberId) (topic:TopicName, partition:Partition, offset:Offset) = async {
-      let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, null |] |])
+      let req =
+        OffsetCommitRequest(
+         cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [|partition, offset, null|] |])
       do! Kafka.offsetCommit conn req |> Async.Ignore
       // TODO: check error
       return () }
@@ -229,7 +243,7 @@ module Consumer =
     // fetch sent to broker in metadata or coordinator?
     let stream (generationId,memberId) (topic:TopicName, partition:Partition) =
       let rec go (offset:FetchOffset) = asyncSeq {
-        let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBuffer |] |])
+        let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [|partition, offset, cfg.fetchBuffer|] |])
         // TODO: wait for state change (kill) signal
         let! res = Kafka.fetch conn req
         // TODO: check error
@@ -243,18 +257,20 @@ module Consumer =
       go (0L)
 
     // TODO: period and watch for changes?
-    do! Kafka.metadata conn (MetadataRequest(cfg.topics)) |> Async.Ignore
+    do! Kafka.metadata conn (Metadata.Request(cfg.topics)) |> Async.Ignore
 
     let rec go () : AsyncSeq<_> = async {
       // start of session
       let! _groupCoord = Kafka.groupCoordinator conn (GroupCoordinatorRequest(cfg.groupId))
       // TODO: send offset commit/fetch requests to groop coord
-      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Buffer.empty)
+      let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Binary.empty)
       let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
-      let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
+      let groupProtocols =
+        GroupProtocols(
+          [| assignmentStrategy, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta |])
 
       let memberId : MemberId = "" // assigned by coordinator
-      let joinGroupReq = JoinGroupRequest(cfg.groupId, cfg.sessionTimeout, memberId, ProtocolType.consumer, groupProtocols)
+      let joinGroupReq = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, memberId, ProtocolType.consumer, groupProtocols)
       let! joinGroupRes = Kafka.joinGroup conn joinGroupReq
       // TODO: or failure
       let generationId = joinGroupRes.generationId
@@ -265,7 +281,10 @@ module Consumer =
         // determine assignments
         // send sync request
         let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment([||]))
-        let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([| "" (*memberId*), (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment) |]))
+        let groupAssignment =
+          GroupAssignment(
+            [| "" (*memberId*), toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment |])
+        let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, groupAssignment)
         let! _syncRes = Kafka.syncGroup conn syncReq
 
 
@@ -300,11 +319,3 @@ module Consumer =
     return! go ()
 
   }
-
-
-
-
-// -------------------------------------------------------------------------------------------------------------------------------------
-
-
-
