@@ -10,7 +10,7 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
-open KafkaFs
+open Kafunk
 
 let Log = Log.create __SOURCE_FILE__
 
@@ -20,7 +20,7 @@ let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchrono
 
 metadata.brokers
 |> Seq.iter (fun b ->
-  Log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId 
+  Log.info "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId
 )
 
 metadata.topicMetadata

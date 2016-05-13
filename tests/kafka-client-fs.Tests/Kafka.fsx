@@ -1,7 +1,7 @@
 ﻿#r "bin/Release/KafkaFs.dll"
 
-open KafkaFs
-open KafkaFs.Protocol
+open Kafunk
+open Kafunk.Protocol
 
 //Log.To.console "*" NLog.LogLevel.Trace
 let log = Log.create __SOURCE_FILE__

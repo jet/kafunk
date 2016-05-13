@@ -4,10 +4,10 @@ open NUnit.Framework
 
 open System.Text
 
-open KafkaFs
-open KafkaFs.Protocol
+open Kafunk
+open Kafunk.Protocol
 
-let arraySegToFSharp (arr:Buffer.Segment) =
+let arraySegToFSharp (arr:Binary.Segment) =
   let sb = StringBuilder()
   sb.Append("[| ") |> ignore
   for byte in arr do
@@ -18,9 +18,9 @@ let arraySegToFSharp (arr:Buffer.Segment) =
 [<Test>]
 let ``should encode int32 negative``() =
   let x = -1
-  let buf = Buffer.zeros 4
-  Buffer.writeInt32 x buf |> ignore
-  let x2 = Buffer.readInt32 buf |> fst
+  let buf = Binary.zeros 4
+  Binary.writeInt32 x buf |> ignore
+  let x2 = Binary.readInt32 buf |> fst
   Assert.AreEqual(x, x2)
 
 [<Test>]
@@ -58,13 +58,13 @@ let ``should encode MessageSet``() =
     ]
     |> MessageSet.ofMessages
   let data = toArraySeg MessageSet.size MessageSet.write ms
-  let encoded = data |> Buffer.toArray |> Array.toList
+  let encoded = data |> Binary.toArray |> Array.toList
   Assert.True ((expected = encoded))
 
 [<Test>]
 let ``should decode FetchResponse``() =
   let data =
-    Buffer.ofArray [|
+    Binary.ofArray [|
       0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
       0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy;0uy;0uy;0uy;37uy;0uy;0uy;
       0uy;0uy;0uy;0uy;0uy;7uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;
@@ -80,12 +80,12 @@ let ``should decode FetchResponse``() =
   Assert.AreEqual(mss, 37)
   Assert.AreEqual(o, 7L)
   Assert.AreEqual(1940715388, int m.crc)
-  Assert.AreEqual("hello world", (m.value |> Buffer.toString))
+  Assert.AreEqual("hello world", (m.value |> Binary.toString))
 
 [<Test>]
 let ``should decode ProduceResponse``() =
   let data =
-    Buffer.ofArray [|
+    Binary.ofArray [|
       0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
       0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
   let (res:ProduceResponse), _ = ProduceResponse.read data
@@ -99,7 +99,7 @@ let ``should decode ProduceResponse``() =
 [<Test>]
 let ``should encode ProduceRequest``() =
   let req = ProduceRequest.ofMessageSet "test" 0 (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) None None
-  let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> Buffer.toArray |> Array.toList
+  let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> Binary.toArray |> Array.toList
   let expected = [
     0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;
     0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;

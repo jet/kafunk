@@ -1,6 +1,6 @@
 ﻿module CompressionGzipTests
 
-open KafkaFs
+open Kafunk
 open NUnit.Framework
 open System
 open System.Text
