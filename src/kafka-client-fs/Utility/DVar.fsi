@@ -4,6 +4,7 @@ namespace Kafunk
 type DVar<'a> = private { mutable cell: 'a; event: Event<'a> }
 
 /// Operations on dependant variables.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DVar =
 
     /// Creates a DVar and initializes it with the specified value.
