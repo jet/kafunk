@@ -1,4 +1,4 @@
-﻿namespace Kafunk
+namespace Kafunk
 
 open Kafunk
 open Kafunk.Prelude

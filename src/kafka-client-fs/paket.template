@@ -1,7 +1,7 @@
 type project
 owners
     Jet.com
-authors 
+authors
     Jet.com
 projectUrl
     http://github.com/eulerfx/kafka-client-fs

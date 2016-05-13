@@ -1,4 +1,4 @@
-﻿#nowarn "40"
+#nowarn "40"
 namespace Kafunk
 
 // TODO: https://github.com/fsprojects/FSharpx.Async
