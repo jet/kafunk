@@ -4,7 +4,7 @@
 #I "../../bin"
 
 (**
-kafka-client-fs
+kafunk
 ======================
 
 Documentation
@@ -13,8 +13,8 @@ Documentation
   <div class="span1"></div>
   <div class="span6">
     <div class="well well-small" id="nuget">
-      The kafka-client-fs library can be <a href="https://nuget.org/packages/kafka-client-fs">installed from NuGet</a>:
-      <pre>PM> Install-Package kafka-client-fs</pre>
+      The kafunk library can be <a href="https://nuget.org/packages/kafunk">installed from NuGet</a>:
+      <pre>PM> Install-Package kafunk</pre>
     </div>
   </div>
   <div class="span1"></div>
@@ -26,8 +26,8 @@ Example
 This example demonstrates using a function defined in this sample library.
 
 *)
-#r "kafka-client-fs.dll"
-open kafka-client-fs
+#r "kafunk.dll"
+open Kafunk
 
 printfn "hello = %i" <| Library.hello 0
 
@@ -59,9 +59,9 @@ The library is available under Public Domain license, which allows modification 
 redistribution for both commercial and non-commercial purposes. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/fsprojects/kafka-client-fs/tree/master/docs/content
-  [gh]: https://github.com/fsprojects/kafka-client-fs
-  [issues]: https://github.com/fsprojects/kafka-client-fs/issues
-  [readme]: https://github.com/fsprojects/kafka-client-fs/blob/master/README.md
-  [license]: https://github.com/fsprojects/kafka-client-fs/blob/master/LICENSE.txt
+  [content]: https://github.com/fsprojects/kafunk/tree/master/docs/content
+  [gh]: https://github.com/fsprojects/kafunk
+  [issues]: https://github.com/fsprojects/kafunk/issues
+  [readme]: https://github.com/fsprojects/kafunk/blob/master/README.md
+  [license]: https://github.com/fsprojects/kafunk/blob/master/LICENSE.txt
 *)
