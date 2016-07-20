@@ -10,8 +10,8 @@ Introducing your project
 Say more
 
 *)
-#r "kafka-client-fs.dll"
-open kafka-client-fs
+#r "kafunk.dll"
+open Kafunk
 
 Library.hello 0
 (**

@@ -260,7 +260,7 @@ type ReqRepSession<'a, 'b, 's> internal
     /// Sends a byte array to the remote host.
     send:Binary.Segment -> Async<int>) =
 
-  static let Log = Log.create "KafkaFunk.TcpSession"
+  static let Log = Log.create "Kafunk.TcpSession"
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()

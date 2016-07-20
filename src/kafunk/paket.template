@@ -4,11 +4,11 @@ owners
 authors
     Jet.com
 projectUrl
-    http://github.com/eulerfx/kafka-client-fs
+    http://github.com/jet/kafunk
 iconUrl
-    https://raw.githubusercontent.com/eulerfx/kafka-client-fs/master/docs/files/img/logo.png
+    https://raw.githubusercontent.com/jet/kafunk/master/docs/files/img/logo.png
 licenseUrl
-    http://github.com/eulerfx/kafka-client-fs/blob/master/LICENSE.txt
+    http://github.com/jet/kafunk/blob/master/LICENSE.txt
 requireLicenseAcceptance
     false
 copyright
