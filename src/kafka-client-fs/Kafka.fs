@@ -355,7 +355,7 @@ module internal Conn =
         wh.Set()
         Interlocked.Exchange(state, 0) |> ignore
       else
-        log.info "recovery alread in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
+        log.info "recovery already in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
         wh.Wait()
         return () }
 
