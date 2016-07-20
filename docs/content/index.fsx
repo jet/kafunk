@@ -4,7 +4,7 @@
 #I "../../bin"
 
 (**
-kafka-client-fs
+kafunk
 ======================
 
 Documentation
@@ -13,8 +13,8 @@ Documentation
   <div class="span1"></div>
   <div class="span6">
     <div class="well well-small" id="nuget">
-      The kafka-client-fs library can be <a href="https://nuget.org/packages/kafka-client-fs">installed from NuGet</a>:
-      <pre>PM> Install-Package kafka-client-fs</pre>
+      The kafunk library can be <a href="https://nuget.org/packages/kafunk">installed from NuGet</a>:
+      <pre>PM> Install-Package kafunk</pre>
     </div>
   </div>
   <div class="span1"></div>
@@ -26,8 +26,8 @@ Example
 This example demonstrates using a function defined in this sample library.
 
 *)
-#r "kafka-client-fs.dll"
-open kafka-client-fs
+#r "kafunk.dll"
+open kafunk
 
 printfn "hello = %i" <| Library.hello 0
 
@@ -55,13 +55,12 @@ the project and submit pull requests. If you're adding a new public API, please 
 consider adding [samples][content] that can be turned into a documentation. You might
 also want to read the [library design notes][readme] to understand how it works.
 
-The library is available under Public Domain license, which allows modification and 
-redistribution for both commercial and non-commercial purposes. For more information see the 
+The library is available under Apache 2.0. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/fsprojects/kafka-client-fs/tree/master/docs/content
-  [gh]: https://github.com/fsprojects/kafka-client-fs
-  [issues]: https://github.com/fsprojects/kafka-client-fs/issues
-  [readme]: https://github.com/fsprojects/kafka-client-fs/blob/master/README.md
-  [license]: https://github.com/fsprojects/kafka-client-fs/blob/master/LICENSE.txt
+  [content]: https://github.com/jet/kafunk/docs/content
+  [gh]: https://github.com/jet/kafunk
+  [issues]: https://github.com/jet/kafunk/issues
+  [readme]: https://github.com/jet/kafunk/project/README.md
+  [license]: https://github.com/jet/kafunk/project/LICENSE.txt
 *)

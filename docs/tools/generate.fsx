@@ -11,17 +11,17 @@
 // (This is the original behaviour of ProjectScaffold prior to multi project support)
 let referenceBinaries = []
 // Web site location for the generated documentation
-let website = "/kafka-client-fs"
+let website = "/kafunk"
 
-let githubLink = "http://github.com/eulerfx/kafka-client-fs"
+let githubLink = "http://github.com/jet/kafunk"
 
 // Specify more information about your project
 let info =
-  [ "project-name", "kafka-client-fs"
+  [ "project-name", "kafunk"
     "project-author", "Jet.com"
     "project-summary", "F# client for Kafka"
     "project-github", githubLink
-    "project-nuget", "http://nuget.org/packages/kafka-client-fs" ]
+    "project-nuget", "http://nuget.org/packages/kafunk" ]
 
 // --------------------------------------------------------------------------------------
 // For typical project, no changes are needed below
