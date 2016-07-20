@@ -376,9 +376,9 @@ Target "All" DoNothing
   ==> "AssemblyInfo"
   ==> "Build"
   ==> "CopyBinaries"
-  ==> "RunTests"
   ==> "GenerateReferenceDocs"
   ==> "GenerateDocs"
+  ==> "RunTests"
   ==> "All"
   =?> ("ReleaseDocs",isLocalBuild)
 
