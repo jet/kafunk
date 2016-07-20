@@ -9,7 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{63297B
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{A6A6AF7D-D6E3-442D-9B1E-58CC91879BE1}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "kafka-client-fs", "src\kafka-client-fs\kafka-client-fs.fsproj", "{18629B6B-ACE4-4C73-B058-EFA494EB42CE}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "kafunk", "src\kafunk\kafunk.fsproj", "{18629B6B-ACE4-4C73-B058-EFA494EB42CE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60BC93-E09B-4E5F-9D85-95A519479D54}"
 	ProjectSection(SolutionItems) = preProject
@@ -32,7 +32,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "content", "content", "{8E6D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ED8079DD-2B06-4030-9F0F-DC548F98E1C4}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "kafka-client-fs.Tests", "tests\kafka-client-fs.Tests\kafka-client-fs.Tests.fsproj", "{757D24EB-9619-4959-8F5A-658EB232F9A4}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "kafunk.Tests", "tests\kafunk.Tests\kafunk.Tests.fsproj", "{757D24EB-9619-4959-8F5A-658EB232F9A4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

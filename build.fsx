@@ -28,7 +28,7 @@ open SourceLink
 
 // The name of the project
 // (used by attributes in AssemblyInfo, name of a NuGet package and directory in 'src')
-let project = "kafka-client-fs"
+let project = "kafunk"
 
 // Short summary of the project
 // (used as description in AssemblyInfo and as a short summary for NuGet package)
@@ -45,21 +45,21 @@ let authors = [ "Jet.com" ]
 let tags = "kafka"
 
 // File system information
-let solutionFile  = "kafka-client-fs.sln"
+let solutionFile  = "kafunk.sln"
 
 // Pattern specifying assemblies to be tested using NUnit
 let testAssemblies = "tests/**/bin/Release/*Tests*.dll"
 
 // Git configuration (used for publishing documentation in gh-pages branch)
 // The profile where the project is posted
-let gitOwner = "eulerfx"
+let gitOwner = "jet"
 let gitHome = "https://github.com/" + gitOwner
 
 // The name of the project on GitHub
-let gitName = "kafka-client-fs"
+let gitName = "kafunk"
 
 // The url for the raw files hosted
-let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/eulerfx"
+let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/jet"
 
 // --------------------------------------------------------------------------------------
 // END TODO: The rest of the file includes standard build steps

@@ -157,7 +157,7 @@ module internal Api =
 module internal Conn =
 
   // Let's avoid this Log vs Log.create. Just lowercase it. Shadowing the constructor is not cool.
-  let private log = Log.create "KafkaFunk.Conn"
+  let private log = Log.create "Kafunk.Conn"
 
   let ApiVersion : ApiVersion = 0s
 
