@@ -9,7 +9,7 @@ kafka:
     - zookeeper:zk
   environment:
     HOSTNAME_COMMAND: "route -n | awk '/UG[ \t]/{print $$2}'"
-    #KAFKA_ADVERTISED_HOST_NAME: 10.51.22.43
+    KAFKA_ADVERTISED_HOST_NAME: 10.51.23.113
     KAFKA_CREATE_TOPICS: "topicA:1:1,topicB:3:3,topicC:8:1"
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
