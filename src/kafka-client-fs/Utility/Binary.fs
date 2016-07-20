@@ -2,6 +2,7 @@ namespace Kafunk
 
 open System
 open System.Text
+open Prelude
 
 module Binary =
 
