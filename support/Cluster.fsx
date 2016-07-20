@@ -77,6 +77,17 @@ Target "Start:All" <| ignore
 Target "Stop:All" <| fun () ->
     dockerCompose "down"
 
+Target "Start:Single" <| fun () ->
+    let exitCode = Shell.Exec("docker-compose", "-p kafunk scale zookeeper=1", supportPath + "\docker\kafka")
+    if exitCode <> 0 then failwith "Unable to start zookeeper"
+    System.Threading.Thread.Sleep(1500)
+    let exitCode = Shell.Exec("docker-compose", "-p kafunk scale kafka=1", supportPath + "\docker\kafka")
+    if exitCode <> 0 then failwith "Unable to start kafka"
+
+Target "Stop:Single" <| fun () ->
+    let exitCode = Shell.Exec("docker-compose", "-p kafunk down", supportPath + "\docker\kafka")
+    if exitCode <> 0 then failwith "Unable to run docker-compose -p kafunk down"
+
 /// Some of our targets require these asynchronous starts to be
 /// farther along, so we'll artificially delay. HACK HACK ;-)
 Target "Delay" <| fun () ->
