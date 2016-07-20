@@ -135,11 +135,6 @@ module AsyncCh =
   let inline enqueueFill a (ch:AsyncCh<'a>) = ch.EnqueueFill a
 
 
-
-
-
-
-
 [<AutoOpen>]
 module AsyncEx =
 
@@ -218,37 +213,37 @@ module AsyncEx =
       Async.StartWithContinuations (a, ok, err, cnc, defaultArg ct CancellationToken.None)
 
     static member Parallel (c1, c2) : Async<'a * 'b> = async {
-        let! c1 = c1 |> Async.StartChild
-        let! c2 = c2 |> Async.StartChild
-        let! c1 = c1
-        let! c2 = c2
-        return c1,c2 }
+      let! c1 = c1 |> Async.StartChild
+      let! c2 = c2 |> Async.StartChild
+      let! c1 = c1
+      let! c2 = c2
+      return c1,c2 }
 
     static member Parallel (c1:Async<unit>, c2:Async<unit>) : Async<unit> = async {
-        let! c1 = c1 |> Async.StartChild
-        let! c2 = c2 |> Async.StartChild
-        do! c1
-        do! c2 }
+      let! c1 = c1 |> Async.StartChild
+      let! c2 = c2 |> Async.StartChild
+      do! c1
+      do! c2 }
 
     static member Parallel (c1, c2, c3) : Async<'a * 'b * 'c> = async {
-        let! c1 = c1 |> Async.StartChild
-        let! c2 = c2 |> Async.StartChild
-        let! c3 = c3 |> Async.StartChild
-        let! c1 = c1
-        let! c2 = c2
-        let! c3 = c3
-        return c1,c2,c3 }
+      let! c1 = c1 |> Async.StartChild
+      let! c2 = c2 |> Async.StartChild
+      let! c3 = c3 |> Async.StartChild
+      let! c1 = c1
+      let! c2 = c2
+      let! c3 = c3
+      return c1,c2,c3 }
 
     static member Parallel (c1, c2, c3, c4) : Async<'a * 'b * 'c * 'd> = async {
-        let! c1 = c1 |> Async.StartChild
-        let! c2 = c2 |> Async.StartChild
-        let! c3 = c3 |> Async.StartChild
-        let! c4 = c4 |> Async.StartChild
-        let! c1 = c1
-        let! c2 = c2
-        let! c3 = c3
-        let! c4 = c4
-        return c1,c2,c3,c4 }
+      let! c1 = c1 |> Async.StartChild
+      let! c2 = c2 |> Async.StartChild
+      let! c3 = c3 |> Async.StartChild
+      let! c4 = c4 |> Async.StartChild
+      let! c1 = c1
+      let! c2 = c2
+      let! c3 = c3
+      let! c4 = c4
+      return c1,c2,c3,c4 }
 
     /// Creates an async computation which runs the provided sequence of computations and completes
     /// when all computations in the sequence complete. Up to parallelism computations will
@@ -326,16 +321,15 @@ module AsyncEx =
 
     /// Retries an async computation.
     static member retryTimeout (attempts:int) (filter:exn -> bool) (timeoutMs:int) (a:Async<'a>) = async {
-        try
-            let! res = a
-            return res
-        with ex ->
-            if (filter ex = false) then return raise (new Exception("Retry attempt exception filtered.", ex))
-            elif attempts = 0 then return raise (new Exception("Retry failed after several attempts.", ex))
-            else
-                if timeoutMs > 0 then do! Async.Sleep timeoutMs
-                return! Async.retryTimeout (attempts - 1) filter timeoutMs a
-    }
+      try
+          let! res = a
+          return res
+      with ex ->
+          if (filter ex = false) then return raise (new Exception("Retry attempt exception filtered.", ex))
+          elif attempts = 0 then return raise (new Exception("Retry failed after several attempts.", ex))
+          else
+              if timeoutMs > 0 then do! Async.Sleep timeoutMs
+              return! Async.retryTimeout (attempts - 1) filter timeoutMs a }
 
     /// Retries an async computation when exceptions match the specified filter.
     static member retry (attempts:int) (filter:exn -> bool) (a:Async<'a>) = Async.retryTimeout attempts filter 0 a
@@ -347,15 +341,15 @@ module AsyncEx =
     /// IDisposable object that cancels the computation. This method can be used
     /// when implementing the Subscribe method of IObservable interface.
     static member StartDisposable (op:Async<unit>) =
-        let ct = new System.Threading.CancellationTokenSource()
-        Async.Start(op, ct.Token)
-        { new IDisposable with member x.Dispose() = ct.Cancel() }
+      let ct = new System.Threading.CancellationTokenSource()
+      Async.Start(op, ct.Token)
+      { new IDisposable with member x.Dispose() = ct.Cancel() }
 
     /// Returns an async computation which runs the argument computation but raises an exception if it doesn't complete
     /// by the specified timeout.
     static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) = async {
-        let! r = Async.StartChild(c, (int)timeout.TotalMilliseconds)
-        return! r }
+      let! r = Async.StartChild(c, (int)timeout.TotalMilliseconds)
+      return! r }
 
     /// Creates a computation which returns the result of the first computation that
     /// produces a value as well as a handle to the other computation. The other
@@ -393,8 +387,7 @@ module AsyncEx =
       |> Async.map (fun (first,second) ->
         match first with
         | Choice1Of2 a -> (a,(second |> Async.map (function Choice2Of2 b -> b | _ -> failwith "invalid state"))) |> Choice1Of2
-        | Choice2Of2 b -> (b,(second |> Async.map (function Choice1Of2 a -> a | _ -> failwith "invalid state"))) |> Choice2Of2
-      )
+        | Choice2Of2 b -> (b,(second |> Async.map (function Choice1Of2 a -> a | _ -> failwith "invalid state"))) |> Choice2Of2)
 
     /// Creates an async computation which completes when any of the argument computations completes.
     /// The other argument computation is cancelled.
@@ -450,8 +443,6 @@ module AsyncChoice =
       | Choice2Of2 b -> f b |> Async.map Choice2Of2)
 
 
-
-
 type IVar<'a> = TaskCompletionSource<'a>
 
 module IVar =
@@ -473,9 +464,6 @@ module IVar =
     iv.Task |> Async.AwaitTask
 
 
-
-
-
 type AsyncObs<'a> = 'a option -> Async<unit>
 
 module AsyncObs =
@@ -490,8 +478,6 @@ module AsyncObs =
 
   let tryFinally (comp:unit -> unit) (o:AsyncObs<'a>) : AsyncObs<'a> =
     tryFinallyAsync (async { do comp () }) o
-
-
 
 
 type AsyncEvt<'a> = AsyncObs<'a> -> Async<unit>
@@ -578,9 +564,6 @@ module AsyncEvt =
         do! obs (Some (DateTime.UtcNow)) }
 
 
-
-
-
 type AsyncObs<'a, 'b> = 'a option -> Async<'b option>
 
 type AsyncPipe<'a, 'b> = AsyncObs<'a, 'b> -> Async<'b option>
@@ -608,13 +591,6 @@ module AysncPipe =
           | None ->
             obs None)
       return! go s })
-
-
-
-
-
-
-
 
 
 type AsyncEvtSrc<'a> = AsyncEvtSrc of IVar<('a * AsyncEvtSrc<'a>) option>
@@ -765,16 +741,6 @@ module AsyncEvtSrc =
     let rec zipAsync (AsyncStreamCons (a,tla)) (AsyncStreamCons (b,tlb)) : AsyncStreamCons<'a * 'b> =
       AsyncStreamCons ((a,b), Async.Parallel (tla,tlb) |> Async.map ((<||) zipAsync))
 
-//
-//module AsyncStream =
-//
-//  let whenever (a:AsyncStream<'a>) (tf:AsyncStream<bool>) : AsyncStream<'a> =
-//    failwith ""
-
-
-
-
-
   type AsyncAlt<'a> =
     private
     | Now of 'a
@@ -802,7 +768,6 @@ module AsyncEvtSrc =
       let comp () = tcs.SetResult()
       AwaitComp (a, comp)
 
-    ///
     let ofAsync (a:Async<'a>) : AsyncAlt<'a> =
       withNackAsync <| fun (nack:Async<unit>) ->
         let tcs = TaskCompletionSource<'a>()
@@ -846,63 +811,6 @@ module AsyncEvtSrc =
     let distTupleAsync (a:Async<'a>, b:Async<'b>) : Async<'a * 'b> =
       Async.Parallel (a,b)
 
-
-
-
-
-
-
-
     // prepare/commit
     let commit (_a:Async<Async<unit> option>) =
       failwith ""
-
-//    let ch<'a> =
-//      // Take : Ch<'a> -> AsyncAlt<'a> / Give : Ch<'a> -> 'a -> AsyncAlt<unit>
-//      let agent =
-//        MailboxProcessor.Start <| fun agent -> async {
-//
-//            let rec loop () = async {
-//              let! msg = agent.Receive()
-//              match msg with
-//              | Take reply -> }
-//
-//            let rec full (a:'a) =
-//              agent.Scan (function
-//                | Take reply -> Some (async { reply.Reply a })
-//                | _ -> None)
-//
-//            and empty (repply:) =
-//              agent.Scan (function
-//                | Give (a,reply) ->
-//
-//                )
-//
-//            //
-//            return () }
-//      ()
-
-
-
-//    let choose (a:AsyncAlt<'a>) (b:AsyncAlt<'a>) : AsyncAlt<'a> =
-//      match a,b with
-//      | Now a, _ -> AsyncAlt.Now a
-//      | _, Now b -> AsyncAlt.Now b
-//      | Never, Never -> AsyncAlt.Never
-//      | Never, b -> b
-//      | a, Never -> a
-//      | Await a, Await b -> AsyncAlt.Await (Async.choose a b)
-//      | Await a, AwaitComp (b,comp) ->
-//        let await () = async {
-//          let! chosen : Async<'a> = Async.choose a b }
-
-
-
-
-
-
-//        failwith ""
-//      | AwaitComp (a,comp), Await b ->
-//        failwith ""
-//      | AwaitComp (a,comp1), AwaitComp (b,comp2) ->
-//        failwith ""
