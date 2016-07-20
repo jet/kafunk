@@ -1,4 +1,4 @@
-﻿#r "bin/release/KafkaFs.dll"
+﻿#r "bin/release/kafunk.dll"
 #time "on"
 
 open System

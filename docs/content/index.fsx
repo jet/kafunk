@@ -27,7 +27,7 @@ This example demonstrates using a function defined in this sample library.
 
 *)
 #r "kafunk.dll"
-open kafunk
+open Kafunk
 
 printfn "hello = %i" <| Library.hello 0
 
