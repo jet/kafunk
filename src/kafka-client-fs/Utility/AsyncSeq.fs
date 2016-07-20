@@ -32,34 +32,34 @@ module AsyncSeq =
   /// Yields all elements of the first asynchronous sequence and then
   /// all elements of the second asynchronous sequence.
   let rec append (seq1:AsyncSeq<'T>) (seq2:AsyncSeq<'T>) : AsyncSeq<'T> = async {
-      let! v1 = seq1
-      match v1 with
-      | Nil -> return! seq2
-      | Cons (h,t) -> return Cons(h, append t seq2) }
+    let! v1 = seq1
+    match v1 with
+    | Nil -> return! seq2
+    | Cons (h,t) -> return Cons(h, append t seq2) }
 
   /// Computation builder that allows creating of asynchronous
   /// sequences using the 'asyncSeq { ... }' syntax
   type AsyncSeqBuilder() =
-      member x.Yield(v) = singleton v
-      // This looks weird, but it is needed to allow:
-      //
-      //     while foo do
-      //         do! something
-      //
-      // because F# translates body as Bind(something, fun () -> Return())
-      member x.Return(()) = empty
-      member x.YieldFrom(s) = s
-      member x.Zero () = empty
-      member x.Bind (inp:Async<'T>, body : 'T -> AsyncSeq<'U>) : AsyncSeq<'U> =
-          async.Bind(inp, body)
+    member x.Yield(v) = singleton v
+    // This looks weird, but it is needed to allow:
+    //
+    //     while foo do
+    //         do! something
+    //
+    // because F# translates body as Bind(something, fun () -> Return())
+    member x.Return(()) = empty
+    member x.YieldFrom(s) = s
+    member x.Zero () = empty
+    member x.Bind (inp:Async<'T>, body : 'T -> AsyncSeq<'U>) : AsyncSeq<'U> =
+      async.Bind(inp, body)
 
-      member x.Combine (seq1:AsyncSeq<'T>, seq2:AsyncSeq<'T>) = append seq1 seq2
+    member x.Combine (seq1:AsyncSeq<'T>, seq2:AsyncSeq<'T>) = append seq1 seq2
 
-      member x.While (gd, seq:AsyncSeq<'T>) =
-          if gd() then x.Combine(seq,x.Delay(fun () -> x.While (gd, seq))) else x.Zero()
+    member x.While (gd, seq:AsyncSeq<'T>) =
+      if gd() then x.Combine(seq,x.Delay(fun () -> x.While (gd, seq))) else x.Zero()
 
-      member x.Delay (f:unit -> AsyncSeq<'T>) =
-          async.Delay(f)
+    member x.Delay (f:unit -> AsyncSeq<'T>) =
+      async.Delay(f)
 
 
   /// Builds an asynchronou sequence using the computation builder syntax
@@ -68,35 +68,35 @@ module AsyncSeq =
   /// Tries to get the next element of an asynchronous sequence
   /// and returns either the value or an exception
   let internal tryNext (input:AsyncSeq<_>) = async {
-      try
-          let! v = input
-          return Choice1Of2 v
-      with e ->
-          return Choice2Of2 e }
+    try
+      let! v = input
+      return Choice1Of2 v
+    with e ->
+      return Choice2Of2 e }
 
   /// Implements the 'TryWith' functionality for computation builder
   let rec internal tryWith (input : AsyncSeq<'T>) handler =    asyncSeq {
-      let! v = tryNext input
-      match v with
-      | Choice1Of2 Nil -> ()
-      | Choice1Of2 (Cons (h, t)) ->
-              yield h
-              yield! tryWith t handler
-      | Choice2Of2 rest ->
-              yield! handler rest }
+    let! v = tryNext input
+    match v with
+    | Choice1Of2 Nil -> ()
+    | Choice1Of2 (Cons (h, t)) ->
+      yield h
+      yield! tryWith t handler
+    | Choice2Of2 rest ->
+      yield! handler rest }
 
   /// Implements the 'TryFinally' functionality for computation builder
   let rec internal tryFinally (input : AsyncSeq<'T>) compensation = asyncSeq {
-      let! v = tryNext input
-      match v with
-      | Choice1Of2 Nil ->
-              compensation()
-      | Choice1Of2 (Cons (h, t)) ->
-              yield h
-              yield! tryFinally t compensation
-      | Choice2Of2 e ->
-              compensation()
-              yield! raise e }
+    let! v = tryNext input
+    match v with
+    | Choice1Of2 Nil ->
+      compensation()
+    | Choice1Of2 (Cons (h, t)) ->
+      yield h
+      yield! tryFinally t compensation
+    | Choice2Of2 e ->
+      compensation()
+      yield! raise e }
 
   /// Creates an asynchronou sequence that iterates over the given input sequence.
   /// For every input element, it calls the the specified function and iterates
@@ -104,54 +104,54 @@ module AsyncSeq =
   /// This is the 'bind' operation of the computation expression (exposed using
   /// the 'for' keyword in asyncSeq computation).
   let rec collect f (input : AsyncSeq<'T>) : AsyncSeq<'TResult> = asyncSeq {
-      let! v = input
-      match v with
-      | Nil -> ()
-      | Cons(h, t) ->
-              yield! f h
-              yield! collect f t }
+    let! v = input
+    match v with
+    | Nil -> ()
+    | Cons(h, t) ->
+      yield! f h
+      yield! collect f t }
 
   // Add additional methods to the 'asyncSeq' computation builder
   type AsyncSeqBuilder with
 
-      member x.TryFinally (body: AsyncSeq<'T>, compensation) =
-          tryFinally body compensation
+    member x.TryFinally (body: AsyncSeq<'T>, compensation) =
+      tryFinally body compensation
 
-      member x.TryWith (body: AsyncSeq<_>, handler: (exn -> AsyncSeq<_>)) =
-          tryWith body handler
+    member x.TryWith (body: AsyncSeq<_>, handler: (exn -> AsyncSeq<_>)) =
+      tryWith body handler
 
-      member x.Using (resource:#IDisposable, binder) =
-          tryFinally (binder resource) (fun () ->
-              if box resource <> null then resource.Dispose())
+    member x.Using (resource:#IDisposable, binder) =
+      tryFinally (binder resource) (fun () ->
+        if box resource <> null then resource.Dispose())
 
-      /// For loop that iterates over a synchronous sequence (and generates
-      /// all elements generated by the asynchronous body)
-      member x.For(seq:seq<'T>, action:'T -> AsyncSeq<'TResult>) =
-          let enum = seq.GetEnumerator()
-          x.TryFinally(x.While((fun () -> enum.MoveNext()), x.Delay(fun () ->
-              action enum.Current)), (fun () ->
-                  if enum <> null then enum.Dispose() ))
+    /// For loop that iterates over a synchronous sequence (and generates
+    /// all elements generated by the asynchronous body)
+    member x.For(seq:seq<'T>, action:'T -> AsyncSeq<'TResult>) =
+      let enum = seq.GetEnumerator()
+      x.TryFinally(x.While((fun () -> enum.MoveNext()), x.Delay(fun () ->
+        action enum.Current)), (fun () ->
+          if enum <> null then enum.Dispose() ))
 
-      /// Asynchronous for loop - for all elements from the input sequence,
-      /// generate all elements produced by the body (asynchronously). See
-      /// also the AsyncSeq.collect function.
-      member x.For (seq:AsyncSeq<'T>, action:'T -> AsyncSeq<'TResult>) =
-          collect action seq
+    /// Asynchronous for loop - for all elements from the input sequence,
+    /// generate all elements produced by the body (asynchronously). See
+    /// also the AsyncSeq.collect function.
+    member x.For (seq:AsyncSeq<'T>, action:'T -> AsyncSeq<'TResult>) =
+      collect action seq
 
 
   // Add asynchronous for loop to the 'async' computation builder
   type Microsoft.FSharp.Control.AsyncBuilder with
 
-      member x.For (seq:AsyncSeq<'T>, action:'T -> Async<unit>) =
-          async.Bind(seq, function
-              | Nil -> async.Zero()
-              | Cons(h, t) -> async.Combine(action h, x.For(t, action)))
+    member x.For (seq:AsyncSeq<'T>, action:'T -> Async<unit>) =
+      async.Bind(seq, function
+        | Nil -> async.Zero()
+        | Cons(h, t) -> async.Combine(action h, x.For(t, action)))
 
-      member x.For (seq:AsyncSeq<'a>, action:'a -> unit) : Async<unit> =
-          async.Bind(seq,
-              function
-              | Nil -> async.Zero()
-              | Cons(h, t) -> async { action h ; return! x.For(t, action) })
+    member x.For (seq:AsyncSeq<'a>, action:'a -> unit) : Async<unit> =
+      async.Bind(seq,
+        function
+        | Nil -> async.Zero()
+        | Cons(h, t) -> async { action h ; return! x.For(t, action) })
 
   // --------------------------------------------------------------------------
   // Additional combinators (implemented as async/asyncSeq computations)
@@ -162,9 +162,9 @@ module AsyncSeq =
   /// The specified function is asynchronous (and the input sequence will
   /// be asked for the next element after the processing of an element completes).
   let mapAsync f (input : AsyncSeq<'T>) : AsyncSeq<'TResult> = asyncSeq {
-      for itm in input do
-          let! v = f itm
-          yield v }
+    for itm in input do
+      let! v = f itm
+      yield v }
 
   /// Asynchronously iterates over the input sequence and generates 'x' for
   /// every input element for which the specified asynchronous function
@@ -173,11 +173,11 @@ module AsyncSeq =
   /// The specified function is asynchronous (and the input sequence will
   /// be asked for the next element after the processing of an element completes).
   let chooseAsync f (input : AsyncSeq<'T>) : AsyncSeq<'R> = asyncSeq {
-      for itm in input do
-          let! v = f itm
-          match v with
-          | Some v -> yield v
-          | _ -> () }
+    for itm in input do
+      let! v = f itm
+      match v with
+      | Some v -> yield v
+      | _ -> () }
 
   /// Builds a new asynchronous sequence whose elements are those from the
   /// input sequence for which the specified function returned true.
@@ -185,33 +185,33 @@ module AsyncSeq =
   /// The specified function is asynchronous (and the input sequence will
   /// be asked for the next element after the processing of an element completes).
   let filterAsync f (input:AsyncSeq<'T>) = asyncSeq {
-      for v in input do
-          let! b = f v
-          if b then yield v }
+    for v in input do
+      let! b = f v
+      if b then yield v }
 
   /// Asynchronously returns the last element that was generated by the
   /// given asynchronous sequence (or the specified default value).
   let rec lastOrDefault def (input:AsyncSeq<'T>) = async {
-      let! v = input
-      match v with
-      | Nil -> return def
-      | Cons(h, t) -> return! lastOrDefault h t }
+    let! v = input
+    match v with
+    | Nil -> return def
+    | Cons(h, t) -> return! lastOrDefault h t }
 
   /// Asynchronously returns the first element that was generated by the
   /// given asynchronous sequence (or the specified default value).
   let firstOrDefault def (input:AsyncSeq<'T>) = async {
-      let! v = input
-      match v with
-      | Nil -> return def
-      | Cons(h, _) -> return h }
+    let! v = input
+    match v with
+    | Nil -> return def
+    | Cons(h, _) -> return h }
 
   /// Asynchronously returns true if the asynchronous sequence contains
   /// no elements, false otherwise
   let isEmpty (input:AsyncSeq<'T>) = async {
-      let! v = input
-      match v with
-      | Nil -> return true
-      | Cons _ -> return false }
+    let! v = input
+    match v with
+    | Nil -> return true
+    | Cons _ -> return false }
 
   /// Aggregates the elements of the input asynchronous sequence using the
   /// specified 'aggregation' function. The result is an asynchronous
@@ -220,13 +220,13 @@ module AsyncSeq =
   /// The aggregation function is asynchronous (and the input sequence will
   /// be asked for the next element after the processing of an element completes).
   let rec scanAsync f (state:'TState) (input : AsyncSeq<'T>) = asyncSeq {
-      let! v = input
-      match v with
-      | Nil -> ()
-      | Cons(h, t) ->
-              let! v = f state h
-              yield v
-              yield! t |> scanAsync f v }
+    let! v = input
+    match v with
+    | Nil -> ()
+    | Cons(h, t) ->
+      let! v = f state h
+      yield v
+      yield! t |> scanAsync f v }
 
   /// Iterates over the input sequence and calls the specified function for
   /// every value (to perform some side-effect asynchronously).
@@ -234,8 +234,8 @@ module AsyncSeq =
   /// The specified function is asynchronous (and the input sequence will
   /// be asked for the next element after the processing of an element completes).
   let rec iterAsync f (input : AsyncSeq<'T>) = async {
-      for itm in input do
-          do! f itm }
+    for itm in input do
+      do! f itm }
 
   /// Maps an async function over an async sequence in parallel.
   /// The output is returned in order, which results in the potential for head-of-line blocking.
@@ -260,14 +260,14 @@ module AsyncSeq =
   /// from the input sequence and its predecessor. Empty sequence is returned for
   /// singleton input sequence.
   let rec pairwise (input:AsyncSeq<'T>) = asyncSeq {
-      let! v = input
-      match v with
-      | Nil -> ()
-      | Cons(h, t) ->
-              let prev = ref h
-              for v in t do
-                  yield (!prev, v)
-                  prev := v }
+    let! v = input
+    match v with
+    | Nil -> ()
+    | Cons(h, t) ->
+      let prev = ref h
+      for v in t do
+        yield (!prev, v)
+        prev := v }
 
   /// Aggregates the elements of the input asynchronous sequence using the
   /// specified 'aggregation' function. The result is an asynchronous
@@ -276,12 +276,12 @@ module AsyncSeq =
   /// The aggregation function is asynchronous (and the input sequence will
   /// be asked for the next element after the processing of an element completes).
   let rec foldAsync f (state:'TState) (input : AsyncSeq<'T>) =
-      input |> scanAsync f state |> lastOrDefault state
+    input |> scanAsync f state |> lastOrDefault state
 
   /// Same as AsyncSeq.foldAsync, but the specified function is synchronous
   /// and returns the result of aggregation immediately.
   let rec fold f (state:'TState) (input : AsyncSeq<'T>) =
-      foldAsync (fun st v -> f st v |> async.Return) state input
+    foldAsync (fun st v -> f st v |> async.Return) state input
 
   /// Like AsyncSeq.foldAsync but with a possibility of early termination.
   let rec foldAsyncT (f:'State -> 'T -> Async<'State option>) (state:'State) (input:AsyncSeq<'T>) : Async<'State> = async {
@@ -320,7 +320,7 @@ module AsyncSeq =
   /// Same as AsyncSeq.scanAsync, but the specified function is synchronous
   /// and returns the result of aggregation immediately.
   let rec scan f (state:'TState) (input : AsyncSeq<'T>) =
-      scanAsync (fun st v -> f st v |> async.Return) state input
+    scanAsync (fun st v -> f st v |> async.Return) state input
 
   /// Same as AsyncSeq.mapAsync, but the specified function is synchronous
   /// and returns the result of projection immediately.
@@ -333,15 +333,15 @@ module AsyncSeq =
   /// Same as AsyncSeq.chooseAsync, but the specified function is synchronous
   /// and processes the input element immediately.
   let choose f (input:AsyncSeq<'T>) = asyncSeq {
-      for itm in input do
-          match f itm with
-          | Some v -> yield v
-          | _ -> () }
+    for itm in input do
+      match f itm with
+      | Some v -> yield v
+      | _ -> () }
 
   /// Same as AsyncSeq.filterAsync, but the specified predicate is synchronous
   /// and processes the input element immediately.
   let filter f (input : AsyncSeq<'T>) =
-      filterAsync (f >> async.Return) input
+    filterAsync (f >> async.Return) input
 
   /// Creates an asynchronous sequence that lazily takes element from an
   /// input synchronous sequence and returns them one-by-one.
@@ -414,13 +414,13 @@ module AsyncSeq =
   /// sequentially iterated over (at the maximal possible speed). Disposing of the
   /// observer cancels the iteration over asynchronous sequence.
   let toObservable (s:AsyncSeq<_>) =
-      let start (obs:IObserver<_>) = async {
-          try
-              for v in s do obs.OnNext(v)
-              obs.OnCompleted()
-          with e ->
-              obs.OnError(e) }
-      { new IObservable<_> with member __.Subscribe(obs) = start obs |> Async.StartDisposable }
+    let start (obs:IObserver<_>) = async {
+      try
+        for v in s do obs.OnNext(v)
+        obs.OnCompleted()
+      with e ->
+        obs.OnError(e) }
+    { new IObservable<_> with member __.Subscribe(obs) = start obs |> Async.StartDisposable }
 
 
   /// Converts an AsyncSeq into a blocking sequence.
@@ -454,89 +454,86 @@ module AsyncSeq =
   /// Combines two asynchronous sequences into a sequence of pairs.
   /// The values from sequences are retrieved in parallel.
   let rec zip (input1 : AsyncSeq<'T1>) (input2 : AsyncSeq<'T2>) : AsyncSeq<_> = async {
-      let! ft = input1 |> Async.StartChild
-      let! s = input2
-      let! f = ft
-      match f, s with
-      | Cons(hf, tf), Cons(hs, ts) ->
-              return Cons( (hf, hs), zip tf ts)
-      | _ -> return Nil }
+    let! ft = input1 |> Async.StartChild
+    let! s = input2
+    let! f = ft
+    match f, s with
+    | Cons(hf, tf), Cons(hs, ts) ->
+      return Cons( (hf, hs), zip tf ts)
+    | _ -> return Nil }
 
   /// Returns elements from an asynchronous sequence while the specified
   /// predicate holds. The predicate is evaluated asynchronously.
   let rec takeWhileAsync p (input : AsyncSeq<'T>) : AsyncSeq<_> = async {
-      let! v = input
-      match v with
-      | Cons(h, t) ->
-              let! res = p h
-              if res then
-                  return Cons(h, takeWhileAsync p t)
-              else return Nil
-      | Nil -> return Nil }
+    let! v = input
+    match v with
+    | Cons(h, t) ->
+      let! res = p h
+      if res then
+        return Cons(h, takeWhileAsync p t)
+      else return Nil
+    | Nil -> return Nil }
 
   /// Skips elements from an asynchronous sequence while the specified
   /// predicate holds and then returns the rest of the sequence. The
   /// predicate is evaluated asynchronously.
   let rec skipWhileAsync p (input : AsyncSeq<'T>) : AsyncSeq<_> = async {
-      let! v = input
-      match v with
-      | Cons(h, t) ->
-              let! res = p h
-              if res then return! skipWhileAsync p t
-              else return v//t
-      | Nil -> return Nil }
+    let! v = input
+    match v with
+    | Cons(h, t) ->
+      let! res = p h
+      if res then return! skipWhileAsync p t
+      else return v//t
+    | Nil -> return Nil }
 
   /// Returns elements from an asynchronous sequence while the specified
   /// predicate holds. The predicate is evaluated synchronously.
   let takeWhile p (input : AsyncSeq<'T>) =
-      takeWhileAsync (p >> async.Return) input
+    takeWhileAsync (p >> async.Return) input
 
   /// Skips elements from an asynchronous sequence while the specified
   /// predicate holds and then returns the rest of the sequence. The
   /// predicate is evaluated asynchronously.
   let rec skipWhile p (input : AsyncSeq<'T>) = async {
-      let! v = input
-      match v with
-      | Cons(h, t) ->
-          if (p h) then return! skipWhile p t
-          else return v
-      | Nil -> return Nil }
+    let! v = input
+    match v with
+    | Cons(h, t) ->
+      if (p h) then return! skipWhile p t
+      else return v
+    | Nil -> return Nil }
 
   /// Returns the first N elements of an asynchronous sequence
   let rec take count (input:AsyncSeq<'T>) : AsyncSeq<_> = async {
-      if count > 0 then
-          let! v = input
-          match v with
-          | Cons(h, t) -> return Cons(h, take (count - 1) t)
-          | Nil -> return Nil
-      else return Nil }
+    if count > 0 then
+      let! v = input
+      match v with
+      | Cons(h, t) -> return Cons(h, take (count - 1) t)
+      | Nil -> return Nil
+    else return Nil }
 
   /// Skips the first N elements of an asynchronous sequence and
   /// then returns the rest of the sequence unmodified.
   let rec skip count (input : AsyncSeq<'T>) : AsyncSeq<_> = async {
-      if count > 0 then
-          let! v = input
-          match v with
-          | Cons(_, t) ->
-                  return! skip (count - 1) t
-          | Nil -> return Nil
-      else return! input }
+    if count > 0 then
+      let! v = input
+      match v with
+      | Cons(_, t) ->
+        return! skip (count - 1) t
+      | Nil -> return Nil
+    else return! input }
 
   let interleave =
-
-      let rec left (a:AsyncSeq<'a>) (b:AsyncSeq<'b>) : AsyncSeq<Choice<_,_>> = async {
-          let! a = a
-          match a with
-          | Cons (a1, t1) -> return Cons (Choice1Of2 a1, right t1 b)
-          | Nil -> return! b |> map Choice2Of2 }
-
-      and right (a:AsyncSeq<'a>) (b:AsyncSeq<'b>) : AsyncSeq<Choice<_,_>> = async {
-          let! b = b
-          match b with
-          | Cons (a2, t2) -> return Cons (Choice2Of2 a2, left a t2)
-          | Nil -> return! a |> map Choice1Of2 }
-
-      left
+    let rec left (a:AsyncSeq<'a>) (b:AsyncSeq<'b>) : AsyncSeq<Choice<_,_>> = async {
+      let! a = a
+      match a with
+      | Cons (a1, t1) -> return Cons (Choice1Of2 a1, right t1 b)
+      | Nil -> return! b |> map Choice2Of2 }
+    and right (a:AsyncSeq<'a>) (b:AsyncSeq<'b>) : AsyncSeq<Choice<_,_>> = async {
+      let! b = b
+      match b with
+      | Cons (a2, t2) -> return Cons (Choice2Of2 a2, left a t2)
+      | Nil -> return! a |> map Choice1Of2 }
+    left
 
   /// Iterates the async sequence using the specified function. After the first item is retrieved, retrieval of subseqent items runs in parrallel to the
   /// function.
@@ -577,12 +574,12 @@ module AsyncSeq =
 
   /// Flattens a projection of AsyncSeq to sequences.
   let rec collectSeq (f:'a -> #seq<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = asyncSeq {
-      let! s = s
-      match s with
-      | Nil -> ()
-      | Cons (head,tail) ->
-          for item in f head do yield item
-          yield! collectSeq f tail }
+    let! s = s
+    match s with
+    | Nil -> ()
+    | Cons (head,tail) ->
+      for item in f head do yield item
+      yield! collectSeq f tail }
 
   /// Flattens an AsyncSeq of sequences.
   let rec concatSeq (s:AsyncSeq<#seq<'a>>) : AsyncSeq<'a> = asyncSeq {
@@ -590,38 +587,38 @@ module AsyncSeq =
     match v with
     | Nil -> ()
     | Cons (h, t) ->
-        for item in h do
-          yield item
-        yield! concatSeq t }
+      for item in h do
+        yield item
+      yield! concatSeq t }
 
   /// Generates an async sequence using the specified generator function.
   let rec unfoldAsync (f:'State -> Async<('a * 'State) option>) (s:'State) : AsyncSeq<'a> = asyncSeq {
-      let! r = f s
-      match r with
-      | Some (a,s) ->
-          yield a
-          yield! unfoldAsync f s
-      | None -> () }
+    let! r = f s
+    match r with
+    | Some (a,s) ->
+      yield a
+      yield! unfoldAsync f s
+    | None -> () }
 
   /// Iterates the AsyncSeq and collects the output into an array.
   let toArray (s:AsyncSeq<'a>) : Async<'a[]> =
-      s
-      |> fold (fun (arr:ResizeArray<'a>) a -> arr.Add(a) ; arr) (new ResizeArray<'a>())
-      |> Async.map (fun arr -> arr.ToArray())
+    s
+    |> fold (fun (arr:ResizeArray<'a>) a -> arr.Add(a) ; arr) (new ResizeArray<'a>())
+    |> Async.map (fun arr -> arr.ToArray())
 
   /// Iterates the AsyncSeq and collects the output into a list.
   let toList (s:AsyncSeq<'a>) : Async<'a list> =
-      s
-      |> fold (fun arr a -> a::arr) []
-      |> Async.map List.rev
+    s
+    |> fold (fun arr a -> a::arr) []
+    |> Async.map List.rev
 
   /// Iterates a sequnce of async computations and collects their results into an array.
   let seqOfAsyncToArray (s:seq<Async<'a>>) : Async<'a[]> = async {
-      let rs = new ResizeArray<'a>()
-      for item in s do
-          let! a = item
-          rs.Add a
-      return rs.ToArray() }
+    let rs = new ResizeArray<'a>()
+    for item in s do
+      let! a = item
+      rs.Add a
+    return rs.ToArray() }
 
   /// Merges two async sequences into an async sequence non-deterministically.
   let rec merge (a:AsyncSeq<'a>) (b:AsyncSeq<'a>) : AsyncSeq<'a> = async {
@@ -705,18 +702,18 @@ module AsyncSeqExtensions =
   type Microsoft.FSharp.Control.AsyncBuilder with
     member x.For (seq:AsyncSeq<'T>, action:'T -> Async<unit>) =
       async.Bind(seq, function
-          | Nil -> async.Zero()
-          | Cons(h, t) -> async.Combine(action h, x.For(t, action)))
+        | Nil -> async.Zero()
+        | Cons(h, t) -> async.Combine(action h, x.For(t, action)))
 
   // duplicated here from AsyncSeq since I'm not sure why it was commented out
   let toObservable (aseq:AsyncSeq<_>) =
     let start (obs:IObserver<_>) =
-        async {
-            try
-                for v in aseq do obs.OnNext(v)
-                obs.OnCompleted()
-            with e ->
-                obs.OnError(e) }
-        |> Async.StartDisposable
+      async {
+        try
+          for v in aseq do obs.OnNext(v)
+          obs.OnCompleted()
+        with e ->
+          obs.OnError(e) }
+      |> Async.StartDisposable
     { new IObservable<_> with
-            member x.Subscribe(obs) = start obs }
+      member x.Subscribe(obs) = start obs }
