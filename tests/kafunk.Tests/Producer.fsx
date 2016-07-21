@@ -11,12 +11,13 @@ open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
 open Kafunk
+open Kafunk.Protocol
 
 let Log = Log.create __SOURCE_FILE__
 
 let conn = Kafka.connHost "localhost"
 
-let cfg = ProducerCfg.create ([|"test"|], Partitioner.konst 0, requiredAcks=RequiredAcks.None)
+let cfg = ProducerCfg.create ([|"test"|], Partitioner.konst 0, requiredAcks=RequiredAckOptions.None)
 
 let producer =
   Producer.createAsync conn cfg |> Async.RunSynchronously
