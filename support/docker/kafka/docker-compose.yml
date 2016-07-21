@@ -2,12 +2,17 @@ zookeeper:
   image: wurstmeister/zookeeper
   ports: ["2181:2181"]
 kafka:
-  image: wurstmeister/kafka 
+  image: wurstmeister/kafka
   ports: ["9092:9092"]
   links:
     - zookeeper:zk
   environment:
-    KAFKA_ADVERTISED_HOST_NAME: 10.51.21.99
+    HOSTNAME_COMMAND: "route -n | awk '/UG[ \t]/{print $$2}'"
+    # Replace this env var if the HOSTNAME_COMMAND doesn't work.
+    # This is required for certain docker runtimes like Docker for
+    # Mac since the bridge IP isn't available on the host. Note that
+    # localhost / 127.0.0.1 will NOT work here.
+    # KAFKA_ADVERTISED_HOST_NAME: [your host interface]
     KAFKA_CREATE_TOPICS: "TopicA:1:1,TopicB:8:1"
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
