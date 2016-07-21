@@ -72,7 +72,7 @@ with
   static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
     {
       topics = topics
-      requiredAcks = defaultArg requiredAcks RequiredAckOptions.Local
+      requiredAcks = defaultArg requiredAcks RequiredAcks.Local
       compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
       partition = partition
