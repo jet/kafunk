@@ -1,5 +1,5 @@
 group Build
-  source https://nuget.org/api/v2
+  source https://api.nuget.org/v3/index.json
 
   nuget SourceLink.Fake
   nuget FAKE
@@ -8,7 +8,8 @@ group Build
   github fsharp/FAKE modules/Octokit/Octokit.fsx
 
 group Test
-  source https://nuget.org/api/v2
+  source https://api.nuget.org/v3/index.json
 
-  nuget NUnit ~> 2
-  nuget NUnit.Runners ~> 2
+  nuget NUnit
+  nuget NUnit.Runners
+  github forki/FsUnit FsUnit.fs
