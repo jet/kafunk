@@ -36,11 +36,6 @@ module DVar =
   /// When the argument changes, the dependant variable changes.
   val map : ('a -> 'b) -> DVar<'a> -> DVar<'b> when 'b : not struct
 
-  /// Creates a DVar based on two argument DVars, one storing a function value
-  /// and the other a value to apply the function to. The resulting DVar contains
-  /// the resulting value and changes based on the two DVars.
-  val ap : DVar<('a -> 'b)> -> DVar<'a> -> DVar<'b> when 'b : not struct
-
   /// Combine values of two DVars using the specified function.
   val combineLatestWith :
     ('a -> 'b -> 'c) -> DVar<'a> -> DVar<'b> -> DVar<'c>
@@ -66,22 +61,28 @@ module DVar =
   /// and the ref is bound to all subsequent updates of the DVar.
   val bindToRef : 'a ref -> DVar<'a> -> unit
 
+  /// Updates the value in a DVar using the specified function.
   val update : ('a -> 'a) -> DVar<'a> -> unit when 'a : not struct
 
+  /// Updates the value in a DVar using the specified function if it results in a change.
   val updateIfDistinctBy :
     ('a -> 'k) -> ('a -> 'a) -> DVar<'a> -> bool
     when 'a : not struct and 'k : equality
 
+  /// Updates the value in a DVar using the specified function if it results in a change.
   val updateIfDistinct :
     ('a -> 'a) -> DVar<'a> -> bool
     when 'a : not struct and 'a : equality
 
+  /// Returns a DVar which only emits changes when contiguous values are distinct.
   val distinctBy :
     ('a -> 'k) -> DVar<'a> -> DVar<'a>
     when 'a : not struct and 'k : equality and 'k : not struct
 
+  /// Returns a DVar which only emits changes when contiguous values are distinct.
   val distinct : DVar<'a> -> DVar<'a> when 'a : not struct and 'a : equality
 
+  /// Alias for DVar.get.
   val extract : (DVar<'a> -> 'a)
 
   /// Creates a DVar<'b> using the value extracted from the argument
@@ -139,7 +140,8 @@ module DVar =
   ///     one does not get any special composition privileges.
   val extend : (DVar<'a> -> 'b) -> DVar<'a> -> DVar<'b> when 'b : not struct
 
-  val choice : Choice<DVar<'a>,DVar<'b>> -> DVar<Choice<'a,'b>>
+  /// Distributes Choice over a DVar.
+  val choice : Choice<DVar<'a>, DVar<'b>> -> DVar<Choice<'a, 'b>>
 
   val observe : DVar<'a> -> 'a * IEvent<'a>
 

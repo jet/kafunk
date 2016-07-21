@@ -70,6 +70,7 @@
     <None Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
     <None Include="Fetch.fsx" />
+    <None Include="Consumer.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
