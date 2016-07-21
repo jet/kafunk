@@ -73,7 +73,7 @@ with
     {
       topics = topics
       requiredAcks = defaultArg requiredAcks RequiredAckOptions.Local
-      compression = defaultArg compression Compression.None
+      compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
       partition = partition
     }

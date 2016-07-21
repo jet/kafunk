@@ -35,7 +35,7 @@ module Protocol =
     /// Kafka message attributes.
     type Attributes = int8
 
-    module Compression =
+    module CompressionCodec =
 
         [<Literal>]
         let Mask = 7uy
