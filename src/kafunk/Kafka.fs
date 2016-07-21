@@ -592,7 +592,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     bootstrapChanField <- ch }
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
-  member private __.ApplyMetadata (metadata:MetadataResponse) = async {
+  member internal __.ApplyMetadata (metadata:MetadataResponse) = async {
     Log.info "applying cluster metadata for topics=%s" (String.concat ", " (metadata.topicMetadata |> Seq.map (fun m -> m.topicName)))
     let hostByNode' =
       metadata.brokers
@@ -650,15 +650,29 @@ module Kafka =
   let metadata (c:KafkaConn) (req:Metadata.Request) : Async<MetadataResponse> =
     Api.metadata c.Chan req
 
-  let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> =
-    Api.fetch c.Chan req
+  let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> = async {
+    let bootChan = c.Chan
+    let topics = Array.map fst req.topics
+    // TODO: only do this when we're missing topic metadata
+    let! metadata = Api.metadata bootChan (Metadata.Request(topics))
+    do! c.ApplyMetadata(metadata)
+    return! Api.fetch bootChan req }
 
-  let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> =
+  let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> = async {
     let chan = c.Chan
-    Api.produce chan req
+    let topics = Array.map fst req.topics
+    // TODO: only do this when we're missing topic metadata
+    let! metadata = Api.metadata chan (Metadata.Request(topics))
+    do! c.ApplyMetadata(metadata)
+    return! Api.produce chan req }
 
-  let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> =
-    Api.offset c.Chan req
+  let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> = async {
+    let chan = c.Chan
+    let topics = Array.map fst req.topics
+    // TODO: only do this when we're missing topic metadata
+    let! metadata = Api.metadata chan (Metadata.Request(topics))
+    do! c.ApplyMetadata(metadata)
+    return! Api.offset chan req }
 
   let groupCoordinator (c:KafkaConn) (req:GroupCoordinatorRequest) : Async<GroupCoordinatorResponse> =
     Api.groupCoordinator c.Chan req
