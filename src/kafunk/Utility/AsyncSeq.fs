@@ -245,7 +245,7 @@ module AsyncSeq =
       let! b = Async.StartChild(f a)
       mb |> Mb.put (Some b)
     })
-    mb.Put None
+    mb |> Mb.put None
     let rec loop () = async {
       let! b = mb |> Mb.take
       match b with

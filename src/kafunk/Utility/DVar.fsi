@@ -36,11 +36,6 @@ module DVar =
   /// When the argument changes, the dependant variable changes.
   val map : ('a -> 'b) -> DVar<'a> -> DVar<'b> when 'b : not struct
 
-  /// Creates a DVar based on two argument DVars, one storing a function value
-  /// and the other a value to apply the function to. The resulting DVar contains
-  /// the resulting value and changes based on the two DVars.
-  val ap : DVar<('a -> 'b)> -> DVar<'a> -> DVar<'b> when 'b : not struct
-
   /// Combine values of two DVars using the specified function.
   val combineLatestWith :
     ('a -> 'b -> 'c) -> DVar<'a> -> DVar<'b> -> DVar<'c>
