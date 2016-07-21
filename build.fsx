@@ -53,7 +53,7 @@ let testAssemblies = "tests/**/bin/Release/*Tests*.dll"
 
 // Git configuration (used for publishing documentation in gh-pages branch)
 // The profile where the project is posted
-let gitOwner = "jet"
+let gitOwner = environVarOrDefault "gitOwner" "jet"
 let gitHome = "https://github.com/" + gitOwner
 
 // The name of the project on GitHub
@@ -374,9 +374,9 @@ Target "All" DoNothing
   ==> "AssemblyInfo"
   ==> "Build"
   ==> "CopyBinaries"
+  ==> "RunTests"
   ==> "GenerateReferenceDocs"
   ==> "GenerateDocs"
-  ==> "RunTests"
   ==> "All"
   =?> ("ReleaseDocs",isLocalBuild)
 
