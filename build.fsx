@@ -5,6 +5,7 @@
 #r @"packages/build/FAKE/tools/FakeLib.dll"
 open Fake
 open Fake.Git
+open Fake.Testing
 open Fake.AssemblyInfoFile
 open Fake.ReleaseNotesHelper
 open Fake.UserInputHelper
@@ -144,11 +145,8 @@ Target "Build" (fun _ ->
 
 Target "RunTests" (fun _ ->
     !! testAssemblies
-    |> NUnit (fun p ->
-        { p with
-            DisableShadowCopy = true
-            TimeOut = TimeSpan.FromMinutes 20.
-            OutputFile = "TestResults.xml" })
+    |> NUnit3 (fun p ->
+        { p with TimeOut = TimeSpan.FromMinutes 20.})
 )
 
 #if MONO
