@@ -55,13 +55,12 @@ the project and submit pull requests. If you're adding a new public API, please 
 consider adding [samples][content] that can be turned into a documentation. You might
 also want to read the [library design notes][readme] to understand how it works.
 
-The library is available under Public Domain license, which allows modification and 
-redistribution for both commercial and non-commercial purposes. For more information see the 
+The library is available under Apache 2.0. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/fsprojects/kafunk/tree/master/docs/content
-  [gh]: https://github.com/fsprojects/kafunk
-  [issues]: https://github.com/fsprojects/kafunk/issues
-  [readme]: https://github.com/fsprojects/kafunk/blob/master/README.md
-  [license]: https://github.com/fsprojects/kafunk/blob/master/LICENSE.txt
+  [content]: https://github.com/jet/kafunk/docs/content
+  [gh]: https://github.com/jet/kafunk
+  [issues]: https://github.com/jet/kafunk/issues
+  [readme]: https://github.com/jet/kafunk/project/README.md
+  [license]: https://github.com/jet/kafunk/project/LICENSE.txt
 *)
