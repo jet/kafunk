@@ -6,6 +6,7 @@ group Build
   nuget FSharp.Formatting
 
   github fsharp/FAKE modules/Octokit/Octokit.fsx
+  nuget Snappy.NET
 
 group Test
   source https://api.nuget.org/v3/index.json

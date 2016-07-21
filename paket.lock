@@ -4,6 +4,7 @@ GROUP Build
 NUGET
   remote: http://api.nuget.org/v3/index.json
     FAKE (4.34.1)
+    Crc32C.NET (1.0.5)
     FSharp.Compiler.Service (2.0.0.6)
     FSharp.Formatting (2.14.4)
       FSharp.Compiler.Service (2.0.0.6)
@@ -18,6 +19,8 @@ NUGET
       Microsoft.Bcl.Build (>= 1.0.14)
     Octokit (0.20)
       Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
+    Snappy.NET (1.1.1.8)
+      Crc32C.NET (>= 1.0.5)
     SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
