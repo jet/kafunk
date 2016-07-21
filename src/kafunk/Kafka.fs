@@ -519,28 +519,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
     let! ch = Conn.connect(ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
-    // TODO: Reload topics DVar here! This hack is for testing.
-    // This really need to be done by the cluster not here.
-    // Let's establish that the lower level API should always
-    // assume the specific connection has been selected. The
-    // routing should be moved to the cluster API.
     Log.info "connected to host=%s port=%i node_id=%A" host port nodeId
-    //if nodeId.IsSome then
-    //    hostByNode |> DVar.update (Map.add nodeId.Value (host, port))
-    // Perhaps we can get the metadata here. In a more complete design, we'd
-    // want a metadata manager handling these sorts of things. The state of
-    // fetching metadata matters and failure to get metadata updates needs to
-    // be visible. We'll wrap these into mailbox processors. To this extent
-    // we'll have a reliable way to detect errors in a consistent way rather
-    // than have too many places in our code to pick them up. DVars should be
-    // used to deal with shared state (ETS-like configuration caches). The
-    // library for these caches should effectively look like function calls
-    // or at least simple values. DVars and MailboxProcessors should not
-    // become API.
-    // Let's start a new project in this solution which does only the
-    // publishing side with the basic cluster processor idea (instead of
-    // building on top of the current project, which is overcomplicated).
-    //hostByTopic |> DVar.update (Map.add ("test1", 0) (host, port))
     nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
