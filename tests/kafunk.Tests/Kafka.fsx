@@ -1,4 +1,4 @@
-﻿#r "bin/Release/kafunk.dll"
+﻿#r "bin/debug/kafunk.dll"
 
 open Kafunk
 open Kafunk.Protocol
@@ -6,7 +6,7 @@ open Kafunk.Protocol
 //Log.To.console "*" NLog.LogLevel.Trace
 let log = Log.create __SOURCE_FILE__
 
-let conn = Kafka.connHostAndPort "10.51.22.43" 32822 //"10.51.22.43" //"10.211.55.2" 32777
+let conn = Kafka.connHostAndPort "127.0.0.1" 9092 //"10.51.22.43" //"10.211.55.2" 32777
 
 module MetadataDemo =
 
