@@ -2,7 +2,6 @@
 #time "on"
 
 open Kafunk
-open Kafunk.Protocol
 
 // Replace this with an initial broker you wish to use.
 let conn = Kafka.connHostAndPort "127.0.0.1" 9092

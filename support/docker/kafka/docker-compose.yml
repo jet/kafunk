@@ -8,7 +8,7 @@ kafka:
   links:
     - zookeeper:zk
   environment:
-    KAFKA_ADVERTISED_HOST_NAME: 10.51.23.113
+    KAFKA_ADVERTISED_HOST_NAME: 10.51.21.99
     KAFKA_CREATE_TOPICS: "TopicA:1:1,TopicB:8:1"
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
