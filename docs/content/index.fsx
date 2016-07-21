@@ -4,48 +4,62 @@
 #I "../../bin"
 
 (**
-kafunk
+Kafunk - F# Kafka client
 ======================
-
-Documentation
-
-<div class="row">
-  <div class="span1"></div>
-  <div class="span6">
-    <div class="well well-small" id="nuget">
-      The kafunk library can be <a href="https://nuget.org/packages/kafunk">installed from NuGet</a>:
-      <pre>PM> Install-Package kafunk</pre>
-    </div>
-  </div>
-  <div class="span1"></div>
-</div>
 
 Example
 -------
 
-This example demonstrates using a function defined in this sample library.
+This example demonstrates a few uses of the Kafka client.
 
 *)
+
 #r "kafunk.dll"
 open Kafunk
 
-printfn "hello = %i" <| Library.hello 0
+let conn = Kafka.connHost "existentialhost"
+
+
+let metadata = Kafka.metadata conn (Metadata.Request([|"absurd-topic"|])) |> Async.RunSynchronously
+
+for b in metadata.brokers do
+  printfn "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId
+
+for t in metadata.topicMetadata do
+  printfn "topic|topic_name=%s topic_error_code=%i" t.topicName t.topicErrorCode
+  for p in t.partitionMetadata do
+    printfn "topic|topic_name=%s|partition|partition_id=%i" t.topicName p.partitionId
+
+
+
+let producerCfg = 
+  ProducerCfg.create ([|"absurd-topic"|], Partitioner.konst 0, requiredAcks=RequiredAcks.Local)
+
+let producer = 
+  Producer.createAsync conn producerCfg 
+  |> Async.RunSynchronously
+
+let prodRes =
+  Producer.produceSingle producer ("absurd-topic", [| ProducerMessage.ofBytes ("hello world"B) |])
+  |> Async.RunSynchronously
+
+for (tn,offsets) in prodRes.topics do
+  printfn "topic_name=%s" tn
+  for (p,ec,offset) in offsets do
+    printfn "partition=%i error_code=%i offset=%i" p ec offset
+
+
+
+let fetchRes = 
+  Kafka.fetch conn (FetchRequest.ofTopicPartition "absurd-topic" 0 0L 0 0 1000) 
+  |> Async.RunSynchronously
+
+for (tn,pmds) in fetchRes.topics do
+  for (p,ec,hmo,mss,ms) in pmds do
+    printfn "topic=%s partition=%i error=%i" tn p ec
+
 
 (**
-Some more info
-
-Samples & documentation
------------------------
-
-The library comes with comprehensible documentation. 
-It can include tutorials automatically generated from `*.fsx` files in [the content folder][content]. 
-The API reference is automatically generated from Markdown comments in the library implementation.
-
- * [Tutorial](tutorial.html) contains a further explanation of this sample library.
-
- * [API Reference](reference/index.html) contains automatically generated documentation for all types, modules
-   and functions in the library. This includes additional brief samples on using most of the
-   functions.
  
 Contributing and copyright
 --------------------------
@@ -61,6 +75,7 @@ The library is available under Apache 2.0. For more information see the
   [content]: https://github.com/jet/kafunk/docs/content
   [gh]: https://github.com/jet/kafunk
   [issues]: https://github.com/jet/kafunk/issues
-  [readme]: https://github.com/jet/kafunk/project/README.md
+  [readme]: https://github.com/jet/kafunk/project/README.md 
   [license]: https://github.com/jet/kafunk/project/LICENSE.txt
+  
 *)

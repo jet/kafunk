@@ -10,7 +10,6 @@ open Kafunk.Protocol
 module Consumer =
 
   type ConsumerConfig = {
-    //bootstrapServers : Uri[] // kafka://127.0.0.1:9092
     groupId : GroupId
     topics : TopicName[]
     sessionTimeout : SessionTimeout
@@ -29,7 +28,6 @@ module Consumer =
     with
       static member create (groupId:GroupId, topics:TopicName[]) =
         {
-          //ConsumerConfig.bootstrapServers = bootstrapServers
           groupId = groupId
           topics = topics
           sessionTimeout = 10000
@@ -51,18 +49,6 @@ module Consumer =
     | Largest
     | Disable
     | Anything
-
-
-
-//  type ConsumerState =
-//    | Down
-//    | Discover of GroupId
-//    | GroupFollower of generationId:GenerationId * LeaderId * MemberId * GroupProtocol
-//    | GroupLeader of generationId:GenerationId * LeaderId * MemberId * Members * GroupProtocol
-//    | PartOfGroup
-//    | RediscoverCoordinator
-//    | StoppedConsumption
-//    | Error
 
 (*
 
@@ -223,7 +209,6 @@ module Consumer =
       | _ ->
         return ConsumerGroupResponse.SessionTimeout }
 
-
     // sent to group coordinator
     let commitOffset (generationId,memberId) (topic:TopicName, partition:Partition, offset:Offset) = async {
       let req =
@@ -251,6 +236,7 @@ module Consumer =
         let partition,_ec,_hmo,_mss,ms = partitions.[0]
         let nextOffset = MessageSet.nextOffset ms
         let commit = commitOffset (generationId,memberId) (topic, partition, offset)
+        let ms = Compression.decompress ms
         yield ms,commit
         yield! go nextOffset }
       // TODO: fetch offset
@@ -268,14 +254,12 @@ module Consumer =
       let groupProtocols =
         GroupProtocols(
           [| assignmentStrategy, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta |])
-
       let memberId : MemberId = "" // assigned by coordinator
       let joinGroupReq = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, memberId, ProtocolType.consumer, groupProtocols)
       let! joinGroupRes = Kafka.joinGroup conn joinGroupReq
       // TODO: or failure
       let generationId = joinGroupRes.generationId
       let memberId = joinGroupRes.memberId
-
       // is leader?
       if (joinGroupRes.leaderId = joinGroupRes.memberId) then
         // determine assignments
@@ -286,36 +270,22 @@ module Consumer =
             [| "" (*memberId*), toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment |])
         let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, groupAssignment)
         let! _syncRes = Kafka.syncGroup conn syncReq
-
-
         // TODO: get metadata?
-
         return failwith ""
       else
-
         let syncReq = SyncGroupRequest(cfg.groupId, generationId, memberId, GroupAssignment([||]))
         let! syncRes = Kafka.syncGroup conn syncReq
         let (memberAssignment:ConsumerGroupMemberAssignment,_) = ConsumerGroupMemberAssignment.read syncRes.memberAssignment
-
         // the partitions assigned to this member
         let topicPartitions = memberAssignment.partitionAssignment.assignments
-
-
         // the topic,partition,stream combinations assigned to this member
         let topicStreams =
           topicPartitions
           |> Array.collect (fun (t,ps) -> ps |> Array.map (fun p -> t,p))
           |> Array.map (fun (t,p) -> t,p, stream (generationId,memberId) (t,p))
-
-
         // return and wait for errors, which will stop all child streams
         // and return a new state
-
         return Cons ( (generationId,memberId,topicStreams), go ())
-
       }
-
-
     return! go ()
-
   }

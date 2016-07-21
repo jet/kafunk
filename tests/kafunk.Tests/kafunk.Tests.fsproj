@@ -63,10 +63,6 @@
   -->
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
-    <Compile Include="..\..\paket-files\test\forki\FsUnit\FsUnit.fs">
-      <Paket>True</Paket>
-      <Link>FsUnit.fs</Link>
-    </Compile>
     <None Include="paket.references" />
     <Compile Include="CodecTests.fs" />
     <None Include="Kafka.fsx" />
@@ -74,6 +70,7 @@
     <None Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
     <Compile Include="ProducerTests.fs" />
+    <None Include="Fetch.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

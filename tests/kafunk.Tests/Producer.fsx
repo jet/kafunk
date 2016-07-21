@@ -1,38 +1,26 @@
-﻿#r "bin/debug/kafunk.dll"
+#r "bin/Debug/kafunk.dll"
 #time "on"
 
-open System
-open System.IO
-open System.Net
-open System.Net.Sockets
-open System.Text
-open System.Collections.Generic
-open System.Collections.Concurrent
-open System.Threading
-open System.Threading.Tasks
 open Kafunk
 open Kafunk.Protocol
 
-let Log = Log.create __SOURCE_FILE__
+// Replace this with an initial broker you wish to use.
+let conn = Kafka.connHostAndPort "127.0.0.1" 9092
 
-let conn = Kafka.connHostAndPort "localhost" 9092
-
-let cfg = ProducerCfg.create ([|"test"|], Partitioner.konst 0, requiredAcks=RequiredAckOptions.None)
+let producerCfg =
+  ProducerCfg.create ([|"test-topic"|], Partitioner.konst 0, requiredAcks=RequiredAcks.Local)
 
 let producer =
-  Producer.createAsync conn cfg |> Async.RunSynchronously
-
-let res =
-  Producer.produceSingle producer ("test", [| ProducerMessage.ofBytes ("hello world"B) |])
+  Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
 
-Log.info "received produce response"
+let prodRes =
+  Producer.produceSingle producer ("test-topic", [| ProducerMessage.ofBytes ("hello world"B) |])
+  |> Async.RunSynchronously
 
-res.topics
-|> Array.iter (fun (tn,offsets) ->
-  Log.info "topic_name=%s" tn
-  offsets
-  |> Array.iter (fun (p,ec,offset) ->
-    Log.info "partition=%i error_code=%i offset=%i" p ec offset
-  )
-)
+printfn "receiving produce response"
+
+for (tn,offsets) in prodRes.topics do
+  printfn "topic_name=%s" tn
+  for (p,ec,offset) in offsets do
+    printfn "partition=%i error_code=%i offset=%i" p ec offset

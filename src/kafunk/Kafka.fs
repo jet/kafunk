@@ -55,13 +55,13 @@ module ProduceRequest =
 
   let ofMessageSet topic partition ms requiredAcks timeout =
     ProduceRequest(
-      (defaultArg requiredAcks RequiredAckOptions.Local),
+      (defaultArg requiredAcks RequiredAcks.Local),
       (defaultArg timeout 1000),
       [| topic, [| partition, MessageSet.size ms, ms |] |] )
 
   let ofMessageSets topic ms requiredAcks timeout =
     ProduceRequest(
-      (defaultArg requiredAcks RequiredAckOptions.Local),
+      (defaultArg requiredAcks RequiredAcks.Local),
       (defaultArg timeout 1000),
       [| topic, ms |> Array.map (fun (p, ms) -> (p, MessageSet.size ms, ms)) |])
 
@@ -93,7 +93,7 @@ module internal ResponseEx =
     /// If a request does not expect a response, returns the default response.
     static member awaitResponse (x:RequestMessage) =
       match x with
-      | RequestMessage.Produce req when req.requiredAcks = RequiredAckOptions.None ->
+      | RequestMessage.Produce req when req.requiredAcks = RequiredAcks.None ->
         Some(ResponseMessage.ProduceResponse(new ProduceResponse([||])))
       | _ -> None
 
@@ -423,7 +423,6 @@ module internal Conn =
 
     return session.Send }
 
-
 // http://kafka.apache.org/documentation.html#connectconfigs
 
 /// Kafka connection configuration.
@@ -525,10 +524,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     // Let's establish that the lower level API should always
     // assume the specific connection has been selected. The
     // routing should be moved to the cluster API.
-    Log.info "connecting to a new host"
-    if nodeId.IsSome then
-        Log.info "node id inserted to hostByNode: %A" nodeId.Value
-        hostByNode |> DVar.update (Map.add nodeId.Value (host, port))
+    Log.info "connected to host=%s port=%i node_id=%A" host port nodeId
+    //if nodeId.IsSome then
+    //    hostByNode |> DVar.update (Map.add nodeId.Value (host, port))
     // Perhaps we can get the metadata here. In a more complete design, we'd
     // want a metadata manager handling these sorts of things. The state of
     // fetching metadata matters and failure to get metadata updates needs to
@@ -595,6 +593,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member private __.ApplyMetadata (metadata:MetadataResponse) = async {
+    Log.info "applying cluster metadata for topics=%s" (String.concat ", " (metadata.topicMetadata |> Seq.map (fun m -> m.topicName)))
     let hostByNode' =
       metadata.brokers
       |> Seq.map (fun b -> b.nodeId, (b.host, b.port))
@@ -607,11 +606,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
+    Log.info "getting cluster metadata for topics=%s" (String.concat ", " topics)
     let! metadata = Api.metadata bootstrapChan (Metadata.Request(topics))
     do! this.ApplyMetadata metadata
     return metadata }
 
-  /// Gets the group coordinator for the specified group, connects to it, adds to routing table.
+  /// Gets the group coordinator for the specified group, connects to it, and updates internal routing table.
   member internal __.ConnectGroupCoordinator (groupId:GroupId) =
     connectGroupCoordinator groupId
 

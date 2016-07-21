@@ -12,4 +12,3 @@ group Test
 
   nuget NUnit
   nuget NUnit.Runners
-  github forki/FsUnit FsUnit.fs

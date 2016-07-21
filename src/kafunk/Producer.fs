@@ -72,8 +72,8 @@ with
   static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
     {
       topics = topics
-      requiredAcks = defaultArg requiredAcks RequiredAckOptions.Local
-      compression = defaultArg compression Compression.None
+      requiredAcks = defaultArg requiredAcks RequiredAcks.Local
+      compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
       partition = partition
     }
@@ -93,6 +93,7 @@ module Producer =
       |> Seq.map (fun tmd -> tmd.topicName,tmd)
       |> Map.ofSeq
 
+
     let produce (ms:MessageBundle[]) = async {
       let ms =
         ms
@@ -101,7 +102,8 @@ module Producer =
             pms
             |> Seq.groupBy (fun pm -> cfg.partition (tn, Map.find tn metadataByTopic, pm))
             |> Seq.map (fun (p,pms) ->
-              let ms = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) |> MessageSet.ofMessages
+              let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
+              let ms = Compression.compress cfg.compression messages
               p,ms)
             |> Seq.toArray
           tn,ms)
