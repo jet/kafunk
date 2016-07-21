@@ -3,5 +3,3 @@ group Test
 NUnit
 
 NUnit.Runners
-
-File:FsUnit.fs .
