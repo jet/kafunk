@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <title>Namespaces - kafunk</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="description" content=""/>
+    <meta name="author" content="Jet.com"/>
+
+    <script src="https://code.jquery.com/jquery-1.8.0.js"></script>
+    <script src="https://code.jquery.com/ui/1.8.23/jquery-ui.js"></script>
+    <script src="https://netdna.bootstrapcdn.com/twitter-bootstrap/2.2.1/js/bootstrap.min.js"></script>
+    <link href="https://netdna.bootstrapcdn.com/twitter-bootstrap/2.2.1/css/bootstrap-combined.min.css" rel="stylesheet"/>
+
+    <link type="text/css" rel="stylesheet" href="/kafunk/content/style.css" />
+    <script type="text/javascript" src="/kafunk/content/tips.js"></script>
+    <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="container">
+      <div class="masthead">
+        <ul class="nav nav-pills pull-right">
+          <li><a href="http://fsharp.org">fsharp.org</a></li>
+          <li><a href="http://github.com/jet/kafunk">github page</a></li>
+        </ul>
+        <h3 class="muted"><a href="/kafunk/index.html">kafunk</a></h3>
+      </div>
+      <hr />
+      <div class="row">
+        <div class="span9" id="main">
+          
+
+<h1>kafunk</h1>
+
+
+  <h2>Kafunk Namespace</h2>
+    <div>
+      <table class="table table-bordered type-list">
+    <thead>
+      <tr><td>Type</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncch-1.html">AsyncCh<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncevt-1.html">AsyncEvt<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncevtsrc-1.html">AsyncEvtSrc<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncobs-2.html">AsyncObs<'a, 'b></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncobs-1.html">AsyncObs<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncpipe-2.html">AsyncPipe<'a, 'b></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncpipe-1.html">AsyncPipe<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncseq-1.html">AsyncSeq<'T></a>
+          </td>
+          <td class="xmldoc"><p>An asynchronous sequence represents a delayed computation that can be
+started to produce either Cons value consisting of the next element of the
+sequence (head) together with the next asynchronous sequence (tail) or a
+special value representing the end of the sequence (Nil)</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncseqinner-1.html">AsyncSeqInner<'T></a>
+          </td>
+          <td class="xmldoc"><p>The interanl type that represents a value returned as a result of
+evaluating a step of an asynchronous sequence</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-chan.html">Chan</a>
+          </td>
+          <td class="xmldoc"><p>A request/reply channel to Kafka.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-correlationid.html">CorrelationId</a>
+          </td>
+          <td class="xmldoc"><p>A correlation id.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-dvar-1.html">DVar<'a></a>
+          </td>
+          <td class="xmldoc"><p>A dependant variable.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-ivar-1.html">IVar<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-kafkaconn.html">KafkaConn</a>
+          </td>
+          <td class="xmldoc"><p>A connection to a Kafka cluster.
+This is a stateful object which maintains request/reply sessions with brokers.
+It acts as a context for API operations, providing filtering and fault tolerance.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-kafkaconncfg.html">KafkaConnCfg</a>
+          </td>
+          <td class="xmldoc"><p>Kafka connection configuration.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-loglevel.html">LogLevel</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-logger.html">Logger</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-mb-1.html">Mb<'a></a>
+          </td>
+          <td class="xmldoc"><p>An unbounded FIFO mailbox.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-messagebundle.html">MessageBundle</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-objectpool-1.html">ObjectPool<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-producer.html">Producer</a>
+          </td>
+          <td class="xmldoc"><p>A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-producercfg.html">ProducerCfg</a>
+          </td>
+          <td class="xmldoc"><p>Producer configuration.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-producermessage.html">ProducerMessage</a>
+          </td>
+          <td class="xmldoc"><p>A producer message.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-reqrepsession-3.html">ReqRepSession<'a, 'b, 's></a>
+          </td>
+          <td class="xmldoc"><p>A multiplexed request/reply session.
+Note a session is stateful in that it maintains state between requests and responses
+and in that starts a process to read the input stream.
+Send failures are propagated to the caller who is responsible for recreating the session.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-sessionmessage.html">SessionMessage</a>
+          </td>
+          <td class="xmldoc"><p>A client creates a session message, assigns a unique tx id and waits for a response from the server.
+A server receives a session message, and sends a response with the same tx id.</p>
+
+</td>
+        </tr>
+    </tbody>
+  </table>
+  <table class="table table-bordered module-list">
+    <thead>
+      <tr><td>Module</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-arraymodule.html">Array</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncch.html">AsyncCh</a>
+          </td>
+          <td class="xmldoc"><p>Operations on channels.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncchoice.html">AsyncChoice</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncevt.html">AsyncEvt</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncevtsrc.html">AsyncEvtSrc</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncex.html">AsyncEx</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncobs.html">AsyncObs</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncseq.html">AsyncSeq</a>
+          </td>
+          <td class="xmldoc"><p>Module with helper functions for working with asynchronous sequences</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncseqextensions.html">AsyncSeqExtensions</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-aysncpipe.html">AysncPipe</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-binary.html">Binary</a>
+          </td>
+          <td class="xmldoc"><p>The binary module offers functions for working with octet arrays. The
+primary concepts are read and write functions which operate on preallocated
+arrays. The size* functions are used to decide what the byte-size of a
+given structure would be if written. This is used when preallocating the
+array of bytes used to back the buffer (represented as an
+ArraySegment<byte> internally).</p>
+<p>Since the segments returned are new values one can keep old Binary.Segment
+instances to allow referencing to old frames of refernce. This comes into
+use when calculating things like checksums after writing data. So, while
+the underlying bytes are mutable, the segments themsevles are not treated
+as such.</p>
+<p>The peek and poke operations are just like read and write respectively
+other than the fact that they don't return a new buffer segment window
+adjusted to start right after the data read. Read and write are implemented
+in terms of these lower level operations.</p>
+<p>The types the buffer is designed to work with are signed. This is inherited
+from the design documents of the Kafka protocol which is inheriting Java's
+lack of unsigned types. So when you see int8 rather than byte, it's not a
+mistake.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-choice.html">Choice</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-consumer.html">Consumer</a>
+          </td>
+          <td class="xmldoc"><p>High-level consumer API.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-crc.html">Crc</a>
+          </td>
+          <td class="xmldoc"><p>CRC-32</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-dvarmodule.html">DVar</a>
+          </td>
+          <td class="xmldoc"><p>Operations on dependant variables.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-dictmodule.html">Dict</a>
+          </td>
+          <td class="xmldoc"><p>Basic operations on dictionaries.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-fetchrequest.html">FetchRequest</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-framing.html">Framing</a>
+          </td>
+          <td class="xmldoc"><p>Stream framing</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-ivar.html">IVar</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-kafkamodule.html">Kafka</a>
+          </td>
+          <td class="xmldoc"><p>Kafka API.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-logmodule.html">Log</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-loggerex.html">LoggerEx</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-mapmodule.html">Map</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-mb.html">Mb</a>
+          </td>
+          <td class="xmldoc"><p>Operations on unbounded FIFO mailboxes.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-message.html">Message</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-messageset.html">MessageSet</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-partitionermodule.html">Partitioner</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-prelude.html">Prelude</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-producerequest.html">ProduceRequest</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-producermodule.html">Producer</a>
+          </td>
+          <td class="xmldoc"><p>High-level producer API.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-protocol.html">Protocol</a>
+          </td>
+          <td class="xmldoc"><p>The Kafka RPC protocol.
+<a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol">https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol</a></p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-seqmodule.html">Seq</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-sessionmodule.html">Session</a>
+          </td>
+          <td class="xmldoc"><p>Operations on network sessions (layer 5).</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-socketmodule.html">Socket</a>
+          </td>
+          <td class="xmldoc"><p>Operations on Berkley sockets.</p>
+
+</td>
+        </tr>
+    </tbody>
+  </table>
+
+    </div>
+
+        </div>
+        <div class="span3">
+          <img src="/kafunk/img/logo.png" alt="F# Project" style="width:150px;margin:10px" />  
+          <ul class="nav nav-list" id="menu" style="margin-top: 20px;">
+            <li class="nav-header">kafunk</li>
+            <li><a href="/kafunk/index.html">Home page</a></li>
+            <li class="divider"></li>
+            <li><a href="http://nuget.org/packages/kafunk">Get Library via NuGet</a></li>
+            <li><a href="http://github.com/jet/kafunk">Source Code on GitHub</a></li>
+            <li><a href="/kafunk/license.html">License</a></li>
+            <li><a href="/kafunk/release-notes.html">Release Notes</a></li>
+            
+            <li class="nav-header">Getting started</li>
+            <li><a href="/kafunk/tutorial.html">Sample tutorial</a></li>
+
+            <li class="nav-header">Documentation</li>
+            <li><a href="/kafunk/reference/index.html">API Reference</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <a href="http://github.com/jet/kafunk"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"/></a>
+  </body>
+  </html>
