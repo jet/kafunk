@@ -1,15 +1,16 @@
-﻿#r "bin/release/kafunk.dll"
+﻿#r "bin/Debug/kafunk.dll"
 #time "on"
 
 open Kafunk
 
-let conn = Kafka.connHost "localhost"
+// Replace this with an initial broker you wish to use.
+let conn = Kafka.connHostAndPort "127.0.0.1" 9092
 
-let producerCfg = 
+let producerCfg =
   ProducerCfg.create ([|"test-topic"|], Partitioner.konst 0, requiredAcks=RequiredAcks.Local)
 
-let producer = 
-  Producer.createAsync conn producerCfg 
+let producer =
+  Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
 
 let prodRes =
