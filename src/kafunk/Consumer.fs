@@ -226,7 +226,7 @@ module Consumer =
       return offset }
 
     // fetch sent to broker in metadata or coordinator?
-    let stream (generationId,memberId) (topic:TopicName, partition:Partition) =
+    let stream (generationId,memberId) (topic:TopicName, partition:Partition) : AsyncSeq<MessageSet * Async<unit>> =
       let rec go (offset:FetchOffset) = asyncSeq {
         let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [|partition, offset, cfg.fetchBuffer|] |])
         // TODO: wait for state change (kill) signal
