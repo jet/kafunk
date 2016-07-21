@@ -423,7 +423,6 @@ module internal Conn =
 
     return session.Send }
 
-
 // http://kafka.apache.org/documentation.html#connectconfigs
 
 /// Kafka connection configuration.
