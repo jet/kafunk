@@ -2,6 +2,7 @@ namespace Kafunk
 
 /// The Kafka RPC protocol.
 /// https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
+[<AutoOpen>]
 module Protocol =
 
     type ApiKey =
@@ -62,7 +63,9 @@ module Protocol =
     /// before responding to the request.
     type RequiredAcks = int16
 
-    module RequiredAckOptions =
+    /// Required acks options.
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module RequiredAcks =
 
         /// No acknoweldgement required.
         let None : RequiredAcks = 0s
@@ -373,10 +376,11 @@ module Protocol =
 
         /// Request metadata on all or a specific set of topics.
         /// Can be routed to any node in the bootstrap list.
-        [<Struct>]
         type Request =
-            val topicNames : TopicName[]
-            new (topicNames) = { topicNames = topicNames }
+            struct
+                val topicNames : TopicName[]
+                new (topicNames) = { topicNames = topicNames }
+            end
 
         let sizeRequest (x:Request) =
                 Binary.sizeArray x.topicNames Binary.sizeString
