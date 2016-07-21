@@ -18,7 +18,7 @@ let ``Message Compression with Gzip`` () =
         Compression.gzip [message; message2]
 
     let outputMessageSet =
-        Compression.decompress inputMessage
+        Compression.decompressMessage inputMessage
 
     let messages = outputMessageSet.messages
     Assert.IsTrue (messages.Length = 2)

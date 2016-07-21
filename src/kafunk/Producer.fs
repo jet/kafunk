@@ -103,7 +103,7 @@ module Producer =
             |> Seq.groupBy (fun pm -> cfg.partition (tn, Map.find tn metadataByTopic, pm))
             |> Seq.map (fun (p,pms) ->
               let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
-              let ms = Compression.compressMessages cfg.compression messages
+              let ms = Compression.compress cfg.compression messages
               p,ms)
             |> Seq.toArray
           tn,ms)

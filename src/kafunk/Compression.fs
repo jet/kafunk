@@ -29,7 +29,7 @@ module Compression =
                 reraise()
         createMessage (outputStream.ToArray() |> Binary.ofArray) Protocol.CompressionCodec.GZIP
 
-    let decompress (message:Protocol.Message) =
+    let decompressMessage (message:Protocol.Message) =
         match (message.attributes &&& (sbyte Protocol.CompressionCodec.Mask)) |> byte with
         | Protocol.CompressionCodec.GZIP ->
             let inputBytes = message.value |> Binary.toArray
@@ -59,9 +59,14 @@ module Compression =
             // TODO: logging?
             failwithf "Unknown Codec: %i" codec
 
-    let compressMessages compression messages = 
+    let compress compression messages = 
         match compression with
         | Protocol.CompressionCodec.None -> MessageSet.ofMessages messages
         | Protocol.CompressionCodec.GZIP -> MessageSet.ofMessage <| gzip messages
         | Protocol.CompressionCodec.Snappy -> failwithf "Snappy not supported yet!"
         | _ -> failwithf "Incorrect compression codec %A" compression
+
+    let decompress (messageSet: Protocol.MessageSet) = 
+        match messageSet.messages with
+        | [| (_,_,message) |] -> decompressMessage message
+        | _ -> messageSet
