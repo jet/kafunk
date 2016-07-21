@@ -15,7 +15,7 @@ open Kafunk.Protocol
 
 let Log = Log.create __SOURCE_FILE__
 
-let conn = Kafka.connHost "localhost"
+let conn = Kafka.connHostAndPort "localhost" 9092
 
 let cfg = ProducerCfg.create ([|"test"|], Partitioner.konst 0, requiredAcks=RequiredAckOptions.None)
 
