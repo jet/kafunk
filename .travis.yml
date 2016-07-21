@@ -1,9 +1,16 @@
 language: csharp
-
+solution: kafunk.sln
 sudo: false  # use the new container-based Travis infrastructure 
 
 before_install:
   - chmod +x build.sh
- 
+
+install:
+  - nuget restore kafunk.sln
+  - nuget install NUnit.Runners -OutputDirectory testrunner
+
 script: 
   - ./build.sh All
+  - xbuild /p:Configuration=Release kafunk.sln
+  - mono ./testrunner/NUnit.Runners.*/tools/nunit-console.exe ./tests/kafunk.Tests/bin/Release/Kafunk.Tests.dll
+
