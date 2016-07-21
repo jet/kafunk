@@ -251,6 +251,7 @@ module Consumer =
         let partition,_ec,_hmo,_mss,ms = partitions.[0]
         let nextOffset = MessageSet.nextOffset ms
         let commit = commitOffset (generationId,memberId) (topic, partition, offset)
+        let ms = Compression.decompress ms
         yield ms,commit
         yield! go nextOffset }
       // TODO: fetch offset
