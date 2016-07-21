@@ -63,10 +63,6 @@
   -->
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
-    <Compile Include="..\..\paket-files\test\forki\FsUnit\FsUnit.fs">
-      <Paket>True</Paket>
-      <Link>FsUnit.fs</Link>
-    </Compile>
     <None Include="paket.references" />
     <Compile Include="CodecTests.fs" />
     <None Include="Kafka.fsx" />
