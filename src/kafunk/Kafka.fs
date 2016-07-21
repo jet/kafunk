@@ -519,28 +519,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
     let! ch = Conn.connect(ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
-    // TODO: Reload topics DVar here! This hack is for testing.
-    // This really need to be done by the cluster not here.
-    // Let's establish that the lower level API should always
-    // assume the specific connection has been selected. The
-    // routing should be moved to the cluster API.
     Log.info "connected to host=%s port=%i node_id=%A" host port nodeId
-    //if nodeId.IsSome then
-    //    hostByNode |> DVar.update (Map.add nodeId.Value (host, port))
-    // Perhaps we can get the metadata here. In a more complete design, we'd
-    // want a metadata manager handling these sorts of things. The state of
-    // fetching metadata matters and failure to get metadata updates needs to
-    // be visible. We'll wrap these into mailbox processors. To this extent
-    // we'll have a reliable way to detect errors in a consistent way rather
-    // than have too many places in our code to pick them up. DVars should be
-    // used to deal with shared state (ETS-like configuration caches). The
-    // library for these caches should effectively look like function calls
-    // or at least simple values. DVars and MailboxProcessors should not
-    // become API.
-    // Let's start a new project in this solution which does only the
-    // publishing side with the basic cluster processor idea (instead of
-    // building on top of the current project, which is overcomplicated).
-    //hostByTopic |> DVar.update (Map.add ("test1", 0) (host, port))
     nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
@@ -592,7 +571,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     bootstrapChanField <- ch }
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
-  member private __.ApplyMetadata (metadata:MetadataResponse) = async {
+  member internal __.ApplyMetadata (metadata:MetadataResponse) = async {
     Log.info "applying cluster metadata for topics=%s" (String.concat ", " (metadata.topicMetadata |> Seq.map (fun m -> m.topicName)))
     let hostByNode' =
       metadata.brokers
@@ -650,15 +629,29 @@ module Kafka =
   let metadata (c:KafkaConn) (req:Metadata.Request) : Async<MetadataResponse> =
     Api.metadata c.Chan req
 
-  let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> =
-    Api.fetch c.Chan req
+  let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> = async {
+    let bootChan = c.Chan
+    let topics = Array.map fst req.topics
+    // TODO: only do this when we're missing topic metadata
+    let! metadata = Api.metadata bootChan (Metadata.Request(topics))
+    do! c.ApplyMetadata(metadata)
+    return! Api.fetch bootChan req }
 
-  let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> =
+  let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> = async {
     let chan = c.Chan
-    Api.produce chan req
+    let topics = Array.map fst req.topics
+    // TODO: only do this when we're missing topic metadata
+    let! metadata = Api.metadata chan (Metadata.Request(topics))
+    do! c.ApplyMetadata(metadata)
+    return! Api.produce chan req }
 
-  let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> =
-    Api.offset c.Chan req
+  let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> = async {
+    let chan = c.Chan
+    let topics = Array.map fst req.topics
+    // TODO: only do this when we're missing topic metadata
+    let! metadata = Api.metadata chan (Metadata.Request(topics))
+    do! c.ApplyMetadata(metadata)
+    return! Api.offset chan req }
 
   let groupCoordinator (c:KafkaConn) (req:GroupCoordinatorRequest) : Async<GroupCoordinatorResponse> =
     Api.groupCoordinator c.Chan req
