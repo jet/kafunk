@@ -58,3 +58,10 @@ module Compression =
         | codec  ->
             // TODO: logging?
             failwithf "Unknown Codec: %i" codec
+
+    let compressMessages compression messages = 
+        match compression with
+        | Protocol.CompressionCodec.None -> MessageSet.ofMessages messages
+        | Protocol.CompressionCodec.GZIP -> MessageSet.ofMessage <| gzip messages
+        | Protocol.CompressionCodec.Snappy -> failwithf "Snappy not supported yet!"
+        | _ -> failwithf "Incorrect compression codec %A" compression
