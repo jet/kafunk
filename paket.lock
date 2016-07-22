@@ -1,4 +1,6 @@
-
+NUGET
+  remote: http://api.nuget.org/v3/index.json
+    FSharp.Core (3.1.2.5) - redirects: force
 
 GROUP Build
 NUGET
