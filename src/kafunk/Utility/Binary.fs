@@ -308,13 +308,13 @@ module Binary =
 
   let inline readArray (read : Reader<'a>) (buf : Segment) : 'a[] * Segment =
     let n, buf = buf |> readInt32
-    let mutable buf = buf
+    let buf = ref buf
     let arr = [|
       for _i = 0 to n - 1 do
-        let elem, buf' = read buf
+        let elem, buf' = read !buf
         yield elem
-        buf <- buf' |]
-    (arr, buf)
+        buf := buf' |]
+    (arr, !buf)
 
   let inline writeArrayNoSize buf arr (write : Writer<'a>) =
     let mutable buf = buf
@@ -323,12 +323,12 @@ module Binary =
     buf
 
   let inline readArrayByteSize size buf (read : Reader<'a>) =
-    let mutable buf = buf
-    let mutable consumed = 0
+    let buf = ref buf
+    let consumed = ref 0
     let arr = [|
-      while consumed < size do
-        let elem, buf' = read buf
+      while !consumed < size do
+        let elem, buf' = read !buf
         yield elem
-        consumed <- consumed + (buf'.Offset - buf.Offset)
-        buf <- buf' |]
-    (arr, buf)
+        consumed := !consumed + (buf'.Offset - (!buf).Offset)
+        buf := buf' |]
+    (arr, !buf)
