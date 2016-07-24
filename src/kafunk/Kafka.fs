@@ -611,11 +611,13 @@ module Kafka =
   let conn cfg =
     connAsync cfg |> Async.RunSynchronously
 
+  // Creates an async connection to a Kafka host
   let connHostAsync (host:string) =
     let ub = UriBuilder("kafka", host, DefaultPort)
     let cfg = KafkaConnCfg.ofBootstrapServers [ub.Uri]
     connAsync cfg
 
+  // Creates a connection to a Kafka host
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
