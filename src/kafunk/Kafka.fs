@@ -10,14 +10,18 @@ open Kafunk
 open Kafunk.Prelude
 open Kafunk.Protocol
 
+/// Public API to handle Kafka messages.
 module Message =
 
+  /// Creates a Kafka message
   let create value key attrs =
     Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Binary.empty)), value)
 
+  /// Creates a Kafka message from buffer data.
   let ofBuffer data key =
-    Message(0, 0y, 0y, (defaultArg  key (Binary.empty)), data)
+    Message(0, 0y, 0y, (defaultArg key (Binary.empty)), data)
 
+  /// Creates a Kafka message from a byte array.
   let ofBytes value key =
     let key =
       match key with
@@ -25,14 +29,17 @@ module Message =
       | None -> Binary.empty
     Message(0, 0y, 0y, key, Binary.ofArray value)
 
+  /// Creates a Kafka message from a string.
   let ofString (value:string) (key:string) =
     let value = Encoding.UTF8.GetBytes value |> Binary.ofArray
     let key = Encoding.UTF8.GetBytes key |> Binary.ofArray
     Message(0, 0y, 0y, key, value)
 
+  /// Extracts the value from a Kafka message and converts it to a string.
   let valueString (m:Message) =
     m.value |> Binary.toString
 
+  /// Extracts the key from a Kafka message and converts it to a string.  
   let keyString (m:Message) =
     if isNull m.value.Array then null
     else m.value |> Binary.toString
