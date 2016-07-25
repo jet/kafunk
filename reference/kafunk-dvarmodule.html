@@ -24,7 +24,7 @@
       <div class="masthead">
         <ul class="nav nav-pills pull-right">
           <li><a href="http://fsharp.org">fsharp.org</a></li>
-          <li><a href="https://github.com/jet/kafunk">github page</a></li>
+          <li><a href="http://github.com/jet/kafunk">github page</a></li>
         </ul>
         <h3 class="muted"><a href="/kafunk/index.html">Kafunk</a></h3>
       </div>
@@ -55,15 +55,37 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '154', 154)" onmouseover="showTip(event, '154', 154)">
+          <code onmouseout="hideTip(event, '224', 224)" onmouseover="showTip(event, '224', 224)">
+            ap arg1 arg2
+          </code>
+          <div class="tip" id="224">
+            <strong>Signature:</strong> DVar&lt;(&#39;a -&gt; &#39;b)&gt; -&gt; DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L42-42" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Creates a DVar based on two argument DVars, one storing a function value
+and the other a value to apply the function to. The resulting DVar contains
+the resulting value and changes based on the two DVars.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '225', 225)" onmouseover="showTip(event, '225', 225)">
             bindToRef arg1 arg2
           </code>
-          <div class="tip" id="154">
+          <div class="tip" id="225">
             <strong>Signature:</strong> &#39;a ref -&gt; DVar&lt;&#39;a&gt; -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L71-71" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L71-71" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -76,15 +98,15 @@ and the ref is bound to all subsequent updates of the DVar.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '155', 155)" onmouseover="showTip(event, '155', 155)">
+          <code onmouseout="hideTip(event, '226', 226)" onmouseover="showTip(event, '226', 226)">
             changes arg1
           </code>
-          <div class="tip" id="155">
+          <div class="tip" id="226">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; IEvent&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L27-27" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L27-27" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -96,35 +118,33 @@ and the ref is bound to all subsequent updates of the DVar.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '156', 156)" onmouseover="showTip(event, '156', 156)">
+          <code onmouseout="hideTip(event, '227', 227)" onmouseover="showTip(event, '227', 227)">
             choice arg1
           </code>
-          <div class="tip" id="156">
+          <div class="tip" id="227">
             <strong>Signature:</strong> Choice&lt;DVar&lt;&#39;a&gt;,DVar&lt;&#39;b&gt;&gt; -&gt; DVar&lt;Choice&lt;&#39;a,&#39;b&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L114-114" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L114-114" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Distributes Choice over a DVar.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '157', 157)" onmouseover="showTip(event, '157', 157)">
+          <code onmouseout="hideTip(event, '228', 228)" onmouseover="showTip(event, '228', 228)">
             choose arg1 arg2
           </code>
-          <div class="tip" id="157">
+          <div class="tip" id="228">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L122-122" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L122-122" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -136,15 +156,15 @@ and the ref is bound to all subsequent updates of the DVar.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '158', 158)" onmouseover="showTip(event, '158', 158)">
+          <code onmouseout="hideTip(event, '229', 229)" onmouseover="showTip(event, '229', 229)">
             combineLatest arg1 arg2
           </code>
-          <div class="tip" id="158">
+          <div class="tip" id="229">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;b&gt; -&gt; DVar&lt;&#39;a * &#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L52-52" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L52-52" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -156,15 +176,15 @@ and the ref is bound to all subsequent updates of the DVar.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '159', 159)" onmouseover="showTip(event, '159', 159)">
+          <code onmouseout="hideTip(event, '230', 230)" onmouseover="showTip(event, '230', 230)">
             combineLatestWith arg1 arg2 arg3
           </code>
-          <div class="tip" id="159">
+          <div class="tip" id="230">
             <strong>Signature:</strong> (&#39;a -&gt; &#39;b -&gt; &#39;c) -&gt; DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;b&gt; -&gt; DVar&lt;&#39;c&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L49-49" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L49-49" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -176,15 +196,15 @@ and the ref is bound to all subsequent updates of the DVar.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '160', 160)" onmouseover="showTip(event, '160', 160)">
+          <code onmouseout="hideTip(event, '231', 231)" onmouseover="showTip(event, '231', 231)">
             create arg1
           </code>
-          <div class="tip" id="160">
+          <div class="tip" id="231">
             <strong>Signature:</strong> &#39;a -&gt; DVar&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L11-11" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L11-11" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -196,55 +216,51 @@ and the ref is bound to all subsequent updates of the DVar.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '161', 161)" onmouseover="showTip(event, '161', 161)">
+          <code onmouseout="hideTip(event, '232', 232)" onmouseover="showTip(event, '232', 232)">
             distinct arg1
           </code>
-          <div class="tip" id="161">
+          <div class="tip" id="232">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L102-102" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L102-102" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns a DVar which only emits changes when contiguous values are distinct.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '162', 162)" onmouseover="showTip(event, '162', 162)">
+          <code onmouseout="hideTip(event, '233', 233)" onmouseover="showTip(event, '233', 233)">
             distinctBy arg1 arg2
           </code>
-          <div class="tip" id="162">
+          <div class="tip" id="233">
             <strong>Signature:</strong> (&#39;a -&gt; &#39;k) -&gt; DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'k          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L92-92" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L92-92" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns a DVar which only emits changes when contiguous values are distinct.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '163', 163)" onmouseover="showTip(event, '163', 163)">
+          <code onmouseout="hideTip(event, '234', 234)" onmouseover="showTip(event, '234', 234)">
             extend arg1 arg2
           </code>
-          <div class="tip" id="163">
+          <div class="tip" id="234">
             <strong>Signature:</strong> (DVar&lt;&#39;a&gt; -&gt; &#39;b) -&gt; DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L107-107" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L107-107" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -326,35 +342,33 @@ one does not get any special composition privileges.
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '164', 164)" onmouseover="showTip(event, '164', 164)">
+          <code onmouseout="hideTip(event, '235', 235)" onmouseover="showTip(event, '235', 235)">
             extract 
           </code>
-          <div class="tip" id="164">
+          <div class="tip" id="235">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; &#39;a<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L105-105" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L105-105" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Alias for DVar.get.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '165', 165)" onmouseover="showTip(event, '165', 165)">
+          <code onmouseout="hideTip(event, '236', 236)" onmouseover="showTip(event, '236', 236)">
             get arg1
           </code>
-          <div class="tip" id="165">
+          <div class="tip" id="236">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; &#39;a<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L14-14" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L14-14" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -366,15 +380,15 @@ one does not get any special composition privileges.
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '166', 166)" onmouseover="showTip(event, '166', 166)">
+          <code onmouseout="hideTip(event, '237', 237)" onmouseover="showTip(event, '237', 237)">
             iter arg1 arg2
           </code>
-          <div class="tip" id="166">
+          <div class="tip" id="237">
             <strong>Signature:</strong> (&#39;a -&gt; unit) -&gt; DVar&lt;&#39;a&gt; -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L33-33" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L33-33" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -387,15 +401,15 @@ subsequent values.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '167', 167)" onmouseover="showTip(event, '167', 167)">
+          <code onmouseout="hideTip(event, '238', 238)" onmouseover="showTip(event, '238', 238)">
             map arg1 arg2
           </code>
-          <div class="tip" id="167">
+          <div class="tip" id="238">
             <strong>Signature:</strong> (&#39;a -&gt; &#39;b) -&gt; DVar&lt;&#39;a&gt; -&gt; DVar&lt;&#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L37-37" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L37-37" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -408,15 +422,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '168', 168)" onmouseover="showTip(event, '168', 168)">
+          <code onmouseout="hideTip(event, '239', 239)" onmouseover="showTip(event, '239', 239)">
             mapFun arg1 arg2
           </code>
-          <div class="tip" id="168">
+          <div class="tip" id="239">
             <strong>Signature:</strong> (&#39;c -&gt; &#39;a -&gt; &#39;b) -&gt; DVar&lt;&#39;c&gt; -&gt; &#39;a -&gt; &#39;b<br />
                           <strong>Type parameters:</strong> 'c, 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L58-58" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L58-58" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -428,15 +442,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '169', 169)" onmouseover="showTip(event, '169', 169)">
+          <code onmouseout="hideTip(event, '240', 240)" onmouseover="showTip(event, '240', 240)">
             observe arg1
           </code>
-          <div class="tip" id="169">
+          <div class="tip" id="240">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; &#39;a * IEvent&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L119-119" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L119-119" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -446,15 +460,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '170', 170)" onmouseover="showTip(event, '170', 170)">
+          <code onmouseout="hideTip(event, '241', 241)" onmouseover="showTip(event, '241', 241)">
             ofEvent arg1 arg2
           </code>
-          <div class="tip" id="170">
+          <div class="tip" id="241">
             <strong>Signature:</strong> &#39;a -&gt; IEvent&lt;&#39;a&gt; -&gt; DVar&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L61-61" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L61-61" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -466,15 +480,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '171', 171)" onmouseover="showTip(event, '171', 171)">
+          <code onmouseout="hideTip(event, '242', 242)" onmouseover="showTip(event, '242', 242)">
             ofObservable arg1 arg2
           </code>
-          <div class="tip" id="171">
+          <div class="tip" id="242">
             <strong>Signature:</strong> &#39;a -&gt; IObservable&lt;&#39;a&gt; -&gt; DVar&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L66-66" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L66-66" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -486,15 +500,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '172', 172)" onmouseover="showTip(event, '172', 172)">
+          <code onmouseout="hideTip(event, '243', 243)" onmouseover="showTip(event, '243', 243)">
             ping arg1
           </code>
-          <div class="tip" id="172">
+          <div class="tip" id="243">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L24-24" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L24-24" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -506,15 +520,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '173', 173)" onmouseover="showTip(event, '173', 173)">
+          <code onmouseout="hideTip(event, '244', 244)" onmouseover="showTip(event, '244', 244)">
             put arg1 arg2
           </code>
-          <div class="tip" id="173">
+          <div class="tip" id="244">
             <strong>Signature:</strong> &#39;a -&gt; DVar&lt;&#39;a&gt; -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L17-17" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L17-17" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -526,15 +540,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '174', 174)" onmouseover="showTip(event, '174', 174)">
+          <code onmouseout="hideTip(event, '245', 245)" onmouseover="showTip(event, '245', 245)">
             set arg1 arg2
           </code>
-          <div class="tip" id="174">
+          <div class="tip" id="245">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; &#39;a -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L21-21" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L21-21" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -546,15 +560,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '175', 175)" onmouseover="showTip(event, '175', 175)">
+          <code onmouseout="hideTip(event, '246', 246)" onmouseover="showTip(event, '246', 246)">
             subs arg1 arg2
           </code>
-          <div class="tip" id="175">
+          <div class="tip" id="246">
             <strong>Signature:</strong> DVar&lt;&#39;a&gt; -&gt; (&#39;a -&gt; unit) -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L30-30" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L30-30" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -566,15 +580,15 @@ When the argument changes, the dependant variable changes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '176', 176)" onmouseover="showTip(event, '176', 176)">
+          <code onmouseout="hideTip(event, '247', 247)" onmouseover="showTip(event, '247', 247)">
             toFun arg1
           </code>
-          <div class="tip" id="176">
+          <div class="tip" id="247">
             <strong>Signature:</strong> DVar&lt;(&#39;a -&gt; &#39;b)&gt; -&gt; &#39;a -&gt; &#39;b<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L55-55" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L55-55" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -587,61 +601,55 @@ the implementation from the DVar on each invocation.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '177', 177)" onmouseover="showTip(event, '177', 177)">
+          <code onmouseout="hideTip(event, '248', 248)" onmouseover="showTip(event, '248', 248)">
             update arg1 arg2
           </code>
-          <div class="tip" id="177">
+          <div class="tip" id="248">
             <strong>Signature:</strong> (&#39;a -&gt; &#39;a) -&gt; DVar&lt;&#39;a&gt; -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L75-75" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L75-75" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Updates the value in a DVar using the specified function.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '178', 178)" onmouseover="showTip(event, '178', 178)">
+          <code onmouseout="hideTip(event, '249', 249)" onmouseover="showTip(event, '249', 249)">
             updateIfDistinct arg1 arg2
           </code>
-          <div class="tip" id="178">
+          <div class="tip" id="249">
             <strong>Signature:</strong> (&#39;a -&gt; &#39;a) -&gt; DVar&lt;&#39;a&gt; -&gt; bool<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L89-89" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L89-89" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Updates the value in a DVar using the specified function if it results in a change.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '179', 179)" onmouseover="showTip(event, '179', 179)">
+          <code onmouseout="hideTip(event, '250', 250)" onmouseover="showTip(event, '250', 250)">
             updateIfDistinctBy arg1 arg2 arg3
           </code>
-          <div class="tip" id="179">
+          <div class="tip" id="250">
             <strong>Signature:</strong> (&#39;a -&gt; &#39;k) -&gt; (&#39;a -&gt; &#39;a) -&gt; DVar&lt;&#39;a&gt; -&gt; bool<br />
                           <strong>Type parameters:</strong> 'a, 'k          </div>
         </td>
         <td class="xmldoc">
-            <a href="https://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L78-78" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/DVar.fs#L78-78" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Updates the value in a DVar using the specified function if it results in a change.</p>
-
-
+          
         </td>
       </tr>
     </tbody>
@@ -655,7 +663,7 @@ the implementation from the DVar on each invocation.</p>
             <li><a href="/kafunk/index.html">Home page</a></li>
             <li class="divider"></li>
             <li><a href="http://nuget.org/packages/kafunk">Get Library via NuGet</a></li>
-            <li><a href="https://github.com/jet/kafunk">Source Code on GitHub</a></li>
+            <li><a href="http://github.com/jet/kafunk">Source Code on GitHub</a></li>
             <li><a href="/kafunk/license.html">License</a></li>
             <li><a href="/kafunk/release-notes.html">Release Notes</a></li>
             
@@ -668,6 +676,6 @@ the implementation from the DVar on each invocation.</p>
         </div>
       </div>
     </div>
-    <a href="https://github.com/jet/kafunk"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"/></a>
+    <a href="http://github.com/jet/kafunk"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"/></a>
   </body>
   </html>
