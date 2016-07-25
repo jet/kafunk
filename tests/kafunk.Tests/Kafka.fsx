@@ -64,7 +64,7 @@ module ConsumerGroupDemo =
 
   log.info "id=%i host=%s port=%i error=%i" res.coordinatorId res.coordinatorHost res.coordinatorPort res.errorCode
 
-  let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, [|"test"|], Buffer.empty)
+  let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, [|"test"|], Binary.empty)
   let assignmentStrategy : AssignmentStrategy = "range" //roundrobin
   let groupProtocols = GroupProtocols([| assignmentStrategy, (toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta) |])
   let joinGroupReq = JoinGroup.Request("test-group", 10000, "", ProtocolType.consumer, groupProtocols)
