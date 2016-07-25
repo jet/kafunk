@@ -34,8 +34,8 @@ module Message =
     m.value |> Binary.toString
 
   let keyString (m:Message) =
-    if isNull m.value.Array then null
-    else m.value |> Binary.toString
+    if isNull m.key.Array then null
+    else m.key |> Binary.toString
 
 module MessageSet =
 
