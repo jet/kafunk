@@ -39,16 +39,19 @@ module Message =
   let valueString (m:Message) =
     m.value |> Binary.toString
 
-  /// Extracts the key from a Kafka message and converts it to a string.  
+  /// Extracts the key from a Kafka message and converts it to a string.
   let keyString (m:Message) =
     if isNull m.value.Array then null
     else m.value |> Binary.toString
 
+/// Public API to handle Kafka message sets.
 module MessageSet =
 
+  /// Creates a MessageSet from a single message.
   let ofMessage (m:Message) =
     MessageSet([| 0L, Message.size m, m |])
 
+  /// Creates a MessageSet from a sequence of messages.
   let ofMessages ms =
     MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
 
@@ -58,29 +61,36 @@ module MessageSet =
     let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
     maxOffset + 1L
 
+/// Public API to handle Kafka produce requests.
 module ProduceRequest =
 
+  /// Creates a ProduceRequest from a single message set.
   let ofMessageSet topic partition ms requiredAcks timeout =
     ProduceRequest(
       (defaultArg requiredAcks RequiredAcks.Local),
       (defaultArg timeout 1000),
       [| topic, [| partition, MessageSet.size ms, ms |] |] )
 
+  /// Creates a ProduceRequest from an array of message sets.
   let ofMessageSets topic ms requiredAcks timeout =
     ProduceRequest(
       (defaultArg requiredAcks RequiredAcks.Local),
       (defaultArg timeout 1000),
       [| topic, ms |> Array.map (fun (p, ms) -> (p, MessageSet.size ms, ms)) |])
 
+  /// Creates a ProduceRequest from an array of message set topics.
   let ofMessageSetTopics ms requiredAcks timeout =
     ProduceRequest(requiredAcks, timeout,
       ms |> Array.map (fun (t, ms) -> (t, ms |> Array.map (fun (p, ms) -> (p, MessageSet.size ms, ms)))))
 
+/// Public API to handle Kafka fetch requests.
 module FetchRequest =
 
+  /// Creates a FetchRequest from a single topic partition.
   let ofTopicPartition topic partition offset maxWaitTime minBytes maxBytesPerPartition =
     FetchRequest(-1, maxWaitTime, minBytes , [| topic, [| partition,  offset, maxBytesPerPartition |] |])
 
+  /// Creates a FetchRequest from an array of topic partition.
   let ofTopicPartitions topic ps maxWaitTime minBytes maxBytesPerPartition =
     FetchRequest(-1, maxWaitTime, minBytes, [| (topic, ps |> Array.map (fun (p, o) -> (p, o, maxBytesPerPartition))) |])
 
@@ -604,25 +614,29 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   interface IDisposable with
     member __.Dispose () = ()
 
-/// Kafka API.
+/// Public Kafka API.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Kafka =
 
   let [<Literal>] DefaultPort = 9092
 
+  /// Creates a connection to Kafka by using the given configuration and connects to it asynchronously.
   let connAsync (cfg:KafkaConnCfg) = async {
     let conn = new KafkaConn(cfg)
     do! conn.Connect ()
     return conn }
 
+  /// Creates a connection to Kafka by using the given configuration and connects to it synchronously.
   let conn cfg =
     connAsync cfg |> Async.RunSynchronously
 
+  /// Creates a connection to a Kafka host on the default port and connects to it asynchronously.
   let connHostAsync (host:string) =
     let ub = UriBuilder("kafka", host, DefaultPort)
     let cfg = KafkaConnCfg.ofBootstrapServers [ub.Uri]
     connAsync cfg
 
+  /// Creates a connection to a Kafka host on the default port and connects to it synchronously.
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
@@ -633,9 +647,11 @@ module Kafka =
     conn.Connect() |> Async.RunSynchronously
     conn
 
+  /// Retrieves metadata from a Kafka connection.
   let metadata (c:KafkaConn) (req:Metadata.Request) : Async<MetadataResponse> =
     Api.metadata c.Chan req
 
+  /// Retrieves data from a Kafka connection.
   let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> = async {
     let bootChan = c.Chan
     let topics = Array.map fst req.topics
@@ -644,6 +660,7 @@ module Kafka =
     do! c.ApplyMetadata(metadata)
     return! Api.fetch bootChan req }
 
+  /// Publishes data on a Kafka connection.
   let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> = async {
     let chan = c.Chan
     let topics = Array.map fst req.topics
@@ -652,6 +669,7 @@ module Kafka =
     do! c.ApplyMetadata(metadata)
     return! Api.produce chan req }
 
+  /// Retrieves the current offset of a Kafka connection.
   let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> = async {
     let chan = c.Chan
     let topics = Array.map fst req.topics
