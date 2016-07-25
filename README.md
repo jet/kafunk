@@ -8,7 +8,7 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 
 # Status
 
-This is a work in progress and not yet published as a packge. See the issue list for the remaining items. At the point, the public API and internals may undergo several changes before stabilizing. Still, contributions are welcome!
+This is a work in progress and not yet published as a package. See the issue list for the remaining items. At the point, the public API and internals may undergo several changes before stabilizing. Still, contributions are welcome!
 
 | Feature         | Status   |
 | ----------------|----------|
