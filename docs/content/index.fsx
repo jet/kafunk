@@ -95,10 +95,10 @@ also want to read the [library design notes][readme] to understand how it works.
 The library is available under Apache 2.0. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/jet/kafunk/docs/content
+  [content]: https://github.com/jet/kafunk/tree/master/docs/content
   [gh]: https://github.com/jet/kafunk
   [issues]: https://github.com/jet/kafunk/issues
-  [readme]: https://github.com/jet/kafunk/project/README.md 
-  [license]: https://github.com/jet/kafunk/project/LICENSE.txt
+  [readme]: https://github.com/jet/kafunk/blob/master/README.md
+  [license]: https://github.com/jet/kafunk/blob/master/LICENSE.txt
   
 *)
