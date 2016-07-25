@@ -7,6 +7,7 @@ open System.Net.Sockets
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
+open FSharp.Control
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Dns =
@@ -30,6 +31,7 @@ module internal Dns =
 /// Operations on Berkley sockets.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Socket =
+  open FSharp.Control
 
   /// Executes an async socket operation.
   let exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (config:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
@@ -142,6 +144,7 @@ module Framing =
 
   /// 32 bit length prefix framer
   module LengthPrefix =
+    open FSharp.Control
 
     [<Literal>]
     let HeaderLength = 4
