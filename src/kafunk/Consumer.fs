@@ -8,6 +8,7 @@ open Kafunk.Protocol
 
 /// High-level consumer API.
 module Consumer =
+  open FSharp.Control
 
   type ConsumerConfig = {
     groupId : GroupId

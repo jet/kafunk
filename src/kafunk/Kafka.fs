@@ -553,8 +553,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     Log.info "discovering bootstrap brokers...|client_id=%s" cfg.clientId
     let! bootstrapChan =
       cfg.bootstrapServers
-      |> AsyncSeq.ofSeq
-      |> AsyncSeq.tryPickAsync (fun uri -> async {
+      |> FSharp.Control.AsyncSeq.ofSeq
+      |> FSharp.Control.AsyncSeq.tryPickAsync (fun uri -> async {
         //Log.info "connecting....|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
         try
           let! ch = connHost (uri.Host, uri.Port, None)

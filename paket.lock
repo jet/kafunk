@@ -1,5 +1,6 @@
 NUGET
   remote: http://api.nuget.org/v3/index.json
+    FSharp.Control.AsyncSeq (2.0.8)
     FSharp.Core (3.1.2.5) - redirects: force
 
 GROUP Build
@@ -23,7 +24,7 @@ NUGET
     SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
-    modules/Octokit/Octokit.fsx (573a4dc3d2be229d55a4935136f393d1f1d683c1)
+    modules/Octokit/Octokit.fsx (6fd8b4d79012bde7c3210031b5017b6c9fc05fda)
       Octokit (>= 0.20)
 GROUP Test
 NUGET
