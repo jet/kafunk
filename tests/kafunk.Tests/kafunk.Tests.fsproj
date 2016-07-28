@@ -69,6 +69,7 @@
     <Compile Include="Compression-gzip-tests.fs" />
     <None Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
+    <Compile Include="ProducerTests.fs" />
     <None Include="Fetch.fsx" />
     <None Include="Consumer.fsx" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-﻿#r "bin/Debug/kafunk.dll"
+#r "bin/Debug/kafunk.dll"
 #time "on"
 
 open Kafunk

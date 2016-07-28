@@ -1,4 +1,4 @@
-﻿#r "bin/Debug/kafunk.dll"
+#r "bin/Debug/kafunk.dll"
 
 open Kafunk
 open Kafunk.Protocol
