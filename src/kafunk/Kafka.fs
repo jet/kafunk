@@ -347,7 +347,7 @@ module internal Conn =
                      |> Message.setFieldValue "remoteEndpoint" ep)
       let! sendRcvSocket = Socket.connect connSocket ep
       log.logSimple (Message.event Info "Connected"
-                     |> Message.setFieldValue "removeEndpoint" sendRcvSocket.RemoteEndPoint)
+                     |> Message.setFieldValue "remoteEndpoint" sendRcvSocket.RemoteEndPoint)
       return sendRcvSocket }
 
     let! sendRcvSocket = conn ()
@@ -399,7 +399,7 @@ module internal Conn =
             do! reset (Some ex)
             return! sendErr buf
           | _ ->
-            log.logSimple (Message.event Error  "exception"
+            log.logSimple (Message.event Error  "Unhandled exception"
                            |> Message.addExn ex)
             return raise ex })
 
@@ -409,18 +409,18 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          log.logSimple (Message.event Info "received 0 bytes indicating a closed TCP connection")
+          log.logSimple (Message.event Info "Received 0 bytes indicating a closed TCP connection")
           do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.logSimple (Message.event Warn "error receiving on socket"
+            log.logSimple (Message.event Warn "Error receiving on socket"
                            |> Message.addExn ex)
             do! reset (Some ex)
             return! receiveErr buf
           | _ ->
-            log.logSimple (Message.event Error "error on socket"
+            log.logSimple (Message.event Error "Error on socket"
                            |> Message.addExn ex)
             return raise ex })
 

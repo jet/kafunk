@@ -271,14 +271,14 @@ type ReqRepSession<'a, 'b, 's> internal
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
-      Log.logSimple (Message.event Verbose "received message."
+      Log.logSimple (Message.event Verbose "Received message."
                      |> Message.setFieldValue "correlationId" correlationId
                      |> Message.setFieldValue "size" sessionData.payload.Count)
       let state, reply = token
       let res = decode (correlationId,state,sessionData.payload)
       reply.SetResult res
     else
-      Log.logSimple (Message.event Error "received message but unabled to find session for {correlation_id}"
+      Log.logSimple (Message.event Error "Received message but unabled to find session for {correlation_id}"
                      |> Message.setFieldValue "correlationId" correlationId)
 
   let mux (req:'a) =
@@ -288,7 +288,7 @@ type ReqRepSession<'a, 'b, 's> internal
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (state,rep))) then
-        Log.logSimple (Message.event Error "clash of the sessions!")
+        Log.logSimple (Message.event Error "Clash of the sessions!")
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
@@ -296,7 +296,7 @@ type ReqRepSession<'a, 'b, 's> internal
   do
     receive
     |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.logSimple (Message.event Info "session disconnected."))
+    |> Async.tryFinally (fun () -> Log.logSimple (Message.event Info "Session disconnected."))
     |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
