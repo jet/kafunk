@@ -9,6 +9,7 @@ group Build
   nuget FSharp.Formatting
 
   github fsharp/FAKE modules/Octokit/Octokit.fsx
+  github logary/logary src/Logary.Facade/Facade.fs
 
 group Test
   source https://api.nuget.org/v3/index.json

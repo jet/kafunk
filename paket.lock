@@ -23,8 +23,10 @@ NUGET
     SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
-    modules/Octokit/Octokit.fsx (573a4dc3d2be229d55a4935136f393d1f1d683c1)
+    modules/Octokit/Octokit.fsx (8fd20ae42c996060bc8bedb821edfb50517cdd8b)
       Octokit (>= 0.20)
+  remote: logary/logary
+    src/Logary.Facade/Facade.fs (6b25548f3671b32eb074917d1982e2eb418cc14f)
 GROUP Test
 NUGET
   remote: http://api.nuget.org/v3/index.json
