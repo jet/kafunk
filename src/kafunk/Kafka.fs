@@ -342,12 +342,14 @@ module internal Conn =
           ProtocolType.Tcp,
           NoDelay=true,
           ExclusiveAddressUse=true)
-      log.logSimple (Message.event Info "Connecting..."
-                     |> Message.setFieldValue "clientId" clientId
-                     |> Message.setFieldValue "remoteEndpoint" ep)
+      log.log Info (
+        Message.eventX "Connecting..."
+        >> Message.setFieldValue "clientId" clientId
+        >> Message.setFieldValue "remoteEndpoint" ep)
       let! sendRcvSocket = Socket.connect connSocket ep
-      log.logSimple (Message.event Info "Connected"
-                     |> Message.setFieldValue "remoteEndpoint" sendRcvSocket.RemoteEndPoint)
+      log.log Info (
+        Message.eventX "Connected"
+        >> Message.setFieldValue "remoteEndpoint" sendRcvSocket.RemoteEndPoint)
       return sendRcvSocket }
 
     let! sendRcvSocket = conn ()
@@ -368,9 +370,10 @@ module internal Conn =
     /// Notify of an error and recovery.
     /// If a recovery is in progress, wait for it to complete and return.
     let reset (_ex:exn option) = async {
-      log.logSimple (Message.event Info "Recovering TCP connection"
-                     |> Message.setFieldValue "clientId" clientId
-                     |> Message.setFieldValue "remoteEndpoint" ep)
+      log.log Info (
+        Message.eventX "Recovering TCP connection for {clientId} to {remoteEndpoint}"
+        >> Message.setFieldValue "clientId" clientId
+        >> Message.setFieldValue "remoteEndpoint" ep)
       if Interlocked.CompareExchange(state, 1, 0) = 0 then
         wh.Reset()
         let! sendRcvSocket' = conn ()
@@ -378,9 +381,10 @@ module internal Conn =
         wh.Set()
         Interlocked.Exchange(state, 0) |> ignore
       else
-        log.logSimple (Message.event Info "Recovery already in progress, waiting..."
-                       |> Message.setFieldValue "clientId" clientId
-                       |> Message.setFieldValue "remoteEndpoint" ep)
+        log.log Info (
+          Message.eventX "Recovery already in progress, waiting..."
+          >> Message.setFieldValue "clientId" clientId
+          >> Message.setFieldValue "remoteEndpoint" ep)
         wh.Wait()
         return () }
 
@@ -409,14 +413,13 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          log.logSimple (Message.event Info "Received 0 bytes indicating a closed TCP connection")
+          log.log Info (Message.eventX "Received 0 bytes indicating a closed TCP connection")
           do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.logSimple (Message.event Warn "Error receiving on socket"
-                           |> Message.addExn ex)
+            log.logSimple (Message.event Warn "Error receiving on socket" |> Message.addExn ex)
             do! reset (Some ex)
             return! receiveErr buf
           | _ ->
@@ -548,10 +551,11 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
     let! ch = Conn.connect(ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
-    Log.logSimple (Message.event Info "Connected to host"
-                   |> Message.setFieldValue "host" host
-                   |> Message.setFieldValue "port" port
-                   |> Message.setFieldValue "nodeId" nodeId)
+    Log.log Info (
+      Message.eventX "Connected to {host}:{port}"
+      >> Message.setFieldValue "host" host
+      >> Message.setFieldValue "port" port
+      >> Message.setFieldValue "nodeId" nodeId)
     nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
@@ -565,8 +569,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Connects to the first broker in the bootstrap list.
   let connectBootstrap () = async {
-    Log.logSimple (Message.event Info "Discovering bootstrap brokers..."
-                   |> Message.setFieldValue "clientId" cfg.clientId)
+    Log.log Info (
+      Message.eventX "Discovering bootstrap brokers..."
+      >> Message.setFieldValue "clientId" cfg.clientId)
     let! bootstrapChan =
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -627,9 +632,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
-    Log.log Info (fun _ ->
-      Message.event Info "Getting cluster metadata for {topics}"
-      |> Message.setFieldValue "topics" (String.concat ", " topics))
+    Log.log Info (
+      Message.eventX "Getting cluster metadata for {topics}"
+      >> Message.setFieldValue "topics" (String.concat ", " topics))
     let! metadata = Api.metadata bootstrapChan (Metadata.Request(topics))
     do! this.ApplyMetadata metadata
     return metadata }

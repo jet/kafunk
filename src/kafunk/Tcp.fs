@@ -271,20 +271,22 @@ type ReqRepSession<'a, 'b, 's> internal
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
-      Log.logSimple (Message.event Verbose "Received message."
-                     |> Message.setFieldValue "correlationId" correlationId
-                     |> Message.setFieldValue "size" sessionData.payload.Count)
+      Log.log Verbose (
+        Message.eventX "Received message"
+        >> Message.setFieldValue "correlationId" correlationId
+        >> Message.setFieldValue "size" sessionData.payload.Count)
       let state, reply = token
       let res = decode (correlationId,state,sessionData.payload)
       reply.SetResult res
     else
-      Log.logSimple (Message.event Error "Received message but unabled to find session for {correlation_id}"
-                     |> Message.setFieldValue "correlationId" correlationId)
+      Log.logSimple (
+        Message.event Error "Received message but unabled to find session for {correlationId}"
+        |> Message.setFieldValue "correlationId" correlationId)
 
   let mux (req:'a) =
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()
-    let sessionReq,state = encode (req,correlationId)
+    let sessionReq, state = encode (req,correlationId)
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (state,rep))) then
@@ -296,19 +298,20 @@ type ReqRepSession<'a, 'b, 's> internal
   do
     receive
     |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.logSimple (Message.event Info "Session disconnected."))
+    |> Async.tryFinally (fun () -> Log.log Info (Message.eventX "Session disconnected"))
     |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
     let correlationId,sessionData,rep = mux req
-    Log.logSimple (Message.event Verbose "Sending request..."
-                   |> Message.setFieldValue "correlationId" correlationId
-                   |> Message.setFieldValue "size" sessionData.Count)
+    Log.log Verbose (
+      Message.eventX "Sending request..."
+      >> Message.setFieldValue "correlationId" correlationId
+      >> Message.setFieldValue "size" sessionData.Count)
     let! sent = send sessionData
-    Log.log Verbose (fun _ ->
-      Message.event Verbose "Request sent"
-      |> Message.setFieldValue "correlationId" correlationId
-      |> Message.setFieldValue "bytes" sent)
+    Log.log Verbose (
+      Message.eventX "Request sent"
+      >> Message.setFieldValue "correlationId" correlationId
+      >> Message.setFieldValue "bytes" sent)
     return! rep.Task |> Async.AwaitTask }
 
   interface IDisposable with
