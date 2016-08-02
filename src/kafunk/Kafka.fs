@@ -175,7 +175,7 @@ module internal Api =
 module internal Conn =
 
   // Let's avoid this Log vs Log.create. Just lowercase it. Shadowing the constructor is not cool.
-  let private log = Log.create "Kafunk.Conn"
+  let private logger = Log.create "Kafunk.Conn"
 
   let ApiVersion : ApiVersion = 0s
 
@@ -342,12 +342,12 @@ module internal Conn =
           ProtocolType.Tcp,
           NoDelay=true,
           ExclusiveAddressUse=true)
-      log.log Info (
+      logger.log Info (
         Message.eventX "Connecting..."
         >> Message.setFieldValue "clientId" clientId
         >> Message.setFieldValue "remoteEndpoint" ep)
       let! sendRcvSocket = Socket.connect connSocket ep
-      log.log Info (
+      logger.log Info (
         Message.eventX "Connected"
         >> Message.setFieldValue "remoteEndpoint" sendRcvSocket.RemoteEndPoint)
       return sendRcvSocket }
@@ -370,7 +370,7 @@ module internal Conn =
     /// Notify of an error and recovery.
     /// If a recovery is in progress, wait for it to complete and return.
     let reset (_ex:exn option) = async {
-      log.log Info (
+      logger.log Info (
         Message.eventX "Recovering TCP connection for {clientId} to {remoteEndpoint}"
         >> Message.setFieldValue "clientId" clientId
         >> Message.setFieldValue "remoteEndpoint" ep)
@@ -381,7 +381,7 @@ module internal Conn =
         wh.Set()
         Interlocked.Exchange(state, 0) |> ignore
       else
-        log.log Info (
+        logger.log Info (
           Message.eventX "Recovery already in progress, waiting..."
           >> Message.setFieldValue "clientId" clientId
           >> Message.setFieldValue "remoteEndpoint" ep)
@@ -398,12 +398,12 @@ module internal Conn =
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.logSimple (Message.event Error "Socket exception"
+            logger.logSimple (Message.event Error "Socket exception"
                            |> Message.addExn ex)
             do! reset (Some ex)
             return! sendErr buf
           | _ ->
-            log.logSimple (Message.event Error  "Unhandled exception"
+            logger.logSimple (Message.event Error  "Unhandled exception"
                            |> Message.addExn ex)
             return raise ex })
 
@@ -413,17 +413,17 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          log.log Info (Message.eventX "Received 0 bytes indicating a closed TCP connection")
+          logger.log Info (Message.eventX "Received 0 bytes indicating a closed TCP connection")
           do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.logSimple (Message.event Warn "Error receiving on socket" |> Message.addExn ex)
+            logger.logSimple (Message.event Warn "Error receiving on socket" |> Message.addExn ex)
             do! reset (Some ex)
             return! receiveErr buf
           | _ ->
-            log.logSimple (Message.event Error "Error on socket"
+            logger.logSimple (Message.event Error "Error on socket"
                            |> Message.addExn ex)
             return raise ex })
 
@@ -477,7 +477,7 @@ with
 /// It acts as a context for API operations, providing filtering and fault tolerance.
 type KafkaConn internal (cfg:KafkaConnCfg) =
 
-  static let Log = Log.create "KafkaFunc.Conn"
+  static let logger = Log.create "KafkaFunc.Conn"
 
   // note: must call Connect first thing!
   let [<VolatileField>] mutable bootstrapChanField : Chan =
@@ -551,7 +551,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
     let! ch = Conn.connect(ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
-    Log.log Info (
+    logger.log Info (
       Message.eventX "Connected to {host}:{port}"
       >> Message.setFieldValue "host" host
       >> Message.setFieldValue "port" port
@@ -569,7 +569,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Connects to the first broker in the bootstrap list.
   let connectBootstrap () = async {
-    Log.log Info (
+    logger.log Info (
       Message.eventX "Discovering bootstrap brokers..."
       >> Message.setFieldValue "clientId" cfg.clientId)
     let! bootstrapChan =
@@ -581,7 +581,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
           let! ch = connHost (uri.Host, uri.Port, None)
           return Some ch
         with ex ->
-          Log.logSimple (Message.event Error "Error connecting to bootstrap host"
+          logger.logSimple (Message.event Error "Error connecting to bootstrap host"
                          |> Message.setFieldValue "host" uri.Host
                          |> Message.setFieldValue "port" uri.Port
                          |> Message.addExn ex)
@@ -613,7 +613,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal __.ApplyMetadata (metadata:MetadataResponse) = async {
-    Log.log Info (fun _ ->
+    logger.log Info (fun _ ->
       let topics =
         metadata.topicMetadata
         |> Seq.map (fun m -> m.topicName)
@@ -632,7 +632,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
-    Log.log Info (
+    logger.log Info (
       Message.eventX "Getting cluster metadata for {topics}"
       >> Message.setFieldValue "topics" (String.concat ", " topics))
     let! metadata = Api.metadata bootstrapChan (Metadata.Request(topics))

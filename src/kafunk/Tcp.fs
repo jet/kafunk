@@ -261,7 +261,7 @@ type ReqRepSession<'a, 'b, 's> internal
     /// Sends a byte array to the remote host.
     send:Binary.Segment -> Async<int>) =
 
-  static let Log = Log.create "Kafunk.TcpSession"
+  static let logger = Log.create "Kafunk.TcpSession"
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
@@ -271,7 +271,7 @@ type ReqRepSession<'a, 'b, 's> internal
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
-      Log.log Verbose (
+      logger.log Verbose (
         Message.eventX "Received message"
         >> Message.setFieldValue "correlationId" correlationId
         >> Message.setFieldValue "size" sessionData.payload.Count)
@@ -279,7 +279,7 @@ type ReqRepSession<'a, 'b, 's> internal
       let res = decode (correlationId,state,sessionData.payload)
       reply.SetResult res
     else
-      Log.logSimple (
+      logger.logSimple (
         Message.event Error "Received message but unabled to find session for {correlationId}"
         |> Message.setFieldValue "correlationId" correlationId)
 
@@ -290,7 +290,7 @@ type ReqRepSession<'a, 'b, 's> internal
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (state,rep))) then
-        Log.logSimple (Message.event Error "Clash of the sessions!")
+        logger.logSimple (Message.event Error "Clash of the sessions!")
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
@@ -298,17 +298,17 @@ type ReqRepSession<'a, 'b, 's> internal
   do
     receive
     |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.log Info (Message.eventX "Session disconnected"))
+    |> Async.tryFinally (fun () -> logger.log Info (Message.eventX "Session disconnected"))
     |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
     let correlationId,sessionData,rep = mux req
-    Log.log Verbose (
+    logger.log Verbose (
       Message.eventX "Sending request..."
       >> Message.setFieldValue "correlationId" correlationId
       >> Message.setFieldValue "size" sessionData.Count)
     let! sent = send sessionData
-    Log.log Verbose (
+    logger.log Verbose (
       Message.eventX "Request sent"
       >> Message.setFieldValue "correlationId" correlationId
       >> Message.setFieldValue "bytes" sent)
