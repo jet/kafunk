@@ -6,6 +6,7 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 
+open Kafunk.Logging
 open Kafunk
 open Kafunk.Prelude
 open Kafunk.Protocol
@@ -341,9 +342,12 @@ module internal Conn =
           ProtocolType.Tcp,
           NoDelay=true,
           ExclusiveAddressUse=true)
-      log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
+      log.logSimple (Message.event Info "Connecting..."
+                     |> Message.setFieldValue "clientId" clientId
+                     |> Message.setFieldValue "remoteEndpoint" ep)
       let! sendRcvSocket = Socket.connect connSocket ep
-      log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint
+      log.logSimple (Message.event Info "Connected"
+                     |> Message.setFieldValue "removeEndpoint" sendRcvSocket.RemoteEndPoint)
       return sendRcvSocket }
 
     let! sendRcvSocket = conn ()
@@ -364,7 +368,9 @@ module internal Conn =
     /// Notify of an error and recovery.
     /// If a recovery is in progress, wait for it to complete and return.
     let reset (_ex:exn option) = async {
-      log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
+      log.logSimple (Message.event Info "Recovering TCP connection"
+                     |> Message.setFieldValue "clientId" clientId
+                     |> Message.setFieldValue "remoteEndpoint" ep)
       if Interlocked.CompareExchange(state, 1, 0) = 0 then
         wh.Reset()
         let! sendRcvSocket' = conn ()
@@ -372,7 +378,9 @@ module internal Conn =
         wh.Set()
         Interlocked.Exchange(state, 0) |> ignore
       else
-        log.info "recovery already in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
+        log.logSimple (Message.event Info "Recovery already in progress, waiting..."
+                       |> Message.setFieldValue "clientId" clientId
+                       |> Message.setFieldValue "remoteEndpoint" ep)
         wh.Wait()
         return () }
 
@@ -386,11 +394,13 @@ module internal Conn =
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.error "socket exception|error=%O" ex
+            log.logSimple (Message.event Error "Socket exception"
+                           |> Message.addExn ex)
             do! reset (Some ex)
             return! sendErr buf
           | _ ->
-            log.error "exception=%O" ex
+            log.logSimple (Message.event Error  "exception"
+                           |> Message.addExn ex)
             return raise ex })
 
     let rec receiveErr buf =
@@ -399,17 +409,19 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          log.warn "received 0 bytes indicating a closed TCP connection"
+          log.logSimple (Message.event Info "received 0 bytes indicating a closed TCP connection")
           do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.warn "error receiving on socket|error=%O" ex
+            log.logSimple (Message.event Warn "error receiving on socket"
+                           |> Message.addExn ex)
             do! reset (Some ex)
             return! receiveErr buf
           | _ ->
-            log.error "exception=%O" ex
+            log.logSimple (Message.event Error "error on socket"
+                           |> Message.addExn ex)
             return raise ex })
 
     let send, receive = sendErr, receiveErr

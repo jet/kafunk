@@ -7,6 +7,7 @@ open System.Net.Sockets
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
+open Kafunk.Logging
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Dns =
@@ -270,12 +271,15 @@ type ReqRepSession<'a, 'b, 's> internal
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
-      Log.trace "received message. correlation_id=%i size=%i" correlationId sessionData.payload.Count
-      let state,reply = token
+      Log.logSimple (Message.event Verbose "received message."
+                     |> Message.setFieldValue "correlationId" correlationId
+                     |> Message.setFieldValue "size" sessionData.payload.Count)
+      let state, reply = token
       let res = decode (correlationId,state,sessionData.payload)
       reply.SetResult res
     else
-      Log.error "received message but unabled to find session for correlation_id=%i" correlationId
+      Log.logSimple (Message.event Error "received message but unabled to find session for {correlation_id}"
+                     |> Message.setFieldValue "correlationId" correlationId)
 
   let mux (req:'a) =
     let correlationId = correlationId ()
@@ -284,7 +288,7 @@ type ReqRepSession<'a, 'b, 's> internal
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (state,rep))) then
-        Log.error "clash of the sessions!"
+        Log.logSimple (Message.event Error "clash of the sessions!")
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
@@ -292,14 +296,19 @@ type ReqRepSession<'a, 'b, 's> internal
   do
     receive
     |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.info "session disconnected.")
+    |> Async.tryFinally (fun () -> Log.logSimple (Message.event Info "session disconnected."))
     |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
     let correlationId,sessionData,rep = mux req
-    Log.trace "sending request... correlation_id=%i bytes=%i" correlationId sessionData.Count
+    Log.logSimple (Message.event Verbose "Sending request..."
+                   |> Message.setFieldValue "correlationId" correlationId
+                   |> Message.setFieldValue "size" sessionData.Count)
     let! sent = send sessionData
-    Log.trace "request sent. correlation_id=%i bytes=%i" correlationId sent
+    Log.log Verbose (fun _ ->
+      Message.event Verbose "Request sent"
+      |> Message.setFieldValue "correlationId" correlationId
+      |> Message.setFieldValue "bytes" sent)
     return! rep.Task |> Async.AwaitTask }
 
   interface IDisposable with

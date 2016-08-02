@@ -1,9 +1,8 @@
-﻿#r "bin/Debug/kafunk.dll"
+﻿#r "bin/Debug/Kafunk.dll"
 
 open Kafunk
 open Kafunk.Protocol
 
-//Log.To.console "*" NLog.LogLevel.Trace
 let log = Log.create __SOURCE_FILE__
 
 // Replace this with an initial broker you wish to use.

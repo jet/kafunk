@@ -3,7 +3,7 @@ NUGET
     FSharp.Core (3.1.2.5) - redirects: force
 GITHUB
   remote: logary/logary
-    src/Logary.Facade/Facade.fs (dacb3107de557fa9094fd20e7a2fac197d793db1)
+    src/Logary.Facade/Facade.fs (a07e24bc6a2975ccce0e9be8fe5f6b9ba74fa92e)
 GROUP Build
 NUGET
   remote: http://api.nuget.org/v3/index.json
