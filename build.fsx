@@ -78,6 +78,11 @@ let (|Fsproj|Csproj|Vbproj|Shproj|) (projFileName:string) =
     | f when f.EndsWith("shproj") -> Shproj
     | _                           -> failwith (sprintf "Project file %s not supported. Unknown project type." projFileName)
 
+Target "LoggingFile" (fun _ ->
+    ReplaceInFiles [ "namespace Logary.Facade", "namespace Kafunk.Logging" ]
+                   [ "paket-files/logary/logary/src/Logary.Facade/Facade.fs" ]
+)
+
 // Generate assembly info files with the right version & up-to-date information
 Target "AssemblyInfo" (fun _ ->
     let getAssemblyInfoAttributes projectName =
@@ -371,6 +376,7 @@ Target "BuildPackage" DoNothing
 Target "All" DoNothing
 
 "Clean"
+  ==> "LoggingFile"
   ==> "AssemblyInfo"
   ==> "Build"
   ==> "CopyBinaries"

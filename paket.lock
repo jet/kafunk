@@ -1,11 +1,13 @@
 NUGET
   remote: http://api.nuget.org/v3/index.json
     FSharp.Core (3.1.2.5) - redirects: force
-
+GITHUB
+  remote: logary/logary
+    src/Logary.Facade/Facade.fs (dacb3107de557fa9094fd20e7a2fac197d793db1)
 GROUP Build
 NUGET
   remote: http://api.nuget.org/v3/index.json
-    FAKE (4.34.5)
+    FAKE (4.36)
     FSharp.Compiler.Service (2.0.0.6)
     FSharp.Formatting (2.14.4)
       FSharp.Compiler.Service (2.0.0.6)
@@ -18,15 +20,13 @@ NUGET
     Microsoft.Net.Http (2.2.29) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl (>= 1.1.10)
       Microsoft.Bcl.Build (>= 1.0.14)
-    Octokit (0.20)
+    Octokit (0.21.1)
       Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
     SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
     modules/Octokit/Octokit.fsx (8fd20ae42c996060bc8bedb821edfb50517cdd8b)
       Octokit (>= 0.20)
-  remote: logary/logary
-    src/Logary.Facade/Facade.fs (6b25548f3671b32eb074917d1982e2eb418cc14f)
 GROUP Test
 NUGET
   remote: http://api.nuget.org/v3/index.json
