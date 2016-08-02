@@ -548,7 +548,10 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
     let! ch = Conn.connect(ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
-    Log.info "connected to host=%s port=%i node_id=%A" host port nodeId
+    Log.logSimple (Message.event Info "Connected to host"
+                   |> Message.setFieldValue "host" host
+                   |> Message.setFieldValue "port" port
+                   |> Message.setFieldValue "nodeId" nodeId)
     nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
@@ -562,7 +565,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Connects to the first broker in the bootstrap list.
   let connectBootstrap () = async {
-    Log.info "discovering bootstrap brokers...|client_id=%s" cfg.clientId
+    Log.logSimple (Message.event Info "Discovering bootstrap brokers..."
+                   |> Message.setFieldValue "clientId" cfg.clientId)
     let! bootstrapChan =
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -572,7 +576,10 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
           let! ch = connHost (uri.Host, uri.Port, None)
           return Some ch
         with ex ->
-          Log.error "error connecting to bootstrap host=%s port=%i error=%O" uri.Host uri.Port ex
+          Log.logSimple (Message.event Error "Error connecting to bootstrap host"
+                         |> Message.setFieldValue "host" uri.Host
+                         |> Message.setFieldValue "port" uri.Port
+                         |> Message.addExn ex)
           return None })
     match bootstrapChan with
     | Some bootstrapChan ->
@@ -601,7 +608,13 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal __.ApplyMetadata (metadata:MetadataResponse) = async {
-    Log.info "applying cluster metadata for topics=%s" (String.concat ", " (metadata.topicMetadata |> Seq.map (fun m -> m.topicName)))
+    Log.log Info (fun _ ->
+      let topics =
+        metadata.topicMetadata
+        |> Seq.map (fun m -> m.topicName)
+        |> String.concat ", "
+      Message.event Info "Applying cluster metadata for {topics}"
+      |> Message.setFieldValue "topics" topics)
     let hostByNode' =
       metadata.brokers
       |> Seq.map (fun b -> b.nodeId, (b.host, b.port))
@@ -614,7 +627,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
-    Log.info "getting cluster metadata for topics=%s" (String.concat ", " topics)
+    Log.log Info (fun _ ->
+      Message.event Info "Getting cluster metadata for {topics}"
+      |> Message.setFieldValue "topics" (String.concat ", " topics))
     let! metadata = Api.metadata bootstrapChan (Metadata.Request(topics))
     do! this.ApplyMetadata metadata
     return metadata }
