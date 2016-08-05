@@ -90,7 +90,9 @@ module internal ResponseEx =
     failwith (sprintf "Wrong response!")
 
   type RequestMessage with
+    
     /// If a request does not expect a response, returns the default response.
+    /// Used to generate responses for requests which don't expect a response from the server.
     static member awaitResponse (x:RequestMessage) =
       match x with
       | RequestMessage.Produce req when req.requiredAcks = RequiredAcks.None ->
@@ -110,6 +112,13 @@ module internal ResponseEx =
     static member internal toLeaveGroup res = match res with LeaveGroupResponse x -> x | _ -> wrongResponse ()
     static member internal toListGroups res = match res with ListGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()
+
+    static member isError (x:ResponseMessage) =
+      match x with
+      | ResponseMessage.DescribeGroupsResponse r -> r.groups |> Seq.exists (fun (ec,_,_,_,_,_) -> ErrorCode.isError ec)
+      | ResponseMessage.FetchResponse r -> r.topics |> Seq.exists (fun (_,xs) -> xs |> Seq.exists (fun (_,ec,_,_,_) -> ErrorCode.isError ec))
+      | _ -> false
+      
 
 
 /// API operations on a generic request/reply channel.
@@ -277,7 +286,7 @@ module internal Conn =
 
       | OffsetFetch r ->
         match byGroupId |> Dict.tryGet r.consumerGroup with
-        | Some send -> return! send req
+        | Some ch -> return! ch req
         | None -> return failwith ""
 
       | JoinGroup r ->
@@ -308,14 +317,167 @@ module internal Conn =
         // TODO
         return failwith "" }
 
+  // Resource.toDVar
+  // Resource.recover (access is queued)
+
+  // operations on resource monitors.
+  module Resource =
+
+
+    (*
+    
+      - perform op
+      - on failure, recover
+      - recovery requests received during recovery are queued to wait of the recovery in progress, at
+        which point they will receive the recovered resource. this ensures only a single resource is created.
+        ...but then why not apply on creation function??
+
+      - must change atomically with resource access
+
+    *)
+
+
+    /// Resource recovery action
+    type Recovery =
+      
+      /// The error should be ignored.
+      | Ignore
+
+      /// The resource should be re-created.
+      | Restart
+
+      /// The error should be escalated, notifying dependent
+      /// resources.
+      | Escalate     
+
+    /// Configuration for a recoverable resource.        
+    type Cfg<'r> = {
+      
+      /// A computation which creates a resource.
+      create : Async<'r>
+      
+      /// A computation which handles an exception received
+      /// during action upon a resource.
+      /// The resource takes the returned recovery action.
+      handle : ('r * exn) -> Async<Recovery>
+      
+      /// A heartbeat process, started each time the
+      /// resource is created.
+      /// If and when and heartbeat computation completes,
+      /// the returned recovery action is taken.
+      hearbeat : 'r -> Async<Recovery>
+
+    }
+
+    type Event =
+      | Restarted
+      | Escalating      
+      
+
+    /// Recoverable resource supporting recoverable operations.
+    type Resource<'r> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
+      let rsrc = ref Unchecked.defaultof<_>
+      let rwl = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion)
+//      let mbp = MailboxProcessor.Start (fun mbp -> async {
+//        let! msg = mbp.Receive()
+//        return () })
+      
+      let evt = new Event<Event>()
+
+      member __.Kill () = ()
+
+      member internal __.Notify<'s> (r:Resource<'s>) =
+        evt.Publish.Add (function
+          | Restarted -> ()
+          | Escalating -> ())         
+
+      member __.Heartbeat () = async {
+        return () }
+      
+      member internal __.Init () = async {
+        if rwl.TryEnterWriteLock(0) then
+          let! r = create
+          rsrc := r
+          rwl.ExitWriteLock()
+          return ()
+        else
+          return () }
+
+      member __.Recover (ex:exn) = async {
+        let r = !rsrc
+        let! recovery = handle (r,ex)
+        match recovery with
+        | Ignore -> 
+          return ()
+        | Escalate -> 
+          evt.Trigger (Escalating)
+          raise ex
+        | Restart -> 
+          //evt.Trigger (Restarting)                   
+          do! __.Init()
+          evt.Trigger (Restarted) }
+
+      member __.Op<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
+        let rec go a = async {
+          rwl.EnterReadLock()
+          let r = !rsrc
+          rwl.ExitReadLock()
+          try
+            let! b = op r a
+            return b
+          with ex ->
+            do! __.Recover ex
+            return! go a }
+        go
+
+      interface IDisposable with
+        member __.Dispose () = ()
+    
+    /// When child restarts, parent is notified.
+    let dependsOn (p:Resource<'a>) (child:Resource<'a>) =
+      failwith ""
+   
+
+    let recoverableRecreate (create:Async<'r>) (handleError:('r * exn) -> Async<Recovery>) = async {      
+      let r = new Resource<_>(create, handleError)
+      do! r.Init()
+      return r }
+
+
+    /// Injects a resource into a resource-dependent async function.
+    let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<_>) : 'a -> Async<'b> =
+      r.Op op
+
+    
+
+    let extend (f:Resource<'a> -> 'b) (r:Resource<'a>) : Resource<'b> =
+      failwith ""
+      
+
+
+  /// Kafka operations which can be sent to any broker in the list.
+  /// This is used to restrict the operations supported by bootstrap brokers.
+  module Bootstrap =
+    
+    let metadata (ch:Chan) (req:Metadata.Request) =
+      Api.metadata ch req
+
+    let groupCoordinator (ch:Chan) (req:GroupCoordinatorRequest) =
+      Api.groupCoordinator ch req
+
+
+
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   let rec connect (ep:IPEndPoint, clientId:ClientId) : Async<Chan> = async {
 
     let receiveBufferSize = 8192
 
+    // actions := create | recover
+    // recovery := overlapping | singleton | 
+
     /// Builds and connects the socket.
-    let conn () = async {
+    let conn = async {
       // TODO: lifecycle
       let connSocket =
         new Socket(
@@ -329,71 +491,70 @@ module internal Conn =
       log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint
       return sendRcvSocket }
 
-    let! sendRcvSocket = conn ()
-    let sendRcvSocket = DVar.create sendRcvSocket
+//    let! sendRcvSocket = conn
+//    let sendRcvSocket = DVar.create sendRcvSocket
 
-    let receive =
-      sendRcvSocket
-      |> DVar.mapFun Socket.receive
-
-    let send =
-      sendRcvSocket
-      |> DVar.mapFun Socket.sendAll
-
-    // TODO: implement using channels
-    let state = ref 0 // 0 - OK, 1 - recovery in progress
-    let wh = new ManualResetEventSlim()
-
-    /// Notify of an error and recovery.
-    /// If a recovery is in progress, wait for it to complete and return.
-    let reset (_ex:exn option) = async {
-      log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
-      if Interlocked.CompareExchange(state, 1, 0) = 0 then
-        wh.Reset()
-        let! sendRcvSocket' = conn ()
-        DVar.put sendRcvSocket' sendRcvSocket
-        wh.Set()
-        Interlocked.Exchange(state, 0) |> ignore
-      else
-        log.info "recovery already in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
-        wh.Wait()
-        return () }
-
-    // TODO: handle specific TCP errors only, otherwise escalate to reconnect
-
-    let rec sendErr buf =
-      send buf
-      |> Async.Catch
-      |> Async.bind (function
-        | Success n -> async.Return n
-        | Failure ex -> async {
+    let! sendRcvSocket = 
+      Resource.recoverableRecreate 
+        conn 
+        (fun (socket,ex) -> async {
+          log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
+          socket.Dispose()
           match ex with
           | :? SocketException as _x ->
             log.error "socket exception|error=%O" ex
-            do! reset (Some ex)
-            return! sendErr buf
+            return Resource.Recovery.Restart
           | _ ->
             log.error "exception=%O" ex
-            return raise ex })
+            return Resource.Recovery.Escalate })
 
+    let receive =
+      let receive s b = 
+        Socket.receive s b
+        |> Async.map (fun received -> 
+          if received = 0 then raise(SocketException(int SocketError.ConnectionAborted)) 
+          else received)
+      sendRcvSocket
+      |> Resource.inject receive
+
+    let rec send =
+      sendRcvSocket
+      |> Resource.inject Socket.sendAll   
+
+    let rec sendErr buf =
+      send buf
+//      |> Async.Catch
+//      |> Async.bind (function
+//        | Success n -> async.Return n
+//        | Failure ex -> async {
+//          match ex with
+//          | :? SocketException as _x ->
+//            log.error "socket exception|error=%O" ex
+//            do! reset (Some ex)
+//            return! sendErr buf
+//          | _ ->
+//            log.error "exception=%O" ex
+//            return raise ex })
+
+    // re-connect -> restart
     let rec receiveErr buf =
       receive buf
-      |> Async.Catch
-      |> Async.bind (function
-        | Success received when received > 0 -> async.Return received
-        | Success _ -> async {
-          log.warn "received 0 bytes indicating a closed TCP connection"
-          do! reset None
-          return! receiveErr buf }
-        | Failure ex -> async {
-          match ex with
-          | :? SocketException as _x ->
-            log.warn "error receiving on socket|error=%O" ex
-            do! reset (Some ex)
-            return! receiveErr buf
-          | _ ->
-            log.error "exception=%O" ex
-            return raise ex })
+//      |> Async.Catch
+//      |> Async.bind (function
+//        | Success received when received > 0 -> async.Return received
+//        | Success _ -> async {
+//          log.warn "received 0 bytes indicating a closed TCP connection"
+//          //do! reset None
+//          return! receiveErr buf }
+//        | Failure ex -> async {
+//          match ex with
+//          | :? SocketException as _x ->
+//            log.warn "error receiving on socket|error=%O" ex            
+//            do! reset (Some ex)
+//            return! receiveErr buf
+//          | _ ->
+//            log.error "exception=%O" ex
+//            return raise ex })
 
     let send, receive = sendErr, receiveErr
 
@@ -513,6 +674,24 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       chanByTopic
       chanByGroupId
     |> DVar.toFun
+
+  let rc : Chan = 
+    routedChan
+    |> AsyncFunc.mapOutWithInAsync (fun (req,res) -> async {      
+      match res with
+      | ResponseMessage.FetchResponse r ->
+        for (tn,pmd) in r.topics do
+          for (_,ec,_,_,_) in pmd do
+            match ec with
+            | ErrorCode.NotLeaderForPartition ->
+              // refresh metadata, retry
+              ()
+            | _ ->
+              // escalate
+              ()
+          ()
+      | _ -> failwith ""
+      return res })
 
   /// Connects to the specified host and adds to routing table.
   let connHost (host:Host, port:Port, nodeId:NodeId option) = async {

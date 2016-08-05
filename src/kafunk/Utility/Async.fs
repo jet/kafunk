@@ -264,3 +264,122 @@ module AsyncEx =
             cnc ex                
         Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
         Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
+
+/// Operations on functions of the form ('a -> Async<'b>).
+module AsyncFunc =
+  
+  let catch (f:'a -> Async<'b>) : 'a -> Async<Choice<'b, exn>> =
+    fun a -> f a |> Async.Catch
+  
+  let recoverResult (f:'a -> Async<Result<'b, 'e>>) (recover:'a * 'e -> Async<'a -> Async<Result<'b, 'e>>>) : 'a -> Async<'b> =
+    let rec go f a = async {
+      let! r = f a
+      match r with
+      | Success a -> return a
+      | Failure e ->
+        let! f' = recover (a,e)
+        return! go f' a }
+    go f
+
+  let mapOutWithInAsync (m:'a * 'b -> Async<'c>) (f:'a -> Async<'b>) : 'a -> Async<'c> =
+    fun a -> f a |> Async.bind (fun b -> m (a,b))
+
+  let mapOutAsync (m:'b -> Async<'c>) (f:'a -> Async<'b>) : 'a -> Async<'c> =
+    f >> Async.bind m
+
+
+
+
+
+type ProcessId = string
+
+type NodeId = string
+
+type PMessage = PMssage with
+  static member decode<'a> (_) = Unchecked.defaultof<'a>
+
+type ProcState = {
+  nodeId : NodeId
+  pid : ProcessId  
+  inbox : MailboxProcessor<PMessage>
+  outbox : MailboxProcessor<PMessage>
+}
+
+type Proc<'a> = P of (ProcState -> Async<'a>)
+
+module Proc = 
+  
+  let un (P p) = p
+
+  let expect<'a> : Proc<'a> =
+    P <| fun st -> async {
+      let! msg = st.inbox.Receive()
+      let a = PMessage.decode msg
+      return a }
+    
+  let pid : Proc<ProcessId> =
+    P <| fun st -> async.Return st.pid
+
+  let run (ps:ProcState) (p:Proc<'a>) : Async<'a> =
+    ps |> un p
+
+  let returnP (a:'a) : Proc<'a> =
+    P <| fun _ -> async { return a }
+
+  let bind (f:'a -> Proc<'b>) (p:Proc<'a>) : Proc<'b> =
+    P <| fun st -> async {
+      let! a = (un p) st
+      return! (un (f a) st) }
+  
+  let liftAsync (a:Async<'a>) : Proc<'a> =
+    P <| fun _ -> a
+  
+  type ProcBuilder () =
+    member __.Return x = returnP x
+    member __.Bind(k,f) = bind f k
+
+  let proc = new ProcBuilder()
+
+  let send (pid2:ProcessId) (m:byte[]) : Proc<unit> = proc {
+    let! selfPid = pid
+    return () }
+
+
+
+  
+
+type MVar<'a> = 
+  private 
+  | MVar of MailboxProcessor<Choice<('a * AsyncReplyChannel<unit>), AsyncReplyChannel<'a>>>
+
+module MVar =
+  
+  let create () : MVar<'a> =
+    let mbp = 
+      MailboxProcessor.Start 
+        (fun agent -> async {
+          let rec empty () = async {
+            return! agent.Scan(function
+              | Choice1Of2 (a:'a, rep:AsyncReplyChannel<unit>) -> 
+                Some (async { rep.Reply () ; return! full a })
+              | _ -> None) }
+          and full a = async {
+            return! agent.Scan(function
+              | Choice2Of2 (rep:AsyncReplyChannel<'a>) ->
+                Some <| async { rep.Reply a ; return! empty() }
+              | _ -> None) }
+          return! empty () } )
+    MVar mbp
+  
+  let un (MVar(mbp)) = mbp
+
+  let put (a:'a) (m:MVar<'a>) : Async<unit> =
+    let mbp = un m
+    mbp.PostAndAsyncReply(fun ch -> Choice1Of2 (a,ch))
+
+  let take (m:MVar<'a>) : Async<'a> =
+    let mbp = un m
+    mbp.PostAndAsyncReply(fun ch -> Choice2Of2 ch)  
+
+
+         

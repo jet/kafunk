@@ -215,6 +215,23 @@ module Protocol =
     [<Literal>]
     let ClusterAuthorizationFailedCode = 31s
 
+    let isError (ec:ErrorCode) = 
+      ec <> NoError
+
+    /// Determines whether the error code indicates a stable condition
+    /// which will not change and should not be retried.
+    let isStable (ec:ErrorCode) =
+      match ec with
+      | NoError -> true
+      | Unknown -> true
+      | MessageSizeTooLarge -> true
+      | OffsetMetadataTooLargeCode -> true
+      | RecordListTooLargeCode -> true
+      | InvalidRequiredAcksCode -> true
+      | IllegalGenerationCode -> true
+      | _ -> false
+      
+
 
   /// The replica id indicates the node id of the replica initiating this
   /// request. Normal client consumers should always specify this as -1.
