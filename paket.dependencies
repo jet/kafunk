@@ -1,5 +1,6 @@
 source https://api.nuget.org/v3/index.json
 nuget FSharp.Core >= 3.1.2.5 redirects: force, lowest_matching: true
+github logary/logary src/Logary.Facade/Facade.fs
 
 group Build
   source https://api.nuget.org/v3/index.json

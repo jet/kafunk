@@ -6,6 +6,8 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 
+open Kafunk.Logging
+open Kafunk.Logging.Message
 open Kafunk
 open Kafunk.Prelude
 open Kafunk.Protocol
@@ -174,7 +176,7 @@ module internal Api =
 module internal Conn =
 
   // Let's avoid this Log vs Log.create. Just lowercase it. Shadowing the constructor is not cool.
-  let private log = Log.create "Kafunk.Conn"
+  let private logger = Log.create "Kafunk.Conn"
 
   let ApiVersion : ApiVersion = 0s
 
@@ -341,9 +343,9 @@ module internal Conn =
           ProtocolType.Tcp,
           NoDelay=true,
           ExclusiveAddressUse=true)
-      log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
+      logger.info (eventX "Connecting..." >> setField "clientId" clientId >> setField "remoteEndpoint" ep)
       let! sendRcvSocket = Socket.connect connSocket ep
-      log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint
+      logger.info (eventX "Connected" >> setField "remoteEndpoint" sendRcvSocket.RemoteEndPoint)
       return sendRcvSocket }
 
     let! sendRcvSocket = conn ()
@@ -364,7 +366,10 @@ module internal Conn =
     /// Notify of an error and recovery.
     /// If a recovery is in progress, wait for it to complete and return.
     let reset (_ex:exn option) = async {
-      log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
+      logger.info (
+        eventX "Recovering TCP connection for {clientId} to {remoteEndpoint}"
+        >> setField "clientId" clientId
+        >> setField "remoteEndpoint" ep)
       if Interlocked.CompareExchange(state, 1, 0) = 0 then
         wh.Reset()
         let! sendRcvSocket' = conn ()
@@ -372,7 +377,10 @@ module internal Conn =
         wh.Set()
         Interlocked.Exchange(state, 0) |> ignore
       else
-        log.info "recovery already in progress, waiting...|client_id=%s remote_endpoint=%O" clientId ep
+        logger.info (
+          eventX "Recovery already in progress, waiting..."
+          >> setField"clientId" clientId
+          >> setField"remoteEndpoint" ep)
         wh.Wait()
         return () }
 
@@ -386,11 +394,11 @@ module internal Conn =
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.error "socket exception|error=%O" ex
+            logger.error (eventX "Socket exception" >> addExn ex)
             do! reset (Some ex)
             return! sendErr buf
           | _ ->
-            log.error "exception=%O" ex
+            logger.error (eventX "Unhandled exception" >> addExn ex)
             return raise ex })
 
     let rec receiveErr buf =
@@ -399,17 +407,17 @@ module internal Conn =
       |> Async.bind (function
         | Success received when received > 0 -> async.Return received
         | Success _ -> async {
-          log.warn "received 0 bytes indicating a closed TCP connection"
+          logger.info (eventX "Received 0 bytes indicating a closed TCP connection")
           do! reset None
           return! receiveErr buf }
         | Failure ex -> async {
           match ex with
           | :? SocketException as _x ->
-            log.warn "error receiving on socket|error=%O" ex
+            logger.warn (eventX "Error receiving on socket" >> addExn ex)
             do! reset (Some ex)
             return! receiveErr buf
           | _ ->
-            log.error "exception=%O" ex
+            logger.error (eventX "Error on socket" >> addExn ex)
             return raise ex })
 
     let send, receive = sendErr, receiveErr
@@ -462,7 +470,7 @@ with
 /// It acts as a context for API operations, providing filtering and fault tolerance.
 type KafkaConn internal (cfg:KafkaConnCfg) =
 
-  static let Log = Log.create "KafkaFunc.Conn"
+  static let logger = Log.create "KafkaFunc.Conn"
 
   // note: must call Connect first thing!
   let [<VolatileField>] mutable bootstrapChanField : Chan =
@@ -536,7 +544,11 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! ep = Dns.IPv4.getEndpointAsync (host, port)
     let! ch = Conn.connect(ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
-    Log.info "connected to host=%s port=%i node_id=%A" host port nodeId
+    logger.info (
+      eventX "Connected to {host}:{port}"
+      >> setField "host" host
+      >> setField "port" port
+      >> setField "nodeId" nodeId)
     nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
     return ch }
 
@@ -550,7 +562,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Connects to the first broker in the bootstrap list.
   let connectBootstrap () = async {
-    Log.info "discovering bootstrap brokers...|client_id=%s" cfg.clientId
+    logger.info (eventX "Discovering bootstrap brokers..." >> setField"clientId" cfg.clientId)
     let! bootstrapChan =
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -560,7 +572,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
           let! ch = connHost (uri.Host, uri.Port, None)
           return Some ch
         with ex ->
-          Log.error "error connecting to bootstrap host=%s port=%i error=%O" uri.Host uri.Port ex
+          logger.error (eventX "Error connecting to bootstrap {host}" >> setField"host" uri.Host
+                        >> setField"port" uri.Port >> addExn ex)
           return None })
     match bootstrapChan with
     | Some bootstrapChan ->
@@ -589,7 +602,10 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal __.ApplyMetadata (metadata:MetadataResponse) = async {
-    Log.info "applying cluster metadata for topics=%s" (String.concat ", " (metadata.topicMetadata |> Seq.map (fun m -> m.topicName)))
+    logger.info (
+      let topics = metadata.topicMetadata |> Seq.map (fun m -> m.topicName) |> String.concat ", "
+      eventX "Applying cluster metadata for {topics}" >> setField "topics" topics)
+
     let hostByNode' =
       metadata.brokers
       |> Seq.map (fun b -> b.nodeId, (b.host, b.port))
@@ -602,7 +618,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Gets metadata from the bootstrap channel and updates internal routing tables.
   member internal this.GetMetadata (topics:TopicName[]) = async {
-    Log.info "getting cluster metadata for topics=%s" (String.concat ", " topics)
+    logger.info (
+      eventX "Getting cluster metadata for {topics}"
+      >> setField"topics" (String.concat ", " topics))
     let! metadata = Api.metadata bootstrapChan (Metadata.Request(topics))
     do! this.ApplyMetadata metadata
     return metadata }

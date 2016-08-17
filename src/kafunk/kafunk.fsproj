@@ -59,6 +59,10 @@
   -->
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
+    <Compile Include="..\..\paket-files\logary\logary\src\Logary.Facade\Facade.fs">
+      <Paket>True</Paket>
+      <Link>Utility/Facade.fs</Link>
+    </Compile>
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="Utility\Prelude.fs" />
