@@ -307,6 +307,10 @@ type ProcState = {
 
 type Proc<'a> = P of (ProcState -> Async<'a>)
 
+type ProcMessage =
+  | Binary of byte[]
+  | D
+
 module Proc = 
   
   let un (P p) = p
@@ -340,13 +344,20 @@ module Proc =
 
   let proc = new ProcBuilder()
 
+  
   let send (pid2:ProcessId) (m:byte[]) : Proc<unit> = proc {
     let! selfPid = pid
     return () }
 
 
 
-  
+
+
+
+
+
+
+
 
 type MVar<'a> = 
   private 
@@ -379,7 +390,14 @@ module MVar =
 
   let take (m:MVar<'a>) : Async<'a> =
     let mbp = un m
-    mbp.PostAndAsyncReply(fun ch -> Choice2Of2 ch)  
+    mbp.PostAndAsyncReply(fun ch -> Choice2Of2 ch)
+
+
+
+
+// trigger when N or more events are consumed within T
+
+
 
 
          
