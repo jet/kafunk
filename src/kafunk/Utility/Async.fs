@@ -111,12 +111,6 @@ module AsyncEx =
       let! c2 = c2
       return c1,c2 }
 
-    static member Parallel (c1:Async<unit>, c2:Async<unit>) : Async<unit> = async {
-      let! c1 = c1 |> Async.StartChild
-      let! c2 = c2 |> Async.StartChild
-      do! c1
-      do! c2 }
-
     static member Parallel (c1, c2, c3) : Async<'a * 'b * 'c> = async {
       let! c1 = c1 |> Async.StartChild
       let! c2 = c2 |> Async.StartChild
@@ -291,71 +285,6 @@ module AsyncFunc =
 
 
 
-type ProcessId = string
-
-type NodeId = string
-
-type PMessage = PMssage with
-  static member decode<'a> (_) = Unchecked.defaultof<'a>
-
-type ProcState = {
-  nodeId : NodeId
-  pid : ProcessId  
-  inbox : MailboxProcessor<PMessage>
-  outbox : MailboxProcessor<PMessage>
-}
-
-type Proc<'a> = P of (ProcState -> Async<'a>)
-
-type ProcMessage =
-  | Binary of byte[]
-  | D
-
-module Proc = 
-  
-  let un (P p) = p
-
-  let expect<'a> : Proc<'a> =
-    P <| fun st -> async {
-      let! msg = st.inbox.Receive()
-      let a = PMessage.decode msg
-      return a }
-    
-  let pid : Proc<ProcessId> =
-    P <| fun st -> async.Return st.pid
-
-  let run (ps:ProcState) (p:Proc<'a>) : Async<'a> =
-    ps |> un p
-
-  let returnP (a:'a) : Proc<'a> =
-    P <| fun _ -> async { return a }
-
-  let bind (f:'a -> Proc<'b>) (p:Proc<'a>) : Proc<'b> =
-    P <| fun st -> async {
-      let! a = (un p) st
-      return! (un (f a) st) }
-  
-  let liftAsync (a:Async<'a>) : Proc<'a> =
-    P <| fun _ -> a
-  
-  type ProcBuilder () =
-    member __.Return x = returnP x
-    member __.Bind(k,f) = bind f k
-
-  let proc = new ProcBuilder()
-
-  
-  let send (pid2:ProcessId) (m:byte[]) : Proc<unit> = proc {
-    let! selfPid = pid
-    return () }
-
-
-
-
-
-
-
-
 
 
 
@@ -393,9 +322,13 @@ module MVar =
     mbp.PostAndAsyncReply(fun ch -> Choice2Of2 ch)
 
 
+//type MVar<'a> () =
+//  let value = ref Unchecked.defaultof<_>
+//  member __.Put (a:'a) : Async<unit> = async {    
+//    return () }
 
 
-// trigger when N or more events are consumed within T
+
 
 
 

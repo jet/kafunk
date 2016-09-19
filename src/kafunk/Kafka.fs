@@ -343,7 +343,7 @@ module internal Conn =
       | Ignore
 
       /// The resource should be re-created.
-      | Restart
+      | Recreate
 
       /// The error should be escalated, notifying dependent
       /// resources.
@@ -393,10 +393,12 @@ module internal Conn =
     /// Resources can form supervision hierarchy through a message passing and reaction system.
     /// Supervision hierarchies can be used to re-cycle chains of dependent resources.
     /// </notes>
-    type Resource<'r> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
-      let rsrc = ref Unchecked.defaultof<_>
-      let rwl = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion)
+    type Resource<'r when 'r : not struct> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
       
+      let Log = Log.create "Resource"
+      let rsrc : 'r ref = ref Unchecked.defaultof<_>
+      let mre = new ManualResetEvent(false)
+      let st = ref 0 // 0 - initialized/zero | 1 - initializing
       let evt = new Event<Event>()
 
       member __.Events : IEvent<Event> =
@@ -405,26 +407,37 @@ module internal Conn =
       member __.Restarts : IEvent<exn> =
         failwith ""
 
-      member __.Monitor (r:Resource<'r>) =
-        r.Restarts.Add (fun _ ->                    
-          ())
-
-      member __.Kill () = 
-        ()
+//      member __.Monitor (r:Resource<'r>) =
+//        r.Restarts.Add (fun _ ->                    
+//          ())
+//
+//      member __.Kill () = 
+//        ()
   
-      member internal __.Notify<'s> (r:Resource<'s>) =
-        evt.Publish.Add (function
-          | Restarted -> ()
-          | Escalating -> ())         
+//      member internal __.Notify<'s> (r:Resource<'s>) =
+//        evt.Publish.Add (function
+//          | Restarted -> ()
+//          | Escalating -> ())         
 
-      /// Creates the resource, ensuring mutual exclusion.      
-      member internal __.Init () = async {
-        if rwl.TryEnterWriteLock(0) then
+      /// Creates the resource, ensuring mutual exclusion.
+      /// In this case, mutual exclusion is extended with the ability to exchange state.
+      /// Protocol:
+      /// - atomic { 
+      ///   if ZERO then set CREATING, create and set resource, pulse waiters
+      ///   else set WAITING (and wait on pulse), once wait completes, read current value
+      member internal __.Create () = async {
+        match Interlocked.CompareExchange (st, 1, 0) with
+        | 0 ->
+          Log.info "creating...."
           let! r = create
           rsrc := r
-          rwl.ExitWriteLock()
+          mre.Set () |> ignore
+          Interlocked.Exchange (st, 0) |> ignore
           return ()
-        else
+        | _ ->        
+          Log.info "waiting..."
+          let! _ = Async.AwaitWaitHandle mre
+          mre.Reset () |> ignore
           return () }
 
       /// Initiates recovery of the resource by virtue of the specified exception
@@ -434,39 +447,38 @@ module internal Conn =
         let! recovery = handle (r,ex)
         match recovery with
         | Ignore -> 
+          Log.info "recovery action=ignoring..."
           return ()
         | Escalate -> 
-          evt.Trigger (Escalating)
+          Log.info "recovery action=escalating..."
+          //evt.Trigger (Escalating)
           raise ex
-        | Restart -> 
-          //evt.Trigger (Restarting)                   
-          do! __.Init()
-          evt.Trigger (Restarted) }
+          return ()
+        | Recreate ->
+          Log.info "recovery action=restarting..."
+          do! __.Create()
+          Log.info "recovery restarted"
+          return () }
 
-      member __.Op<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
+      member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
         let rec go a = async {
-          rwl.EnterReadLock()
           let r = !rsrc
-          rwl.ExitReadLock()
           try
             let! b = op r a
             return b
           with ex ->
+            Log.info "caught exception on injected operation, calling recovery..."
             do! __.Recover ex
+            Log.info "recovery complete, restarting operation..."
             return! go a }
         go
 
       interface IDisposable with
         member __.Dispose () = ()
     
-    /// When child restarts, parent is notified.
-    let dependsOn (p:Resource<'a>) (child:Resource<'a>) =
-      failwith ""
-   
-
     let recoverableRecreate (create:Async<'r>) (handleError:('r * exn) -> Async<Recovery>) = async {      
       let r = new Resource<_>(create, handleError)
-      do! r.Init()
+      do! r.Create()
       return r }
 
 
@@ -474,7 +486,7 @@ module internal Conn =
     /// Failures thrown by the resource-dependent computation are handled by the resource 
     /// recovery logic.
     let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : 'a -> Async<'b> =
-      r.Op op
+      r.Inject op
    
       
 
@@ -512,18 +524,18 @@ module internal Conn =
           ExclusiveAddressUse=true)
       log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
       let! sendRcvSocket = Socket.connect connSocket ep
-      log.info "connected|remote_endpoint=%O" sendRcvSocket.RemoteEndPoint
+      log.info "connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
       return sendRcvSocket }
 
     let recovery (s:Socket, ex:exn) = async {
-      log.info "recovering TCP connection|client_id=%s remote_endpoint=%O" clientId ep
-      s.Dispose()
+      log.info "recovering TCP connection|client_id=%s remote_endpoint=%O from error=%O" clientId ep ex
+      log.trace "disposing errored connection..."
+      do! Socket.disconnect s false
+      s.Dispose()      
       match ex with
       | :? SocketException as _x ->
-        log.error "socket exception|error=%O" ex
-        return Resource.Recovery.Restart
+        return Resource.Recovery.Recreate
       | _ ->
-        log.error "exception=%O" ex
         return Resource.Recovery.Escalate }
 
     let! sendRcvSocket = 
@@ -589,6 +601,77 @@ with
   static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId) =
     { bootstrapServers = bootstrapServers
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N") }
+
+
+type KafkaRoutes () =
+
+  // mutable routing tables
+
+  let chanByHost : DVar<Map<Host * Port, Chan>> =
+    DVar.create Map.empty
+
+  let hostByNode : DVar<Map<NodeId, Host * Port>> =
+    DVar.create Map.empty
+
+  let nodeByTopic : DVar<Map<TopicName * Partition, NodeId>> =
+    DVar.create Map.empty
+
+  let hostByGroup : DVar<Map<GroupId, Host * Port>> =
+    DVar.create Map.empty
+
+  // derived routing tables
+
+  let hostByTopic : DVar<Map<TopicName * Partition, Host * Port>> =
+    DVar.combineLatestWith
+      (fun topicNodes nodeHosts ->
+        topicNodes
+        |> Map.toSeq
+        |> Seq.choose (fun (tp, n) ->
+         match nodeHosts |> Map.tryFind n with
+         | Some host -> Some (tp, host)
+         | None -> None)
+       |> Map.ofSeq)
+      nodeByTopic
+      hostByNode
+    |> DVar.distinct
+
+  let chanByTopic : DVar<Map<(TopicName * Partition), Chan>> =
+    (hostByTopic, chanByHost) ||> DVar.combineLatestWith
+      (fun topicHosts hostChans ->
+        topicHosts
+        |> Map.toSeq
+        |> Seq.map (fun (t, h) ->
+          let chan = Map.find h hostChans in
+          t, chan)
+        |> Map.ofSeq)
+
+  let chanByGroupId : DVar<Map<GroupId, Chan>> =
+    DVar.combineLatestWith
+      (fun groupHosts hostChans ->
+        groupHosts
+        |> Map.toSeq
+        |> Seq.map (fun (g, h) ->
+          let chan = Map.find h hostChans in
+          g, chan)
+        |> Map.ofSeq)
+      hostByGroup
+      chanByHost
+
+  member __.AddChanByHostPort (host:Host, port:Port, ch:Chan) =
+    chanByHost |> DVar.update (Map.add (host, port) ch)
+
+  member __.AddHostPortByNodeId (nodeId:NodeId, host:Host, port:Port) =
+    hostByNode |> DVar.update (Map.add nodeId (host, port))
+
+  member __.AddGroupCoordinatorHostByGroupId (coordinatorHost:Host, coordinatorPort:Port, groupId:GroupId) =
+    hostByGroup |> DVar.updateIfDistinct (Map.add groupId (coordinatorHost, coordinatorPort)) |> ignore
+
+  member __.AddLeaderByTopicPartition (leader:Leader, tn:TopicName, p:Partition) = 
+    nodeByTopic |> DVar.update (Map.add (tn, p) (leader))
+
+  
+    
+
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
@@ -658,34 +741,52 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   let routedChan : Chan =
     DVar.combineLatestWith
-      (fun chanByTopic chanByGroup ->
-        Conn.route bootstrapChan chanByTopic chanByGroup)
+      (fun chanByTopic chanByGroup -> Conn.route bootstrapChan chanByTopic chanByGroup)
       chanByTopic
       chanByGroupId
     |> DVar.toFun
-
-  let rc : Chan = 
-    routedChan
-    |> AsyncFunc.mapOutWithInAsync (fun (req,res) -> async {      
+    //|> AsyncFunc.catch // TODO: catch recoverable exceptions and initiate recovery
+    |> AsyncFunc.mapOutWithInAsync (fun (_,res) -> async {
+      // action = RetryAfterMetadataRefresh | RetryAfterSleep | Escalate
+      let action = 0
       match res with
       | ResponseMessage.FetchResponse r ->
-        for (tn,pmd) in r.topics do
+        for (tn,pmd) in r.topics do          
           for (_,ec,_,_,_) in pmd do
             match ec with
+            | ErrorCode.NoError -> ()
             | ErrorCode.NotLeaderForPartition ->
               // refresh metadata, retry
               ()
             | _ ->
               // escalate
               ()
-          ()
-      | _ -> failwith ""
+      | ResponseMessage.ProduceResponse r ->
+        for (tn,ps) in r.topics do
+          for (p,ec,os) in ps do
+            match ec with
+            | ErrorCode.NoError -> ()
+            | ErrorCode.LeaderNotAvailable | ErrorCode.RequestTimedOut -> 
+              ()
+              
+            | ErrorCode.NotLeaderForPartition ->
+              // refresh metadata
+
+              ()
+            | _ -> ()
+        ()
+      | _ -> 
+        ()
+
+            
+
       return res })
 
   /// Connects to the specified host and adds to routing table.
   let connHost (host:Host, port:Port, nodeId:NodeId option) = async {
-    let! ep = Dns.IPv4.getEndpointAsync (host, port)
-    let! ch = Conn.connect(ep, cfg.clientId)
+    let! eps = Dns.IPv4.getEndpointsAsync (host, port)
+    let ep = eps.[0] // TODO: handle
+    let! ch = Conn.connect (ep, cfg.clientId)
     chanByHost |> DVar.update (Map.add (host, port) ch)
     // TODO: Reload topics DVar here! This hack is for testing.
     // This really need to be done by the cluster not here.
@@ -713,9 +814,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     return ch }
 
   /// Connects to the specified host unless already connected.
-  let connHostNew (host:Host, port:Port, nodeId:NodeId option) = async {
+  let connHostNew (host:Host, port:Port, nodeId:NodeId option) = async {    
     match chanByHost |> DVar.get |> Map.tryFind (host, port) with
-    | Some ch ->
+    | Some ch ->      
       nodeId |> Option.iter (fun nodeId -> hostByNode |> DVar.update (Map.add nodeId (host, port)))
       return ch
     | None -> return! connHost (host, port, nodeId) }
@@ -768,7 +869,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> Map.ofSeq
     for tmd in metadata.topicMetadata do
       for pmd in tmd.partitionMetadata do
-        let (host, port) = hostByNode' |> Map.find pmd.leader // TODO: handle error, but shouldn't happen
+        let (host,port) = hostByNode' |> Map.find pmd.leader // TODO: handle error, but shouldn't happen
         let! _ = connHostNew (host, port, Some pmd.leader)
         nodeByTopic |> DVar.update (Map.add (tmd.topicName, pmd.partitionId) (pmd.leader)) }
 

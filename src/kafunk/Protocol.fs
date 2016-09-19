@@ -218,20 +218,16 @@ module Protocol =
     let isError (ec:ErrorCode) = 
       ec <> NoError
 
-    /// Determines whether the error code indicates a stable condition
-    /// which will not change and should not be retried.
-    let isStable (ec:ErrorCode) =
+    /// Determines whether the error should be escalated as an exception (true)
+    /// or retried (false). 
+    /// NoError does not escalate.
+    /// For retriable errors, action must be take before retry (even if only to sleep).
+    let shouldEscalate (ec:ErrorCode) =
       match ec with
-      | NoError -> true
-      | Unknown -> true
-      | MessageSizeTooLarge -> true
-      | OffsetMetadataTooLargeCode -> true
-      | RecordListTooLargeCode -> true
-      | InvalidRequiredAcksCode -> true
-      | IllegalGenerationCode -> true
-      | _ -> false
-      
-
+      | NoError | UnknownTopicOrPartition | LeaderNotAvailable | NotLeaderForPartition
+      | RequestTimedOut | GroupLoadInProgressCode | GroupCoordinatorNotAvailableCode | NotCoordinatorForGroupCode
+      | NotEnoughReplicasCode | NotEnoughReplicasAfterAppendCode -> false
+      | _ -> true
 
   /// The replica id indicates the node id of the replica initiating this
   /// request. Normal client consumers should always specify this as -1.

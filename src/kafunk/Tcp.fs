@@ -26,6 +26,11 @@ module internal Dns =
       let! ipv4 = getAsync hostOrAddress
       return IPEndPoint(ipv4, port) }
 
+    /// Gets an IPv4 IPEndPoint given a host and port.
+    let getEndpointsAsync (hostOrAddress:string, port:int) = async {
+      let! ipv4s = getAllAsync hostOrAddress
+      return ipv4s |> Array.map (fun ipv4 -> IPEndPoint(ipv4, port)) }
+
 
 /// Operations on Berkley sockets.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -236,6 +241,13 @@ type SessionMessage =
   new (data:Binary.Segment) = { tx_id = Binary.peekInt32 data; payload = Binary.shiftOffset 4 data }
   new (txId, payload) = { tx_id = txId ; payload = payload }
 
+
+//type ReqRepSessionConfig<'In, 'Out, 'State> = {
+//  correlationId : unit -> CorrelationId
+//  encode : 'In * CorrelationId -> Binary.Segment * 'State
+//}
+
+
 /// A multiplexed request/reply session.
 /// Note a session is stateful in that it maintains state between requests and responses
 /// and in that starts a process to read the input stream.
@@ -262,6 +274,8 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
+  let timeoutMs = 5000
+
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
 
@@ -282,9 +296,14 @@ type ReqRepSession<'a, 'b, 's> internal
     let rep = TaskCompletionSource<_>()
     let sessionReq,state = encode (req,correlationId)
     match awaitResponse req with
-    | None ->
+    | None ->      
       if not (txs.TryAdd(correlationId, (state,rep))) then
         Log.error "clash of the sessions!"
+      let rec t = new Timer(TimerCallback(fun _ ->        
+        if rep.TrySetCanceled () then
+          Log.error "request timed out! correlation_id=%i timeout_ms=%i" correlationId timeoutMs
+          t.Dispose()), null, timeoutMs, -1)
+      ()
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
