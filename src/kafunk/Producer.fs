@@ -30,29 +30,38 @@ type ProducerMessage =
 module Partitioner =
 
   /// Constantly returns the same partition.
-  let konst (p:Partition) : TopicName * TopicMetadata * ProducerMessage -> Partition =
+  let konst (p:Partition) : TopicName * Partition[] * ProducerMessage -> Partition =
     konst p
 
   /// Computes the hash-code of the routing key to get the topic partition.
-  let routeKeyHash : TopicName * TopicMetadata * ProducerMessage -> Partition =
-    fun (_,tmd,pm) ->
+  /// NB: Object.GetHashCode isn't guaranteed to be stable across runtimes.
+  let routeKeyHashCode : TopicName * Partition[] * ProducerMessage -> Partition =
+    fun (_,ps,pm) ->
       let hc = if isNull pm.routeKey then 0 else pm.routeKey.GetHashCode()
-      let p = tmd.partitionMetadata.[hc % tmd.partitionMetadata.Length]
-      p.partitionId
+      ps.[hc % ps.Length]
+
 
 type MessageBundle = {
   topic : TopicName
   messages : ProducerMessage[] }
 
+type ProduceError = {
+  errorCode : ErrorCode
+}
+
+type ProduceResult = Result<ProduceResponse, ProduceError>
+
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
-type Producer = MessageBundle[] -> Async<ProduceResponse>
+type Producer = P of (MessageBundle[] -> Async<ProduceResponse>)
+
+/// The number of partitions associated with a topic.
+type TopicPartitionCount = int
 
 /// Producer configuration.
 type ProducerCfg = {
 
-  /// The set of topics to produce to.
-  /// Produce requests must be for a topic in this list.
-  topics : TopicName[]
+  /// The topic to produce to.
+  topic : TopicName
 
   /// The acks required.
   requiredAcks : RequiredAcks
@@ -65,34 +74,47 @@ type ProducerCfg = {
 
   /// A partition function which given a topic name, cluster topic metadata and the message payload, returns the partition
   /// which the message should be written to.
-  partition : TopicName * TopicMetadata * ProducerMessage -> Partition
+  partition : TopicName * Partition[] * ProducerMessage -> Partition
 
 }
 with
-  static member create (topics:TopicName[], partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
+  static member create (topic:TopicName, partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
     {
-      topics = topics
+      topic = topic
       requiredAcks = defaultArg requiredAcks RequiredAcks.Local
       compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
       partition = partition
     }
 
-
 /// High-level producer API.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Producer =
 
+  type ProduceErrorAction =
+    | Ignore
+    | Escalate
+  
+  let private getErrors (res:ProduceResponse) =
+    res.topics
+    |> Seq.collect (fun (tn,ps) ->      
+      ps
+      |> Seq.choose (fun (p,ec,os) ->
+        match ec with
+        | ErrorCode.NoError -> None
+        | _ -> Some (ec,tn,p,os)))
+    |> Seq.toArray
+
+  
+
   /// Creates a producer given a Kafka connection and producer configuration.
   let createAsync (conn:KafkaConn) (cfg:ProducerCfg) : Async<Producer> = async {
 
-    let! metadata = conn.GetMetadata (cfg.topics)
+    let! topicPartitions = conn.GetMetadata [|cfg.topic|]
 
-    let metadataByTopic =
-      metadata.topicMetadata
-      |> Seq.map (fun tmd -> tmd.topicName,tmd)
-      |> Map.ofSeq
-
+    let topicPartitions =      
+      topicPartitions
+      |> Map.find cfg.topic
 
     let produce (ms:MessageBundle[]) = async {
       let ms =
@@ -100,7 +122,7 @@ module Producer =
         |> Seq.map (fun {topic = tn; messages = pms} ->
           let ms =
             pms
-            |> Seq.groupBy (fun pm -> cfg.partition (tn, Map.find tn metadataByTopic, pm))
+            |> Seq.groupBy (fun pm -> cfg.partition (tn, topicPartitions, pm))
             |> Seq.map (fun (p,pms) ->
               let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
               let ms = Compression.compress cfg.compression messages
@@ -110,16 +132,15 @@ module Producer =
         |> Seq.toArray
       let req = ProduceRequest.ofMessageSetTopics ms cfg.requiredAcks cfg.timeout
       let! res = Kafka.produce conn req
-      // TODO: check for errors
       return res }
 
-    return produce }
+    return P produce }
 
 
   let create (conn:KafkaConn) (cfg:ProducerCfg) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
 
-  let produce (p:Producer) ms =
+  let produce (P(p)) ms =
     p ms
 
   let produceSingle (p:Producer) (tn:TopicName, pms:ProducerMessage[]) =

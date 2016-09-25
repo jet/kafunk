@@ -11,20 +11,6 @@ open System.Collections.Concurrent
 
 open Kafunk.Prelude
 
-type Mb<'a> = MailboxProcessor<'a>
-
-/// Operations on unbounded FIFO mailboxes.
-module Mb =
-
-  /// Creates a new unbounded mailbox.
-  let create () : Mb<'a> = 
-    MailboxProcessor.Start (fun _ -> async.Return())
-
-  /// Puts a message into a mailbox, no waiting.
-  let inline put (a:'a) (mb:Mb<'a>) = mb.Post a
-
-  /// Creates an async computation that completes when a message is available in a mailbox.
-  let inline take (mb:Mb<'a>) = mb.Receive()
 
 [<AutoOpen>]
 module AsyncEx =
@@ -259,31 +245,25 @@ module AsyncEx =
         Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
         Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
 
-/// Operations on functions of the form ('a -> Async<'b>).
-module AsyncFunc =
-  
-  let catch (f:'a -> Async<'b>) : 'a -> Async<Choice<'b, exn>> =
-    fun a -> f a |> Async.Catch
-  
-  let recoverResult (f:'a -> Async<Result<'b, 'e>>) (recover:'a * 'e -> Async<'a -> Async<Result<'b, 'e>>>) : 'a -> Async<'b> =
-    let rec go f a = async {
-      let! r = f a
-      match r with
-      | Success a -> return a
-      | Failure e ->
-        let! f' = recover (a,e)
-        return! go f' a }
-    go f
-
-  let mapOutWithInAsync (m:'a * 'b -> Async<'c>) (f:'a -> Async<'b>) : 'a -> Async<'c> =
-    fun a -> f a |> Async.bind (fun b -> m (a,b))
-
-  let mapOutAsync (m:'b -> Async<'c>) (f:'a -> Async<'b>) : 'a -> Async<'c> =
-    f >> Async.bind m
 
 
 
 
+
+type Mb<'a> = MailboxProcessor<'a>
+
+/// Operations on unbounded FIFO mailboxes.
+module Mb =
+
+  /// Creates a new unbounded mailbox.
+  let create () : Mb<'a> = 
+    MailboxProcessor.Start (fun _ -> async.Return())
+
+  /// Puts a message into a mailbox, no waiting.
+  let inline put (a:'a) (mb:Mb<'a>) = mb.Post a
+
+  /// Creates an async computation that completes when a message is available in a mailbox.
+  let inline take (mb:Mb<'a>) = mb.Receive()
 
 
 
@@ -322,15 +302,239 @@ module MVar =
     mbp.PostAndAsyncReply(fun ch -> Choice2Of2 ch)
 
 
-//type MVar<'a> () =
-//  let value = ref Unchecked.defaultof<_>
-//  member __.Put (a:'a) : Async<unit> = async {    
-//    return () }
 
 
 
+type CellReq<'a> =
+  | Put of 'a * AsyncReplyChannel<unit>
+  | Update of ('a -> 'a) * AsyncReplyChannel<'a>
+  | UpdateAsync of ('a -> Async<'a>) * AsyncReplyChannel<'a>
+  | PutOrUpdate of put:'a * up:('a -> 'a) * AsyncReplyChannel<'a>
+  | Get of AsyncReplyChannel<'a>
+
+type Cell<'a> (?a:'a) =
+
+  let [<VolatileField>] mutable state : 'a = Unchecked.defaultof<_>
+  //let changes = Event<'a>()
+
+  let mbp = MailboxProcessor.Start (fun mbp -> async {
+    let rec init () = async {
+      return! mbp.Scan (function
+        | Put (a,rep) ->
+          state <- a
+          rep.Reply()          
+          Some (loop a)
+        | PutOrUpdate (a,_,rep) -> 
+          rep.Reply a
+          Some (loop a)
+        | _ ->
+          None) }
+    and loop (a:'a) = async {
+      let! msg = mbp.Receive()
+      match msg with
+      | Put (a,rep) ->
+        state <- a
+        rep.Reply()
+        return! loop a
+      | PutOrUpdate (_,up,rep) ->
+        let a = up a
+        state <- a
+        rep.Reply a
+        return! loop a
+      | Get rep ->
+        rep.Reply a
+        return! loop a
+      | Update (f,rep) ->
+        let a = f a
+        state <- a
+        rep.Reply a
+        return! loop a
+      | UpdateAsync (f,rep) ->
+        let! a = f a
+        state <- a
+        rep.Reply a
+        return! loop a }
+    match a with
+    | Some a ->
+      state <- a
+      return! loop a
+    | None -> 
+      return! init () })
+
+  member __.Get () : Async<'a> =
+    mbp.PostAndAsyncReply (Get)
+
+  member __.GetFast () : 'a =
+    state
+
+  member __.Put (a:'a) : Async<unit> =
+    mbp.PostAndAsyncReply (fun ch -> Put (a,ch))
+
+  member __.Update (f:'a -> 'a) : Async<'a> =
+    mbp.PostAndAsyncReply (fun ch -> Update (f,ch))
+
+  member __.UpdateAsync (f:'a -> Async<'a>) : Async<'a> =
+    mbp.PostAndAsyncReply (fun ch -> UpdateAsync (f,ch))
+
+  member __.PutOrUpdate (put:'a, up:'a -> 'a) : Async<'a> =
+    mbp.PostAndAsyncReply (fun ch -> PutOrUpdate (put,up,ch))
+
+  interface IDisposable with
+    member __.Dispose () = (mbp :> IDisposable).Dispose()
+
+module Cell =
+  
+  let create () : Cell<'a> =
+    new Cell<_>()
+
+  let createFull (a:'a) : Cell<'a> =
+    new Cell<_>(a)
+
+  let get (c:Cell<'a>) : Async<'a> =
+    c.Get ()
+
+  let getFastUnsafe (c:Cell<'a>) : 'a =
+    c.GetFast ()
+
+  let put (a:'a) (c:Cell<'a>) : Async<unit> =
+    c.Put a
+
+  let update (f:'a -> 'a) (c:Cell<'a>) : Async<'a> =
+    c.Update f
+
+  let updateAsync (f:'a -> Async<'a>) (c:Cell<'a>) : Async<'a> =
+    c.UpdateAsync f
+
+  let putOrUpdate (put:'a) (up:'a -> 'a) (c:Cell<'a>) : Async<'a> =
+    c.PutOrUpdate (put,up)
 
 
 
+// operations on resource monitors.
+module Resource =
+
+  /// Resource recovery action
+  type Recovery =
+      
+    /// The error should be ignored.
+    | Ignore
+
+    /// The resource should be re-created.
+    | Recreate
+
+    /// The error should be escalated, notifying dependent
+    /// resources.
+    | Escalate     
+
+  /// Configuration for a recoverable resource.        
+  type Cfg<'r> = {
+      
+    /// A computation which creates a resource.
+    create : Async<'r>
+      
+    /// A computation which handles an exception received
+    /// during action upon a resource.
+    /// The resource takes the returned recovery action.
+    handle : ('r * exn) -> Async<Recovery>
+      
+    /// A heartbeat process, started each time the
+    /// resource is created.
+    /// If and when and heartbeat computation completes,
+    /// the returned recovery action is taken.
+    hearbeat : 'r -> Async<Recovery>
+
+    /// Closes the resource.
+    close : 'r -> Async<unit>
+
+  }
+     
+  /// <summary>
+  /// Recoverable resource supporting the creation recoverable operations.
+  /// - create - used to create the resource initially and upon recovery. Overlapped inocations
+  ///   of this function are queued and given the instance being created when creation is complete.
+  /// - handle - called when an exception is raised by an resource-dependent computation created
+  ///   using this resrouce. If this function throws an exception, it is escalated.
+  /// </summary>
+  /// <notes>
+  /// A resource is an entity which undergoes state changes and is used by operations.
+  /// Resources can form supervision hierarchy through a message passing and reaction system.
+  /// Supervision hierarchies can be used to re-cycle chains of dependent resources.
+  /// </notes>
+  type Resource<'r when 'r : not struct> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
+      
+    let Log = Log.create "Resource"
+    let rsrc : 'r ref = ref Unchecked.defaultof<_>
+    let mre = new ManualResetEvent(false)
+    let st = ref 0 // 0 - initialized/zero | 1 - initializing
+   
+    /// Creates the resource, ensuring mutual exclusion.
+    /// In this case, mutual exclusion is extended with the ability to exchange state.
+    /// Protocol:
+    /// - atomic { 
+    ///   if ZERO then set CREATING, create and set resource, pulse waiters
+    ///   else set WAITING (and wait on pulse), once wait completes, read current value
+    member internal __.Create () = async {
+      match Interlocked.CompareExchange (st, 1, 0) with
+      | 0 ->
+        Log.info "creating...."
+        let! r = create
+        rsrc := r
+        mre.Set () |> ignore
+        Interlocked.Exchange (st, 0) |> ignore
+        return ()
+      | _ ->        
+        Log.info "waiting..."
+        let! _ = Async.AwaitWaitHandle mre
+        mre.Reset () |> ignore
+        return () }
+
+    /// Initiates recovery of the resource by virtue of the specified exception
+    /// and executes the resulting recovery action.
+    member __.Recover (ex:exn) = async {
+      let r = !rsrc
+      let! recovery = handle (r,ex)
+      match recovery with
+      | Ignore -> 
+        Log.info "recovery action=ignoring..."
+        return ()
+      | Escalate -> 
+        Log.info "recovery action=escalating..."
+        //evt.Trigger (Escalating)
+        raise ex
+        return ()
+      | Recreate ->
+        Log.info "recovery action=restarting..."
+        do! __.Create()
+        Log.info "recovery restarted"
+        return () }
+
+    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
+      let rec go a = async {
+        let r = !rsrc
+        try
+          let! b = op r a
+          return b
+        with ex ->
+          Log.info "caught exception on injected operation, calling recovery..."
+          do! __.Recover ex
+          Log.info "recovery complete, restarting operation..."
+          return! go a }
+      go
+
+    interface IDisposable with
+      member __.Dispose () = ()
+    
+  let recoverableRecreate (create:Async<'r>) (handleError:('r * exn) -> Async<Recovery>) = async {      
+    let r = new Resource<_>(create, handleError)
+    do! r.Create()
+    return r }
+
+  /// Injects a resource into a resource-dependent async function.
+  /// Failures thrown by the resource-dependent computation are handled by the resource 
+  /// recovery logic.
+  let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : 'a -> Async<'b> =
+    r.Inject op
+   
+      
 
          
