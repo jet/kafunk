@@ -270,7 +270,12 @@ module Mb =
 
 type MVar<'a> = 
   private 
-  | MVar of MailboxProcessor<Choice<('a * AsyncReplyChannel<unit>), AsyncReplyChannel<'a>>>
+  | MVar of MailboxProcessor<MVarReq<'a>>
+
+and MVarReq<'a> = 
+  | Put of 'a * AsyncReplyChannel<unit>
+  | Take of AsyncReplyChannel<'a>
+
 
 module MVar =
   
@@ -280,12 +285,12 @@ module MVar =
         (fun agent -> async {
           let rec empty () = async {
             return! agent.Scan(function
-              | Choice1Of2 (a:'a, rep:AsyncReplyChannel<unit>) -> 
+              | Put (a:'a, rep:AsyncReplyChannel<unit>) -> 
                 Some (async { rep.Reply () ; return! full a })
               | _ -> None) }
           and full a = async {
             return! agent.Scan(function
-              | Choice2Of2 (rep:AsyncReplyChannel<'a>) ->
+              | Take (rep:AsyncReplyChannel<'a>) ->
                 Some <| async { rep.Reply a ; return! empty() }
               | _ -> None) }
           return! empty () } )
@@ -295,11 +300,11 @@ module MVar =
 
   let put (a:'a) (m:MVar<'a>) : Async<unit> =
     let mbp = un m
-    mbp.PostAndAsyncReply(fun ch -> Choice1Of2 (a,ch))
+    mbp.PostAndAsyncReply(fun ch -> Put (a,ch))
 
   let take (m:MVar<'a>) : Async<'a> =
     let mbp = un m
-    mbp.PostAndAsyncReply(fun ch -> Choice2Of2 ch)
+    mbp.PostAndAsyncReply(fun ch -> Take ch)
 
 
 
@@ -315,7 +320,6 @@ type CellReq<'a> =
 type Cell<'a> (?a:'a) =
 
   let [<VolatileField>] mutable state : 'a = Unchecked.defaultof<_>
-  //let changes = Event<'a>()
 
   let mbp = MailboxProcessor.Start (fun mbp -> async {
     let rec init () = async {
@@ -535,6 +539,29 @@ module Resource =
   let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : 'a -> Async<'b> =
     r.Inject op
    
-      
+
+module AsyncFunc =
+  
+  let doBeforeAfter (before:'a -> unit) (after:'a * 'b -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async {
+      do before a
+      let! b = f a
+      do after (a,b)
+      return b }
+
+  let doBeforeAfterError (before:'a -> unit) (after:'a * 'b -> unit) (error:'a * exn -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async {
+      do before a
+      try
+        let! b = f a
+        do after (a,b)
+        return b
+      with ex ->
+        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
+        error (a,edi.SourceException)
+        edi.Throw ()
+        return failwith "undefined" }
+
+
 
          

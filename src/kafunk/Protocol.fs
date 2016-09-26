@@ -349,17 +349,27 @@ module Protocol =
       crcBuf |> Binary.writeInt32 (int crc) |> ignore
       buf
 
-    static member read buf =
-      let crc, buf = Binary.readInt32 buf
-      let offset = buf.Offset
-      let magicByte, buf = Binary.readInt8 buf
-      let attrs, buf = Binary.readInt8 buf
-      let key, buf = Binary.readBytes buf
-      let value, buf = Binary.readBytes buf
-      let crc' = int <| Crc.crc32 buf.Array offset (buf.Offset - offset)
-      if crc <> crc' then
-        failwithf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc
-      (Message(crc, magicByte, attrs, key, value), buf)
+  
+    //static member canRead
+
+    static member read messageSize (buf:Binary.Segment) =
+      if messageSize <= buf.Count then
+        let crc, buf = Binary.readInt32 buf
+        let offset = buf.Offset
+        let magicByte, buf = Binary.readInt8 buf
+        let attrs, buf = Binary.readInt8 buf      
+        let key, buf = Binary.readBytes buf      
+        let value, buf = Binary.readBytes buf
+        let crc' = int <| Crc.crc32 buf.Array offset (buf.Offset - offset)
+        if crc <> crc' then
+          failwithf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc
+        //printfn "read message|size=%i" messageSize
+        Some (Message(crc, magicByte, attrs, key, value), buf)
+      else
+        None
+        //printfn "incomplete message message_size=%i buffer_size=%i" messageSize (buf.Count)
+        //(Message(), Binary.Segment(buf.Array, buf.Count - 1, 0))
+
 
   type MessageSet =
     struct
@@ -377,11 +387,18 @@ module Protocol =
         Binary.write3 Binary.writeInt64 Binary.writeInt32 Message.write)
 
     /// Reads a message set given the size in bytes.
-    static member read size buf =
-      let offset = Binary.readInt64
-      let messageSize = Binary.readInt32
-      let message : Binary.Segment -> Message * Binary.Segment = Message.read
-      let set, buf = Binary.readArrayByteSize size buf (Binary.read3 offset messageSize message)
+    static member read messageSetSize (buf:Binary.Segment) =
+      //printfn "reading message set|message_set_size=%i buffer_size=%i" messageSetSize buf.Count
+      let set, buf = 
+        Binary.readArrayByteSize 
+          messageSetSize 
+          buf 
+          (fun buf ->
+            let offset,buf = Binary.readInt64 buf
+            let messageSize,buf = Binary.readInt32 buf
+            match Message.read messageSize buf with
+            | Some (message,buf) -> Some ((offset,messageSize,message),buf)
+            | None -> None)
       (MessageSet(set), buf)
 
   // Metadata API

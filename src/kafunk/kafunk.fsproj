@@ -64,12 +64,8 @@
     <Compile Include="Utility\Prelude.fs" />
     <Compile Include="Utility\Async.fs" />
     <Compile Include="Utility\AsyncSeq.fs" />
-    <Compile Include="Utility\Binary.fsi" />
     <Compile Include="Utility\Binary.fs" />
-    <Compile Include="Utility\Crc.fsi" />
     <Compile Include="Utility\Crc.fs" />
-    <Compile Include="Utility\DVar.fsi" />
-    <Compile Include="Utility\DVar.fs" />
     <Compile Include="Protocol.fs" />
     <Compile Include="Tcp.fs" />
     <Compile Include="Kafka.fs" />

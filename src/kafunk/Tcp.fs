@@ -162,25 +162,25 @@ module Framing =
       new (remainder:Binary.Segment, length:int, headerBytes:int) = { remainder = remainder ; length = length ; headerBytes = headerBytes }
 
     let frame (data:Binary.Segment) : Binary.Segment[] = [|
-      yield Binary.zeros 4 |> Binary.pokeInt32 data.Count
+      yield Binary.zeros HeaderLength |> Binary.pokeInt32 data.Count
       yield data |]
 
     let frameSeq (data:Binary.Segment seq) : Binary.Segment[] = [|
       let length = data |> Seq.sumBy (fun d -> d.Count)
-      yield Binary.zeros 4 |> Binary.pokeInt32 length
+      yield Binary.zeros HeaderLength |> Binary.pokeInt32 length
       yield! data |]
 
     let private tryReadLength (headerBytes:int) (length:int) (data:Binary.Segment) : ReadResult =
-      if data.Count >= HeaderLength then
-        let length = Binary.peekInt32 data
-        let remainder = Binary.offset (data.Offset + HeaderLength) data
-        ReadResult(remainder, length)
-      else
-        let rec loop  (headerBytes:int) (length:int) (i:int) =
+//      if data.Count >= (HeaderLength - headerBytes) then
+//        let length = Binary.peekInt32 data
+//        let remainder = Binary.offset (data.Offset + HeaderLength) data
+//        ReadResult(remainder, length)
+//      else
+        let rec loop (headerBytes:int) (length:int) (i:int) =
           if i = data.Offset + data.Count then
             new ReadResult(Binary.empty, length, headerBytes)
           else
-            let length = (int data.Array.[i]) <<< (headerBytes * 8) ||| length // little endian
+            let length = ((int data.Array.[i]) <<< ((HeaderLength - headerBytes - 1) * 8)) ||| length // big endian
             let headerBytes = headerBytes + 1
             if headerBytes = HeaderLength then ReadResult(Binary.offset (i + 1) data, length)
             else loop headerBytes length (i + 1)
@@ -283,11 +283,15 @@ type ReqRepSession<'a, 'b, 's> internal
     let sessionData = SessionMessage(data)
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
-    if txs.TryRemove(correlationId, &token) then
-      Log.trace "received message. correlation_id=%i size=%i" correlationId sessionData.payload.Count
+    if txs.TryRemove(correlationId, &token) then      
+      Log.trace "received response. correlation_id=%i size=%i" correlationId sessionData.payload.Count
       let state,reply = token
-      let res = decode (correlationId,state,sessionData.payload)
-      reply.SetResult res
+      try        
+        let res = decode (correlationId,state,sessionData.payload)
+        reply.SetResult res
+      with ex ->
+        Log.error "decode exception correlation_id=%i error=%O" correlationId ex
+        reply.SetException ex
     else
       Log.error "received message but unabled to find session for correlation_id=%i" correlationId
 
@@ -301,7 +305,7 @@ type ReqRepSession<'a, 'b, 's> internal
         Log.error "clash of the sessions!"
       let rec t = new Timer(TimerCallback(fun _ ->        
         if rep.TrySetCanceled () then
-          Log.error "request timed out! correlation_id=%i timeout_ms=%i" correlationId timeoutMs
+          Log.error "request timed out! correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
           t.Dispose()), null, timeoutMs, -1)
       ()
     | Some res ->

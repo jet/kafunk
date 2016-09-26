@@ -6,7 +6,7 @@ open Kafunk
 let conn = Kafka.connHostAndPort "127.0.0.1" 9092
 
 let consumerCfg = 
-  ConsumerConfig.create ("consumer-group-A", [|"test-topic"|])
+  ConsumerConfig.create ("consumer-group-A", [|"test-topic2"|])
 
 Consumer.consume conn consumerCfg
 |> AsyncSeq.iterAsync (fun (gen,topicPartitions) ->

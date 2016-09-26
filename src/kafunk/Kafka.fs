@@ -48,8 +48,11 @@ module MessageSet =
   /// Returns the next offset to fetch, by taking the max offset in the
   /// message set and adding one.
   let nextOffset (ms:MessageSet) =
-    let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
-    maxOffset + 1L
+    if ms.messages.Length > 0 then
+      let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
+      maxOffset + 1L
+    else
+      1L
 
 module ProduceRequest =
 
@@ -177,31 +180,42 @@ module Chan =
     ch (RequestMessage.DescribeGroups req) |> Async.map ResponseMessage.toDescribeGroups
 
 
+  
+  type Config = {
+    useNagle : bool    
+    receiveBufferSize : int
+  } with
+    static member create (?useNagle, ?receiveBufferSize) =
+      {
+        useNagle=defaultArg useNagle false
+        receiveBufferSize=defaultArg receiveBufferSize 8192
+      }
+
+
+
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (ep:IPEndPoint, clientId:ClientId) : Async<Chan> = async {
-
-    let receiveBufferSize = 8192
+  let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
 
     /// Builds and connects the socket.
     let conn = async {
-      // TODO: lifecycle
+      
       let connSocket =
         new Socket(
           ep.AddressFamily,
           SocketType.Stream,
           ProtocolType.Tcp,
-          NoDelay=true,
-          ExclusiveAddressUse=true)
-      Log.info "connecting...|client_id=%s remote_endpoint=%O" clientId ep
+          NoDelay=not(config.useNagle),
+          ExclusiveAddressUse=true,
+          ReceiveBufferSize=config.receiveBufferSize)
+      Log.info "connecting...|remote_endpoint=%O client_id=%s" ep clientId 
       let! sendRcvSocket = Socket.connect connSocket ep
       Log.info "connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
       return sendRcvSocket }
 
     let recovery (s:Socket, ex:exn) = async {
       Log.info "recovering TCP connection|client_id=%s remote_endpoint=%O from error=%O" clientId ep ex
-      Log.trace "disposing errored connection..."
       do! Socket.disconnect s false
       s.Dispose()      
       match ex with
@@ -233,7 +247,7 @@ module Chan =
 
     /// An unframed input stream.
     let inputStream =
-      Socket.receiveStreamFrom receiveBufferSize receive
+      Socket.receiveStreamFrom config.receiveBufferSize receive
       |> Framing.LengthPrefix.unframe
 
     /// A framing sender.
@@ -255,14 +269,19 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
-    return session.Send }
+    return 
+      session.Send
+      |> AsyncFunc.doBeforeAfterError 
+          (fun a -> Log.info "sending request=%A" a)
+          (fun (_,b) -> Log.info "received response=%A" b)
+          (fun (a,e) -> Log.error "error request=%A error=%O" a e) }
 
-
-  let connectHost (clientId:ClientId) (host:Host, port:Port) = async {
-    Log.info "connecting to host=%s port=%i" host port
-    let! eps = Dns.IPv4.getEndpointsAsync (host, port)
-    let ep = eps.[0] // TODO: cycles IPs
-    let! ch = connect (ep, clientId)
+  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
+    Log.info "discovering DNS entries|host=%s" host
+    let! ips = Dns.IPv4.getAllAsync host
+    let ip = ips.[0]
+    let ep = IPEndPoint(ip, port)
+    let! ch = connect config clientId ep
     return ch }
 
 
@@ -345,7 +364,7 @@ module Routing =
     bootstrapHost : Host * Port
     nodeToHost : Map<NodeId, Host * Port>
     topicToNode : Map<TopicName * Partition, NodeId>
-    groupToHost : Map<GroupId, Host * Port>    
+    groupToHost : Map<GroupId, Host * Port>
   } with
   
     static member ofBootstrap (h:Host, p:Port) =
@@ -461,7 +480,7 @@ type RetryAction =
       | ErrorCode.NoError -> None
       
       | ErrorCode.LeaderNotAvailable | ErrorCode.RequestTimedOut | ErrorCode.GroupLoadInProgressCode | ErrorCode.GroupCoordinatorNotAvailableCode
-      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode ->      
+      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->      
         Some (RetryAction.WaitAndRetry)
       
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition
@@ -554,15 +573,18 @@ type KafkaConnCfg = {
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
   /// The client id.
-  clientId : ClientId }
+  clientId : ClientId
+  /// TCP connection configuration.
+  tcpConfig : Chan.Config }
 with
 
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
-  static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId) =
+  static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig) =
     { bootstrapServers = bootstrapServers
-      clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N") }
+      clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
+      tcpConfig = defaultArg tcpConfig (Chan.Config.create())  }
 
 
 /// Connection state.
@@ -615,7 +637,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> AsyncSeq.ofSeq
       |> AsyncSeq.tryPickAsync (fun uri -> async {
         try
-          let! ch = Chan.connectHost cfg.clientId (uri.Host, uri.Port)
+          let! ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host, uri.Port)
           let state = ConnState.ofBootstrap (cfg,uri.Host,uri.Port)
           let state = ConnState.addChannel ((uri.Host,uri.Port),ch) state
           do! stateCell |> Cell.put state
@@ -654,8 +676,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
           |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }) }
 
   /// Sends the request based on discovered routes.
-  and send (req:RequestMessage) = async {    
-    //let! state = Cell.get stateCell
+  and send (req:RequestMessage) = async {
     let state = Cell.getFastUnsafe stateCell
     match Routing.route state.routes req with
     | Success reqRoutes -> 
@@ -681,7 +702,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 let! _ = getMetadata topics
                 return! send req
               | RetryAction.WaitAndRetry ->
-                do! Async.Sleep 1000
+                do! Async.Sleep 5000
                 return! send req })
       | None ->
         let! _ =
@@ -691,7 +712,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
             | Some _ -> return state
             | None ->
               Log.info "creating channel for host=%A" host
-              let! ch = Chan.connectHost state.cfg.clientId host    
+              let! ch = Chan.connectHost cfg.tcpConfig state.cfg.clientId host    
               return state |> ConnState.addChannel (host,ch) })
         return! send req
 

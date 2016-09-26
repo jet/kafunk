@@ -4,6 +4,8 @@ open System
 open System.Text
 open Prelude
 
+// big-endian
+
 module Binary =
 
   type Segment = ArraySegment<byte>
@@ -24,9 +26,11 @@ module Binary =
   let inline resize (count : int) (a : Segment) =
     Segment(a.Array, a.Offset, count)
 
+  /// Sets the offset, adjusting count as needed.
   let inline offset (offset : int) (a : Segment) =
     Segment(a.Array, offset, (a.Count - (offset - a.Offset)))
 
+  /// Shifts the offset by the specified amount, adjusting count as needed.
   let inline shiftOffset (d : int) (a : Segment) : Segment =
     offset (a.Offset + d) a
 
@@ -39,7 +43,8 @@ module Binary =
     arr
 
   let inline toString (buf : Segment) : string =
-    Encoding.UTF8.GetString(buf.Array, buf.Offset, buf.Count)
+    if isNull buf.Array then null
+    else Encoding.UTF8.GetString(buf.Array, buf.Offset, buf.Count)
 
   let append (a : Segment) (b : Segment) : Segment =
     if a.Count = 0 then b
@@ -254,7 +259,7 @@ module Binary =
   let inline sizeBytes (bytes:Segment) =
       sizeInt32 bytes.Count + bytes.Count
 
-  let inline writeBytes (bytes : Segment) buf =
+  let inline writeBytes (bytes:Segment) buf =
     if isNull bytes.Array then
       writeInt32 -1 buf
     else
@@ -262,13 +267,17 @@ module Binary =
       System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
       buf |> shiftOffset bytes.Count
 
-  let inline readBytes (buf : Segment) : Segment * Segment =
+  let inline readBytes (buf:Segment) : Segment * Segment =
     let length, buf = readInt32 buf
     if length = -1 then
       (empty, buf)
     else
-      let arr = Segment(buf.Array, buf.Offset, length)
-      (arr, buf |> shiftOffset length)
+      try
+        let arr = Segment(buf.Array, buf.Offset, length)
+        (arr, buf |> shiftOffset length)
+      with ex ->
+        printfn "expected length=%i array length=%i offset=%i" length buf.Array.Length buf.Offset
+        reraise ()      
 
   // TODO: Do we need to support non-ascii values here? This currently
   // assumes each character is always encoded in UTF-8 by a single byte.
@@ -322,13 +331,17 @@ module Binary =
       buf <- write a buf
     buf
 
-  let inline readArrayByteSize size buf (read : Reader<'a>) =
+  let inline readArrayByteSize size (buf:Segment) (read:Segment -> ('a * Segment) option) =    
     let mutable buf = buf
     let mutable consumed = 0
     let arr = [|
-      while consumed < size do
-        let elem, buf' = read buf
-        yield elem
-        consumed <- consumed + (buf'.Offset - buf.Offset)
-        buf <- buf' |]
+      while consumed < size && buf.Count > 0 do        
+        match read buf with
+        | Some (elem,buf') ->
+          yield elem
+          consumed <- consumed + (buf'.Offset - buf.Offset)
+          buf <- buf'
+        | None ->
+          buf <- Segment()
+    |]
     (arr, buf)

@@ -1,5 +1,6 @@
 namespace Kafunk
 
+[<AutoOpen>]
 module Prelude =
 
   /// Determines whether the argument is a null reference.
@@ -8,10 +9,11 @@ module Prelude =
   /// Given a value, creates a function with one ignored argument which returns the value.
   let inline konst x _ = x
 
-  /// Active pattern for matching a Choice<'a, 'b> with Choice1Of2 = Success and Choice2Of2 = Failure
+  /// Active pattern for matching Result<'a, 'e>.
   let (|Success|Failure|) = function | Choice1Of2 a -> Success a | Choice2Of2 b -> Failure b
 
   let flip f a b = f b a
+
 
 module Choice =
 
@@ -52,6 +54,8 @@ type ObjectPool<'a>(initial:int, create:unit -> 'a) =
       //create ()
     else a
 
+
+
 // log
 
 // TODO: implement!
@@ -89,28 +93,17 @@ module LoggerEx =
 
     member inline ts.trace format = ts.log (format, LogLevel.Trace)
 
-
-
 [<RequireQualifiedAccess>]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Log =
 
   let create name = { name = name }
 
+
+
+
+
 // collection helpers
-
-
-module Lazy =
-  
-  let map (f:'a -> 'b) (l:Lazy<'a>) : Lazy<'b> =
-    Lazy.Create (fun () -> f l.Value)
-
-  let force (l:Lazy<'a>) : 'a =
-    l.Value
-
-  let fold (f:'a -> 'b) (l:Lazy<'a>) : 'b =
-    f l.Value
-
 
 open System.Collections.Generic
 
@@ -131,51 +124,46 @@ module Array =
   
   let inline singleton a = [|a|]
   
+  /// Partitions the array into the specified number of groups.
+  /// If there are more groups than elements, then the empty groups are returned.
+  /// When the array doesn't divide into the number of groups, the last group will 
+  /// have one fewer element.
   let groupInto (groups:int) (a:'a[]) : 'a[][] =
+    if groups < 1 then invalidArg "groups" "must be positive"
     let perGroup = int (ceil (float a.Length / float groups))
     let groups = Array.zeroCreate groups
     for i = 0 to groups.Length - 1 do
       let group = ResizeArray<_>(perGroup)
       for j = 0 to perGroup - 1 do
-        if (i + j) < a.Length then
-          group.Add (a.[i + j])
+        let idx = i * perGroup + j
+        if idx < a.Length then
+          group.Add (a.[idx])
       groups.[i] <- group.ToArray()
     groups
     
     
-
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Seq =
-
-  /// Creates a map from a sequnce based on a key and value selection function.
-  let toKeyValueMap (key:'a -> 'Key) (value:'a -> 'Value) (s:seq<'a>) : Map<'Key, 'Value> =
-    s
-    |> Seq.map (fun a -> key a,value a)
-    |> Map.ofSeq
-
-  let foldRight (f:'a -> Lazy<'b> -> 'b) (b:'b) (xs:seq<'a>) : 'b =
-    use en = xs.GetEnumerator()
-    let rec go b =
-      if not (en.MoveNext()) then b
-      else f en.Current (lazy (go b))
-    go b
-
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Map =
 
   let addMany (kvps:('a * 'b) seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
     kvps |> Seq.fold (fun m (k,v) -> Map.add k v m) m
 
-
-
-
-
+// --------------------------------------------------------------------------------------------------
 
 
 type Result<'a, 'e> = Choice<'a, 'e>
+
+[<AutoOpen>]
+module ResultEx =
+
+  let (|Success|Failure|) (c:Result<'a, 'e>) =
+    match c with
+    | Choice1Of2 a -> Success a
+    | Choice2Of2 e -> Failure e
+
+  let Success a : Result<'a, 'e> = Choice1Of2 a
+
+  let Failure e : Result<'a, 'e> = Choice2Of2 e
 
 module Result =
 
@@ -213,15 +201,3 @@ module Result =
     match !err with
     | Some e -> Choice2Of2 e
     | None -> Choice1Of2 (oks.ToArray())
-
-[<AutoOpen>]
-module ResultEx =
-
-  let (|Success|Failure|) (c:Result<'a, 'e>) =
-    match c with
-    | Choice1Of2 a -> Success a
-    | Choice2Of2 e -> Failure e
-
-  let Success a = Result.success a
-
-  let Failure e = Result.fail e

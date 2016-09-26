@@ -118,7 +118,7 @@ module Consumer =
         return cts.Cancel() }
 
       let rec heartbeat () = async {
-        Log.trace "sending heartbeat|group_id=%s member_id=%s generation_id=%i" cfg.groupId joinGroupRes.memberId joinGroupRes.generationId
+        //Log.trace "sending heartbeat|group_id=%s member_id=%s generation_id=%i" cfg.groupId joinGroupRes.memberId joinGroupRes.generationId
         let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
         let! res = Kafka.heartbeat conn req
         match res.errorCode with
@@ -171,7 +171,7 @@ module Consumer =
       Log.info "received sync group response|member_assignment=[%s]"
         (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%A" tn ps))) 
 
-      Log.info "starting heartbeats..."
+      Log.info "starting heartbeats...|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
       Async.Start (heartbeat (), cts.Token)
             
       let state' =
@@ -198,17 +198,21 @@ module Consumer =
         let stream (topic:TopicName, partition:Partition) : Async<AsyncSeq<MessageSet * Async<unit>>> = async {
 
           let fetchOffset () = async {
+            Log.info "fetching group member offset|topic=%s partition=%i group_id=%s" topic partition cfg.groupId
             try
               let req = OffsetFetchRequest(cfg.groupId, [| topic, [| partition |] |])
               let! res = Kafka.offsetFetch conn req
+              
               let _topic,ps = res.topics.[0]
               let (_p,offset,_metadata,_ec) = ps.[0]
               return offset
             with ex ->
-              do! close ()
+              Log.error "fetch offset error=%O" ex
+              //do! close ()
               return raise ex }
 
-          let! initOffset = fetchOffset ()
+          //let! initOffset = fetchOffset ()
+          let initOffset = 0L
 
           Log.info "fetched initial offset|topic=%s partition=%i offset=%i group_id=%s member_id=%s generation_id=%i" 
             topic
@@ -231,8 +235,8 @@ module Consumer =
             let _,partitions = res.topics.[0]
             let _,ec,_hmo,_mss,ms = partitions.[0]
             if ec = ErrorCode.NoError then
-              let nextOffset = MessageSet.nextOffset ms            
-              let ms = Compression.decompress ms
+              let nextOffset = MessageSet.nextOffset ms
+              //let ms = Compression.decompress ms
               let commit = commitOffset (offset)
               yield ms,commit
               yield! go nextOffset
