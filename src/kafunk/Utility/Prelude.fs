@@ -201,3 +201,43 @@ module Result =
     match !err with
     | Some e -> Choice2Of2 e
     | None -> Choice1Of2 (oks.ToArray())
+
+
+module KafkaUri =
+
+  open System
+
+  let [<Literal>] DefaultPortKafka = 9092
+  let [<Literal>] UriSchemeKafka = "kafka"
+
+  let parse (host:string) =
+    let ok,uri = Uri.TryCreate(host, UriKind.RelativeOrAbsolute)
+    if ok then
+      match uri.IsAbsoluteUri with
+      | true ->
+        if uri.Scheme = UriSchemeKafka then
+          if uri.Port = -1 then
+            let ub = UriBuilder(uri.Scheme, uri.Host, DefaultPortKafka)
+            ub.Uri
+          else
+            uri
+        else        
+          let port = 
+            if uri.Port = -1 then            
+              if not (String.IsNullOrEmpty uri.PathAndQuery) then
+                match Int32.TryParse(uri.PathAndQuery) with
+                | true,port -> port
+                | _ -> DefaultPortKafka
+              else DefaultPortKafka
+            else 
+              uri.Port
+          let host = 
+            if String.IsNullOrEmpty uri.Host then uri.Scheme
+            else uri.Host                       
+          let ub = UriBuilder(UriSchemeKafka, host, port)
+          ub.Uri
+      | false ->
+        let ub = UriBuilder(UriSchemeKafka, host, DefaultPortKafka)
+        ub.Uri
+    else
+      invalidArg "host" (sprintf "invalid host string '%s'" host)

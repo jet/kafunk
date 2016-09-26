@@ -2,13 +2,29 @@
 #time "on"
 
 open Kafunk
+open System
 
-// TODO: empty fetch response
+let host = "guardians-kafka-cluster.qa.jet.com:9092"
+let topic = "nova-retailskus-profx"
+//let topic = "test-topic"
+//let host = "localhost"
+let conn = Kafka.connHost host
 
-let conn = Kafka.connHost "localhost"
+let offsetRes =
+  Kafka.Composite.topicOffsets conn (-2L, 1) topic
+  |> Async.RunSynchronously
+
+printfn "offset response topics=%i" offsetRes.topics.Length
+for (tn,ps) in offsetRes.topics do
+  for p in ps do
+    for o in p.offsets do
+      printfn "topic=%s partition=%i offset=%i" tn p.partition o
+
+
+let (tn,ps) = offsetRes.topics.[0]
 
 let fetchRes = 
-  Kafka.fetch conn (FetchRequest.ofTopicPartition "test-topic" 0 0L 0 0 6000) 
+  Kafka.fetch conn (FetchRequest.ofTopicPartition tn (ps.[0].partition) (ps.[0].offsets.[0]) 0 0 20000) 
   |> Async.RunSynchronously
 
 for (tn,pmds) in fetchRes.topics do
