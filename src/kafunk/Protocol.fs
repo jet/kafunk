@@ -264,7 +264,10 @@ module Protocol =
     let [<Literal>] LatestOffset = -2L
     
     /// Beginning of topic.
-    let [<Literal>] EarliestOffset = -2L
+    let [<Literal>] EarliestOffset = -1L
+
+//    let fromDateTime (dt:System.DateTime) : Time =
+//      (System.TimeZoneInfo.ConvertTimeToUtc(dt) - new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).TotalMilliseconds |> int64
 
   type MaxNumberOfOffsets = int32
 
@@ -280,7 +283,7 @@ module Protocol =
   /// A Kafka group coordinator TCP port.
   type CoordinatorPort = Port
 
-  ///
+  /// The id of the consumer group (same as GroupId).
   type ConsumerGroup = string
 
   type ConsumerGroupGenerationId = int32

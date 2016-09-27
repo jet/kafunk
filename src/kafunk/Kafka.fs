@@ -661,9 +661,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   let stateCell : Cell<ConnState> = Cell.create ()
 
+  let connHost (cfg:KafkaConnCfg) (h:Host, p:Port) =
+    Chan.connectHost cfg.tcpConfig cfg.clientId (h,p)
+
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  let rec bootstrap () = async {
+  let rec bootstrap (cfg:KafkaConnCfg) = async {
     // TODO: serialize
     Log.info "connecting to bootstrap brokers...|client_id=%s" cfg.clientId
     let! state =
@@ -671,7 +674,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> AsyncSeq.ofSeq
       |> AsyncSeq.tryPickAsync (fun uri -> async {
         try
-          let! ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host, uri.Port)
+          let! ch = connHost cfg (uri.Host, uri.Port)
           let state = ConnState.ofBootstrap (cfg,uri.Host,uri.Port)
           let state = ConnState.addChannel ((uri.Host,uri.Port),ch) state
           do! stateCell |> Cell.put state
@@ -747,7 +750,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
               | Some _ -> return state
               | None ->
                 Log.info "creating channel for host=%A" host
-                let! ch = Chan.connectHost cfg.tcpConfig state.cfg.clientId host    
+                let! ch = connHost cfg host    
                 return state |> ConnState.addChannel (host,ch) })
           return! send req }
       
@@ -787,7 +790,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
-    let! _ = bootstrap ()
+    let! _ = bootstrap cfg
     return () }
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
