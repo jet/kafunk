@@ -11,7 +11,7 @@ let topic = "nova-retailskus-profx"
 let conn = Kafka.connHost host
 
 let offsetRes =
-  Kafka.Composite.topicOffsets conn (-2L, 1) topic
+  Kafka.Composite.topicOffsets conn (Time.EarliestOffset, 1) topic
   |> Async.RunSynchronously
 
 printfn "offset response topics=%i" offsetRes.topics.Length

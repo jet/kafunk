@@ -331,11 +331,11 @@ module Binary =
       buf <- write a buf
     buf
 
-  let inline readArrayByteSize size (buf:Segment) (read:Segment -> ('a * Segment) option) =    
+  let inline readArrayByteSize (expectedSize:int) (buf:Segment) (read:Segment -> ('a * Segment) option) =    
     let mutable buf = buf
     let mutable consumed = 0
     let arr = [|
-      while consumed < size && buf.Count > 0 do        
+      while consumed < expectedSize && buf.Count > 0 do        
         match read buf with
         | Some (elem,buf') ->
           yield elem

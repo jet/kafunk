@@ -89,9 +89,6 @@ module FetchRequest =
 
 // Connection
 
-/// A request/reply channel to Kafka.
-type Chan = RequestMessage -> Async<ResponseMessage>
-
 
 [<AutoOpen>]
 module internal ResponseEx =
@@ -163,6 +160,8 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
 
 
+/// A request/reply channel to Kafka.
+type Chan = RequestMessage -> Async<ResponseMessage>
 
 /// API operations on a generic request/reply channel.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -172,7 +171,7 @@ module Chan =
 
   let ApiVersion : ApiVersion = 0s
 
-  let send req (ch:Chan) = ch req
+  let send (ch:Chan) req  = ch req
 
   let metadata (ch:Chan) (req:Metadata.Request) =
     ch (RequestMessage.Metadata req) |> Async.map (function MetadataResponse x -> x | _ -> wrongResponse ())
@@ -263,12 +262,12 @@ module Chan =
         conn 
         recovery
 
-    let sendErr =
+    let send =
       sendRcvSocket
       |> Resource.inject Socket.sendAll   
 
     // re-connect -> restart
-    let receiveErr =
+    let receive =
       let receive s b = 
         Socket.receive s b
         |> Async.map (fun received -> 
@@ -276,8 +275,6 @@ module Chan =
           else received)
       sendRcvSocket
       |> Resource.inject receive
-
-    let send,receive = sendErr,receiveErr
 
     /// An unframed input stream.
     let inputStream =
@@ -527,7 +524,7 @@ type RetryAction =
       match res with
       | ResponseMessage.FetchResponse r ->
         r.topics 
-        |> Seq.tryPick (fun (tn,pmd) -> 
+        |> Seq.tryPick (fun (_tn,pmd) -> 
           pmd 
           |> Seq.tryPick (fun (p,ec,_,_,_) -> 
             RetryAction.errorRetryAction ec
@@ -535,9 +532,9 @@ type RetryAction =
 
       | ResponseMessage.ProduceResponse r ->
         r.topics
-        |> Seq.tryPick (fun (tn,ps) ->
+        |> Seq.tryPick (fun (_tn,ps) ->
           ps
-          |> Seq.tryPick (fun (p,ec,os) -> 
+          |> Seq.tryPick (fun (_p,ec,_os) -> 
             RetryAction.errorRetryAction ec
             |> Option.map (fun action -> ec,action,"")))
 
@@ -557,11 +554,14 @@ type RetryAction =
 
       | ResponseMessage.OffsetFetchResponse r -> 
         r.topics
-        |> Seq.tryPick (fun (t,ps) ->
+        |> Seq.tryPick (fun (_t,ps) ->
           ps
-          |> Seq.tryPick (fun (p,o,md,ec) -> 
-            RetryAction.errorRetryAction ec
-            |> Option.map (fun action -> ec,action,"")))
+          |> Seq.tryPick (fun (_p,_o,_md,ec) -> 
+            match ec with
+            | ErrorCode.UnknownTopicOrPartition -> None // returned for first fetch
+            | _ ->
+              RetryAction.errorRetryAction ec
+              |> Option.map (fun action -> ec,action,"")))
             
       | ResponseMessage.JoinGroupResponse r ->
         RetryAction.errorRetryAction r.errorCode
@@ -575,9 +575,9 @@ type RetryAction =
 
       | ResponseMessage.OffsetCommitResponse r ->
         r.topics
-        |> Seq.tryPick (fun (tn,ps) ->
+        |> Seq.tryPick (fun (_tn,ps) ->
           ps
-          |> Seq.tryPick (fun (p,ec) -> 
+          |> Seq.tryPick (fun (_p,ec) -> 
             RetryAction.errorRetryAction ec
             |> Option.map (fun action -> ec,action,"")))
 
@@ -595,7 +595,7 @@ type RetryAction =
 
       | ResponseMessage.OffsetResponse r ->
         r.topics
-        |> Seq.tryPick (fun (tn,ps) -> 
+        |> Seq.tryPick (fun (_tn,ps) -> 
           ps
           |> Seq.tryPick (fun x -> 
             RetryAction.errorRetryAction x.errorCode
@@ -713,12 +713,13 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     match Routing.route state.routes req with
     | Success reqRoutes ->      
       Log.info "request routed to routes=%A" reqRoutes
-
+      
       let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
         match state |> ConnState.tryFindChanByHost host with
         | Some ch -> 
           return!
-            ch req 
+            req
+            |> Chan.send ch
             |> Async.bind (fun res -> async {
               match RetryAction.tryFindError res with
               | None -> return res
@@ -728,7 +729,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 | RetryAction.Ignore ->
                   return res
                 | RetryAction.Escalate ->
-                  return failwith "escalating..."
+                  return failwithf "unrecoverable error error_code=%i res=%A" errorCode res
                 | RetryAction.RefreshGroupCoordinator gid ->
                   let! _ = getGroupCoordinator gid
                   return! send req
@@ -749,14 +750,24 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 let! ch = Chan.connectHost cfg.tcpConfig state.cfg.clientId host    
                 return state |> ConnState.addChannel (host,ch) })
           return! send req }
-
+      
+      let scatterGather (agg:ResponseMessage[] -> ResponseMessage) = async {
+        if reqRoutes.Length = 1 then
+          return! sendHost reqRoutes.[0]
+        else
+          return!
+            reqRoutes
+            |> Seq.map sendHost
+            |> Async.Parallel
+            |> Async.map agg }        
+ 
       match req with
-      | RequestMessage.Offset _ ->        
-        return!
-          reqRoutes
-          |> Seq.map (sendHost)
-          |> Async.Parallel
-          |> Async.map Routing.concatOffsetResponses
+      | RequestMessage.Offset _ -> 
+        return! scatterGather Routing.concatOffsetResponses
+      | RequestMessage.Fetch _ ->
+        return! scatterGather Routing.concatFetchRes
+      | RequestMessage.Produce _ ->
+        return! scatterGather Routing.concatProduceResponses
       | _ -> 
         return! sendHost reqRoutes.[0]
 
@@ -791,9 +802,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   member internal __.GetState () =
     stateCell |> Cell.get
 
+  member __.Close () =
+    (stateCell :> IDisposable).Dispose()
+
   interface IDisposable with
     member __.Dispose () =
-      (stateCell :> IDisposable).Dispose()
+      __.Close ()
 
 
 /// Kafka API.
@@ -862,7 +876,7 @@ module Kafka =
   module Composite =
 
     let topicOffsets (conn:KafkaConn) (time:Time, maxOffsets:MaxNumberOfOffsets) (topic:TopicName) = async {
-      Log.info "getting offset information for topic=%s" topic
+      Log.info "getting offset information for topic=%s time=%i" topic time
       let! metadata = conn.GetMetadata [|topic|]    
       let topics =
         metadata

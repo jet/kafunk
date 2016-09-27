@@ -254,7 +254,17 @@ module Protocol =
   /// are.
   type HighwaterMarkOffset = int64
 
+  /// Used to ask for all messages before a certain time (ms).
   type Time = int64
+
+  [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+  module Time =
+    
+    /// End of topic.
+    let [<Literal>] LatestOffset = -2L
+    
+    /// Beginning of topic.
+    let [<Literal>] EarliestOffset = -2L
 
   type MaxNumberOfOffsets = int32
 
@@ -350,10 +360,12 @@ module Protocol =
       buf
 
   
-    //static member canRead
-
-    static member read messageSize (buf:Binary.Segment) =
-      if messageSize <= buf.Count then
+    /// Reads the message from the buffer, returning the message and new state of buffer.
+    /// If the buffer doesn't have sufficient space for the message, returns None.
+    /// Support for partial messages exists because Kafka can send partial message when
+    /// receive size limit is reached.
+    static member read (expectedSize:int) (buf:Binary.Segment) =
+      if expectedSize <= buf.Count then
         let crc, buf = Binary.readInt32 buf
         let offset = buf.Offset
         let magicByte, buf = Binary.readInt8 buf
@@ -363,12 +375,9 @@ module Protocol =
         let crc' = int <| Crc.crc32 buf.Array offset (buf.Offset - offset)
         if crc <> crc' then
           failwithf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc
-        //printfn "read message|size=%i" messageSize
         Some (Message(crc, magicByte, attrs, key, value), buf)
       else
         None
-        //printfn "incomplete message message_size=%i buffer_size=%i" messageSize (buf.Count)
-        //(Message(), Binary.Segment(buf.Array, buf.Count - 1, 0))
 
 
   type MessageSet =
@@ -386,9 +395,9 @@ module Protocol =
       Binary.writeArrayNoSize buf ms.messages (
         Binary.write3 Binary.writeInt64 Binary.writeInt32 Message.write)
 
-    /// Reads a message set given the size in bytes.
+    /// Reads the messages from the buffer, returning the message and new state of buffer.
+    /// If the buffer doesn't have sufficient space for the last message, skips it.
     static member read messageSetSize (buf:Binary.Segment) =
-      //printfn "reading message set|message_set_size=%i buffer_size=%i" messageSetSize buf.Count
       let set, buf = 
         Binary.readArrayByteSize 
           messageSetSize 

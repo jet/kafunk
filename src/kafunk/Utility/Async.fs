@@ -312,6 +312,7 @@ module MVar =
 
 type CellReq<'a> =
   | Put of 'a * AsyncReplyChannel<unit>
+  | PutAsync of Async<'a> * AsyncReplyChannel<'a>
   | Update of ('a -> 'a) * AsyncReplyChannel<'a>
   | UpdateAsync of ('a -> Async<'a>) * AsyncReplyChannel<'a>
   | PutOrUpdate of put:'a * up:('a -> 'a) * AsyncReplyChannel<'a>
@@ -328,6 +329,12 @@ type Cell<'a> (?a:'a) =
           state <- a
           rep.Reply()          
           Some (loop a)
+        | PutAsync (a,rep) ->          
+          Some (async {
+            let! a = a
+            state <- a
+            rep.Reply a
+            return! loop a })
         | PutOrUpdate (a,_,rep) -> 
           rep.Reply a
           Some (loop a)
@@ -338,7 +345,12 @@ type Cell<'a> (?a:'a) =
       match msg with
       | Put (a,rep) ->
         state <- a
-        rep.Reply()
+        rep.Reply ()
+        return! loop a
+      | PutAsync (a,rep) ->          
+        let! a = a
+        state <- a
+        rep.Reply a
         return! loop a
       | PutOrUpdate (_,up,rep) ->
         let a = up a
@@ -374,6 +386,9 @@ type Cell<'a> (?a:'a) =
   member __.Put (a:'a) : Async<unit> =
     mbp.PostAndAsyncReply (fun ch -> Put (a,ch))
 
+  member __.PutAsync (a:Async<'a>) : Async<'a> =
+    mbp.PostAndAsyncReply (fun ch -> PutAsync (a,ch))
+
   member __.Update (f:'a -> 'a) : Async<'a> =
     mbp.PostAndAsyncReply (fun ch -> Update (f,ch))
 
@@ -402,6 +417,9 @@ module Cell =
 
   let put (a:'a) (c:Cell<'a>) : Async<unit> =
     c.Put a
+
+  let putAsync (a:Async<'a>) (c:Cell<'a>) : Async<'a> =
+    c.PutAsync a
 
   let update (f:'a -> 'a) (c:Cell<'a>) : Async<'a> =
     c.Update f
@@ -470,6 +488,10 @@ module Resource =
     let rsrc : 'r ref = ref Unchecked.defaultof<_>
     let mre = new ManualResetEvent(false)
     let st = ref 0 // 0 - initialized/zero | 1 - initializing
+    let cell : Cell<'r> = 
+      let c = Cell.create ()
+      
+      c
    
     /// Creates the resource, ensuring mutual exclusion.
     /// In this case, mutual exclusion is extended with the ability to exchange state.

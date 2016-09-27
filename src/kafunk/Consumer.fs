@@ -15,11 +15,12 @@ type ConsumerConfig = {
   fetchMaxWaitMs : MaxWaitTime
   metadataFetchTimeoutMs : int32
   totalBufferMemory : int32
-  fetchBuffer : MaxBytes
+  fetchBufferBytes : MaxBytes
   clientId : string
   socketReceiveBuffer : int32
   reconnectBackoffMs : int32
   offsetRetentionTime : int64
+  initialFetchTime : Time
 }
   with
     static member create (groupId:GroupId, topics:TopicName[]) =
@@ -33,11 +34,12 @@ type ConsumerConfig = {
         fetchMaxWaitMs = 0
         metadataFetchTimeoutMs = 0
         totalBufferMemory = 10000
-        fetchBuffer = 1000
+        fetchBufferBytes = 1000000
         clientId = Guid.NewGuid().ToString("N")
         socketReceiveBuffer = 1000
         reconnectBackoffMs = 0
         offsetRetentionTime = 0L
+        initialFetchTime = Time.EarliestOffset
       }
 
 and AutoOffsetReset =
@@ -194,25 +196,31 @@ module Consumer =
         
         let memberId = state.memberId
         let generationId = state.generationId
-    
+           
         let stream (topic:TopicName, partition:Partition) : Async<AsyncSeq<MessageSet * Async<unit>>> = async {
 
           let fetchOffset () = async {
             Log.info "fetching group member offset|topic=%s partition=%i group_id=%s" topic partition cfg.groupId
             try
               let req = OffsetFetchRequest(cfg.groupId, [| topic, [| partition |] |])
-              let! res = Kafka.offsetFetch conn req
-              
+              let! res = Kafka.offsetFetch conn req                                          
               let _topic,ps = res.topics.[0]
               let (_p,offset,_metadata,_ec) = ps.[0]
-              return offset
+              if _ec = ErrorCode.UnknownTopicOrPartition then
+                Log.info "offset not available at group coordinator|group_id=%s member_id=%s topic=%s partition=%i generation=%i" cfg.groupId memberId topic partition generationId
+                let offsetReq = OffsetRequest(-1, [| topic, [| partition,Time.EarliestOffset,1 |] |])
+                let! offsetRes = Kafka.offset conn offsetReq
+                let _,ps = offsetRes.topics.[0]
+                return ps.[0].offsets.[0]
+              else
+                return offset
             with ex ->
               Log.error "fetch offset error=%O" ex
               //do! close ()
               return raise ex }
 
-          //let! initOffset = fetchOffset ()
-          let initOffset = 0L
+          let! initOffset = fetchOffset ()
+          //let initOffset = 0L
 
           Log.info "fetched initial offset|topic=%s partition=%i offset=%i group_id=%s member_id=%s generation_id=%i" 
             topic
@@ -222,15 +230,13 @@ module Consumer =
             memberId
             generationId
 
-          let commitOffset (offset:Offset) = async {
+          let commitOffset (offset:Offset) = async {            
             let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [|partition, offset, null|] |])
             let! res = Kafka.offsetCommit conn req
-            if res.topics.Length > 0 then              
-              ()
             return () }
 
           let rec go (offset:FetchOffset) = asyncSeq {
-            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBuffer|] |])
+            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
             let! res = Kafka.fetch conn req
             let _,partitions = res.topics.[0]
             let _,ec,_hmo,_mss,ms = partitions.[0]

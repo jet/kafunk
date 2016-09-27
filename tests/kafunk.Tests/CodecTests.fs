@@ -83,6 +83,26 @@ let ``should decode FetchResponse``() =
   Assert.AreEqual("hello world", (m.value |> Binary.toString))
 
 [<Test>]
+let ``should decode partial FetchResponse`` () =
+  let data =
+    Binary.ofArray [|
+      0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
+      0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy;0uy;0uy;0uy;37uy;0uy;0uy;
+      0uy;0uy;0uy;0uy;0uy;7uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;
+      255uy;255uy;255uy;255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;
+      32uy;119uy;111uy;114uy;108uy |]
+  let (res:FetchResponse), _ = FetchResponse.read data
+  let tn,ps = res.topics.[0]
+  let _p, _ec, _hwo, _mss, ms = ps.[0]  
+  Assert.AreEqual(1, res.topics.Length)
+  Assert.AreEqual("test", tn)
+  Assert.AreEqual(0, ms.messages.Length)
+  
+  
+  
+
+
+[<Test>]
 let ``should decode ProduceResponse``() =
   let data =
     Binary.ofArray [|

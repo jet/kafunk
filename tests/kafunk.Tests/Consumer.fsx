@@ -3,10 +3,15 @@
 
 open Kafunk
 
-let conn = Kafka.connHostAndPort "127.0.0.1" 9092
+let host = "guardians-kafka-cluster.qa.jet.com:9092"
+//let host = "localhost"
+let topic = "nova-retailskus-profx"
+//let topic = "test-topic2"
+let conn = Kafka.connHost host
+let group = "test1"
 
 let consumerCfg = 
-  ConsumerConfig.create ("consumer-group-A", [|"test-topic2"|])
+  ConsumerConfig.create (group, [|topic|])
 
 Consumer.consume conn consumerCfg
 |> AsyncSeq.iterAsync (fun (gen,topicPartitions) ->
@@ -14,8 +19,10 @@ Consumer.consume conn consumerCfg
   |> Seq.map (fun (tn,p,stream) -> 
     stream
     |> AsyncSeq.iterAsync (fun (ms,commitOffset) -> async {
-      printfn "consuming message set|offsets=%s" (String.concat "," (ms.messages |> Seq.map (fun (o,ms,m) -> sprintf "offset=%i" o)))
+      printfn "consuming_message_set|offsets=%s" (String.concat "," (ms.messages |> Seq.map (fun (o,ms,m) -> sprintf "offset=%i" o)))
+      do! commitOffset
       return () }))
   |> Async.Parallel
   |> Async.Ignore)
 |> Async.RunSynchronously
+
