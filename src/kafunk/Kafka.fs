@@ -242,13 +242,13 @@ module Chan =
           NoDelay=not(config.useNagle),
           ExclusiveAddressUse=true,
           ReceiveBufferSize=config.receiveBufferSize)
-      Log.info "connecting...|remote_endpoint=%O client_id=%s" ep clientId 
+      Log.info "connecting|remote_endpoint=%O client_id=%s" ep clientId 
       let! sendRcvSocket = Socket.connect connSocket ep
       Log.info "connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
       return sendRcvSocket }
 
     let recovery (s:Socket, ex:exn) = async {
-      Log.info "recovering TCP connection|client_id=%s remote_endpoint=%O from error=%O" clientId ep ex
+      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O from error=%O" clientId ep ex
       do! Socket.disconnect s false
       s.Dispose()      
       match ex with
@@ -303,12 +303,12 @@ module Chan =
     return 
       session.Send
       |> AsyncFunc.doBeforeAfterError 
-          (fun a -> Log.info "sending request=%A" a)
-          (fun (_,b) -> Log.info "received response=%A" b)
-          (fun (a,e) -> Log.error "error request=%A error=%O" a e) }
+          (fun a -> Log.trace "sending_request|request=%A" a)
+          (fun (_,b) -> Log.trace "received_response|response=%A" b)
+          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" a e) }
 
   let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
-    Log.info "discovering DNS entries|host=%s" host
+    Log.info "discovering_dns_entries|host=%s" host
     let! ips = Dns.IPv4.getAllAsync host
     let ip = ips.[0]
     let ep = IPEndPoint(ip, port)
@@ -668,7 +668,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   /// initial routing table.
   let rec bootstrap (cfg:KafkaConnCfg) = async {
     // TODO: serialize
-    Log.info "connecting to bootstrap brokers...|client_id=%s" cfg.clientId
+    Log.info "connecting_to_bootstrap_brokers|client_id=%s" cfg.clientId
     let! state =
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -680,7 +680,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
           do! stateCell |> Cell.put state
           return Some state
         with ex ->
-          Log.error "exception connecting to bootstrap host=%s port=%i error=%O" uri.Host uri.Port ex
+          Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
           return None })
     match state with
     | Some state ->
@@ -693,9 +693,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     return!
       stateCell
       |> Cell.updateAsync (fun state -> async {
-        Log.info "getting metadata|topics=%s" (String.concat ", " topics)
+        Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
         let! metadata = Chan.metadata send (Metadata.Request(topics))   
-        Log.info "received metadata|%s" (MetadataResponse.Print metadata)
+        Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
         return 
           state 
           |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }) }
@@ -715,7 +715,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let state = Cell.getFastUnsafe stateCell
     match Routing.route state.routes req with
     | Success reqRoutes ->      
-      Log.info "request routed to routes=%A" reqRoutes
+      Log.trace "request_routed|routes=%A" reqRoutes
       
       let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
         match state |> ConnState.tryFindChanByHost host with
@@ -727,7 +727,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
               match RetryAction.tryFindError res with
               | None -> return res
               | Some (errorCode,action,msg) ->   
-                Log.error "response error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
+                Log.error "response_errored|error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
                 match action with
                 | RetryAction.Ignore ->
                   return res
@@ -749,7 +749,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
               match state |> ConnState.tryFindChanByHost host with
               | Some _ -> return state
               | None ->
-                Log.info "creating channel for host=%A" host
+                Log.info "creating_channel|host=%A" host
                 let! ch = connHost cfg host    
                 return state |> ConnState.addChannel (host,ch) })
           return! send req }
@@ -775,12 +775,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
         return! sendHost reqRoutes.[0]
 
     | Failure (Routing.MissingTopicRoute topic) ->
-      Log.warn "incorrect topic/partition route, refreshing metadata|topic=%s request=%A" topic req
+      Log.warn "incorrect_topic_partition_route, refreshing_metadata|topic=%s request=%A" topic req
       let! _ = getMetadata [|topic|]      
       return! send req
 
     | Failure (Routing.MissingGroupRoute group) ->      
-      Log.warn "incorrect group goordinator route, getting group goordinator|group=%s" group
+      Log.warn "incorrect_group_goordinator_route, getting_group_goordinator|group=%s" group
       let! _ = getGroupCoordinator group
       return! send req
 
@@ -879,7 +879,7 @@ module Kafka =
   module Composite =
 
     let topicOffsets (conn:KafkaConn) (time:Time, maxOffsets:MaxNumberOfOffsets) (topic:TopicName) = async {
-      Log.info "getting offset information for topic=%s time=%i" topic time
+      Log.info "getting_offsets|topic=%s time=%i" topic time
       let! metadata = conn.GetMetadata [|topic|]    
       let topics =
         metadata

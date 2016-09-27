@@ -8,10 +8,10 @@ let host = "guardians-kafka-cluster.qa.jet.com:9092"
 let topic = "nova-retailskus-profx"
 //let topic = "test-topic2"
 let conn = Kafka.connHost host
-let group = "test1"
+let group = "leo_test5"
 
 let consumerCfg = 
-  ConsumerConfig.create (group, [|topic|])
+  ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.LatestOffset)
 
 Consumer.consume conn consumerCfg
 |> AsyncSeq.iterAsync (fun (gen,topicPartitions) ->

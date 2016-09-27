@@ -261,10 +261,10 @@ module Protocol =
   module Time =
     
     /// End of topic.
-    let [<Literal>] LatestOffset = -2L
+    let [<Literal>] LatestOffset = -1L
     
     /// Beginning of topic.
-    let [<Literal>] EarliestOffset = -1L
+    let [<Literal>] EarliestOffset = -2L
 
 //    let fromDateTime (dt:System.DateTime) : Time =
 //      (System.TimeZoneInfo.ConvertTimeToUtc(dt) - new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).TotalMilliseconds |> int64

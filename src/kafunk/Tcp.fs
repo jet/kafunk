@@ -284,13 +284,13 @@ type ReqRepSession<'a, 'b, 's> internal
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then      
-      Log.trace "received response. correlation_id=%i size=%i" correlationId sessionData.payload.Count
+      Log.trace "received_response|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       let state,reply = token
       try        
         let res = decode (correlationId,state,sessionData.payload)
         reply.SetResult res
       with ex ->
-        Log.error "decode exception correlation_id=%i error=%O" correlationId ex
+        Log.error "decode exception correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.SetException ex
     else
       Log.error "received message but unabled to find session for correlation_id=%i" correlationId
@@ -305,7 +305,7 @@ type ReqRepSession<'a, 'b, 's> internal
         Log.error "clash of the sessions!"
       let rec t = new Timer(TimerCallback(fun _ ->        
         if rep.TrySetCanceled () then
-          Log.error "request timed out! correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
+          Log.error "request_timed_out|correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
           t.Dispose()), null, timeoutMs, -1)
       ()
     | Some res ->
@@ -320,9 +320,9 @@ type ReqRepSession<'a, 'b, 's> internal
 
   member x.Send (req:'a) = async {
     let correlationId,sessionData,rep = mux req
-    Log.trace "sending request... correlation_id=%i bytes=%i" correlationId sessionData.Count
+    Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
     let! sent = send sessionData
-    Log.trace "request sent. correlation_id=%i bytes=%i" correlationId sent
+    Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
     return! rep.Task |> Async.AwaitTask }
 
   interface IDisposable with

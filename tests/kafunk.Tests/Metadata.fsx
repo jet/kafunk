@@ -4,7 +4,7 @@
 open Kafunk
 
 // Replace this with an initial broker you wish to use.
-let conn = Kafka.connHostAndPort "127.0.0.1" 9092
+let conn = Kafka.connHost "127.0.0.1:9092"
 
 let metadata = Kafka.metadata conn (Metadata.Request([|"test-topic"|])) |> Async.RunSynchronously
 
