@@ -172,10 +172,64 @@ module internal ResponseEx =
         |> String.concat " ; "
       sprintf "FetchResponse|%s" ts
 
+  type OffsetFetchRequest with
+    static member Print (x:OffsetFetchRequest) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun p -> sprintf "partition=%i" p)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=%s" tn ps)
+        |> String.concat " ; "
+      sprintf "OffsetFetchRequest|group_id=%s topics=%s" x.consumerGroup ts
+
+  type OffsetFetchResponse with
+    static member Print (x:OffsetFetchResponse) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,o,_md,ec) -> sprintf "partition=%i offset=%i error_code=%i" p o ec)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "OffsetFetchResponse|%s" ts
+
+  type OffsetCommitRequest with
+    static member Print (x:OffsetCommitRequest) =
+      let topics =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,o,_) -> sprintf "(partition=%i offset=%i)" p o)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "OffsetCommitRequest|group_id=%s member_id=%s generation_id=%i topics=%s" x.consumerGroup x.consumerId x.consumerGroupGenerationId topics
+
+  type OffsetCommitResponse with
+    static member Print (x:OffsetCommitResponse) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,ec) -> sprintf "(partition=%i error_code=%i)" p ec)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "OffsetCommitResponse|%s" ts
+
   type RequestMessage with
     static member Print (x:RequestMessage) =
       match x with
       | RequestMessage.Fetch x -> FetchRequest.Print x
+      | RequestMessage.OffsetCommit x -> OffsetCommitRequest.Print x
+      | RequestMessage.OffsetFetch x -> OffsetFetchRequest.Print x
       | _ ->  sprintf "%A" x
 
   type ResponseMessage with
@@ -183,6 +237,8 @@ module internal ResponseEx =
       match x with
       | ResponseMessage.MetadataResponse x -> MetadataResponse.Print x
       | ResponseMessage.FetchResponse x -> FetchResponse.Print x
+      | ResponseMessage.OffsetCommitResponse x -> OffsetCommitResponse.Print x
+      | ResponseMessage.OffsetFetchResponse x -> OffsetFetchResponse.Print x
       | x -> sprintf "%A" x
 
   // ------------------------------------------------------------------------------------------------------------------------------

@@ -235,7 +235,7 @@ module Consumer =
           generationId
 
         let commitOffset (offset:Offset) = async {
-          Log.info "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId memberId generationId offset
+          Log.info "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId memberId generationId offset cfg.offsetRetentionTime
           let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
           let! res = Kafka.offsetCommit conn req
           if res.topics.Length > 0 then
@@ -245,7 +245,8 @@ module Consumer =
             return ()
           else          
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId memberId generationId offset
-            return failwith "offset commit failed!" }
+            //return failwith "offset commit failed!" }
+            return () }
 
         let rec fetchStream (offset:FetchOffset) = asyncSeq {
           //Log.trace "sending_fetch_request|topic=%s partition=%i member_id=%s offset=%i" topic partition memberId offset

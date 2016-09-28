@@ -7,7 +7,7 @@ let host = "guardians-kafka-cluster.qa.jet.com:9092"
 //let host = "localhost"
 let topic = "nova-retailskus-profx"
 //let topic = "test-topic2"
-let group = "leo_test10"
+let group = "leo_test11"
 
 
 
