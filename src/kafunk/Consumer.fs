@@ -75,8 +75,6 @@ module Consumer =
   /// configured thresholds, the resulting sequence throws an exception.
   let consume (conn:KafkaConn) (cfg:ConsumerConfig) = async {
     
-    //let _ = conn.CancellationToken.Register (fun () -> Log.info "connection_cancelled")
-
     let cts = CancellationTokenSource.CreateLinkedTokenSource conn.CancellationToken
     let state : MVar<ConsumerState> = MVar.create ()
 
@@ -93,6 +91,15 @@ module Consumer =
       GroupProtocols(
         [| assignmentStrategy, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta |])
 
+
+    let close (state:ConsumerState) = async {
+      Log.info "closing_consumer_group|group_id=%s member_id=%s generation_id=%i leader_id=%s member_count=%i" 
+        cfg.groupId 
+        state.memberId 
+        state.generationId 
+        ""
+        state.memberAssignment.partitionAssignment.assignments.Length
+      return cts.Cancel() }
 
     let rec join (prevState:ConsumerState option) = async {
 
@@ -112,34 +119,7 @@ module Consumer =
         joinGroupRes.generationId 
         joinGroupRes.leaderId
         joinGroupRes.groupProtocol
-        
-
-      let close () = async {
-        Log.info "closing_consumer_group|group_id=%s member_id=%s generation_id=%i leader_id=%s member_count=%i" 
-          cfg.groupId 
-          joinGroupRes.memberId 
-          joinGroupRes.generationId 
-          joinGroupRes.leaderId
-          joinGroupRes.members.members.Length
-        return cts.Cancel() }
-
-      let rec heartbeat () = async {
-        let! ct = Async.CancellationToken
-        if ct.IsCancellationRequested then
-          Log.info "stopping_heartbeats"
-          return ()
-        else
-          Log.trace "sending_heartbeat|cancelled=%b" ct.IsCancellationRequested
-          let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
-          let! res = Kafka.heartbeat conn req
-          match res.errorCode with
-          | ErrorCode.IllegalGenerationCode ->
-            do! close ()
-            return ()
-          | _ ->
-            do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
-            return! heartbeat () }
-            
+                    
       let! topicPartitions = conn.GetMetadata cfg.topics
 
       let! syncGroupRes = async {
@@ -182,9 +162,6 @@ module Consumer =
       Log.info "received_sync_group_response|member_assignment=[%s]"
         (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%A" tn ps))) 
       
-      Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
-      Async.Start (heartbeat (), cts.Token)
-            
       let state' =
         {
           memberId = joinGroupRes.memberId
@@ -193,6 +170,27 @@ module Consumer =
           cancellationToken = cts.Token
         }
 
+      let rec heartbeat state = async {
+        let! ct = Async.CancellationToken
+        if ct.IsCancellationRequested then
+          Log.info "stopping_heartbeats"
+          return ()
+        else
+          Log.trace "sending_heartbeat|cancelled=%b" ct.IsCancellationRequested
+          let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
+          let! res = Kafka.heartbeat conn req
+          match res.errorCode with
+          | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode ->
+            do! close state
+            do! join (Some state)
+            return ()
+          | _ ->
+            do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
+            return! heartbeat state }
+
+      Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
+      Async.Start (heartbeat state', cts.Token)
+            
       do! state |> MVar.put state'
 
       return () }
@@ -241,9 +239,14 @@ module Consumer =
           if res.topics.Length > 0 then
             let (tn,ps) = res.topics.[0]
             let (p,ec) = ps.[0]
-            Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId memberId generationId offset
-            return ()
-          else          
+            match ec with
+            | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode ->
+              do! close state
+              do! join (Some state)
+            | _ ->
+              Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId memberId generationId offset
+              return ()
+            else          
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId memberId generationId offset
             return failwith "offset commit failed!" }
             //return () }
