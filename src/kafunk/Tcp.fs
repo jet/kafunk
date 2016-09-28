@@ -274,7 +274,7 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let timeoutMs = 5000
+  let timeoutMs = 10000
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
@@ -288,7 +288,8 @@ type ReqRepSession<'a, 'b, 's> internal
       let state,reply = token
       try        
         let res = decode (correlationId,state,sessionData.payload)
-        reply.SetResult res
+        if not (reply.TrySetResult res) then
+          Log.warn "received_response_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
         Log.error "decode exception correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.SetException ex

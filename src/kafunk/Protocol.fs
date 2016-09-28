@@ -406,11 +406,14 @@ module Protocol =
           messageSetSize 
           buf 
           (fun buf ->
-            let offset,buf = Binary.readInt64 buf
-            let messageSize,buf = Binary.readInt32 buf
-            match Message.read messageSize buf with
-            | Some (message,buf) -> Some ((offset,messageSize,message),buf)
-            | None -> None)
+            if buf.Count > (8 + 4) then
+              let offset,buf = Binary.readInt64 buf
+              let messageSize,buf = Binary.readInt32 buf
+              match Message.read messageSize buf with
+              | Some (message,buf) -> Some ((offset,messageSize,message),buf)
+              | None -> None
+            else
+              None)
       (MessageSet(set), buf)
 
   // Metadata API

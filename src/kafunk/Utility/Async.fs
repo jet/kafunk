@@ -9,6 +9,7 @@ open System.Threading.Tasks
 open System.Collections.Generic
 open System.Collections.Concurrent
 
+open Kafunk
 open Kafunk.Prelude
 
 

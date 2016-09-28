@@ -334,14 +334,13 @@ module Binary =
   let inline readArrayByteSize (expectedSize:int) (buf:Segment) (read:Segment -> ('a * Segment) option) =    
     let mutable buf = buf
     let mutable consumed = 0
-    let arr = [|
-      while consumed < expectedSize && buf.Count > 0 do        
-        match read buf with
-        | Some (elem,buf') ->
-          yield elem
-          consumed <- consumed + (buf'.Offset - buf.Offset)
-          buf <- buf'
-        | None ->
-          buf <- Segment()
-    |]
-    (arr, buf)
+    let arr = ResizeArray<_>()
+    while consumed < expectedSize && buf.Count > 0 do        
+      match read buf with
+      | Some (elem,buf') ->
+        arr.Add elem
+        consumed <- consumed + (buf'.Offset - buf.Offset)
+        buf <- buf'
+      | None ->
+        buf <- Segment()
+    (arr.ToArray(), buf)

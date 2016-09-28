@@ -96,8 +96,7 @@ module internal ResponseEx =
   let wrongResponse () =
     failwith (sprintf "Wrong response!")
 
-  type RequestMessage with
-    
+  type RequestMessage with    
     /// If a request does not expect a response, returns the default response.
     /// Used to generate responses for requests which don't expect a response from the server.
     static member awaitResponse (x:RequestMessage) =
@@ -131,30 +130,59 @@ module internal ResponseEx =
   // printers
 
   type MetadataResponse with
-    static member Print (x:MetadataResponse) =      
+    static member Print (x:MetadataResponse) =
       let topics =
         x.topicMetadata
         |> Seq.map (fun tmd -> 
           let partitions = 
             tmd.partitionMetadata
-            |> Seq.map (fun pmd -> sprintf "[partition_id=%i leader=%i]" pmd.partitionId pmd.leader)
+            |> Seq.map (fun pmd -> sprintf "(partition_id=%i leader=%i)" pmd.partitionId pmd.leader)
             |> String.concat " ; "
           sprintf "[topic=%s partitions=%s]" tmd.topicName partitions)
         |> String.concat " ; "
       let brokers =
         x.brokers
-        |> Seq.map (fun b -> sprintf "[node_id=%i host=%s port=%i]" b.nodeId b.host b.port)
+        |> Seq.map (fun b -> sprintf "(node_id=%i host=%s port=%i)" b.nodeId b.host b.port)
         |> String.concat " ; "
-      sprintf "MetadataResponse|brokers=%s|topics=%s" brokers topics
+      sprintf "MetadataResponse|brokers=%s|topics=[%s]" brokers topics
+
+  type FetchRequest with
+    static member Print (x:FetchRequest) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps = 
+            ps
+            |> Seq.map (fun (p,o,_mb) -> sprintf "(partition=%i offset=%i)" p o)
+            |> String.concat " ; "        
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "FetchRequest|%s" ts
+
+  type FetchResponse with
+    static member Print (x:FetchResponse) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,ec,hwmo,_mss,_ms) -> sprintf "(topic=%s partition=%i error_code=%i high_watermark_offset=%i)" tn p ec hwmo)
+            |> String.concat ";"
+          sprintf "topic=%s [%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "FetchResponse|%s" ts
 
   type RequestMessage with
     static member Print (x:RequestMessage) =
-      sprintf "%A" x
+      match x with
+      | RequestMessage.Fetch x -> FetchRequest.Print x
+      | _ ->  sprintf "%A" x
 
   type ResponseMessage with
     static member Print (x:ResponseMessage) =
       match x with
       | ResponseMessage.MetadataResponse x -> MetadataResponse.Print x
+      | ResponseMessage.FetchResponse x -> FetchResponse.Print x
       | x -> sprintf "%A" x
 
   // ------------------------------------------------------------------------------------------------------------------------------
@@ -303,9 +331,9 @@ module Chan =
     return 
       session.Send
       |> AsyncFunc.doBeforeAfterError 
-          (fun a -> Log.trace "sending_request|request=%A" a)
-          (fun (_,b) -> Log.trace "received_response|response=%A" b)
-          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" a e) }
+          (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
+          (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
+          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e) }
 
   let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
     Log.info "discovering_dns_entries|host=%s" host
@@ -604,21 +632,28 @@ type RetryAction =
 /// Kafka connection configuration.
 /// http://kafka.apache.org/documentation.html#connectconfigs
 type KafkaConnCfg = {
+  
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
+  
   /// The client id.
   clientId : ClientId
+  
   /// TCP connection configuration.
-  tcpConfig : Chan.Config }
-with
+  tcpConfig : Chan.Config 
+
+  requestTimeout : TimeSpan
+
+} with
 
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
-  static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig) =
+  static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?requestTimeout) =
     { bootstrapServers = bootstrapServers
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
-      tcpConfig = defaultArg tcpConfig (Chan.Config.create())  }
+      tcpConfig = defaultArg tcpConfig (Chan.Config.create())
+      requestTimeout = defaultArg requestTimeout (TimeSpan.FromMilliseconds 5000.0)  }
 
 
 /// Connection state.
@@ -660,6 +695,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   static let Log = Log.create "Kafunk.Conn"
 
   let stateCell : Cell<ConnState> = Cell.create ()
+  let cts = new CancellationTokenSource()
 
   let connHost (cfg:KafkaConnCfg) (h:Host, p:Port) =
     Chan.connectHost cfg.tcpConfig cfg.clientId (h,p)
@@ -669,27 +705,31 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   let rec bootstrap (cfg:KafkaConnCfg) = async {
     // TODO: serialize
     Log.info "connecting_to_bootstrap_brokers|client_id=%s" cfg.clientId
-    let! state =
-      cfg.bootstrapServers
-      |> AsyncSeq.ofSeq
-      |> AsyncSeq.tryPickAsync (fun uri -> async {
-        try
-          let! ch = connHost cfg (uri.Host, uri.Port)
-          let state = ConnState.ofBootstrap (cfg,uri.Host,uri.Port)
-          let state = ConnState.addChannel ((uri.Host,uri.Port),ch) state
-          do! stateCell |> Cell.put state
-          return Some state
-        with ex ->
-          Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
-          return None })
-    match state with
-    | Some state ->
-      return state
-    | None ->
-      return failwith "unable to connect to bootstrap brokers" }
+    return!
+      stateCell
+      |> Cell.putAsync (async {
+        let! state =
+          cfg.bootstrapServers
+          |> AsyncSeq.ofSeq
+          |> AsyncSeq.tryPickAsync (fun uri -> async {
+            try
+              let! ch = connHost cfg (uri.Host, uri.Port)
+              let state = 
+                ConnState.ofBootstrap (cfg,uri.Host,uri.Port)
+                |> ConnState.addChannel ((uri.Host,uri.Port),ch)            
+              return Some state
+            with ex ->
+              Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
+              return None })     
+        match state with
+        | Some state ->
+          return state
+        | None ->
+          return failwith "unable to connect to bootstrap brokers" } ) }
 
   /// Discovers cluster metadata.
   and getMetadata (topics:TopicName[]) = async {
+    // TODO: TTL check
     return!
       stateCell
       |> Cell.updateAsync (fun state -> async {
@@ -754,7 +794,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 return state |> ConnState.addChannel (host,ch) })
           return! send req }
       
-      let scatterGather (agg:ResponseMessage[] -> ResponseMessage) = async {
+      let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
         if reqRoutes.Length = 1 then
           return! sendHost reqRoutes.[0]
         else
@@ -762,7 +802,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
             reqRoutes
             |> Seq.map sendHost
             |> Async.Parallel
-            |> Async.map agg }        
+            |> Async.map gather }        
  
       match req with
       | RequestMessage.Offset _ -> 
@@ -786,6 +826,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
     }
     
+  member internal __.CancellationToken = cts.Token
+
   member internal __.Chan : Chan = send
   
   /// Connects to a broker from the bootstrap list.
@@ -806,7 +848,11 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     stateCell |> Cell.get
 
   member __.Close () =
+    Log.info "closing_connection"
+    cts.CancelAfter (cfg.requestTimeout)
+    cts.Dispose()
     (stateCell :> IDisposable).Dispose()
+    
 
   interface IDisposable with
     member __.Dispose () =
