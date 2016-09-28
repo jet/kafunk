@@ -32,7 +32,8 @@ let go = async {
             (ms.messages.Length)
             (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
             (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
-          do! commitOffset
+          //do! commitOffset
+          Async.Start commitOffset
           return () }))
       |> Async.Parallel
       |> Async.Ignore)

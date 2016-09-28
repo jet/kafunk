@@ -211,7 +211,7 @@ module Consumer =
             let! res = Kafka.offsetFetch conn req                                          
             let _topic,ps = res.topics.[0]
             let (_p,offset,_metadata,_ec) = ps.[0]
-            if _ec = ErrorCode.UnknownTopicOrPartition then
+            if offset = -1L then
               Log.info "offset_not_available_at_group_coordinator|group_id=%s member_id=%s topic=%s partition=%i generation=%i" cfg.groupId memberId topic partition generationId
               let offsetReq = OffsetRequest(-1, [| topic, [| partition,cfg.initialFetchTime,1 |] |])
               let! offsetRes = Kafka.offset conn offsetReq
@@ -235,18 +235,18 @@ module Consumer =
           generationId
 
         let commitOffset (offset:Offset) = async {
-          Log.info "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId memberId generationId offset cfg.offsetRetentionTime
+          Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId memberId generationId offset cfg.offsetRetentionTime
           let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
           let! res = Kafka.offsetCommit conn req
           if res.topics.Length > 0 then
             let (tn,ps) = res.topics.[0]
             let (p,ec) = ps.[0]
-            Log.info "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId memberId generationId offset
+            Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId memberId generationId offset
             return ()
           else          
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId memberId generationId offset
-            //return failwith "offset commit failed!" }
-            return () }
+            return failwith "offset commit failed!" }
+            //return () }
 
         let rec fetchStream (offset:FetchOffset) = asyncSeq {
           //Log.trace "sending_fetch_request|topic=%s partition=%i member_id=%s offset=%i" topic partition memberId offset

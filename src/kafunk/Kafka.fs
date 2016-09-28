@@ -372,7 +372,12 @@ module Chan =
 
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
-      let req = Request(ApiVersion, correlationId, clientId, req)
+      let version = 
+        match req with
+        | RequestMessage.OffsetFetch _ -> 1s
+        | RequestMessage.OffsetCommit _ -> 2s
+        | _ -> ApiVersion
+      let req = Request(version, correlationId, clientId, req)
       let sessionData = toArraySeg Request.size Request.write req
       sessionData, req.apiKey
 
