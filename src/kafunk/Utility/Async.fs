@@ -246,6 +246,9 @@ module AsyncEx =
         Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
         Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
 
+    /// Associates an async computation to a cancellation token.
+    static member withCancellationToken (ct:CancellationToken) (a:Async<'a>) : Async<'a> =
+      Async.FromContinuations (fun (ok,err,cnc) -> Async.StartThreadPoolWithContinuations(a, ok, err, cnc, ct))
 
 
 
@@ -503,14 +506,14 @@ module Resource =
     member internal __.Create () = async {
       match Interlocked.CompareExchange (st, 1, 0) with
       | 0 ->
-        Log.info "creating...."
+        Log.info "creating"
         let! r = create
         rsrc := r
         mre.Set () |> ignore
         Interlocked.Exchange (st, 0) |> ignore
         return ()
       | _ ->        
-        Log.info "waiting..."
+        Log.info "waiting"
         let! _ = Async.AwaitWaitHandle mre
         mre.Reset () |> ignore
         return () }

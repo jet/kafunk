@@ -10,34 +10,26 @@ let topic = "nova-retailskus-profx"
 let group = "leo_test11"
 
 
-
 let go = async {
-
   use! conn = Kafka.connHostAsync host
-
   let consumerCfg = 
     ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)
-
-  let! stream = Consumer.consume conn consumerCfg
-
+  let! topics = Consumer.consume conn consumerCfg
   return!
-    stream
-    |> AsyncSeq.iterAsync (fun (gen,topicPartitions) ->
-      topicPartitions
-      |> Seq.map (fun (tn,p,stream) -> 
-        printfn "streaming|topic=%s partition=%i" tn p
-        stream
-        |> AsyncSeq.iterAsync (fun (ms,commitOffset) -> async {
-          printfn "consuming_message_set|count=%i size=%i first_offset=%i"
-            (ms.messages.Length)
-            (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
-            (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
-          //do! commitOffset
-          Async.Start commitOffset
-          return () }))
-      |> Async.Parallel
-      |> Async.Ignore)
-  
+    topics
+    |> Seq.map (fun (tn,p,stream) -> 
+      printfn "streaming|topic=%s partition=%i" tn p
+      stream
+      |> AsyncSeq.iterAsync (fun (ms,commitOffset) -> async {
+        printfn "consuming_message_set|count=%i size=%i first_offset=%i"
+          (ms.messages.Length)
+          (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
+          (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
+        //do! commitOffset
+        Async.Start commitOffset
+        return () }))
+    |> Async.Parallel
+    |> Async.Ignore
 }
 
 Async.RunSynchronously go

@@ -229,6 +229,9 @@ module Protocol =
       | NotEnoughReplicasCode | NotEnoughReplicasAfterAppendCode -> false
       | _ -> true
 
+  /// Duration in milliseconds for which the request was throttled due to quota violation.
+  type ThrottleTime = int32
+
   /// The replica id indicates the node id of the replica initiating this
   /// request. Normal client consumers should always specify this as -1.
   type ReplicaId = int32
@@ -548,7 +551,8 @@ module Protocol =
   and ProduceResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode * Offset)[])[]
-      new (topics) = { topics = topics }
+      val throttleTime : ThrottleTime
+      new (topics,throttleTime) = { topics = topics ; throttleTime = throttleTime }
     end
   with
 
@@ -558,7 +562,8 @@ module Protocol =
       let readTopic =
         Binary.read2 Binary.readString (Binary.readArray readPartition)
       let topics, buf = buf |> Binary.readArray readTopic
-      (ProduceResponse(topics), buf)
+      let tt, buf = buf |> Binary.readInt32 
+      (ProduceResponse(topics,tt), buf)
 
   // Fetch API
 
@@ -1229,6 +1234,13 @@ module Protocol =
       | LeaveGroup _ -> ApiKey.LeaveGroupRequest
       | ListGroups _ -> ApiKey.ListGroupsRequest
       | DescribeGroups _ -> ApiKey.DescribeGroupsRequest
+
+    member x.ApiVersion : ApiVersion =
+      match x with
+      | RequestMessage.OffsetFetch  _ -> 1s
+      | RequestMessage.OffsetCommit _ -> 2s
+      | RequestMessage.Produce _ -> 1s
+      | _ -> 0s
 
   /// A Kafka request envelope.
   type Request =

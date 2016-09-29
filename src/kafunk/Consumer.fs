@@ -59,11 +59,12 @@ module Consumer =
   type ConsumerState = {
     generationId : GenerationId
     memberId : MemberId
+    leaderId : LeaderId
     memberAssignment : ConsumerGroupMemberAssignment
     cancellationToken : CancellationToken
   } with
     static member topicPartitions (s:ConsumerState) =
-      s.memberAssignment.partitionAssignment.assignments  
+      s.memberAssignment.partitionAssignment.assignments    
 
 
   /// Given a consumer configuration, initiates the consumer group protocol.
@@ -75,14 +76,8 @@ module Consumer =
   /// configured thresholds, the resulting sequence throws an exception.
   let consume (conn:KafkaConn) (cfg:ConsumerConfig) = async {
     
-    let cts = CancellationTokenSource.CreateLinkedTokenSource conn.CancellationToken
-    let state : MVar<ConsumerState> = MVar.create ()
-
-    let states = asyncSeq {
-      while true do
-        let! s = MVar.take state
-        yield s }
-
+    let stateCell : Cell<ConsumerState> = Cell.create ()
+    
     // TODO: configurable
     let protocolType = ProtocolType.consumer
     let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Binary.empty)
@@ -90,22 +85,31 @@ module Consumer =
     let groupProtocols =
       GroupProtocols(
         [| assignmentStrategy, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta |])
+                            
+    /// Closes a consumer group.
+    let close (state:ConsumerState) : Async<unit> = async {
+      return!
+        stateCell
+        |> Cell.updateAsync (fun state' -> async {
+          if state.generationId = state'.generationId then
+            return failwith ""
+          else
+            return state' })
+        |> Async.Ignore }
 
-
-    let close (state:ConsumerState) = async {
-      Log.info "closing_consumer_group|group_id=%s member_id=%s generation_id=%i leader_id=%s member_count=%i" 
-        cfg.groupId 
-        state.memberId 
-        state.generationId 
-        ""
-        state.memberAssignment.partitionAssignment.assignments.Length
-      return cts.Cancel() }
-
+    /// Joins the consumer group.
     let rec join (prevState:ConsumerState option) = async {
+      
+      match prevState with
+      | None -> 
+        Log.info "initializing_consumer|group_id=%s" cfg.groupId
+      | Some prevState -> 
+        Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevState.memberId
 
-      Log.info "initializing_consumer|group_id=%s" cfg.groupId
 
-      let cts = CancellationTokenSource.CreateLinkedTokenSource cts.Token
+
+
+      let cts = CancellationTokenSource.CreateLinkedTokenSource conn.CancellationToken
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
       let! joinGroupRes =
@@ -144,8 +148,7 @@ module Consumer =
                 |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
                 |> Seq.toArray
               let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment(assignment))              
-              memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment)
-            )
+              memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))
                       
           let req = SyncGroupRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
           let! res = Kafka.syncGroup conn req
@@ -165,44 +168,45 @@ module Consumer =
       let state' =
         {
           memberId = joinGroupRes.memberId
+          leaderId = joinGroupRes.leaderId
           generationId = joinGroupRes.generationId
           memberAssignment = assignment
           cancellationToken = cts.Token
         }
 
+      /// Starts hearbeat process.
       let rec heartbeat state = async {
-        let! ct = Async.CancellationToken
-        if ct.IsCancellationRequested then
-          Log.info "stopping_heartbeats"
-          return ()
-        else
-          Log.trace "sending_heartbeat|cancelled=%b" ct.IsCancellationRequested
-          let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
-          let! res = Kafka.heartbeat conn req
-          match res.errorCode with
-          | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode ->
-            do! close state
-            do! join (Some state)
-            return ()
-          | _ ->
-            do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
-            return! heartbeat state }
+        //Log.trace "sending_heartbeat"
+        let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
+        let! res = Kafka.heartbeat conn req
+        match res.errorCode with
+        | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode ->
+          let! state' = rejoin state
+          return! heartbeat state'
+        | _ ->
+          do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
+          return! heartbeat state }
 
       Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
       Async.Start (heartbeat state', cts.Token)
             
-      do! state |> MVar.put state'
+      do! stateCell |> Cell.put state'
 
-      return () }
-              
-    let consume state = asyncSeq {
+      return state' }
         
-      let memberId = state.memberId
-      let generationId = state.generationId
+    /// Serialize and de-dup concurrent rejoins.            
+    and rejoin prevState = async {
+      do! close prevState
+      return! join (Some prevState) }
+
+    /// Returns an async sequence elements of which correspond to
+    /// generations of the consumer group protocol.
+    /// Each element contains a sub-sequence corresponding to messages from an individual topic * partition.              
+    and consume (state:ConsumerState) = async {        
            
       let stream (topic:TopicName, partition:Partition) : Async<AsyncSeq<MessageSet * Async<unit>>> = async {
 
-        let fetchOffset () = async {
+        let fetchInitOffset () = async {
           Log.info "fetching_group_member_offset|topic=%s partition=%i group_id=%s time=%i" topic partition cfg.groupId cfg.initialFetchTime
           try
             let req = OffsetFetchRequest(cfg.groupId, [| topic, [| partition |] |])
@@ -210,7 +214,7 @@ module Consumer =
             let _topic,ps = res.topics.[0]
             let (_p,offset,_metadata,_ec) = ps.[0]
             if offset = -1L then
-              Log.info "offset_not_available_at_group_coordinator|group_id=%s member_id=%s topic=%s partition=%i generation=%i" cfg.groupId memberId topic partition generationId
+              Log.info "offset_not_available_at_group_coordinator|group_id=%s member_id=%s topic=%s partition=%i generation=%i" cfg.groupId state.memberId topic partition state.generationId
               let offsetReq = OffsetRequest(-1, [| topic, [| partition,cfg.initialFetchTime,1 |] |])
               let! offsetRes = Kafka.offset conn offsetReq
               let _,ps = offsetRes.topics.[0]
@@ -222,85 +226,95 @@ module Consumer =
             //do! close ()
             return raise ex }
 
-        let! initOffset = fetchOffset ()
+        let! initOffset = fetchInitOffset ()
 
         Log.info "fetched_initial_offset|topic=%s partition=%i offset=%i group_id=%s member_id=%s generation_id=%i" 
           topic
           partition
           initOffset
           cfg.groupId
-          memberId
-          generationId
+          state.memberId
+          state.generationId
 
-        let commitOffset (offset:Offset) = async {
-          Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId memberId generationId offset cfg.offsetRetentionTime
-          let req = OffsetCommitRequest(cfg.groupId, generationId, memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
+        // pattern: eliminate erroneous case through non-termination.
+        // pattern: on certain responses, take some action and then restart (but with timeout).
+        // pattern: 
+
+        /// Commits the specified offset within the consumer group.
+        let rec commitOffset (state:ConsumerState) (offset:Offset) = async {
+          Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
+          let req = OffsetCommitRequest(cfg.groupId, state.generationId, state.memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
           let! res = Kafka.offsetCommit conn req
           if res.topics.Length > 0 then
             let (tn,ps) = res.topics.[0]
             let (p,ec) = ps.[0]
             match ec with
             | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode ->
-              do! close state
-              do! join (Some state)
+              let! state = rejoin state
+              return! commitOffset state offset
             | _ ->
-              Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId memberId generationId offset
+              Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
               return ()
             else          
-            Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId memberId generationId offset
+            Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
             return failwith "offset commit failed!" }
             //return () }
 
-        let rec fetchStream (offset:FetchOffset) = asyncSeq {
-          //Log.trace "sending_fetch_request|topic=%s partition=%i member_id=%s offset=%i" topic partition memberId offset
-          
-          let rec fetchRange offset = async {
-            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
-            let! res = Kafka.fetch conn req
-            let _,partitions = res.topics.[0]
-            let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
+        let rec fetchOffset (state:ConsumerState) offset : Async<FetchResponse> = async {
+          let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
+          let! res = Kafka.fetch conn req
+          let _,partitions = res.topics.[0]
+          let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
+          match ec with
+          | ErrorCode.Unknown -> return failwith "unknown"
+          | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
+            Log.info "rejoining_consumer_group"
+            let! state' = rejoin state
+            return! fetchOffset state' offset
+          | _ ->
             if ms.messages.Length = 0 then
               Log.info "reached_end_of_stream|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
               do! Async.Sleep 10000
-              return! fetchRange offset 
+              return! fetchOffset state offset 
             else
               //let ms = Compression.decompress ms
               //let commit = commitOffset (offset)
               return res }
+
+        /// Fetches a stream of messages starting at the specified offset.
+        let rec fetchStream (state:ConsumerState) (offset:FetchOffset) = asyncSeq {
+          //Log.trace "sending_fetch_request|topic=%s partition=%i member_id=%s offset=%i" topic partition memberId offset         
           
-          let! res = fetchRange offset
+          let! res = fetchOffset state offset
           //let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
           //let! res = Kafka.fetch conn req
           let _,partitions = res.topics.[0]
           let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
           //let ms = Compression.decompress ms
-          let commit = commitOffset offset
+          let commit = commitOffset state offset
           yield ms,commit
 
           // TODO: ensure monotonic?                                                          
-          let nextOffset =MessageSet.nextOffset ms
+          let nextOffset = MessageSet.nextOffset ms
           if nextOffset <= highWatermarkOffset then
-            yield! fetchStream nextOffset
+            yield! fetchStream state nextOffset
           else
             Log.error "offset_calculation_errored|next_offset=%i high_watermark_offset=%i" nextOffset highWatermarkOffset
-            do! Async.Sleep -1 }
+            return failwith "offset_calculation_errored" }
 
-        return fetchStream initOffset }
+        return fetchStream state initOffset }
         
-      let! partitionStreams =
+      return!
         ConsumerState.topicPartitions state
         |> Seq.collect (fun (tn,ps) ->
           ps
           |> Seq.map (fun p -> async {
             let! stream = stream (tn,p)
             return tn,p,stream }))
-        |> Async.Parallel
-            
-      yield generationId,partitionStreams }
+        |> Async.Parallel }            
 
+    let! state = join None
 
-    let! _ = join None
-
-    return states |> AsyncSeq.collect consume
+    return! consume state
          
   }

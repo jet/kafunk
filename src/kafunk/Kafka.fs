@@ -102,7 +102,7 @@ module internal ResponseEx =
     static member awaitResponse (x:RequestMessage) =
       match x with
       | RequestMessage.Produce req when req.requiredAcks = RequiredAcks.None ->
-        Some(ResponseMessage.ProduceResponse(new ProduceResponse([||])))
+        Some(ResponseMessage.ProduceResponse(new ProduceResponse([||], 0)))
       | _ -> None
 
   type ResponseMessage with
@@ -253,8 +253,6 @@ module Chan =
 
   let private Log = Log.create "Kafunk.Chan"
 
-  let ApiVersion : ApiVersion = 0s
-
   let send (ch:Chan) req  = ch req
 
   let metadata (ch:Chan) (req:Metadata.Request) =
@@ -297,7 +295,7 @@ module Chan =
     ch (RequestMessage.DescribeGroups req) |> Async.map ResponseMessage.toDescribeGroups
 
 
-  
+  /// Configuration for an individual TCP connection.
   type Config = {
     useNagle : bool    
     receiveBufferSize : int
@@ -376,7 +374,7 @@ module Chan =
         match req with
         | RequestMessage.OffsetFetch _ -> 1s
         | RequestMessage.OffsetCommit _ -> 2s
-        | _ -> ApiVersion
+        | _ -> 0s
       let req = Request(version, correlationId, clientId, req)
       let sessionData = toArraySeg Request.size Request.write req
       sessionData, req.apiKey
@@ -403,6 +401,7 @@ module Chan =
     let ep = IPEndPoint(ip, port)
     let! ch = connect config clientId ep
     return ch }
+
 
 
 
@@ -449,10 +448,13 @@ module Routing =
   let concatProduceResponses (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toProduce
-    |> (fun rs -> new ProduceResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.ProduceResponse)
+    |> (fun rs -> 
+      let topics = rs |> Array.collect (fun r -> r.topics)
+      let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
+      new ProduceResponse(topics, tt) |> ResponseMessage.ProduceResponse)
 
-  let concatProduceResponsesMs (rs:ProduceResponse[]) =
-    new ProduceResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.ProduceResponse
+//  let concatProduceResponsesMs (rs:ProduceResponse[]) =
+//    new ProduceResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.ProduceResponse
 
   /// Partitions an offset request by topic/partition.
   let partitionOffsetReq (req:OffsetRequest) =
@@ -542,13 +544,10 @@ module Routing =
     | MissingTopicRoute of topic:TopicName
     | MissingGroupRoute of group:GroupId
 
-  /// A routes routes a request to a host * port.
-  type Router = RequestMessage -> RouteResult
-
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
   /// Group related requests are routed to the respective broker.
-  let route (routes:Routes) : Router =
+  let route (routes:Routes) : RequestMessage -> RouteResult =
 
     // route to bootstrap broker
     let bootstrapRoute req = Success [| req, routes.bootstrapHost |]
@@ -887,6 +886,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
     }
     
+  /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
 
   member internal __.Chan : Chan = send
@@ -910,8 +910,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   member __.Close () =
     Log.info "closing_connection"
-    cts.CancelAfter (cfg.requestTimeout)
-    cts.Dispose()
+    //cts.CancelAfter cfg.requestTimeout
+    //cts.Dispose()
+    cts.Cancel()
     (stateCell :> IDisposable).Dispose()
     
 
