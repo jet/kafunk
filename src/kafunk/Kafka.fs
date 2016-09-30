@@ -453,9 +453,6 @@ module Routing =
       let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
       new ProduceResponse(topics, tt) |> ResponseMessage.ProduceResponse)
 
-//  let concatProduceResponsesMs (rs:ProduceResponse[]) =
-//    new ProduceResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.ProduceResponse
-
   /// Partitions an offset request by topic/partition.
   let partitionOffsetReq (req:OffsetRequest) =
     req.topics
@@ -617,6 +614,20 @@ type RetryAction =
 
     static member tryFindError (res:ResponseMessage) =
       match res with
+      | ResponseMessage.MetadataResponse r ->
+        r.topicMetadata
+        |> Seq.tryPick (fun x -> 
+          RetryAction.errorRetryAction x.topicErrorCode
+          |> Option.map (fun action -> x.topicErrorCode,action,""))
+
+      | ResponseMessage.OffsetResponse r ->
+        r.topics
+        |> Seq.tryPick (fun (_tn,ps) -> 
+          ps
+          |> Seq.tryPick (fun x -> 
+            RetryAction.errorRetryAction x.errorCode
+            |> Option.map (fun action -> x.errorCode,action,"")))
+
       | ResponseMessage.FetchResponse r ->
         r.topics 
         |> Seq.tryPick (fun (_tn,pmd) -> 
@@ -632,20 +643,18 @@ type RetryAction =
           |> Seq.tryPick (fun (_p,ec,_os) -> 
             RetryAction.errorRetryAction ec
             |> Option.map (fun action -> ec,action,"")))
-
-      | ResponseMessage.DescribeGroupsResponse r ->
-        r.groups
-        |> Seq.tryPick (fun (ec,_,_,_,_,_) -> 
-          RetryAction.errorRetryAction ec
-          |> Option.map (fun action -> ec,action,""))
       
       | ResponseMessage.GroupCoordinatorResponse r ->
         RetryAction.errorRetryAction r.errorCode
         |> Option.map (fun action -> r.errorCode,action,"")
 
-      | ResponseMessage.HeartbeatResponse r ->        
-        RetryAction.errorRetryAction r.errorCode
-        |> Option.map (fun action -> r.errorCode,action,"")
+      | ResponseMessage.HeartbeatResponse r ->
+        match r.errorCode with 
+        | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+          Some (r.errorCode,RetryAction.PassThru,"")
+        | _ ->
+          RetryAction.errorRetryAction r.errorCode
+          |> Option.map (fun action -> r.errorCode,action,"")
 
       | ResponseMessage.OffsetFetchResponse r -> 
         r.topics
@@ -653,48 +662,55 @@ type RetryAction =
           ps
           |> Seq.tryPick (fun (_p,_o,_md,ec) -> 
             match ec with
-            //| ErrorCode.UnknownTopicOrPartition -> None // v0 only
+            | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+              Some (ec,RetryAction.PassThru,"")
             | _ ->
               RetryAction.errorRetryAction ec
               |> Option.map (fun action -> ec,action,"")))
-            
-      | ResponseMessage.JoinGroupResponse r ->
-        RetryAction.errorRetryAction r.errorCode
-        |> Option.map (fun action -> r.errorCode,action,"")
 
-      | ResponseMessage.MetadataResponse r ->
-        r.topicMetadata
-        |> Seq.tryPick (fun x -> 
-          RetryAction.errorRetryAction x.topicErrorCode
-          |> Option.map (fun action -> x.topicErrorCode,action,""))
-
-      | ResponseMessage.OffsetCommitResponse r ->
+      | ResponseMessage.OffsetCommitResponse r ->        
         r.topics
         |> Seq.tryPick (fun (_tn,ps) ->
           ps
           |> Seq.tryPick (fun (_p,ec) -> 
-            RetryAction.errorRetryAction ec
-            |> Option.map (fun action -> ec,action,"")))
+            match ec with
+            | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+              Some (ec,RetryAction.PassThru,"")
+            | _ ->
+              RetryAction.errorRetryAction ec
+              |> Option.map (fun action -> ec,action,"")))
+                        
+      | ResponseMessage.JoinGroupResponse r ->
+        match r.errorCode with
+        | ErrorCode.UnknownMemberIdCode ->
+          Some (r.errorCode,RetryAction.PassThru,"")
+        | _ ->
+          RetryAction.errorRetryAction r.errorCode
+          |> Option.map (fun action -> r.errorCode,action,"")
 
       | ResponseMessage.SyncGroupResponse r ->
-        RetryAction.errorRetryAction r.errorCode
-        |> Option.map (fun action -> r.errorCode,action,"")
+        match r.errorCode with 
+        | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+          Some (r.errorCode,RetryAction.PassThru,"")
+        | _ ->        
+          RetryAction.errorRetryAction r.errorCode
+          |> Option.map (fun action -> r.errorCode,action,"")
       
       | ResponseMessage.LeaveGroupResponse r ->
         RetryAction.errorRetryAction r.errorCode
         |> Option.map (fun action -> r.errorCode,action,"")
 
+      | ResponseMessage.DescribeGroupsResponse r ->
+        r.groups
+        |> Seq.tryPick (fun (ec,_,_,_,_,_) -> 
+          RetryAction.errorRetryAction ec
+          |> Option.map (fun action -> ec,action,""))
+
       | ResponseMessage.ListGroupsResponse r ->
         RetryAction.errorRetryAction r.errorCode
         |> Option.map (fun action -> r.errorCode,action,"")
 
-      | ResponseMessage.OffsetResponse r ->
-        r.topics
-        |> Seq.tryPick (fun (_tn,ps) -> 
-          ps
-          |> Seq.tryPick (fun x -> 
-            RetryAction.errorRetryAction x.errorCode
-            |> Option.map (fun action -> x.errorCode,action,"")))
+
 
 /// Kafka connection configuration.
 /// http://kafka.apache.org/documentation.html#connectconfigs
@@ -822,7 +838,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let state = Cell.getFastUnsafe stateCell
     match Routing.route state.routes req with
     | Success reqRoutes ->      
-      Log.trace "request_routed|routes=%A" reqRoutes
+      //Log.trace "request_routed|routes=%A" reqRoutes
       
       let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
         match state |> ConnState.tryFindChanByHost host with
