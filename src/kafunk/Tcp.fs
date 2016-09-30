@@ -284,7 +284,7 @@ type ReqRepSession<'a, 'b, 's> internal
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then      
-      Log.trace "received_response|correlation_id=%i size=%i" correlationId sessionData.payload.Count
+      //Log.trace "received_response|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       let state,reply = token
       try        
         let res = decode (correlationId,state,sessionData.payload)
@@ -321,9 +321,9 @@ type ReqRepSession<'a, 'b, 's> internal
 
   member x.Send (req:'a) = async {
     let correlationId,sessionData,rep = mux req
-    Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
+    //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
     let! sent = send sessionData
-    Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
+    //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
     return! rep.Task |> Async.AwaitTask }
 
   interface IDisposable with

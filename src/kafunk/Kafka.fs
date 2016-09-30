@@ -587,11 +587,15 @@ module Routing =
 
 /// Indicates an action to take in response to a request error.
 type RetryAction =
+  
+  // TODO: generalize these 3
   | RefreshMetadataAndRetry of topics:TopicName[]
   | RefreshGroupCoordinator of groupId:GroupId
   | WaitAndRetry
+
+
   | Escalate
-  | Ignore
+  | PassThru
   with
 
     static member errorRetryAction (ec:ErrorCode) =
@@ -604,6 +608,9 @@ type RetryAction =
       
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition
         Some (RetryAction.RefreshMetadataAndRetry [||])
+
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode -> 
+        Some (RetryAction.PassThru) // escalate to consumer group logic.
       
       | _ ->
         Some (RetryAction.Escalate)
@@ -646,7 +653,7 @@ type RetryAction =
           ps
           |> Seq.tryPick (fun (_p,_o,_md,ec) -> 
             match ec with
-            | ErrorCode.UnknownTopicOrPartition -> None // returned for first fetch
+            //| ErrorCode.UnknownTopicOrPartition -> None // v0 only
             | _ ->
               RetryAction.errorRetryAction ec
               |> Option.map (fun action -> ec,action,"")))
@@ -793,9 +800,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     return!
       stateCell
       |> Cell.updateAsync (fun state -> async {
-        Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
+        //Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
         let! metadata = Chan.metadata send (Metadata.Request(topics))   
-        Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
+        //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
         return 
           state 
           |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }) }
@@ -829,7 +836,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
               | Some (errorCode,action,msg) ->   
                 Log.error "response_errored|error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
                 match action with
-                | RetryAction.Ignore ->
+                | RetryAction.PassThru ->
                   return res
                 | RetryAction.Escalate ->
                   return failwithf "unrecoverable error error_code=%i res=%A" errorCode res
