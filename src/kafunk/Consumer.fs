@@ -56,7 +56,7 @@ module Consumer =
   let private Log = Log.create "Kafunk.Consumer"
   
   /// Stats corresponding to a single generation of the consumer group protocol.
-  type ConsumerState = {
+  type GenerationState = {
     generationId : GenerationId
     memberId : MemberId
     leaderId : LeaderId
@@ -71,11 +71,14 @@ module Consumer =
     initOffset : Offset
   }
 
+
+  /// Returns an async sequence corresponding to generations of the consumer group protocol.
+  /// A generation changes when the group changes, particularly when members join or leave.
+  /// Each generation contains a set of async sequences corresponding to messages in a single topic-partition.
+  /// The message set is accompanied by an async computation which when evaluated, commits the checkpoint
+  /// corresponding to the message set.
   let consume (conn:KafkaConn) (cfg:ConsumerConfig) = asyncSeq {
-    
-    //let stateCell : Cell<ConsumerState> = Cell.create ()
-    //let stateCell : MVar<ConsumerState> = MVar.create ()
-    
+        
     // TODO: configurable
     let protocolType = ProtocolType.consumer
     let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Binary.empty)
@@ -108,10 +111,13 @@ module Consumer =
           return Some res }
       
       match joinGroupRes with
-      | None ->
+      | None ->        
+        Log.warn "join_group_error"
+        do! Async.Sleep 100
         return! join prevMemberId
 
-      | Some joinGroupRes ->                     
+      | Some joinGroupRes ->
+                           
         Log.info "join_group_response|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s" 
           cfg.groupId 
           joinGroupRes.memberId 
@@ -180,7 +186,6 @@ module Consumer =
               let (_p,offset,_metadata,ec) = ps.[0]
               match ec with
               | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode  ->
-                //let! state = rejoin joinGroupRes.memberId
                 return failwith "restart join process"
               | _ ->
                 if offset = -1L then
@@ -217,7 +222,7 @@ module Consumer =
             }
 
           /// Starts the hearbeat process.
-          let rec heartbeat (state:ConsumerState) = async {
+          let rec heartbeat (state:GenerationState) = async {
             let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
             let! res = Kafka.heartbeat conn req
             match res.errorCode with
@@ -236,7 +241,7 @@ module Consumer =
     /// Closes a consumer group.
     /// The current generation stops emitting.
     /// A new join operation will begin.
-    and close (state:ConsumerState) : Async<unit> = async {
+    and close (state:GenerationState) : Async<unit> = async {
       // TODO: IVar
       if not state.cancellationToken.IsCancellationRequested then
         Log.warn "closing_consumer_group|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
@@ -247,7 +252,7 @@ module Consumer =
         return () }
 
     /// Initiates consumption of a single generation of the consumer group protocol.
-    let consume (state:ConsumerState) = async {
+    let consume (state:GenerationState) = async {
 
       /// Returns an async sequence corresponding to the consumption of an individual partition.
       let consumePartition (topic:TopicName, partition:Partition, initOffset:FetchOffset) = async {        
@@ -271,6 +276,7 @@ module Consumer =
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
             return failwith "offset commit failed!" }
 
+        /// Fetches the specified offset.
         let rec fetch (offset:FetchOffset) : Async<FetchResponse option> = async {
           // TODO: fix via embedded cancellation token
           if state.cancellationToken.IsCancellationRequested then return None
@@ -283,7 +289,6 @@ module Consumer =
               let _,partitions = res.topics.[0]
               let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
               match ec with
-              //| ErrorCode.Unknown -> return failwith "unknown"
               | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
                 do! close state
                 return None
@@ -296,8 +301,20 @@ module Consumer =
                   //let ms = Compression.decompress ms
                   return Some res }
 
+        let rec fetch2 (offset:FetchOffset) = async {
+          try
+            return! fetch offset
+          with 
+            | EscalationException (ec,res) when ec = ErrorCode.OffsetOutOfRange ->
+              Log.warn "offset_exception_escalated|error_code=%i res=%A" ec res
+              Log.warn "decrementing_offset|offset=%i new_offset=%i" offset (offset - 1L)
+              do! Async.Sleep 5000
+              return! fetch2 (offset - 1L) }
+
+        let fetch = fetch2
+
         /// Fetches a stream of messages starting at the specified offset.
-        let rec fetchStream (offset:FetchOffset) = asyncSeq {
+        let rec fetchStream (offset:FetchOffset) = asyncSeq {          
           let! res = fetch offset
           match res with
           | None -> ()
@@ -306,13 +323,13 @@ module Consumer =
             let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
             //let ms = Compression.decompress ms
             let commit = commitOffset offset
-            yield ms,commit                                              
-            let nextOffset = MessageSet.nextOffset ms
-            if nextOffset <= highWatermarkOffset then
+            yield ms,commit
+            try                                              
+              let nextOffset = MessageSet.nextOffset ms highWatermarkOffset
               yield! fetchStream nextOffset
-            else
-              Log.error "offset_calculation_errored|next_offset=%i high_watermark_offset=%i" nextOffset highWatermarkOffset
-              return failwith "offset_calculation_errored" }
+            with ex ->
+              Log.error "next offset failed"
+              return raise ex }
       
         return fetchStream initOffset }
      
@@ -326,7 +343,7 @@ module Consumer =
       return partitionStreams }
 
     /// Emits generations of the consumer group protocol.
-    let rec generations (prevState:ConsumerState option) = asyncSeq {
+    let rec generations (prevState:GenerationState option) = asyncSeq {
       let! state = join (prevState |> Option.map (fun s -> s.memberId))
       let! topics = Async.withCancellationToken state.cancellationToken.Token (consume state)
       yield state.generationId,topics
@@ -334,3 +351,36 @@ module Consumer =
       yield! generations (Some state) }
                    
     yield! generations None }
+
+  
+  let callback 
+    (handler:MessageSet * Async<unit> -> Async<unit>) 
+    (consumer:AsyncSeq<GenerationId * (TopicName * Partition * AsyncSeq<MessageSet * Async<unit>>)[]>) : Async<unit> = async {
+      return!
+        consumer
+        |> AsyncSeq.iterAsync (fun (_generationId,topics) -> async {          
+          return!
+            topics
+            |> Seq.map (fun (_tn,_p,stream) -> async {              
+              return! stream |> AsyncSeq.iterAsync handler })
+            |> Async.Parallel
+            |> Async.Ignore }) }
+
+  let callbackCommit
+    (checkpoint:MessageSet * Async<unit> -> Async<unit>)
+    (handler:MessageSet -> Async<unit>) =
+    callback (fun (ms,commit) -> async {
+      do! handler ms
+      do! checkpoint (ms,commit) })
+
+  let callbackCommitAfter =
+    callbackCommit (fun (_,commit) -> commit)
+
+  let callbackCommitAsync =
+    callbackCommit (fun (_,commit) -> async { return Async.Start commit })
+
+  let callbackCommitPeriodic (period:TimeSpan) =    
+    callbackCommit (fun (_,commit) -> async { return Async.Start commit })
+    
+
+  

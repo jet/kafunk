@@ -3,12 +3,16 @@
 
 open Kafunk
 
-let host = "guardians-kafka-cluster.qa.jet.com:9092"
-//let host = "localhost"
-let topic = "nova-retailskus-profx"
-//let topic = "test-topic2"
-let group = "leo_test13"
+let topic = "test-topic2"
+let host = "localhost"
+let group = "leo_test15"
 
+//let conn = Kafka.connHost host
+//let consumerCfg = ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)
+//Consumer.consume conn consumerCfg
+//|> Consumer.callbackCommitAfter 
+//  (fun ms -> async {    
+//    return () })
 
 let go = async {
   let! conn = Kafka.connHostAsync host

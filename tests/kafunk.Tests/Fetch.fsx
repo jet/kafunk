@@ -4,10 +4,8 @@
 open Kafunk
 open System
 
-let host = "guardians-kafka-cluster.qa.jet.com:9092"
-let topic = "nova-retailskus-profx"
-//let topic = "test-topic"
-//let host = "localhost"
+let topic = "test-topic"
+let host = "localhost"
 let conn = Kafka.connHost host
 
 let offsetRes =

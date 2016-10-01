@@ -47,10 +47,14 @@ module MessageSet =
 
   /// Returns the next offset to fetch, by taking the max offset in the
   /// message set and adding one.
-  let nextOffset (ms:MessageSet) =
+  let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) =
     if ms.messages.Length > 0 then
-      let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
-      maxOffset + 1L
+      //let maxOffset = ms.messages |> Seq.map (fun (off, _, _) -> off) |> Seq.max
+      let (maxOffset,_,_) = ms.messages.[ms.messages.Length - 1]
+      let no = maxOffset + 1L
+      if no <= hwm then no
+      else 
+        failwithf "invalid offset computation maxOffset=%i hwm=%i" maxOffset hwm
     else
       1L
 
@@ -166,7 +170,7 @@ module internal ResponseEx =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,ec,hwmo,_mss,_ms) -> sprintf "(topic=%s partition=%i error_code=%i high_watermark_offset=%i)" tn p ec hwmo)
+            |> Seq.map (fun (p,ec,hwmo,mss,_ms) -> sprintf "(topic=%s partition=%i error_code=%i high_watermark_offset=%i message_set_size=%i)" tn p ec hwmo mss)
             |> String.concat ";"
           sprintf "topic=%s [%s]" tn ps)
         |> String.concat " ; "
@@ -223,6 +227,14 @@ module internal ResponseEx =
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
       sprintf "OffsetCommitResponse|%s" ts
+
+  type HeartbeatRequest with
+    static member Print (x:HeartbeatRequest) =
+      sprintf "HeartbeatRequest|group_id=%s member_id=%s generation_id=%i" x.groupId x.memberId x.generationId
+
+  type HeartbeatResponse with
+    static member Print (x:HeartbeatResponse) =
+      sprintf "HeartbeatResponse|error_code=%i" x.errorCode
 
   type RequestMessage with
     static member Print (x:RequestMessage) =
@@ -770,6 +782,20 @@ type ConnState = {
     }
 
 
+
+type ResponseError =
+  | FetchError of FetchResponse
+  | ProduceError of ProduceResponse
+
+
+type ChanResult = Result<ResponseMessage, ResponseError>
+
+
+
+exception EscalationException of errorCode:ErrorCode * res:ResponseMessage
+
+
+
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
 /// It acts as a context for API operations, providing filtering and fault tolerance.
@@ -855,7 +881,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 | RetryAction.PassThru ->
                   return res
                 | RetryAction.Escalate ->
-                  return failwithf "unrecoverable error error_code=%i res=%A" errorCode res
+                  return raise (EscalationException (errorCode,res))
                 | RetryAction.RefreshGroupCoordinator gid ->
                   let! _ = getGroupCoordinator gid
                   return! send req

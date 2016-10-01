@@ -3,8 +3,7 @@
 
 open Kafunk
 
-// Replace this with an initial broker you wish to use.
-let conn = Kafka.connHostAndPort "127.0.0.1" 9092
+let conn = Kafka.connHost "127.0.0.1:9092" 
 
 let topicName = "test-topic2"
 
@@ -23,7 +22,6 @@ for (tn,offsets) in prodRes.topics do
   printfn "topic_name=%s" tn
   for (p,ec,offset) in offsets do
     printfn "partition=%i error_code=%i offset=%i" p ec offset
-
 
 
 //let N = 10
