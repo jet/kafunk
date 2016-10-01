@@ -66,8 +66,7 @@
     <None Include="paket.references" />
     <Compile Include="CodecTests.fs" />
     <Compile Include="TcpTests.fs" />
-    <None Include="Kafka.fsx" />
-    <Compile Include="Compression-gzip-tests.fs" />
+    <Compile Include="CompressionGzipTests.fs" />
     <None Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
     <None Include="Fetch.fsx" />

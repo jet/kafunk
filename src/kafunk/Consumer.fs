@@ -89,6 +89,9 @@ module Consumer =
                             
 
     /// Joins the consumer group.
+    /// - Join group.
+    /// - Sync group (assign partitions to members).
+    /// - Fetch initial offsets.
     let rec join (prevMemberId:MemberId option) = async {      
       match prevMemberId with
       | None -> 
@@ -106,17 +109,21 @@ module Consumer =
         let! res = Kafka.joinGroup conn req
         match res.errorCode with
         | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
-          return None
+          return Failure res.errorCode
         | _ ->
-          return Some res }
+          return Success res }
       
       match joinGroupRes with
-      | None ->        
+      | Failure ec ->        
         Log.warn "join_group_error"
         do! Async.Sleep 100
-        return! join prevMemberId
+        match ec with
+        | ErrorCode.UnknownMemberIdCode -> 
+          Log.warn "resetting_member_id"
+          return! join None
+        | _ -> return! join prevMemberId
 
-      | Some joinGroupRes ->
+      | Success joinGroupRes ->
                            
         Log.info "join_group_response|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s" 
           cfg.groupId 
@@ -259,7 +266,7 @@ module Consumer =
            
         /// Commits the specified offset within the consumer group.
         let commitOffset (offset:FetchOffset) : Async<unit> = async {
-          Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
+          //Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
           let req = OffsetCommitRequest(cfg.groupId, state.generationId, state.memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
           let! res = Kafka.offsetCommit conn req
           if res.topics.Length > 0 then
@@ -270,7 +277,7 @@ module Consumer =
               do! close state
               return ()
             | _ ->
-              Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
+              //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
               return ()
             else          
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
@@ -306,10 +313,14 @@ module Consumer =
             return! fetch offset
           with 
             | EscalationException (ec,res) when ec = ErrorCode.OffsetOutOfRange ->
-              Log.warn "offset_exception_escalated|error_code=%i res=%A" ec res
-              Log.warn "decrementing_offset|offset=%i new_offset=%i" offset (offset - 1L)
+              Log.warn "offset_exception_escalated|topic=%s partition=%i error_code=%i res=%A" topic partition ec res   
+              let offsetReq = OffsetRequest(-1, [| topic, [| partition, cfg.initialFetchTime, 1 |] |])                         
+              let! offsetRes = Kafka.offset conn offsetReq
+              let (tn,ps) = offsetRes.topics.[0]
+              let p = ps.[0]
+              Log.warn "fetched_topic_offsets|topic=%s partition=%i latest_offset=%i attempted_offset=%i delta=%i" tn p.partition p.offsets.[0] offset (p.offsets.[0] - offset)
               do! Async.Sleep 5000
-              return! fetch2 (offset - 1L) }
+              return! fetch2 p.offsets.[0] }
 
         let fetch = fetch2
 
@@ -367,19 +378,16 @@ module Consumer =
             |> Async.Ignore }) }
 
   let callbackCommit
-    (checkpoint:MessageSet * Async<unit> -> Async<unit>)
+    (commit:MessageSet * Async<unit> -> Async<unit>)
     (handler:MessageSet -> Async<unit>) =
-    callback (fun (ms,commit) -> async {
+    callback (fun (ms,c) -> async {
       do! handler ms
-      do! checkpoint (ms,commit) })
+      do! commit (ms,c) })
 
   let callbackCommitAfter =
     callbackCommit (fun (_,commit) -> commit)
 
   let callbackCommitAsync =
-    callbackCommit (fun (_,commit) -> async { return Async.Start commit })
-
-  let callbackCommitPeriodic (period:TimeSpan) =    
     callbackCommit (fun (_,commit) -> async { return Async.Start commit })
     
 

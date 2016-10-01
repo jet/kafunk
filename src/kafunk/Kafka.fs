@@ -150,6 +150,32 @@ module internal ResponseEx =
         |> String.concat " ; "
       sprintf "MetadataResponse|brokers=%s|topics=[%s]" brokers topics
 
+  type ProduceRequest with
+    static member Print (x:ProduceRequest) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,mss,_) -> sprintf "partition=%i message_set_size=%i" p mss)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "ProduceRequest|required_acks=%i timeout=%i topics=[%s]" x.requiredAcks x.timeout ts
+
+  type ProduceResponse with
+    static member Print (x:ProduceResponse) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,ec,o) -> sprintf "partition=%i offset=%i error_code=%i" p o ec)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "ProduceResponse|topics=[%s]" ts
+
   type FetchRequest with
     static member Print (x:FetchRequest) =
       let ts =
@@ -170,11 +196,43 @@ module internal ResponseEx =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,ec,hwmo,mss,_ms) -> sprintf "(topic=%s partition=%i error_code=%i high_watermark_offset=%i message_set_size=%i)" tn p ec hwmo mss)
+            |> Seq.map (fun (p,ec,hwmo,mss,ms) ->
+              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " offset=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
+              sprintf "(partition=%i error_code=%i high_watermark_offset=%i message_set_size=%i%s)" p ec hwmo mss offsetInfo)
             |> String.concat ";"
-          sprintf "topic=%s [%s]" tn ps)
+          sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
       sprintf "FetchResponse|%s" ts
+
+  type OffsetRequest with
+    static member Print (x:OffsetRequest) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun (p,t,_) -> sprintf "partition=%i time=%i" p t)
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=%s" tn ps)
+        |> String.concat " ; "
+      sprintf "OffsetRequest|topics=%s" ts
+
+  type OffsetResponse with
+    static member Print (x:OffsetResponse) =
+      let ts =
+        x.topics
+        |> Seq.map (fun (tn,ps) ->
+          let ps =
+            ps
+            |> Seq.map (fun po -> 
+              sprintf "partition=%i error_code=%i offsets=[%s]" 
+                po.partition 
+                po.errorCode 
+                (po.offsets |> Seq.map (sprintf "offset=%i") |> String.concat " ; "))
+            |> String.concat " ; "
+          sprintf "topic=%s partitions=[%s]" tn ps)
+        |> String.concat " ; "
+      sprintf "OffsetResponse|topics=%s" ts
 
   type OffsetFetchRequest with
     static member Print (x:OffsetFetchRequest) =
@@ -185,7 +243,7 @@ module internal ResponseEx =
             ps
             |> Seq.map (fun p -> sprintf "partition=%i" p)
             |> String.concat " ; "
-          sprintf "topic=%s partitions=%s" tn ps)
+          sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
       sprintf "OffsetFetchRequest|group_id=%s topics=%s" x.consumerGroup ts
 
@@ -240,8 +298,11 @@ module internal ResponseEx =
     static member Print (x:RequestMessage) =
       match x with
       | RequestMessage.Fetch x -> FetchRequest.Print x
+      | RequestMessage.Produce x -> ProduceRequest.Print x
       | RequestMessage.OffsetCommit x -> OffsetCommitRequest.Print x
       | RequestMessage.OffsetFetch x -> OffsetFetchRequest.Print x
+      | RequestMessage.Offset x -> OffsetRequest.Print x
+      | RequestMessage.Heartbeat x -> HeartbeatRequest.Print x
       | _ ->  sprintf "%A" x
 
   type ResponseMessage with
@@ -249,8 +310,11 @@ module internal ResponseEx =
       match x with
       | ResponseMessage.MetadataResponse x -> MetadataResponse.Print x
       | ResponseMessage.FetchResponse x -> FetchResponse.Print x
+      | ResponseMessage.ProduceResponse x -> ProduceResponse.Print x
       | ResponseMessage.OffsetCommitResponse x -> OffsetCommitResponse.Print x
       | ResponseMessage.OffsetFetchResponse x -> OffsetFetchResponse.Print x
+      | ResponseMessage.OffsetResponse x -> OffsetResponse.Print x
+      | ResponseMessage.HeartbeatResponse x -> HeartbeatResponse.Print x
       | x -> sprintf "%A" x
 
   // ------------------------------------------------------------------------------------------------------------------------------
@@ -317,8 +381,6 @@ module Chan =
         useNagle=defaultArg useNagle false
         receiveBufferSize=defaultArg receiveBufferSize 8192
       }
-
-
 
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.

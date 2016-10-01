@@ -15,6 +15,11 @@ module Prelude =
   let flip f a b = f b a
 
 
+module Option =
+  
+  let getOr (defaultValue:'a) = function Some a -> a | None -> defaultValue
+
+
 module Choice =
 
   let fold (f:'a -> 'c) (g:'b -> 'c) (c:Choice<'a, 'b>) : 'c =
@@ -110,20 +115,17 @@ type Result<'a, 'e> = Choice<'a, 'e>
 [<AutoOpen>]
 module ResultEx =
 
-  let (|Success|Failure|) (c:Result<'a, 'e>) =
-    match c with
-    | Choice1Of2 a -> Success a
-    | Choice2Of2 e -> Failure e
+  let (|Success|Failure|) r : Result<'a, 'e> = r
 
-  let Success a : Result<'a, 'e> = Choice1Of2 a
+  let inline Success a : Result<'a, 'e> = Choice1Of2 a
 
-  let Failure e : Result<'a, 'e> = Choice2Of2 e
+  let inline Failure e : Result<'a, 'e> = Choice2Of2 e
 
 module Result =
 
-  let success a : Result<'a, 'e> = Choice1Of2 a
+  let inline success a : Result<'a, 'e> = Choice1Of2 a
 
-  let fail e : Result<'a, 'e> = Choice2Of2 e
+  let inline fail e : Result<'a, 'e> = Choice2Of2 e
 
   let inline map f (r:Result<'a, 'e>) : Result<'b, 'e> = 
     Choice.mapLeft f r
