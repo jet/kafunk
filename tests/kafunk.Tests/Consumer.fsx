@@ -3,9 +3,10 @@
 
 open Kafunk
 
+
 let topic = "test-topic2"
 let host = "localhost"
-let group = "leo_test15"
+let group = "leo_test16"
 
 //let conn = Kafka.connHost host
 //let consumerCfg = ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)

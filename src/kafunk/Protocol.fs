@@ -1239,7 +1239,7 @@ module Protocol =
       match x with
       | RequestMessage.OffsetFetch  _ -> 1s
       | RequestMessage.OffsetCommit _ -> 2s
-      | RequestMessage.Produce _ -> 1s
+      //| RequestMessage.Produce _ -> 1s
       | _ -> 0s
 
   /// A Kafka request envelope.

@@ -2,6 +2,7 @@ namespace Kafunk
 
 open System
 open System.Threading
+open System.Threading.Tasks
 
 open Kafunk
 
@@ -61,8 +62,9 @@ module Consumer =
     memberId : MemberId
     leaderId : LeaderId
     assignments : TopicPartitionAssignment[]
-    cancellationToken : CancellationTokenSource
-    cancelled : Async<unit>
+    //cancellationToken : CancellationTokenSource
+    //cancelled : Async<unit>
+    closed : Tasks.TaskCompletionSource<unit>
   } 
 
   and TopicPartitionAssignment = {    
@@ -70,6 +72,11 @@ module Consumer =
     partition : Partition
     initOffset : Offset
   }
+
+  // TODO: refactor (back to Cancellation token, or Hopac Alt?)
+  let peekTask (f:'a -> 'b) (t:Task<'a>) (a:Async<'b>) = async {
+    if t.IsCompleted then return f t.Result
+    else return! a }
 
 
   /// Returns an async sequence corresponding to generations of the consumer group protocol.
@@ -100,7 +107,7 @@ module Consumer =
       | Some prevMemberId -> 
         Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
 
-      let cts = CancellationTokenSource.CreateLinkedTokenSource conn.CancellationToken
+      //let cts = CancellationTokenSource.CreateLinkedTokenSource conn.CancellationToken
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
       let! joinGroupRes = async {
@@ -218,45 +225,51 @@ module Consumer =
         
           Log.info "fetched_initial_offsets|"
 
-          let state' =
+          let state =
             {
               memberId = joinGroupRes.memberId
               leaderId = joinGroupRes.leaderId
               generationId = joinGroupRes.generationId
               assignments = initOffsets
-              cancellationToken = cts
-              cancelled = Async.AwaitWaitHandle cts.Token.WaitHandle |> Async.Ignore
+              closed = Tasks.TaskCompletionSource<unit>()
             }
+          
+          conn.CancellationToken.Register (fun () -> state.closed.TrySetResult() |> ignore) |> ignore
 
           /// Starts the hearbeat process.
-          let rec heartbeat (state:GenerationState) = async {
-            let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
-            let! res = Kafka.heartbeat conn req
-            match res.errorCode with
-            | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode ->
-              do! close state
-              return ()
-            | _ ->
-              do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
-              return! heartbeat state }
+          let rec heartbeat (state:GenerationState) =
+            peekTask
+              id
+              state.closed.Task
+              (async {
+                let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
+                let! res = Kafka.heartbeat conn req
+                match res.errorCode with
+                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode ->
+                  do! close state
+                  return ()
+                | _ ->
+                  do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
+                  return! heartbeat state })
 
           Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
-          Async.Start (heartbeat state', cts.Token)
+          //Async.Start (heartbeat state', cts.Token)
+          Async.Start (heartbeat state)
+          return state }
 
-          return state' }
-        
     /// Closes a consumer group.
     /// The current generation stops emitting.
     /// A new join operation will begin.
-    and close (state:GenerationState) : Async<unit> = async {
-      // TODO: IVar
-      if not state.cancellationToken.IsCancellationRequested then
-        Log.warn "closing_consumer_group|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
-        state.cancellationToken.Cancel ()
-        return ()
-      else
-        Log.warn "consumer_group_close_already_requested|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
-        return () }
+    and close (state:GenerationState) : Async<unit> =
+      peekTask
+        id
+        state.closed.Task
+        (async {
+          if state.closed.TrySetResult () then
+            Log.warn "closing_consumer_group|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
+          else
+            Log.warn "concurrent_close_request_received|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
+          })
 
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:GenerationState) = async {
@@ -279,34 +292,35 @@ module Consumer =
             | _ ->
               //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
               return ()
-            else          
+          else          
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
             return failwith "offset commit failed!" }
 
         /// Fetches the specified offset.
-        let rec fetch (offset:FetchOffset) : Async<FetchResponse option> = async {
-          // TODO: fix via embedded cancellation token
-          if state.cancellationToken.IsCancellationRequested then return None
-          else
-            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
-            let! res = Kafka.fetch conn req
-            if res.topics.Length = 0 then
-              return failwith "nothing returned in fetch response!"
-            else
-              let _,partitions = res.topics.[0]
-              let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
-              match ec with
-              | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
-                do! close state
-                return None
-              | _ ->
-                if ms.messages.Length = 0 then
-                  Log.info "reached_end_of_stream|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
-                  do! Async.Sleep 10000
-                  return! fetch offset 
-                else
-                  //let ms = Compression.decompress ms
-                  return Some res }
+        let rec fetch (offset:FetchOffset) : Async<FetchResponse option> = 
+          peekTask
+            (fun _ -> None)
+            (state.closed.Task)
+            (async {
+              let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
+              let! res = Kafka.fetch conn req
+              if res.topics.Length = 0 then
+                return failwith "nothing returned in fetch response!"
+              else
+                let _,partitions = res.topics.[0]
+                let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
+                match ec with
+                | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
+                  do! close state
+                  return None
+                | _ ->
+                  if ms.messages.Length = 0 then
+                    Log.info "reached_end_of_stream|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
+                    do! Async.Sleep 10000
+                    return! fetch offset 
+                  else
+                    //let ms = Compression.decompress ms
+                    return Some res })
 
         let rec fetch2 (offset:FetchOffset) = async {
           try
@@ -356,9 +370,9 @@ module Consumer =
     /// Emits generations of the consumer group protocol.
     let rec generations (prevState:GenerationState option) = asyncSeq {
       let! state = join (prevState |> Option.map (fun s -> s.memberId))
-      let! topics = Async.withCancellationToken state.cancellationToken.Token (consume state)
+      let! topics = consume state
       yield state.generationId,topics
-      do! state.cancelled
+      do! state.closed.Task |> Async.AwaitTask
       yield! generations (Some state) }
                    
     yield! generations None }

@@ -241,13 +241,6 @@ type SessionMessage =
   new (data:Binary.Segment) = { tx_id = Binary.peekInt32 data; payload = Binary.shiftOffset 4 data }
   new (txId, payload) = { tx_id = txId ; payload = payload }
 
-
-//type ReqRepSessionConfig<'In, 'Out, 'State> = {
-//  correlationId : unit -> CorrelationId
-//  encode : 'In * CorrelationId -> Binary.Segment * 'State
-//}
-
-
 /// A multiplexed request/reply session.
 /// Note a session is stateful in that it maintains state between requests and responses
 /// and in that starts a process to read the input stream.

@@ -375,11 +375,13 @@ module Chan =
   type Config = {
     useNagle : bool    
     receiveBufferSize : int
+    sendBufferSize : int
   } with
-    static member create (?useNagle, ?receiveBufferSize) =
+    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize) =
       {
         useNagle=defaultArg useNagle false
         receiveBufferSize=defaultArg receiveBufferSize 8192
+        sendBufferSize=defaultArg sendBufferSize 8192
       }
 
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -388,8 +390,7 @@ module Chan =
   let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
 
     /// Builds and connects the socket.
-    let conn = async {
-      
+    let conn = async {      
       let connSocket =
         new Socket(
           ep.AddressFamily,
@@ -397,15 +398,15 @@ module Chan =
           ProtocolType.Tcp,
           NoDelay=not(config.useNagle),
           ExclusiveAddressUse=true,
-          ReceiveBufferSize=config.receiveBufferSize)
-      Log.info "connecting|remote_endpoint=%O client_id=%s" ep clientId 
+          ReceiveBufferSize=config.receiveBufferSize,
+          SendBufferSize=config.receiveBufferSize)
+      Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" ep clientId 
       let! sendRcvSocket = Socket.connect connSocket ep
-      Log.info "connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
+      Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
       return sendRcvSocket }
 
     let recovery (s:Socket, ex:exn) = async {
       Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O from error=%O" clientId ep ex
-      do! Socket.disconnect s false
       s.Dispose()      
       match ex with
       | :? SocketException as _x ->
@@ -418,12 +419,12 @@ module Chan =
         conn 
         recovery
 
-    let send =
+    let! send =
       sendRcvSocket
       |> Resource.inject Socket.sendAll   
 
     // re-connect -> restart
-    let receive =
+    let! receive =
       let receive s b = 
         Socket.receive s b
         |> Async.map (fun received -> 
@@ -432,24 +433,18 @@ module Chan =
       sendRcvSocket
       |> Resource.inject receive
 
+
     /// An unframed input stream.
     let inputStream =
       Socket.receiveStreamFrom config.receiveBufferSize receive
       |> Framing.LengthPrefix.unframe
 
     /// A framing sender.
-    let send (data:Binary.Segment) =
-      let framed = data |> Framing.LengthPrefix.frame
-      send framed
+    let send = Framing.LengthPrefix.frame >> send
 
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
-      let version = 
-        match req with
-        | RequestMessage.OffsetFetch _ -> 1s
-        | RequestMessage.OffsetCommit _ -> 2s
-        | _ -> 0s
-      let req = Request(version, correlationId, clientId, req)
+      let req = Request(req.ApiVersion, correlationId, clientId, req)
       let sessionData = toArraySeg Request.size Request.write req
       sessionData, req.apiKey
 
@@ -986,12 +981,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
         return! sendHost reqRoutes.[0]
 
     | Failure (Routing.MissingTopicRoute topic) ->
-      Log.warn "incorrect_topic_partition_route, refreshing_metadata|topic=%s request=%A" topic req
+      Log.warn "missing_topic_partition_route|topic=%s request=%A" topic req
       let! _ = getMetadata [|topic|]      
       return! send req
 
     | Failure (Routing.MissingGroupRoute group) ->      
-      Log.warn "incorrect_group_goordinator_route, getting_group_goordinator|group=%s" group
+      Log.warn "missing_group_goordinator_route|group=%s" group
       let! _ = getGroupCoordinator group
       return! send req
 

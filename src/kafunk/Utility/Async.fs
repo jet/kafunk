@@ -252,8 +252,6 @@ module AsyncEx =
 
 
 
-
-
 type Mb<'a> = MailboxProcessor<'a>
 
 /// Operations on unbounded FIFO mailboxes.
@@ -442,9 +440,6 @@ module Resource =
   /// Resource recovery action
   type Recovery =
       
-    /// The error should be ignored.
-    | Ignore
-
     /// The resource should be re-created.
     | Recreate
 
@@ -452,26 +447,10 @@ module Resource =
     /// resources.
     | Escalate     
 
-  /// Configuration for a recoverable resource.        
-  type Cfg<'r> = {
-      
-    /// A computation which creates a resource.
-    create : Async<'r>
-      
-    /// A computation which handles an exception received
-    /// during action upon a resource.
-    /// The resource takes the returned recovery action.
-    handle : ('r * exn) -> Async<Recovery>
-      
-    /// A heartbeat process, started each time the
-    /// resource is created.
-    /// If and when and heartbeat computation completes,
-    /// the returned recovery action is taken.
-    hearbeat : 'r -> Async<Recovery>
 
-    /// Closes the resource.
-    close : 'r -> Async<unit>
-
+  type Epoch<'r> = {
+    resource : 'r
+    closed : TaskCompletionSource<unit>
   }
      
   /// <summary>
@@ -486,83 +465,58 @@ module Resource =
   /// Resources can form supervision hierarchy through a message passing and reaction system.
   /// Supervision hierarchies can be used to re-cycle chains of dependent resources.
   /// </notes>
-  type Resource<'r when 'r : not struct> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
+  type Resource<'r> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
       
     let Log = Log.create "Resource"
-    let rsrc : 'r ref = ref Unchecked.defaultof<_>
-    let mre = new ManualResetEvent(false)
-    let st = ref 0 // 0 - initialized/zero | 1 - initializing
-    let cell : Cell<'r> = 
-      let c = Cell.create ()
-      
-      c
+    
+    let cell : Cell<Epoch<'r>> = Cell.create ()
    
-    /// Creates the resource, ensuring mutual exclusion.
-    /// In this case, mutual exclusion is extended with the ability to exchange state.
-    /// Protocol:
-    /// - atomic { 
-    ///   if ZERO then set CREATING, create and set resource, pulse waiters
-    ///   else set WAITING (and wait on pulse), once wait completes, read current value
     member internal __.Create () = async {
-      match Interlocked.CompareExchange (st, 1, 0) with
-      | 0 ->
-        Log.info "creating"
-        let! r = create
-        rsrc := r
-        mre.Set () |> ignore
-        Interlocked.Exchange (st, 0) |> ignore
-        return ()
-      | _ ->        
-        Log.info "waiting"
-        let! _ = Async.AwaitWaitHandle mre
-        mre.Reset () |> ignore
-        return () }
+      return!
+        cell
+        |> Cell.putAsync (async {
+          let! r = create
+          let closed = new TaskCompletionSource<unit>()
+          return { resource = r ; closed = closed } }) }
 
-    /// Initiates recovery of the resource by virtue of the specified exception
-    /// and executes the resulting recovery action.
-    member __.Recover (ex:exn) = async {
-      let r = !rsrc
-      let! recovery = handle (r,ex)
-      match recovery with
-      | Ignore -> 
-        Log.info "recovery action=ignoring..."
-        return ()
-      | Escalate -> 
-        Log.info "recovery action=escalating..."
-        //evt.Trigger (Escalating)
-        raise ex
-        return ()
-      | Recreate ->
-        Log.info "recovery action=restarting..."
-        do! __.Create()
-        Log.info "recovery restarted"
-        return () }
-
-    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
-      let rec go a = async {
-        let r = !rsrc
+    member __.Recover (ep':Epoch<'r>, ex:exn) =
+      if ep'.closed.TrySetException ex then
+        cell
+        |> Cell.updateAsync (fun ep -> async {
+          let! recovery = handle (ep.resource,ex)
+          match recovery with
+          | Escalate -> 
+            Log.info "recovery action=escalating..."
+            return raise ex              
+          | Recreate ->
+            Log.info "recovery action=restarting..."
+            let! ep' = __.Create()
+            Log.info "recovery restarted"
+            return ep' })
+      else
+        cell |> Cell.get
+        
+    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
+      let! epoch = Cell.get cell
+      let rec go ep a = async {
         try
-          let! b = op r a
-          return b
+          return! op ep.resource a
         with ex ->
           Log.info "caught exception on injected operation, calling recovery..."
-          do! __.Recover ex
+          let! epoch = __.Recover (ep, ex)
           Log.info "recovery complete, restarting operation..."
-          return! go a }
-      go
+          return! go epoch a }
+      return go epoch }
 
     interface IDisposable with
       member __.Dispose () = ()
     
   let recoverableRecreate (create:Async<'r>) (handleError:('r * exn) -> Async<Recovery>) = async {      
     let r = new Resource<_>(create, handleError)
-    do! r.Create()
+    let! _ = r.Create()
     return r }
 
-  /// Injects a resource into a resource-dependent async function.
-  /// Failures thrown by the resource-dependent computation are handled by the resource 
-  /// recovery logic.
-  let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : 'a -> Async<'b> =
+  let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.Inject op
    
 
