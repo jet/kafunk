@@ -45,17 +45,8 @@ type MessageBundle = {
   topic : TopicName
   messages : ProducerMessage[] }
 
-type ProduceError = {
-  errorCode : ErrorCode
-}
-
-type ProduceResult = Result<ProduceResponse, ProduceError>
-
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
 type Producer = P of (MessageBundle[] -> Async<ProduceResponse>)
-
-/// The number of partitions associated with a topic.
-type TopicPartitionCount = int
 
 /// Producer configuration.
 type ProducerCfg = {
@@ -91,33 +82,18 @@ with
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Producer =
 
-  type ProduceErrorAction =
-    | Ignore
-    | Escalate
-  
-  let private getErrors (res:ProduceResponse) =
-    res.topics
-    |> Seq.collect (fun (tn,ps) ->      
-      ps
-      |> Seq.choose (fun (p,ec,os) ->
-        match ec with
-        | ErrorCode.NoError -> None
-        | _ -> Some (ec,tn,p,os)))
-    |> Seq.toArray
-
-  
-
   /// Creates a producer given a Kafka connection and producer configuration.
   let createAsync (conn:KafkaConn) (cfg:ProducerCfg) : Async<Producer> = async {
 
-    let! topicPartitions = conn.GetMetadata [|cfg.topic|]
+    let rec init () = async {
+      let! topicPartitions = conn.GetMetadata [|cfg.topic|]
+      let topicPartitions =      
+        topicPartitions
+        |> Map.find cfg.topic
+      return produce topicPartitions }
 
-    let topicPartitions =      
-      topicPartitions
-      |> Map.find cfg.topic
-
-    let produce (ms:MessageBundle[]) = async {
-      let ms =
+    and produce (topicPartitions:Partition[]) (ms:MessageBundle[]) = async {
+      let topicMs =
         ms
         |> Seq.map (fun {topic = tn; messages = pms} ->
           let ms =
@@ -130,12 +106,17 @@ module Producer =
             |> Seq.toArray
           tn,ms)
         |> Seq.toArray
-      let req = ProduceRequest.ofMessageSetTopics ms cfg.requiredAcks cfg.timeout
+      let req = ProduceRequest.ofMessageSetTopics topicMs cfg.requiredAcks cfg.timeout
       let! res = Kafka.produce conn req
-      return res }
+      if res.topics.Length = 0 then
+        // TODO: handle errors
+        let! produce = init ()
+        return! produce ms
+      else 
+        return res }
 
+    let! produce = init ()
     return P produce }
-
 
   let create (conn:KafkaConn) (cfg:ProducerCfg) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
