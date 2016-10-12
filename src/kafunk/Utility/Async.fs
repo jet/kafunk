@@ -178,11 +178,39 @@ module AsyncEx =
       Async.Start(op, ct.Token)
       { new IDisposable with member x.Dispose() = ct.Cancel() }
 
-    /// Returns an async computation which runs the argument computation but raises an exception if it doesn't complete
-    /// by the specified timeout.
-    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) = async {
-      let! r = Async.StartChild(c, (int)timeout.TotalMilliseconds)
-      return! r }
+//    /// Returns an async computation which runs the argument computation but raises an exception if it doesn't complete
+//    /// by the specified timeout.
+//    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) = async {
+//      let! r = Async.StartChild(c, (int)timeout.TotalMilliseconds)
+//      return! r }
+
+//    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
+//      Async.FromContinuations <| fun (ok,err,cnc) ->
+//        let cts = new CancellationTokenSource()
+//        cts.CancelAfter timeout
+//        //cts.Token.Register (fun () -> printfn "cancelled!") |> ignore
+//        //let rec t = new Timer(cnc', null, int timeout.TotalMilliseconds, -1)
+////        and cnc' _ = 
+////          printfn "timeout!"
+////          cnc (OperationCanceledException())
+////          cts.Cancel()
+////          t.Dispose()          
+////        let ok a = 
+////          ok a
+////          t.Dispose()             
+////        let err e =           
+////          err e
+////          t.Dispose()
+//        let ok a = ok a ; cts.Dispose()
+//        let err e = err e ; cts.Dispose()
+//        let cnc e = cnc e ; cts.Dispose()
+//        Async.StartWithContinuations (c, ok, err, cnc, cts.Token)
+
+    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
+      let timeout = async {
+        do! Async.Sleep (int timeout.TotalMilliseconds)
+        return raise (OperationCanceledException()) }
+      Async.choose c timeout
 
     /// Creates a computation which returns the result of the first computation that
     /// produces a value as well as a handle to the other computation. The other
@@ -228,7 +256,7 @@ module AsyncEx =
       Async.FromContinuations <| fun (ok,err,cnc) ->
         let state = ref 0
         let cts = new CancellationTokenSource()
-        let inline cancel () =              
+        let inline cancel () =
           cts.Cancel()
           cts.Dispose()
         let inline ok a =
@@ -309,16 +337,23 @@ module MVar =
     mbp.PostAndAsyncReply(fun ch -> Take ch)
 
 
-
+//[<AutoOpen>]
+//module MbpEx =
+//
+//  type MailboxProcessor<'Msg> with
+//    member __.PostAndAsyncReplyTCS (f:TaskCompletionSource<'a> -> 'Msg) : Async<'a> =
+//      let tcs = new TaskCompletionSource<'a>()
+//      __.Post (f tcs)
+//      tcs.Task |> Async.AwaitTask
 
 
 type CellReq<'a> =
-  | Put of 'a * AsyncReplyChannel<unit>
-  | PutAsync of Async<'a> * AsyncReplyChannel<'a>
-  | Update of ('a -> 'a) * AsyncReplyChannel<'a>
-  | UpdateAsync of ('a -> Async<'a>) * AsyncReplyChannel<'a>
-  | PutOrUpdate of put:'a * up:('a -> 'a) * AsyncReplyChannel<'a>
-  | Get of AsyncReplyChannel<'a>
+  | Put of 'a * TaskCompletionSource<'a>
+  | PutAsync of Async<'a> * TaskCompletionSource<'a>
+  | Update of ('a -> 'a) * TaskCompletionSource<'a>
+  | UpdateAsync of ('a -> Async<'a>) * TaskCompletionSource<'a>
+  | PutOrUpdate of put:'a * up:('a -> 'a) * TaskCompletionSource<'a>
+  | Get of TaskCompletionSource<'a>
 
 type Cell<'a> (?a:'a) =
 
@@ -328,17 +363,21 @@ type Cell<'a> (?a:'a) =
     let rec init () = async {
       return! mbp.Scan (function
         | Put (a,rep) ->
-          state <- a
-          rep.Reply()          
+          state <- a         
+          rep.SetResult a
           Some (loop a)
         | PutAsync (a,rep) ->          
           Some (async {
-            let! a = a
-            state <- a
-            rep.Reply a
-            return! loop a })
-        | PutOrUpdate (a,_,rep) -> 
-          rep.Reply a
+            try            
+              let! a = a
+              state <- a
+              rep.SetResult a
+              return! loop a
+            with ex ->
+              rep.SetException ex
+              return! init () })
+        | PutOrUpdate (a,_,rep) ->
+          rep.SetResult a
           Some (loop a)
         | _ ->
           None) }
@@ -347,31 +386,43 @@ type Cell<'a> (?a:'a) =
       match msg with
       | Put (a,rep) ->
         state <- a
-        rep.Reply ()
+        rep.SetResult a
         return! loop a
-      | PutAsync (a,rep) ->          
-        let! a = a
-        state <- a
-        rep.Reply a
-        return! loop a
+      | PutAsync (a',rep) ->
+        try
+          let! a = a'
+          state <- a
+          rep.SetResult a
+          return! loop a
+        with ex ->
+          rep.SetException ex
+          return! loop a
       | PutOrUpdate (_,up,rep) ->
         let a = up a
         state <- a
-        rep.Reply a
+        rep.SetResult a
         return! loop a
       | Get rep ->
-        rep.Reply a
+        rep.SetResult a
         return! loop a
       | Update (f,rep) ->
-        let a = f a
-        state <- a
-        rep.Reply a
-        return! loop a
+        try
+          let a = f a
+          state <- a
+          rep.SetResult a
+          return! loop a
+        with ex ->
+          rep.SetException ex
+          return! loop a
       | UpdateAsync (f,rep) ->
-        let! a = f a
-        state <- a
-        rep.Reply a
-        return! loop a }
+        try
+          let! a = f a
+          state <- a
+          rep.SetResult a
+          return! loop a
+        with ex ->
+          rep.SetException ex
+          return! loop a }
     match a with
     | Some a ->
       state <- a
@@ -379,26 +430,33 @@ type Cell<'a> (?a:'a) =
     | None -> 
       return! init () })
 
+  do mbp.Error.Add (fun x -> printfn "|Cell|ERROR|%O" x)
+  
+  let postAndAsyncReply f = 
+    let tcs = new TaskCompletionSource<'a>()    
+    mbp.Post (f tcs)
+    tcs.Task |> Async.AwaitTask 
+
   member __.Get () : Async<'a> =
-    mbp.PostAndAsyncReply (Get)
+    postAndAsyncReply (Get)
 
   member __.GetFast () : 'a =
     state
 
-  member __.Put (a:'a) : Async<unit> =
-    mbp.PostAndAsyncReply (fun ch -> Put (a,ch))
+  member __.Put (a:'a) : Async<'a> =
+    postAndAsyncReply (fun ch -> Put (a,ch))
 
   member __.PutAsync (a:Async<'a>) : Async<'a> =
-    mbp.PostAndAsyncReply (fun ch -> PutAsync (a,ch))
+    postAndAsyncReply (fun ch -> PutAsync (a,ch))
 
   member __.Update (f:'a -> 'a) : Async<'a> =
-    mbp.PostAndAsyncReply (fun ch -> Update (f,ch))
+    postAndAsyncReply (fun ch -> Update (f,ch))
 
   member __.UpdateAsync (f:'a -> Async<'a>) : Async<'a> =
-    mbp.PostAndAsyncReply (fun ch -> UpdateAsync (f,ch))
+    postAndAsyncReply (fun ch -> UpdateAsync (f,ch))
 
   member __.PutOrUpdate (put:'a, up:'a -> 'a) : Async<'a> =
-    mbp.PostAndAsyncReply (fun ch -> PutOrUpdate (put,up,ch))
+    postAndAsyncReply (fun ch -> PutOrUpdate (put,up,ch))
 
   interface IDisposable with
     member __.Dispose () = (mbp :> IDisposable).Dispose()
@@ -417,7 +475,7 @@ module Cell =
   let getFastUnsafe (c:Cell<'a>) : 'a =
     c.GetFast ()
 
-  let put (a:'a) (c:Cell<'a>) : Async<unit> =
+  let put (a:'a) (c:Cell<'a>) : Async<'a> =
     c.Put a
 
   let putAsync (a:Async<'a>) (c:Cell<'a>) : Async<'a> =
@@ -475,6 +533,7 @@ module Resource =
       return!
         cell
         |> Cell.putAsync (async {
+          Log.info "Resource.Create"
           let! r = create
           let closed = new TaskCompletionSource<unit>()
           return { resource = r ; closed = closed } }) }
@@ -486,12 +545,12 @@ module Resource =
           let! recovery = handle (ep.resource,ex)
           match recovery with
           | Escalate -> 
-            Log.info "recovery action=escalating..."
+            Log.info "recovery_escalating"
             return raise ex              
           | Recreate ->
-            Log.info "recovery action=restarting..."
+            Log.info "recovery_restarting"
             let! ep' = __.Create()
-            Log.info "recovery restarted"
+            Log.info "recovery_restarted"
             return ep' })
       else
         cell |> Cell.get
@@ -502,9 +561,9 @@ module Resource =
         try
           return! op ep.resource a
         with ex ->
-          Log.info "caught exception on injected operation, calling recovery..."
+          Log.info "caught_exception_on_injected_operation|error=%O" ex
           let! epoch = __.Recover (ep, ex)
-          Log.info "recovery complete, restarting operation..."
+          Log.info "recovery_complete"
           return! go epoch a }
       return go epoch }
 

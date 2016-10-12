@@ -11,7 +11,6 @@ type ConsumerConfig = {
   topics : TopicName[]
   sessionTimeout : SessionTimeout
   heartbeatFrequency : int32
-  autoOffsetReset : AutoOffsetReset
   fetchMinBytes : MinBytes
   fetchMaxWaitMs : MaxWaitTime
   metadataFetchTimeoutMs : int32
@@ -30,7 +29,6 @@ type ConsumerConfig = {
         topics = topics
         sessionTimeout = 10000
         heartbeatFrequency = 4
-        autoOffsetReset = AutoOffsetReset.Anything
         fetchMinBytes = 0
         fetchMaxWaitMs = 0
         metadataFetchTimeoutMs = 0
@@ -42,12 +40,6 @@ type ConsumerConfig = {
         offsetRetentionTime = -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
       }
-
-and AutoOffsetReset =
-  | Smallest
-  | Largest
-  | Disable
-  | Anything
 
 
 
@@ -107,7 +99,6 @@ module Consumer =
       | Some prevMemberId -> 
         Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
 
-      //let cts = CancellationTokenSource.CreateLinkedTokenSource conn.CancellationToken
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
       let! joinGroupRes = async {

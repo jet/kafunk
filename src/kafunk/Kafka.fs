@@ -1,3 +1,4 @@
+#nowarn "40"
 namespace Kafunk
 
 open System
@@ -401,22 +402,31 @@ module Chan =
           ReceiveBufferSize=config.receiveBufferSize,
           SendBufferSize=config.receiveBufferSize)
       Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" ep clientId 
-      let! sendRcvSocket = Socket.connect connSocket ep
-      Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
-      return sendRcvSocket }
+      let! sendRcvSocket = 
+        Socket.connect connSocket ep
+        |> Async.timeoutAfter (TimeSpan.FromSeconds 5.0)
+        |> Async.Catch
+      match sendRcvSocket with
+      | Success sendRcvSocket -> 
+        Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
+        return sendRcvSocket 
+      | Failure e ->
+        Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ep e
+        return raise e }
 
     let recovery (s:Socket, ex:exn) = async {
-      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O from error=%O" clientId ep ex
+      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
       s.Dispose()      
       match ex with
-      | :? SocketException as _x ->
+      | :? SocketException as _x ->        
         return Resource.Recovery.Recreate
       | _ ->
+        //Log.info "escalating_tcp_connection_error"
         return Resource.Recovery.Escalate }
 
     let! sendRcvSocket = 
       Resource.recoverableRecreate 
-        conn 
+        conn
         recovery
 
     let! send =
@@ -432,7 +442,6 @@ module Chan =
           else received)
       sendRcvSocket
       |> Resource.inject receive
-
 
     /// An unframed input stream.
     let inputStream =
@@ -866,63 +875,63 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   let connHost (cfg:KafkaConnCfg) (h:Host, p:Port) =
     Chan.connectHost cfg.tcpConfig cfg.clientId (h,p)
 
+  let connCh state host = async {
+    match state |> ConnState.tryFindChanByHost host with
+    | Some _ -> return state
+    | None ->
+      Log.info "creating_channel|host=%A" host
+      let! ch = connHost cfg host    
+      return state |> ConnState.addChannel (host,ch) }      
+
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  let rec bootstrap (cfg:KafkaConnCfg) = async {
-    // TODO: serialize
-    Log.info "connecting_to_bootstrap_brokers|client_id=%s" cfg.clientId
-    return!
-      stateCell
-      |> Cell.putAsync (async {
-        let! state =
-          cfg.bootstrapServers
-          |> AsyncSeq.ofSeq
-          |> AsyncSeq.tryPickAsync (fun uri -> async {
-            try
-              let! ch = connHost cfg (uri.Host, uri.Port)
-              let state = 
-                ConnState.ofBootstrap (cfg,uri.Host,uri.Port)
-                |> ConnState.addChannel ((uri.Host,uri.Port),ch)            
-              return Some state
-            with ex ->
-              Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
-              return None })     
-        match state with
-        | Some state ->
-          return state
-        | None ->
-          return failwith "unable to connect to bootstrap brokers" } ) }
+  let rec bootstrap (cfg:KafkaConnCfg) =
+    let rec loop = async {
+      let! state =
+        cfg.bootstrapServers
+        |> AsyncSeq.ofSeq
+        |> AsyncSeq.tryPickAsync (fun uri -> async {
+          try
+            Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
+            let state = ConnState.ofBootstrap (cfg, uri.Host,uri.Port)
+            let! state = connCh state state.routes.bootstrapHost
+            return Some state
+          with ex ->
+            //return Failure "" })
+            Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
+            return None })     
+      match state with
+      | Some state ->
+        return state
+      | None ->
+        return! loop }               
+    stateCell |> Cell.putAsync loop
 
   /// Discovers cluster metadata.
-  and getMetadata (topics:TopicName[]) = async {
+  and getMetadata (topics:TopicName[]) =
     // TODO: TTL check
-    return!
-      stateCell
-      |> Cell.updateAsync (fun state -> async {
-        //Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
-        let! metadata = Chan.metadata send (Metadata.Request(topics))   
-        //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
-        return 
-          state 
-          |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }) }
+    let go state = async {
+      //Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
+      let! metadata = Chan.metadata send (Metadata.Request(topics))   
+      //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
+      return state |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }
+    stateCell |> Cell.updateAsync go
 
   /// Discovers a coordinator for the group.
-  and getGroupCoordinator (groupId:GroupId) = async {          
-    return!
-      stateCell
-      |> Cell.updateAsync (fun state -> async {        
-        let! group = Chan.groupCoordinator send (GroupCoordinatorRequest(groupId))
-        return 
-          state
-          |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }) }
+  and getGroupCoordinator (groupId:GroupId) =
+    let go state = async {        
+      let! group = Chan.groupCoordinator send (GroupCoordinatorRequest(groupId))
+      return 
+        state
+        |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
+    stateCell |> Cell.updateAsync go
 
   /// Sends the request based on discovered routes.
   and send (req:RequestMessage) = async {
     let state = Cell.getFastUnsafe stateCell
     match Routing.route state.routes req with
     | Success reqRoutes ->      
-      //Log.trace "request_routed|routes=%A" reqRoutes
-      
+      //Log.trace "request_routed|routes=%A" reqRoutes      
       let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
         match state |> ConnState.tryFindChanByHost host with
         | Some ch -> 
@@ -948,16 +957,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 | RetryAction.WaitAndRetry ->
                   do! Async.Sleep 5000
                   return! send req })
-        | None ->
-          let! _ =
-            stateCell
-            |> Cell.updateAsync (fun state -> async {
-              match state |> ConnState.tryFindChanByHost host with
-              | Some _ -> return state
-              | None ->
-                Log.info "creating_channel|host=%A" host
-                let! ch = connHost cfg host    
-                return state |> ConnState.addChannel (host,ch) })
+        | None ->          
+          let! _ = stateCell |> Cell.updateAsync (fun state -> connCh state host)
           return! send req }
       
       let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
