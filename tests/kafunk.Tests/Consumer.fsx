@@ -4,7 +4,7 @@
 open Kafunk
 
 
-let topic = "test-topic2"
+let topic = "test-topic"
 let host = "localhost"
 let group = "leo_test16"
 
@@ -33,8 +33,6 @@ let go = async {
               (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
               (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
             do! commitOffset
-            //Async.Start commitOffset
-            //do! Async.Sleep 5000
             return () })) 
         |> Async.Parallel
         |> Async.Ignore })

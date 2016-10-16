@@ -54,8 +54,6 @@ module Consumer =
     memberId : MemberId
     leaderId : LeaderId
     assignments : TopicPartitionAssignment[]
-    //cancellationToken : CancellationTokenSource
-    //cancelled : Async<unit>
     closed : Tasks.TaskCompletionSource<unit>
   } 
 
@@ -135,6 +133,7 @@ module Consumer =
             Log.info "joined_as_leader"
             let members = joinGroupRes.members.members      
             let! topicPartitions = conn.GetMetadata cfg.topics          
+            // TODO: consider cases where there are more consumers than partitions
             let topicPartitions =
               topicPartitions
               |> Map.toSeq
@@ -181,6 +180,9 @@ module Consumer =
           Log.info "received_sync_group_response|member_assignment=[%s]"
             (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%A" tn ps))) 
       
+          if assignment.partitionAssignment.assignments.Length = 0 then
+            failwith "no partitions assigned!"
+
           /// Fetches the starting offset for the specified topic * partition.
           let fetchInitOffset (tn:TopicName, p:Partition) = async {
             Log.info "fetching_group_member_offset|topic=%s partition=%i group_id=%s time=%i" tn p cfg.groupId cfg.initialFetchTime

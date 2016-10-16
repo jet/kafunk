@@ -314,87 +314,94 @@ type private MVarReq<'a> =
   | Get of TaskCompletionSource<'a>
   | Take of TaskCompletionSource<'a>
 
+type MVarValue<'a> =
+  struct
+    val value : 'a
+    val version : int
+    new (a:'a, v:int) = { value = a ; version = v }
+  end
+
 /// A serialized variable.
 type MVar<'a> (?a:'a) =
 
   let [<VolatileField>] mutable state : 'a = Unchecked.defaultof<_>
 
   let mbp = MailboxProcessor.Start (fun mbp -> async {
-    let rec init () = async {
+    let rec init (v:int) = async {
       state <- Unchecked.defaultof<_>
       return! mbp.Scan (function
         | Put (a,rep) ->
           state <- a         
           rep.SetResult a
-          Some (loop a)
+          Some (loop (a, v + 1))
         | PutAsync (a,rep) ->          
           Some (async {
             try            
               let! a = a
               state <- a
               rep.SetResult a
-              return! loop a
+              return! loop (a, v + 1)
             with ex ->
               rep.SetException ex
-              return! init () })
+              return! init (v + 1) })
         | PutOrUpdate (a,_,rep) ->
           rep.SetResult a
-          Some (loop a)
+          Some (loop (a, v + 1))
         | _ ->
           None) }
-    and loop (a:'a) = async {
+    and loop (a:'a, v:int) = async {
       let! msg = mbp.Receive()
       match msg with
       | Put (a,rep) ->
         state <- a
         rep.SetResult a
-        return! loop a
+        return! loop (a, v + 1)
       | PutAsync (a',rep) ->
         try
           let! a = a'
           state <- a
           rep.SetResult a
-          return! loop a
+          return! loop (a, v + 1)
         with ex ->
           rep.SetException ex
-          return! loop a
+          return! loop (a, v)
       | PutOrUpdate (_,up,rep) ->
         let a = up a
         state <- a
         rep.SetResult a
-        return! loop a
+        return! loop (a, v + 1)
       | Get rep ->
         rep.SetResult a
-        return! loop a
+        return! loop (a, v + 1)
       | Take rep ->        
         rep.SetResult a
-        return! init ()
+        return! init (v + 1)
       | Update (f,rep) ->
         try
           let a = f a
           state <- a
           rep.SetResult a
-          return! loop a
+          return! loop (a, v + 1)
         with ex ->
           rep.SetException ex
-          return! loop a
+          return! loop (a, v)
       | UpdateAsync (f,rep) ->
         try
           let! a = f a
           state <- a
           rep.SetResult a
-          return! loop a
+          return! loop (a, v + 1)
         with ex ->
           rep.SetException ex
-          return! loop a }
+          return! loop (a, v) }
     match a with
     | Some a ->
       state <- a
-      return! loop a
+      return! loop (a, 1)
     | None -> 
-      return! init () })
+      return! init 0 })
 
-  do mbp.Error.Add (fun x -> printfn "|Cell|ERROR|%O" x)
+  do mbp.Error.Add (fun x -> printfn "|MVar|ERROR|%O" x) // shouldn't happen
   
   let postAndAsyncReply f = 
     let tcs = new TaskCompletionSource<'a>()    
@@ -500,42 +507,47 @@ module Resource =
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
    
+    let create = async {
+      Log.info "creating_resource"
+      let! r = create
+      Log.info "created_resource"
+      let closed = new TaskCompletionSource<unit>()
+      return { resource = r ; closed = closed } }
+
+    let recover ex ep = async {
+      Log.info "recovering_resource"
+      let! recovery = handle (ep.resource,ex)
+      match recovery with
+      | Escalate -> 
+        Log.info "recovery_escalating"
+        return raise ex              
+      | Recreate ->
+        Log.info "recovery_restarting"
+        let! ep' = create
+        Log.info "recovery_restarted"
+        return ep' }
+
     member internal __.Create () = async {
-      return!
-        cell
-        |> MVar.putAsync (async {
-          Log.info "Resource.Create"
-          let! r = create
-          let closed = new TaskCompletionSource<unit>()
-          return { resource = r ; closed = closed } }) }
+      return! cell |> MVar.putAsync create }
 
     member __.Recover (ep':Epoch<'r>, ex:exn) =
-      if ep'.closed.TrySetException ex then
-        cell
-        |> MVar.updateAsync (fun ep -> async {
-          let! recovery = handle (ep.resource,ex)
-          match recovery with
-          | Escalate -> 
-            Log.info "recovery_escalating"
-            return raise ex              
-          | Recreate ->
-            Log.info "recovery_restarting"
-            let! ep' = __.Create()
-            Log.info "recovery_restarted"
-            return ep' })
-      else
-        cell |> MVar.get
+      cell |> MVar.updateAsync (recover ex)
+//      if ep'.closed.TrySetException ex then
+//        cell |> MVar.updateAsync (recover ex)
+//      else
+//        cell |> MVar.get
         
-    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
-      let! epoch = MVar.get cell
+    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {      
       let rec go ep a = async {
+        //Log.trace "performing_operation"
         try
           return! op ep.resource a
         with ex ->
           Log.info "caught_exception_on_injected_operation|error=%O" ex
-          let! epoch = __.Recover (ep, ex)
+          let! epoch' = __.Recover (ep, ex)
           Log.info "recovery_complete"
-          return! go epoch a }
+          return! go epoch' a }
+      let! epoch = MVar.get cell
       return go epoch }
 
     interface IDisposable with

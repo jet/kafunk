@@ -910,23 +910,24 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     // TODO: TTL check
     let go state = async {
       //Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
-      let! metadata = Chan.metadata send (Metadata.Request(topics))   
+      let! metadata = Chan.metadata (send state) (Metadata.Request(topics))   
       //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
       return state |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }
     stateCell |> MVar.updateAsync go
 
   /// Discovers a coordinator for the group.
   and getGroupCoordinator (groupId:GroupId) =
-    let go state = async {        
-      let! group = Chan.groupCoordinator send (GroupCoordinatorRequest(groupId))
+    let go state = async {
+      let! group = Chan.groupCoordinator (send state) (GroupCoordinatorRequest(groupId))
       return 
         state
         |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
     stateCell |> MVar.updateAsync go
 
   /// Sends the request based on discovered routes.
-  and send (req:RequestMessage) = async {
-    let state = MVar.getFastUnsafe stateCell
+  and send (state:ConnState) (req:RequestMessage) = async {
+    //let state = MVar.getFastUnsafe stateCell
+    //let! state = MVar.get stateCell
     match Routing.route state.routes req with
     | Success reqRoutes ->      
       //Log.trace "request_routed|routes=%A" reqRoutes      
@@ -947,17 +948,17 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 | RetryAction.Escalate ->
                   return raise (EscalationException (errorCode,res))
                 | RetryAction.RefreshGroupCoordinator gid ->
-                  let! _ = getGroupCoordinator gid
-                  return! send req
+                  let! state' = getGroupCoordinator gid
+                  return! send state' req
                 | RetryAction.RefreshMetadataAndRetry topics ->
-                  let! _ = getMetadata topics
-                  return! send req
+                  let! state' = getMetadata topics
+                  return! send state' req
                 | RetryAction.WaitAndRetry ->
-                  do! Async.Sleep 5000
-                  return! send req })
+                  do! Async.Sleep 5000 // TODO: use Faults module
+                  return! send state req })
         | None ->          
-          let! _ = stateCell |> MVar.updateAsync (fun state -> connCh state host)
-          return! send req }
+          let! state' = stateCell |> MVar.updateAsync (fun state -> connCh state host)
+          return! send state' req }
       
       let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
         if reqRoutes.Length = 1 then
@@ -981,20 +982,22 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
     | Failure (Routing.MissingTopicRoute topic) ->
       Log.warn "missing_topic_partition_route|topic=%s request=%A" topic req
-      let! _ = getMetadata [|topic|]      
-      return! send req
+      let! state' = getMetadata [|topic|]      
+      return! send state' req
 
     | Failure (Routing.MissingGroupRoute group) ->      
       Log.warn "missing_group_goordinator_route|group=%s" group
-      let! _ = getGroupCoordinator group
-      return! send req
+      let! state' = getGroupCoordinator group
+      return! send state' req
 
     }
     
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
 
-  member internal __.Chan : Chan = send
+  member internal __.Chan : Chan =
+    let state = MVar.getFastUnsafe stateCell
+    send state
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
@@ -1015,8 +1018,6 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   member __.Close () =
     Log.info "closing_connection"
-    //cts.CancelAfter cfg.requestTimeout
-    //cts.Dispose()
     cts.Cancel()
     (stateCell :> IDisposable).Dispose()
     

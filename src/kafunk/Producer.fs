@@ -82,23 +82,34 @@ with
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Producer =
 
+  type private ProducerState = {
+    partitions : Partition[]
+    version : int
+  }
+
   /// Creates a producer given a Kafka connection and producer configuration.
   let createAsync (conn:KafkaConn) (cfg:ProducerCfg) : Async<Producer> = async {
 
-    let rec init () = async {
-      let! topicPartitions = conn.GetMetadata [|cfg.topic|]
-      let topicPartitions =      
-        topicPartitions
-        |> Map.find cfg.topic
-      return produce topicPartitions }
+    let producerState : MVar<ProducerState> = MVar.create ()
 
-    and produce (topicPartitions:Partition[]) (ms:MessageBundle[]) = async {
+    let rec init (_prevState:ProducerState option) = async {            
+      let state = async {
+        let! topicPartitions = conn.GetMetadata [|cfg.topic|]
+        let topicPartitions =      
+          topicPartitions
+          |> Map.find cfg.topic
+        return { partitions = topicPartitions ; version = 0 } }
+      // TODO: optimistic concurrency to address overlapping recoveries
+      let! state = producerState |> MVar.putAsync state
+      return state }
+
+    and produce (state:ProducerState) (ms:MessageBundle[]) = async {
       let topicMs =
         ms
         |> Seq.map (fun {topic = tn; messages = pms} ->
           let ms =
             pms
-            |> Seq.groupBy (fun pm -> cfg.partition (tn, topicPartitions, pm))
+            |> Seq.groupBy (fun pm -> cfg.partition (tn, state.partitions, pm))
             |> Seq.map (fun (p,pms) ->
               let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
               let ms = Compression.compress cfg.compression messages
@@ -110,13 +121,13 @@ module Producer =
       let! res = Kafka.produce conn req
       if res.topics.Length = 0 then
         // TODO: handle errors
-        let! produce = init ()
-        return! produce ms
+        let! state' = init (Some state)
+        return! produce state' ms
       else 
         return res }
 
-    let! produce = init ()
-    return P produce }
+    let! state = init None
+    return P (produce state) }
 
   let create (conn:KafkaConn) (cfg:ProducerCfg) : Producer =
     createAsync conn cfg |> Async.RunSynchronously

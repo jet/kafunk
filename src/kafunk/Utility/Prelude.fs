@@ -162,38 +162,20 @@ module Result =
 module KafkaUri =
 
   open System
+  open System.Text.RegularExpressions
 
   let [<Literal>] DefaultPortKafka = 9092
   let [<Literal>] UriSchemeKafka = "kafka"
+  let private KafkaBrokerUriRegex = Regex("^(?<scheme>kafka://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
 
-  let parse (host:string) =
-    let ok,uri = Uri.TryCreate(host, UriKind.RelativeOrAbsolute)
-    if ok then
-      match uri.IsAbsoluteUri with
-      | true ->
-        if uri.Scheme = UriSchemeKafka then
-          if uri.Port = -1 then
-            let ub = UriBuilder(uri.Scheme, uri.Host, DefaultPortKafka)
-            ub.Uri
-          else
-            uri
-        else        
-          let port = 
-            if uri.Port = -1 then            
-              if not (String.IsNullOrEmpty uri.PathAndQuery) then
-                match Int32.TryParse(uri.PathAndQuery) with
-                | true,port -> port
-                | _ -> DefaultPortKafka
-              else DefaultPortKafka
-            else 
-              uri.Port
-          let host = 
-            if String.IsNullOrEmpty uri.Host then uri.Scheme
-            else uri.Host                       
-          let ub = UriBuilder(UriSchemeKafka, host, port)
-          ub.Uri
-      | false ->
-        let ub = UriBuilder(UriSchemeKafka, host, DefaultPortKafka)
-        ub.Uri
+  let parse (host:string) =    
+    let m = KafkaBrokerUriRegex.Match host
+    if not m.Success then invalidArg "host" (sprintf "invalid host string '%s'" host)
     else
-      invalidArg "host" (sprintf "invalid host string '%s'" host)
+      let host = m.Groups.["host"].Value
+      let port = 
+        let g = m.Groups.["port"]
+        if g.Success then Int32.Parse g.Value
+        else DefaultPortKafka
+      let ub = UriBuilder(UriSchemeKafka, host, port)
+      ub.Uri
