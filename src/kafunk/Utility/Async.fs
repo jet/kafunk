@@ -45,7 +45,6 @@ module AsyncEx =
         elif t.IsCompleted then ok ()
         else failwith "invalid Task state!") |> ignore
 
-
   type Async with
 
     /// An async computation which does nothing and completes immediately.
@@ -278,6 +277,14 @@ module AsyncEx =
     static member withCancellationToken (ct:CancellationToken) (a:Async<'a>) : Async<'a> =
       Async.FromContinuations (fun (ok,err,cnc) -> Async.StartThreadPoolWithContinuations(a, ok, err, cnc, ct))
 
+    static member Throw (a:Async<Choice<'a, exn>>) : Async<'a> =
+      async {
+        let! r = a
+        match r with
+        | Choice1Of2 a -> return a
+        | Choice2Of2 e -> return raise e }
+
+
 
 
 type Mb<'a> = MailboxProcessor<'a>
@@ -298,69 +305,23 @@ module Mb =
 
 
 
-type MVar<'a> = 
-  private 
-  | MVar of MailboxProcessor<MVarReq<'a>>
-
-and MVarReq<'a> = 
-  | Put of 'a * AsyncReplyChannel<unit>
-  | Take of AsyncReplyChannel<'a>
-
-
-module MVar =
-  
-  let create () : MVar<'a> =
-    let mbp = 
-      MailboxProcessor.Start 
-        (fun agent -> async {
-          let rec empty () = async {
-            return! agent.Scan(function
-              | Put (a:'a, rep:AsyncReplyChannel<unit>) -> 
-                Some (async { rep.Reply () ; return! full a })
-              | _ -> None) }
-          and full a = async {
-            return! agent.Scan(function
-              | Take (rep:AsyncReplyChannel<'a>) ->
-                Some <| async { rep.Reply a ; return! empty() }
-              | _ -> None) }
-          return! empty () } )
-    MVar mbp
-  
-  let un (MVar(mbp)) = mbp
-
-  let put (a:'a) (m:MVar<'a>) : Async<unit> =
-    let mbp = un m
-    mbp.PostAndAsyncReply(fun ch -> Put (a,ch))
-
-  let take (m:MVar<'a>) : Async<'a> =
-    let mbp = un m
-    mbp.PostAndAsyncReply(fun ch -> Take ch)
-
-
-//[<AutoOpen>]
-//module MbpEx =
-//
-//  type MailboxProcessor<'Msg> with
-//    member __.PostAndAsyncReplyTCS (f:TaskCompletionSource<'a> -> 'Msg) : Async<'a> =
-//      let tcs = new TaskCompletionSource<'a>()
-//      __.Post (f tcs)
-//      tcs.Task |> Async.AwaitTask
-
-
-type CellReq<'a> =
+type private MVarReq<'a> =
   | Put of 'a * TaskCompletionSource<'a>
   | PutAsync of Async<'a> * TaskCompletionSource<'a>
   | Update of ('a -> 'a) * TaskCompletionSource<'a>
   | UpdateAsync of ('a -> Async<'a>) * TaskCompletionSource<'a>
   | PutOrUpdate of put:'a * up:('a -> 'a) * TaskCompletionSource<'a>
   | Get of TaskCompletionSource<'a>
+  | Take of TaskCompletionSource<'a>
 
-type Cell<'a> (?a:'a) =
+/// A serialized variable.
+type MVar<'a> (?a:'a) =
 
   let [<VolatileField>] mutable state : 'a = Unchecked.defaultof<_>
 
   let mbp = MailboxProcessor.Start (fun mbp -> async {
     let rec init () = async {
+      state <- Unchecked.defaultof<_>
       return! mbp.Scan (function
         | Put (a,rep) ->
           state <- a         
@@ -405,6 +366,9 @@ type Cell<'a> (?a:'a) =
       | Get rep ->
         rep.SetResult a
         return! loop a
+      | Take rep ->        
+        rep.SetResult a
+        return! init ()
       | Update (f,rep) ->
         try
           let a = f a
@@ -440,6 +404,9 @@ type Cell<'a> (?a:'a) =
   member __.Get () : Async<'a> =
     postAndAsyncReply (Get)
 
+  member __.Take () : Async<'a> =
+    postAndAsyncReply (Take)
+
   member __.GetFast () : 'a =
     state
 
@@ -461,33 +428,37 @@ type Cell<'a> (?a:'a) =
   interface IDisposable with
     member __.Dispose () = (mbp :> IDisposable).Dispose()
 
-module Cell =
+/// Operations on serialized variables.
+module MVar =
   
-  let create () : Cell<'a> =
-    new Cell<_>()
+  let create () : MVar<'a> =
+    new MVar<_>()
 
-  let createFull (a:'a) : Cell<'a> =
-    new Cell<_>(a)
+  let createFull (a:'a) : MVar<'a> =
+    new MVar<_>(a)
 
-  let get (c:Cell<'a>) : Async<'a> =
+  let get (c:MVar<'a>) : Async<'a> =
     c.Get ()
 
-  let getFastUnsafe (c:Cell<'a>) : 'a =
+  let take (c:MVar<'a>) : Async<'a> =
+    c.Take ()
+
+  let getFastUnsafe (c:MVar<'a>) : 'a =
     c.GetFast ()
 
-  let put (a:'a) (c:Cell<'a>) : Async<'a> =
+  let put (a:'a) (c:MVar<'a>) : Async<'a> =
     c.Put a
 
-  let putAsync (a:Async<'a>) (c:Cell<'a>) : Async<'a> =
+  let putAsync (a:Async<'a>) (c:MVar<'a>) : Async<'a> =
     c.PutAsync a
 
-  let update (f:'a -> 'a) (c:Cell<'a>) : Async<'a> =
+  let update (f:'a -> 'a) (c:MVar<'a>) : Async<'a> =
     c.Update f
 
-  let updateAsync (f:'a -> Async<'a>) (c:Cell<'a>) : Async<'a> =
+  let updateAsync (f:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
     c.UpdateAsync f
 
-  let putOrUpdate (put:'a) (up:'a -> 'a) (c:Cell<'a>) : Async<'a> =
+  let putOrUpdate (put:'a) (up:'a -> 'a) (c:MVar<'a>) : Async<'a> =
     c.PutOrUpdate (put,up)
 
 
@@ -527,12 +498,12 @@ module Resource =
       
     let Log = Log.create "Resource"
     
-    let cell : Cell<Epoch<'r>> = Cell.create ()
+    let cell : MVar<Epoch<'r>> = MVar.create ()
    
     member internal __.Create () = async {
       return!
         cell
-        |> Cell.putAsync (async {
+        |> MVar.putAsync (async {
           Log.info "Resource.Create"
           let! r = create
           let closed = new TaskCompletionSource<unit>()
@@ -541,7 +512,7 @@ module Resource =
     member __.Recover (ep':Epoch<'r>, ex:exn) =
       if ep'.closed.TrySetException ex then
         cell
-        |> Cell.updateAsync (fun ep -> async {
+        |> MVar.updateAsync (fun ep -> async {
           let! recovery = handle (ep.resource,ex)
           match recovery with
           | Escalate -> 
@@ -553,10 +524,10 @@ module Resource =
             Log.info "recovery_restarted"
             return ep' })
       else
-        cell |> Cell.get
+        cell |> MVar.get
         
     member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
-      let! epoch = Cell.get cell
+      let! epoch = MVar.get cell
       let rec go ep a = async {
         try
           return! op ep.resource a

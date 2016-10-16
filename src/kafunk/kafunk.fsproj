@@ -67,6 +67,7 @@
     <Compile Include="Utility\AsyncSeq.fs" />
     <Compile Include="Utility\Binary.fs" />
     <Compile Include="Utility\Crc.fs" />
+    <Compile Include="Utility\Faults.fs" />
     <Compile Include="Protocol.fs" />
     <Compile Include="Tcp.fs" />
     <Compile Include="Kafka.fs" />

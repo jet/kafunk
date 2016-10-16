@@ -869,7 +869,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let stateCell : Cell<ConnState> = Cell.create ()
+  let connectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
+
+  let stateCell : MVar<ConnState> = MVar.create ()
   let cts = new CancellationTokenSource()
 
   let connHost (cfg:KafkaConnCfg) (h:Host, p:Port) =
@@ -886,26 +888,22 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
   let rec bootstrap (cfg:KafkaConnCfg) =
-    let rec loop = async {
-      let! state =
-        cfg.bootstrapServers
-        |> AsyncSeq.ofSeq
-        |> AsyncSeq.tryPickAsync (fun uri -> async {
-          try
-            Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
-            let state = ConnState.ofBootstrap (cfg, uri.Host,uri.Port)
-            let! state = connCh state state.routes.bootstrapHost
-            return Some state
-          with ex ->
-            //return Failure "" })
-            Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
-            return None })     
-      match state with
-      | Some state ->
-        return state
-      | None ->
-        return! loop }               
-    stateCell |> Cell.putAsync loop
+    let loop = 
+      cfg.bootstrapServers
+      |> AsyncSeq.ofSeq
+      |> AsyncSeq.traverseAsyncResult (fun uri -> async {
+        try
+          Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
+          let state = ConnState.ofBootstrap (cfg, uri.Host,uri.Port)
+          let! state = connCh state state.routes.bootstrapHost
+          return Success state
+        with ex ->
+          Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
+          return Failure ex })
+      |> Faults.retryResultThrow 
+          (Seq.concat >> Exn.ofSeq) 
+          connectBackoff
+    stateCell |> MVar.putAsync loop
 
   /// Discovers cluster metadata.
   and getMetadata (topics:TopicName[]) =
@@ -915,7 +913,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       let! metadata = Chan.metadata send (Metadata.Request(topics))   
       //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
       return state |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }
-    stateCell |> Cell.updateAsync go
+    stateCell |> MVar.updateAsync go
 
   /// Discovers a coordinator for the group.
   and getGroupCoordinator (groupId:GroupId) =
@@ -924,11 +922,11 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       return 
         state
         |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
-    stateCell |> Cell.updateAsync go
+    stateCell |> MVar.updateAsync go
 
   /// Sends the request based on discovered routes.
   and send (req:RequestMessage) = async {
-    let state = Cell.getFastUnsafe stateCell
+    let state = MVar.getFastUnsafe stateCell
     match Routing.route state.routes req with
     | Success reqRoutes ->      
       //Log.trace "request_routed|routes=%A" reqRoutes      
@@ -958,7 +956,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                   do! Async.Sleep 5000
                   return! send req })
         | None ->          
-          let! _ = stateCell |> Cell.updateAsync (fun state -> connCh state host)
+          let! _ = stateCell |> MVar.updateAsync (fun state -> connCh state host)
           return! send req }
       
       let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
@@ -1013,7 +1011,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> Routing.Routes.topicPartitions }
 
   member internal __.GetState () =
-    stateCell |> Cell.get
+    stateCell |> MVar.get
 
   member __.Close () =
     Log.info "closing_connection"
