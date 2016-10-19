@@ -3,8 +3,7 @@
 
 open Kafunk
 
-
-let topic = "test-topic"
+let topic = "test-topic_1019"
 let host = "localhost"
 let group = "leo_test16"
 

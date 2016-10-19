@@ -48,7 +48,11 @@ module Exn =
 
   let rec toSeq (e:exn) =
     match e with
-    | :? AggregateException as ae -> ae.InnerExceptions |> Seq.collect (toSeq)
+    | :? AggregateException as ae -> 
+      seq { 
+        yield e
+        for ie in ae.InnerExceptions do 
+          yield! toSeq ie }
     | _ -> Seq.singleton e
 
   let tryPick (f:exn -> 'a option) (e:exn) : 'a option =
@@ -60,11 +64,13 @@ module Exn =
   let throw (e:exn) : 'a =
     raise e
 
+  let existsT<'e> (e:exn) = exists (fun e -> e.GetType() = typeof<'e>) e
+
 
 /// Fault tolerance.
 module Faults =
 
-  let retryAsyncResultReference (b:Backoff) (a:Async<Result<'a, 'e>>) =
+  let retryAsyncResultReference (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
     (AsyncSeq.replicateInfiniteAsync a, Backoff.toAsyncSeq b)
     ||> AsyncSeq.interleave 
     |> AsyncSeq.choose (function Choice1Of2 a -> Some a | _ -> None)
@@ -100,6 +106,9 @@ module Faults =
     |> retryResultThrow 
         (fun es -> Exn.aggregate (sprintf "Operation failed after %i attempts." (List.length es)) es) 
         b 
+
+//  let foldChoice (f:'b -> Async<'a>) (a:Async<Choice<'a, 'b>>) : Async<'a> =
+//    failwith ""
       
 
 module AsyncFun =

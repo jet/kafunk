@@ -10,7 +10,6 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 
 open Kafunk
-open Kafunk.Prelude
 
 
 [<AutoOpen>]
@@ -306,23 +305,14 @@ module Mb =
 
 
 type private MVarReq<'a> =
-  | Put of 'a * TaskCompletionSource<'a>
   | PutAsync of Async<'a> * TaskCompletionSource<'a>
-  | Update of ('a -> 'a) * TaskCompletionSource<'a>
-  | UpdateAsync of ('a -> Async<'a>) * TaskCompletionSource<'a>
-  | PutOrUpdate of put:'a * up:('a -> 'a) * TaskCompletionSource<'a>
+  | UpdateAsync of cond:('a -> bool) * update:('a -> Async<'a>) * TaskCompletionSource<'a>
+  | PutOrUpdateAsync of update:('a option -> Async<'a>) * TaskCompletionSource<'a>
   | Get of TaskCompletionSource<'a>
-  | Take of TaskCompletionSource<'a>
-
-type MVarValue<'a> =
-  struct
-    val value : 'a
-    val version : int
-    new (a:'a, v:int) = { value = a ; version = v }
-  end
+  | Take of cond:('a -> bool) * TaskCompletionSource<'a>
 
 /// A serialized variable.
-type MVar<'a> (?a:'a) =
+type MVar<'a> internal (?a:'a) =
 
   let [<VolatileField>] mutable state : 'a = Unchecked.defaultof<_>
 
@@ -330,10 +320,6 @@ type MVar<'a> (?a:'a) =
     let rec init (v:int) = async {
       state <- Unchecked.defaultof<_>
       return! mbp.Scan (function
-        | Put (a,rep) ->
-          state <- a         
-          rep.SetResult a
-          Some (loop (a, v + 1))
         | PutAsync (a,rep) ->          
           Some (async {
             try            
@@ -344,18 +330,20 @@ type MVar<'a> (?a:'a) =
             with ex ->
               rep.SetException ex
               return! init (v + 1) })
-        | PutOrUpdate (a,_,rep) ->
-          rep.SetResult a
-          Some (loop (a, v + 1))
+        | PutOrUpdateAsync (update,rep) ->          
+          Some (async {
+            try
+              let! a = update None
+              rep.SetResult a  
+              return! loop (a, v + 1)
+            with ex ->
+              rep.SetException ex
+              return! init v })
         | _ ->
           None) }
     and loop (a:'a, v:int) = async {
       let! msg = mbp.Receive()
       match msg with
-      | Put (a,rep) ->
-        state <- a
-        rep.SetResult a
-        return! loop (a, v + 1)
       | PutAsync (a',rep) ->
         try
           let! a = a'
@@ -365,32 +353,35 @@ type MVar<'a> (?a:'a) =
         with ex ->
           rep.SetException ex
           return! loop (a, v)
-      | PutOrUpdate (_,up,rep) ->
-        let a = up a
-        state <- a
-        rep.SetResult a
-        return! loop (a, v + 1)
-      | Get rep ->
-        rep.SetResult a
-        return! loop (a, v + 1)
-      | Take rep ->        
-        rep.SetResult a
-        return! init (v + 1)
-      | Update (f,rep) ->
+      | PutOrUpdateAsync (update,rep) ->
         try
-          let a = f a
+          let! a = update (Some a)
           state <- a
           rep.SetResult a
           return! loop (a, v + 1)
         with ex ->
           rep.SetException ex
           return! loop (a, v)
-      | UpdateAsync (f,rep) ->
-        try
-          let! a = f a
-          state <- a
+      | Get rep ->
+        rep.SetResult a
+        return! loop (a, v + 1)
+      | Take (cond,rep) ->
+        if cond a then        
           rep.SetResult a
-          return! loop (a, v + 1)
+          return! init (v + 1)
+        else
+          rep.SetResult a
+          return! loop (a, v)
+      | UpdateAsync (cond,f,rep) ->
+        try
+          if cond a then
+            let! a = f a
+            state <- a
+            rep.SetResult a
+            return! loop (a, v + 1)
+          else
+            rep.SetResult a
+            return! loop (a, v)
         with ex ->
           rep.SetException ex
           return! loop (a, v) }
@@ -411,26 +402,32 @@ type MVar<'a> (?a:'a) =
   member __.Get () : Async<'a> =
     postAndAsyncReply (Get)
 
+  member __.TakeIf (cond:'a -> bool) : Async<'a> =
+    postAndAsyncReply (fun tcs -> Take(cond, tcs))
+
   member __.Take () : Async<'a> =
-    postAndAsyncReply (Take)
+    __.TakeIf (konst true)
 
   member __.GetFast () : 'a =
     state
 
   member __.Put (a:'a) : Async<'a> =
-    postAndAsyncReply (fun ch -> Put (a,ch))
+    __.PutAsync (async.Return a)
 
   member __.PutAsync (a:Async<'a>) : Async<'a> =
     postAndAsyncReply (fun ch -> PutAsync (a,ch))
 
   member __.Update (f:'a -> 'a) : Async<'a> =
-    postAndAsyncReply (fun ch -> Update (f,ch))
+    __.UpdateAsync (f >> async.Return)
 
-  member __.UpdateAsync (f:'a -> Async<'a>) : Async<'a> =
-    postAndAsyncReply (fun ch -> UpdateAsync (f,ch))
+  member __.UpdateIfAsync (cond:'a -> bool, update:'a -> Async<'a>) : Async<'a> =
+    postAndAsyncReply (fun ch -> UpdateAsync (cond, update, ch))
 
-  member __.PutOrUpdate (put:'a, up:'a -> 'a) : Async<'a> =
-    postAndAsyncReply (fun ch -> PutOrUpdate (put,up,ch))
+  member __.UpdateAsync (update:'a -> Async<'a>) : Async<'a> =
+    __.UpdateIfAsync (konst true, update)
+
+  member __.PutOrUpdateAsync (update:'a option -> Async<'a>) : Async<'a> =
+    postAndAsyncReply (fun ch -> PutOrUpdateAsync (update,ch))
 
   interface IDisposable with
     member __.Dispose () = (mbp :> IDisposable).Dispose()
@@ -438,35 +435,64 @@ type MVar<'a> (?a:'a) =
 /// Operations on serialized variables.
 module MVar =
   
+  /// Creates an empty MVar.
   let create () : MVar<'a> =
     new MVar<_>()
 
+  /// Creates a full MVar.
   let createFull (a:'a) : MVar<'a> =
     new MVar<_>(a)
 
+  /// Gets the value of the MVar.
   let get (c:MVar<'a>) : Async<'a> =
     c.Get ()
 
+  /// Takes an item from an MVar if the item satisfied the condition.
+  /// If the item doesn't satisfy the condition, it is still returned, but
+  /// remains in the MVar.
+  let takeIf (cond:'a -> bool) (c:MVar<'a>) : Async<'a> =
+    c.TakeIf (cond)
+
+  /// Takes an item from the MVar.
   let take (c:MVar<'a>) : Async<'a> =
     c.Take ()
-
+  
+  /// Returns the last known value, if any, without serialization.
+  /// NB: unsafe because the value may be null, but helpful for supporting overlapping
+  /// operations.
   let getFastUnsafe (c:MVar<'a>) : 'a =
     c.GetFast ()
 
+  /// Puts an item into the MVar, returning the item that was put.
+  /// Returns if the MVar is either empty or full.
   let put (a:'a) (c:MVar<'a>) : Async<'a> =
     c.Put a
 
+  /// Puts an item into the MVar, returning the item that was put.
+  /// Returns if the MVar is either empty or full.
   let putAsync (a:Async<'a>) (c:MVar<'a>) : Async<'a> =
     c.PutAsync a
 
-  let update (f:'a -> 'a) (c:MVar<'a>) : Async<'a> =
-    c.Update f
+  /// Puts a new value into an MVar or updates an existing value.
+  /// Returns the value that was put or the updated value.
+  let putOrUpdateAsync (update:'a option -> Async<'a>) (c:MVar<'a>) : Async<'a> =
+    c.PutOrUpdateAsync (update)
 
-  let updateAsync (f:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
-    c.UpdateAsync f
+  /// Updates an item in the MVar.
+  /// Returns when an item is available to update.
+  let update (update:'a -> 'a) (c:MVar<'a>) : Async<'a> =
+    c.Update update
 
-  let putOrUpdate (put:'a) (up:'a -> 'a) (c:MVar<'a>) : Async<'a> =
-    c.PutOrUpdate (put,up)
+  /// Updates an item in the MVar.
+  /// Returns when an item is available to update.
+  let updateAsync (update:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
+    c.UpdateAsync update
+
+  /// Updates an item in the MVar if it satisfies the condition.
+  /// Returns when an item is available to update.
+  /// If the item doesn't satisfy the condition, it is not updated, but it is returned.
+  let updateIfAsync (cond:'a -> bool) (update:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
+    c.UpdateIfAsync (cond, update)
 
 
 
@@ -520,7 +546,9 @@ module Resource =
       match recovery with
       | Escalate -> 
         Log.info "recovery_escalating"
-        return raise ex              
+        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
+        edi.Throw ()
+        return failwith ""              
       | Recreate ->
         Log.info "recovery_restarting"
         let! ep' = create
@@ -532,23 +560,25 @@ module Resource =
 
     member __.Recover (ep':Epoch<'r>, ex:exn) =
       cell |> MVar.updateAsync (recover ex)
+// TODO: review
 //      if ep'.closed.TrySetException ex then
 //        cell |> MVar.updateAsync (recover ex)
 //      else
 //        cell |> MVar.get
         
     member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {      
-      let rec go ep a = async {
+      let rec go a = async {
         //Log.trace "performing_operation"
+        let! ep = MVar.get cell
         try
           return! op ep.resource a
         with ex ->
-          Log.info "caught_exception_on_injected_operation|error=%O" ex
+          Log.info "caught_exception_on_injected_operation|input=%A error=%O" a ex
           let! epoch' = __.Recover (ep, ex)
           Log.info "recovery_complete"
-          return! go epoch' a }
-      let! epoch = MVar.get cell
-      return go epoch }
+          return! go a }
+      //let! epoch = MVar.get cell
+      return go }
 
     interface IDisposable with
       member __.Dispose () = ()

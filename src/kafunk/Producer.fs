@@ -40,6 +40,12 @@ module Partitioner =
       let hc = if isNull pm.routeKey then 0 else pm.routeKey.GetHashCode()
       ps.[hc % ps.Length]
 
+  /// Computes the hash-code of the routing key to get the topic partition.
+  /// NB: Object.GetHashCode isn't guaranteed to be stable across runtimes.
+  let roundRobin : TopicName * Partition[] * ProducerMessage -> Partition =
+    let i = ref 0
+    fun (_,ps,_) -> ps.[System.Threading.Interlocked.Increment i % ps.Length]
+
 
 type MessageBundle = {
   topic : TopicName

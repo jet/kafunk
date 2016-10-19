@@ -6,6 +6,7 @@ open System.Net
 open System.Net.Sockets
 open System.Text
 open System.Threading
+open System.Threading.Tasks
 
 open Kafunk
 open Kafunk.Prelude
@@ -92,8 +93,7 @@ module FetchRequest =
 
 
 
-// Connection
-
+// -------------------------------------------------------------------------------------------------------------------------------------
 
 [<AutoOpen>]
 module internal ResponseEx =
@@ -324,6 +324,12 @@ module internal ResponseEx =
 /// A request/reply channel to Kafka.
 type Chan = RequestMessage -> Async<ResponseMessage>
 
+///// A request/reply channel to a single Kafka broker.
+//type Ch = {
+//  send : RequestMessage -> Async<ResponseMessage>
+//  close : TaskCompletionSource<unit> 
+//}
+
 /// API operations on a generic request/reply channel.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Chan =
@@ -412,17 +418,22 @@ module Chan =
         return sendRcvSocket 
       | Failure e ->
         Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ep e
+        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture e
+        edi.Throw()
         return raise e }
 
     let recovery (s:Socket, ex:exn) = async {
       Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
-      s.Dispose()      
+      tryDispose s
+      do! Async.Sleep 5000
       match ex with
       | :? SocketException as _x ->        
         return Resource.Recovery.Recreate
+//      | :? _ as ae when Exn.existsT<ObjectDisposedException> ae ->
+//        return Resource.Recovery.Recreate
       | _ ->
         //Log.info "escalating_tcp_connection_error"
-        return Resource.Recovery.Escalate }
+        return Resource.Recovery.Recreate }
 
     let! sendRcvSocket = 
       Resource.recoverableRecreate 
@@ -849,12 +860,12 @@ type ConnState = {
 
 
 
-type ResponseError =
-  | FetchError of FetchResponse
-  | ProduceError of ProduceResponse
-
-
-type ChanResult = Result<ResponseMessage, ResponseError>
+//type ResponseError =
+//  | FetchError of FetchResponse
+//  | ProduceError of ProduceResponse
+//
+//
+//type ChanResult = Result<ResponseMessage, ResponseError>
 
 
 
@@ -888,7 +899,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
   let rec bootstrap (cfg:KafkaConnCfg) =
-    let loop = 
+    let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
       |> AsyncSeq.traverseAsyncResult (fun uri -> async {
@@ -903,26 +914,26 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> Faults.retryResultThrow 
           (Seq.concat >> Exn.ofSeq) 
           connectBackoff
-    stateCell |> MVar.putAsync loop
+    stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
   and getMetadata (topics:TopicName[]) =
     // TODO: TTL check
-    let go state = async {
+    let update state = async {
       //Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
       let! metadata = Chan.metadata (send state) (Metadata.Request(topics))   
       //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
       return state |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }
-    stateCell |> MVar.updateAsync go
+    stateCell |> MVar.updateAsync update
 
   /// Discovers a coordinator for the group.
   and getGroupCoordinator (groupId:GroupId) =
-    let go state = async {
+    let update state = async {
       let! group = Chan.groupCoordinator (send state) (GroupCoordinatorRequest(groupId))
       return 
         state
         |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
-    stateCell |> MVar.updateAsync go
+    stateCell |> MVar.updateAsync update
 
   /// Sends the request based on discovered routes.
   and send (state:ConnState) (req:RequestMessage) = async {
@@ -930,7 +941,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     //let! state = MVar.get stateCell
     match Routing.route state.routes req with
     | Success reqRoutes ->      
-      //Log.trace "request_routed|routes=%A" reqRoutes      
+      //Log.trace "request_routed|routes=%A" reqRoutes
+      // NB: currently, calls outer send on retry.
       let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
         match state |> ConnState.tryFindChanByHost host with
         | Some ch -> 
@@ -956,7 +968,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                 | RetryAction.WaitAndRetry ->
                   do! Async.Sleep 5000 // TODO: use Faults module
                   return! send state req })
-        | None ->          
+        | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state -> connCh state host)
           return! send state' req }
       

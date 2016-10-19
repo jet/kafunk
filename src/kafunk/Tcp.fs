@@ -349,8 +349,8 @@ module Session =
   /// sending to the specified output.
   let requestReply
     (correlationId:unit -> int)
-    (encode:'a * int -> Binary.Segment * 's)
-    (decode:int * 's * Binary.Segment -> 'b)
+    (encode:'a * CorrelationId -> Binary.Segment * 's)
+    (decode:CorrelationId * 's * Binary.Segment -> 'b)
     (awaitResponse:'a -> 'b option)
     (receive:AsyncSeq<Binary.Segment>)
     (send:Binary.Segment -> Async<int>) =

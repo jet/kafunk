@@ -14,6 +14,9 @@ module Prelude =
 
   let flip f a b = f b a
 
+  let tryDispose (d:#System.IDisposable) = 
+    try d.Dispose() finally ()
+
 
 module Option =
   
@@ -36,6 +39,9 @@ module Choice =
     match c with
     | Choice1Of2 a -> Choice1Of2 a
     | Choice2Of2 b -> Choice2Of2 (f b)
+
+  let codiag = function Choice1Of2 a -> a | Choice2Of2 a -> a
+    
 
 
 
