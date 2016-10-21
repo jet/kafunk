@@ -7,10 +7,10 @@ open System
 let Log = Log.create __SOURCE_FILE__
 
 let host = "127.0.0.1:9092"
-let topicName = "test-topic_1019"
-let consumerCount = 1
+let topicName = "test-topic_1020g"
+let consumerCount = 2
 let consumerGroup = "kafunk-test-1020a"
-let messageCount = 10000000
+let messageCount = 100000
 //let messageSize = 10
 //let batchSize = 1
 let producerThreads = 10
@@ -74,19 +74,14 @@ let consumer () = async {
           //Log.trace "received_message=%i" i
           if ReceiveSet.TryAdd (i,i) then
             if ReceiveSet.Count >= messageCount then
-              Log.warn "received complete set count=%i" ReceiveSet.Count
+              Log.warn "received_complete_set|receive_count=%i" ReceiveSet.Count
               tcs.SetResult()            
           else 
             //Log.warn "duplicate message=%i" i
             Duplicates.Add i
 
       with ex ->
-        Log.error "error=%O" ex)
-    Log.info "consuming_message_set|count=%i size=%i first_offset=%i"
-      (ms.messages.Length)
-      (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
-      (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
-    return () }
+        Log.error "error=%O" ex) }
 
   return!
     Async.choose
@@ -94,11 +89,16 @@ let consumer () = async {
       (tcs.Task |> Async.AwaitTask)
 }
 
-
 let sw = System.Diagnostics.Stopwatch.StartNew()
+
+let rec monitor () = async {
+  while not tcs.Task.IsCompleted do 
+    do! Async.Sleep 5000
+    Log.warn "receive_count=%i duplicate_count=%i running_time_min=%f" ReceiveSet.Count Duplicates.Count sw.Elapsed.TotalMinutes }
 
 Async.Parallel
   [
+    yield monitor ()
     yield producer ()
     for _ in [1..consumerCount] do
       yield consumer ()

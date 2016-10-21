@@ -1,8 +1,6 @@
 ﻿namespace Kafunk
 
-// log
-
-// TODO: implement!
+open System.Collections.Concurrent
 
 type LogLevel =
   | Trace | Info | Warn | Error | Fatal
@@ -13,6 +11,7 @@ type LogLevel =
 
 type Logger = {
   name : string
+  buffer : BlockingCollection<string>
 }
 
 
@@ -24,7 +23,8 @@ module LoggerEx =
 
     member inline ts.log (format, level:LogLevel) =
       let inline trace (m:string) =
-        Console.WriteLine(String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
+        ts.buffer.Add (String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
+        //Console.WriteLine(String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
 //        match level with
 //        | LogLevel.Trace -> ()
 //        | _ -> Console.WriteLine(String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
@@ -44,4 +44,18 @@ module LoggerEx =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Log =
 
-  let create name = { name = name }
+  open System.Collections.Concurrent
+
+  let buffer = new BlockingCollection<string>()
+
+  Async.Start (async {
+    return!    
+      buffer.GetConsumingEnumerable()
+      |> AsyncSeq.ofSeq
+      |> AsyncSeq.bufferByTimeAndCount 1000 500
+      |> AsyncSeq.iter (fun lines -> 
+        for line in lines do
+          System.Console.Out.WriteLine line)
+  })
+
+  let create name = { name = name ; buffer = buffer }

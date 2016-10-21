@@ -62,9 +62,9 @@
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="Utility\Prelude.fs" />
-    <Compile Include="Utility\Log.fs" />
     <Compile Include="Utility\Async.fs" />
     <Compile Include="Utility\AsyncSeq.fs" />
+    <Compile Include="Utility\Log.fs" />
     <Compile Include="Utility\Binary.fs" />
     <Compile Include="Utility\Crc.fs" />
     <Compile Include="Utility\Faults.fs" />

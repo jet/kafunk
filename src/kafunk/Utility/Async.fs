@@ -529,30 +529,30 @@ module Resource =
   /// </notes>
   type Resource<'r> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
       
-    let Log = Log.create "Resource"
+    //let Log = Log.create "Resource"
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
    
     let create = async {
-      Log.info "creating_resource"
+      //Log.info "creating_resource"
       let! r = create
-      Log.info "created_resource"
+      //Log.info "created_resource"
       let closed = new TaskCompletionSource<unit>()
       return { resource = r ; closed = closed } }
 
     let recover ex ep = async {
-      Log.info "recovering_resource"
+      //Log.info "recovering_resource"
       let! recovery = handle (ep.resource,ex)
       match recovery with
       | Escalate -> 
-        Log.info "recovery_escalating"
+        //Log.info "recovery_escalating"
         let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
         edi.Throw ()
         return failwith ""              
       | Recreate ->
-        Log.info "recovery_restarting"
+        //Log.info "recovery_restarting"
         let! ep' = create
-        Log.info "recovery_restarted"
+        //Log.info "recovery_restarted"
         return ep' }
 
     member internal __.Create () = async {
@@ -573,9 +573,9 @@ module Resource =
         try
           return! op ep.resource a
         with ex ->
-          Log.info "caught_exception_on_injected_operation|input=%A error=%O" a ex
+          //Log.info "caught_exception_on_injected_operation|input=%A error=%O" a ex
           let! epoch' = __.Recover (ep, ex)
-          Log.info "recovery_complete"
+          //Log.info "recovery_complete"
           return! go a }
       //let! epoch = MVar.get cell
       return go }

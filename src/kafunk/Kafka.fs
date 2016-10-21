@@ -904,12 +904,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       |> AsyncSeq.ofSeq
       |> AsyncSeq.traverseAsyncResult (fun uri -> async {
         try
-          Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s port=%i" cfg.clientId uri.Host uri.Port
+          Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let state = ConnState.ofBootstrap (cfg, uri.Host,uri.Port)
           let! state = connCh state state.routes.bootstrapHost
           return Success state
         with ex ->
-          Log.error "errored_connecting_to_bootstrap_host|host=%s port=%i error=%O" uri.Host uri.Port ex
+          Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex
           return Failure ex })
       |> Faults.retryResultThrow 
           (Seq.concat >> Exn.ofSeq) 
@@ -918,11 +918,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Discovers cluster metadata.
   and getMetadata (topics:TopicName[]) =
-    // TODO: TTL check
     let update state = async {
-      //Log.info "getting_metadata|topics=%s" (String.concat ", " topics)
       let! metadata = Chan.metadata (send state) (Metadata.Request(topics))   
-      //Log.info "received_metadata|%s" (MetadataResponse.Print metadata)
       return state |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }
     stateCell |> MVar.updateAsync update
 
@@ -930,9 +927,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   and getGroupCoordinator (groupId:GroupId) =
     let update state = async {
       let! group = Chan.groupCoordinator (send state) (GroupCoordinatorRequest(groupId))
-      return 
-        state
-        |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
+      return state |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
     stateCell |> MVar.updateAsync update
 
   /// Sends the request based on discovered routes.
@@ -1021,15 +1016,13 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let! state = getMetadata topics
-    return 
-      state.routes 
-      |> Routing.Routes.topicPartitions }
+    return state.routes |> Routing.Routes.topicPartitions }
 
   member internal __.GetState () =
     stateCell |> MVar.get
 
   member __.Close () =
-    Log.info "closing_connection"
+    Log.info "closing_connection|client_id=%s" cfg.clientId
     cts.Cancel()
     (stateCell :> IDisposable).Dispose()
     

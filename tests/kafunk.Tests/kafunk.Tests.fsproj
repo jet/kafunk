@@ -71,6 +71,7 @@
     <None Include="Producer.fsx" />
     <None Include="Fetch.fsx" />
     <None Include="Consumer.fsx" />
+    <None Include="ProducerConsumer.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
