@@ -567,17 +567,20 @@ module Resource =
 //        cell |> MVar.get
         
     member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {      
+      let! ep = MVar.get cell
+      let epoch = ref ep
       let rec go a = async {
         //Log.trace "performing_operation"
-        let! ep = MVar.get cell
+        //let! ep = MVar.get cell
+        let ep = !epoch
         try
           return! op ep.resource a
         with ex ->
           //Log.info "caught_exception_on_injected_operation|input=%A error=%O" a ex
           let! epoch' = __.Recover (ep, ex)
+          epoch := epoch'
           //Log.info "recovery_complete"
           return! go a }
-      //let! epoch = MVar.get cell
       return go }
 
     interface IDisposable with

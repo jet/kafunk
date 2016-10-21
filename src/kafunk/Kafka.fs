@@ -1018,9 +1018,6 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let! state = getMetadata topics
     return state.routes |> Routing.Routes.topicPartitions }
 
-  member internal __.GetState () =
-    stateCell |> MVar.get
-
   member __.Close () =
     Log.info "closing_connection|client_id=%s" cfg.clientId
     cts.Cancel()

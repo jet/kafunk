@@ -72,6 +72,17 @@ type ObjectPool<'a>(initial:int, create:unit -> 'a) =
 
 open System.Collections.Generic
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Seq =
+  
+  let rec tryItem index (s:seq<_>) =
+    let rec tryItem index (e:IEnumerator<_>) =
+      if not (e.MoveNext()) then None
+      elif index = 0 then Some(e.Current)
+      else tryItem (index-1) e
+    use e = s.GetEnumerator()
+    tryItem index e
+
 /// Basic operations on dictionaries.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Dict =

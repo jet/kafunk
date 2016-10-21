@@ -3,21 +3,23 @@
 
 open Kafunk
 open System
+open System.Threading.Tasks
+open System.Collections.Concurrent
 
 let Log = Log.create __SOURCE_FILE__
 
 let host = "127.0.0.1:9092"
-let topicName = "test-topic_1020g"
+let topicName = "test-topic_1020i"
 let consumerCount = 2
 let consumerGroup = "kafunk-test-1020a"
-let messageCount = 100000
+let messageCount = 10000000
 //let messageSize = 10
-//let batchSize = 1
-let producerThreads = 10
+let batchSize = 10
+let producerThreads = 500
 
-let tcs = new System.Threading.Tasks.TaskCompletionSource<unit>()
-let ReceiveSet = System.Collections.Concurrent.ConcurrentDictionary<int, _>()
-let Duplicates = ResizeArray<int>()
+let tcs = new TaskCompletionSource<unit>()
+let ReceiveSet = ConcurrentDictionary<int, _>()
+let Duplicates = ConcurrentBag<int>()
 
 let producer () = async {
  
@@ -39,11 +41,15 @@ let producer () = async {
     let _ = Binary.writeInt32 i seg
     ProducerMessage.ofBytes seg
 
+  let batchCount = messageCount / batchSize
+
   do!
-    Seq.init messageCount id
+    Seq.init batchCount id
     |> Seq.map (fun i -> async {
-      let message = message i
-      let req = { topic = topicName ; messages = [| message |] }
+      let messages = 
+        Seq.init batchSize (fun j -> message (i * batchSize + j))
+        |> Seq.toArray
+      let req = { topic = topicName ; messages = messages }
       let! res = Producer.produce producer [| req |]
       return () })
     |> Async.ParallelIgnore producerThreads    
@@ -67,7 +73,7 @@ let consumer () = async {
 
   let handle (ms:MessageSet) = async {    
     ms.messages
-    |> Seq.iter (fun (_o,_ms,m) -> 
+    |> Seq.iter (fun (o,ms,m) -> 
       try
         if not (isNull m.value.Array) && m.value.Count > 0 then
           let (i,_) = Binary.readInt32 m.value
@@ -77,9 +83,9 @@ let consumer () = async {
               Log.warn "received_complete_set|receive_count=%i" ReceiveSet.Count
               tcs.SetResult()            
           else 
-            //Log.warn "duplicate message=%i" i
             Duplicates.Add i
-
+        else
+          Log.warn "empty_message_received|offset=%i message_size=%i" o ms
       with ex ->
         Log.error "error=%O" ex) }
 
@@ -103,7 +109,6 @@ Async.Parallel
     for _ in [1..consumerCount] do
       yield consumer ()
   ]
-//|> Async.withCancellationToken cts.Token
 |> Async.RunSynchronously
 
 sw.Stop()

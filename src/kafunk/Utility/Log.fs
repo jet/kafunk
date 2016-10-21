@@ -23,7 +23,10 @@ module LoggerEx =
 
     member inline ts.log (format, level:LogLevel) =
       let inline trace (m:string) =
-        ts.buffer.Add (String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
+        match level with
+        | Trace -> ()
+        | _ ->
+          ts.buffer.Add (String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
         //Console.WriteLine(String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
 //        match level with
 //        | LogLevel.Trace -> ()
