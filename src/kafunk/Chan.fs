@@ -114,6 +114,7 @@ module internal ResponseEx =
     static member internal toLeaveGroup res = match res with LeaveGroupResponse x -> x | _ -> wrongResponse ()
     static member internal toListGroups res = match res with ListGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()      
+    static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()      
 
   // ------------------------------------------------------------------------------------------------------------------------------
   // printers
@@ -305,7 +306,7 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
 
 
-/// A request/reply channel to Kafka.
+/// A request/reply channel to an individual Kafka broker.
 type Chan = RequestMessage -> Async<ResponseMessage>
 
 /// API operations on a generic request/reply channel.
@@ -316,45 +317,19 @@ module Chan =
 
   let send (ch:Chan) req  = ch req
 
-  let metadata (ch:Chan) (req:Metadata.Request) =
-    ch (RequestMessage.Metadata req) |> Async.map (function MetadataResponse x -> x | _ -> wrongResponse ())
-
-  let fetch (ch:Chan) (req:FetchRequest) : Async<FetchResponse> =
-    ch (RequestMessage.Fetch req) |> Async.map ResponseMessage.toFetch
-
-  let produce (ch:Chan) (req:ProduceRequest) : Async<ProduceResponse> =
-    ch (RequestMessage.Produce req) |> Async.map ResponseMessage.toProduce
-
-  let offset (ch:Chan) (req:OffsetRequest) : Async<OffsetResponse> =
-    ch (RequestMessage.Offset req) |> Async.map ResponseMessage.toOffset
-
-  let groupCoordinator (ch:Chan) (req:GroupCoordinatorRequest) : Async<GroupCoordinatorResponse> =
-    ch (RequestMessage.GroupCoordinator req) |> Async.map ResponseMessage.toGroupCoordinator
-
-  let offsetCommit (ch:Chan) (req:OffsetCommitRequest) : Async<OffsetCommitResponse> =
-    ch (RequestMessage.OffsetCommit req) |> Async.map ResponseMessage.toOffsetCommit
-
-  let offsetFetch (ch:Chan) (req:OffsetFetchRequest) : Async<OffsetFetchResponse> =
-    ch (RequestMessage.OffsetFetch req) |> Async.map ResponseMessage.toOffsetFetch
-
-  let joinGroup (ch:Chan) (req:JoinGroup.Request) : Async<JoinGroup.Response> =
-    ch (RequestMessage.JoinGroup req) |> Async.map ResponseMessage.toJoinGroup
-
-  let syncGroup (ch:Chan) (req:SyncGroupRequest) : Async<SyncGroupResponse> =
-    ch (RequestMessage.SyncGroup req) |> Async.map ResponseMessage.toSyncGroup
-
-  let heartbeat (ch:Chan) (req:HeartbeatRequest) : Async<HeartbeatResponse> =
-    ch (RequestMessage.Heartbeat req) |> Async.map ResponseMessage.toHeartbeat
-
-  let leaveGroup (ch:Chan) (req:LeaveGroupRequest) : Async<LeaveGroupResponse> =
-    ch (RequestMessage.LeaveGroup req) |> Async.map ResponseMessage.toLeaveGroup
-
-  let listGroups (ch:Chan) (req:ListGroupsRequest) : Async<ListGroupsResponse> =
-    ch (RequestMessage.ListGroups req) |> Async.map ResponseMessage.toListGroups
-
-  let describeGroups (ch:Chan) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
-    ch (RequestMessage.DescribeGroups req) |> Async.map ResponseMessage.toDescribeGroups
-
+  let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
+  let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
+  let produce = AsyncFunc.dimap RequestMessage.Produce ResponseMessage.toProduce
+  let offset = AsyncFunc.dimap RequestMessage.Offset ResponseMessage.toOffset
+  let groupCoordinator = AsyncFunc.dimap RequestMessage.GroupCoordinator ResponseMessage.toGroupCoordinator
+  let offsetCommit = AsyncFunc.dimap RequestMessage.OffsetCommit ResponseMessage.toOffsetCommit
+  let offsetFetch = AsyncFunc.dimap RequestMessage.OffsetFetch ResponseMessage.toOffsetFetch
+  let joinGroup = AsyncFunc.dimap RequestMessage.JoinGroup ResponseMessage.toJoinGroup
+  let syncGroup = AsyncFunc.dimap RequestMessage.SyncGroup ResponseMessage.toSyncGroup
+  let heartbeat = AsyncFunc.dimap RequestMessage.Heartbeat ResponseMessage.toHeartbeat
+  let leaveGroup = AsyncFunc.dimap RequestMessage.LeaveGroup ResponseMessage.toLeaveGroup
+  let listGroups = AsyncFunc.dimap RequestMessage.ListGroups ResponseMessage.toListGroups
+  let describeGroups = AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups
 
   /// Configuration for an individual TCP connection.
   type Config = {
@@ -454,12 +429,15 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
-    return 
-      session.Send
+    // TODO: channel-level fault tolerance
+    let send = 
+      session.Send      
       |> AsyncFunc.doBeforeAfterError 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
-          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e) }
+          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)
+
+    return send }
 
   let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
     Log.info "discovering_dns_entries|host=%s" host

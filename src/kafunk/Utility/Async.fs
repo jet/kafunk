@@ -597,6 +597,9 @@ module Resource =
 
 module AsyncFunc =
   
+  let dimap (g:'c -> 'a) (h:'b -> 'd) (f:'a -> Async<'b>) : 'c -> Async<'d> =
+    g >> f >> Async.map h
+
   let doBeforeAfter (before:'a -> unit) (after:'a * 'b -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
     fun a -> async {
       do before a

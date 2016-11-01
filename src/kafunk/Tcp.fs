@@ -284,7 +284,7 @@ type ReqRepSession<'a, 'b, 's> internal
         if not (reply.TrySetResult res) then
           Log.warn "received_response_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
-        Log.error "decode exception correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
+        Log.error "decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.SetException ex
     else
       Log.error "received message but unabled to find session for correlation_id=%i" correlationId
@@ -298,7 +298,7 @@ type ReqRepSession<'a, 'b, 's> internal
       if not (txs.TryAdd(correlationId, (state,rep))) then
         Log.error "clash of the sessions!"
       let rec t = new Timer(TimerCallback(fun _ ->        
-        if rep.TrySetCanceled () then
+        if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
           Log.error "request_timed_out|correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
           t.Dispose()), null, timeoutMs, -1)
       ()
