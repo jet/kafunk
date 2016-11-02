@@ -34,7 +34,7 @@ Seq.init N id
   //printfn "sending request=%i" i
 
   let! prodRes =
-    Producer.produceSingle producer (topicName, [| ProducerMessage.ofBytes payload |])
+    Producer.produce producer [| ProducerMessage.ofBytes payload |]
 
   return ()
 

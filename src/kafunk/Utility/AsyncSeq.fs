@@ -739,6 +739,33 @@ module AsyncSeq =
 
   // ---------------------------------------------------------------------------------------------------------------------------------
 
+  /// Starts a process to consume the input sequence into a bounded buffer and returns 
+  /// an async sequence consuming from this buffer.
+  /// This can be used to decouple and produces and consumers, providing some slack.
+  let readAhead (bufferSize:int) (s:AsyncSeq<'a>) : AsyncSeq<'a> = 
+    let cts = new CancellationTokenSource()
+    let mb = BoundedMb.create bufferSize
+    let rec go s = async {
+      let! s = s
+      match s with
+      | Nil -> 
+        do! mb |> BoundedMb.put None
+        return ()
+      | Cons (a,tl) ->
+        do! mb |> BoundedMb.put (Some a)
+        return! go tl }
+    Async.Start (go s)    
+    let s =
+      unfoldAsync (fun () -> async { 
+        let! a = BoundedMb.take mb
+        match a with
+        | Some a -> return Some (a, ())
+        | None -> return None } ) ()
+    tryFinally s (fun () -> cts.Dispose())
+
+
+
+
 [<AutoOpen>]
 module AsyncSeqExtensions =
 

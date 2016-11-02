@@ -51,13 +51,16 @@ module Routing =
       (tp, RequestMessage.Produce req))
     |> Seq.toArray
 
-  let concatProduceResponses (rs:ResponseMessage[]) =
+  let concatProduceResponses (rs:ProduceResponse[]) =    
+    let topics = rs |> Array.collect (fun r -> r.topics)
+    let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
+    new ProduceResponse(topics, tt)
+
+  let concatProduceResponseMessages (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toProduce
-    |> (fun rs -> 
-      let topics = rs |> Array.collect (fun r -> r.topics)
-      let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
-      new ProduceResponse(topics, tt) |> ResponseMessage.ProduceResponse)
+    |> concatProduceResponses
+    |> ResponseMessage.ProduceResponse
 
   /// Partitions an offset request by topic/partition.
   let partitionOffsetReq (req:OffsetRequest) =
@@ -481,7 +484,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       | RequestMessage.Fetch _ ->
         return! scatterGather Routing.concatFetchRes
       | RequestMessage.Produce _ ->
-        return! scatterGather Routing.concatProduceResponses
+        return! scatterGather Routing.concatProduceResponseMessages
       | _ -> 
         return! sendHost reqRoutes.[0]
 

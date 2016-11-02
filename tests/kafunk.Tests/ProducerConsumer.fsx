@@ -49,8 +49,7 @@ let producer () = async {
       let messages = 
         Seq.init batchSize (fun j -> message (i * batchSize + j))
         |> Seq.toArray
-      let req = { topic = topicName ; messages = messages }
-      let! res = Producer.produce producer [| req |]
+      let! res = Producer.produce producer messages
       return () })
     |> Async.ParallelIgnore producerThreads    
 
