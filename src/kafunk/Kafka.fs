@@ -406,7 +406,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
-      |> AsyncSeq.traverseAsyncResult (fun uri -> async {
+      |> AsyncSeq.traverseAsyncResultList (fun uri -> async {
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let state = ConnState.ofBootstrap (cfg, uri.Host,uri.Port)
@@ -415,7 +415,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
         with ex ->
           Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex
           return Failure ex })
-      |> Faults.retryResultThrow 
+      |> Faults.retryResultThrowList 
           (Seq.concat >> Exn.ofSeq) 
           connectBackoff
     stateCell |> MVar.putOrUpdateAsync update

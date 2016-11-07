@@ -267,7 +267,7 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let timeoutMs = 10000
+  let timeoutMs = 1000 * 30
 
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
@@ -289,19 +289,22 @@ type ReqRepSession<'a, 'b, 's> internal
     else
       Log.error "received message but unabled to find session for correlation_id=%i" correlationId
 
-  let mux (req:'a) =
+  let mux (ct:CancellationToken) (req:'a) =
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()
+    let cancel () =
+      if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
+        Log.error "request_timed_out|correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
+        let mutable token = Unchecked.defaultof<_>
+        txs.TryRemove(correlationId, &token) |> ignore      
+    ct.Register (Action(cancel)) |> ignore
     let sessionReq,state = encode (req,correlationId)
     match awaitResponse req with
     | None ->      
       if not (txs.TryAdd(correlationId, (state,rep))) then
         Log.error "clash of the sessions!"
-      let rec t = new Timer(TimerCallback(fun _ ->        
-        if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
-          Log.error "request_timed_out|correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
-          t.Dispose()), null, timeoutMs, -1)
-      ()
+//      let rec t = new Timer(TimerCallback(fun _ -> cancel () ; t.Dispose()), null, timeoutMs, -1)
+//      ()
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
@@ -309,11 +312,12 @@ type ReqRepSession<'a, 'b, 's> internal
   do
     receive
     |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.info "session disconnected.")
+    |> Async.tryFinally (fun () -> Log.warn "session disconnected.")
     |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
-    let correlationId,sessionData,rep = mux req
+    let! ct = Async.CancellationToken
+    let correlationId,sessionData,rep = mux ct req
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
     let! sent = send sessionData
     //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent

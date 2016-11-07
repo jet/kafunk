@@ -3,16 +3,11 @@
 
 open Kafunk
 
-let topic = "test-topic_1019"
-let host = "localhost"
-let group = "leo_test16"
+let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
-//let conn = Kafka.connHost host
-//let consumerCfg = ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)
-//Consumer.consume conn consumerCfg
-//|> Consumer.callbackCommitAfter 
-//  (fun ms -> async {    
-//    return () })
+let host = argiDefault 1 "localhost"
+let topic = argiDefault 2 "test-topic_1019"
+let group = argiDefault 3 "leo_test16"
 
 let go = async {
   let! conn = Kafka.connHostAsync host

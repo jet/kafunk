@@ -204,12 +204,6 @@ module AsyncEx =
 //        let cnc e = cnc e ; cts.Dispose()
 //        Async.StartWithContinuations (c, ok, err, cnc, cts.Token)
 
-    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
-      let timeout = async {
-        do! Async.Sleep (int timeout.TotalMilliseconds)
-        return raise (OperationCanceledException()) }
-      Async.choose c timeout
-
     /// Creates a computation which returns the result of the first computation that
     /// produces a value as well as a handle to the other computation. The other
     /// computation will be memoized.
@@ -282,6 +276,64 @@ module AsyncEx =
         match r with
         | Choice1Of2 a -> return a
         | Choice2Of2 e -> return raise e }
+
+    static member timeoutResult (timeout:TimeSpan) (c:Async<_>) : Async<Result<_, TimeoutException>> =
+      let timeout = async {
+        do! Async.Sleep (int timeout.TotalMilliseconds)
+        return Failure (TimeoutException()) }
+      Async.choose (Async.map Success c) timeout
+
+    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
+      Async.timeoutResult timeout c |> Async.map Result.throw
+
+
+
+module AsyncFunc =
+  
+  let catch (f:'a -> Async<'b>) : 'a -> Async<Result<'b, exn>> =
+    f >> Async.Catch
+
+  let dimap (g:'c -> 'a) (h:'b -> 'd) (f:'a -> Async<'b>) : 'c -> Async<'d> =
+    g >> f >> Async.map h
+
+  let mapInput (g:'c -> 'a) (f:'a -> Async<'b>) : 'c -> Async<'b> =
+    g >> f
+
+  let mapOut (h:'a * 'b -> 'c) (f:'a -> Async<'b>) : 'a -> Async<'c> =
+    fun a -> Async.map (fun b -> h (a,b)) (f a)
+
+  let mapOutAsync (h:'a * 'b -> Async<'c>) (f:'a -> Async<'b>) : 'a -> Async<'c> =
+    fun a -> Async.bind (fun b -> h (a,b)) (f a)
+
+  let doBeforeAfter (before:'a -> unit) (after:'a * 'b -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async {
+      do before a
+      let! b = f a
+      do after (a,b)
+      return b }
+
+  let doBeforeAfterError (before:'a -> unit) (after:'a * 'b -> unit) (error:'a * exn -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async {
+      do before a
+      try
+        let! b = f a
+        do after (a,b)
+        return b
+      with ex ->
+        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
+        error (a,edi.SourceException)
+        edi.Throw ()
+        return failwith "undefined" }
+
+  let timeout (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async.Delay (fun () -> Async.timeoutAfter t (f a))
+
+  let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
+    fun a -> async.Delay (fun () -> Async.timeoutResult t (f a))
+  
+
+
+
 
 
 
@@ -592,6 +644,7 @@ module Resource =
   type Epoch<'r> = {
     resource : 'r
     closed : TaskCompletionSource<unit>
+    version : int
   }
      
   /// <summary>
@@ -608,16 +661,17 @@ module Resource =
   /// </notes>
   type Resource<'r> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
       
-    //let Log = Log.create "Resource"
+    let Log = Log.create "Resource"
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
    
-    let create = async {
+    let create (prev:Epoch<'r> option) = async {
       //Log.info "creating_resource"
       let! r = create
       //Log.info "created_resource"
       let closed = new TaskCompletionSource<unit>()
-      return { resource = r ; closed = closed } }
+      let v = prev |> Option.map (fun ep -> ep.version + 1) |> Option.getOr 0
+      return { resource = r ; closed = closed ; version = v } }
 
     let recover ex ep = async {
       //Log.info "recovering_resource"
@@ -630,27 +684,21 @@ module Resource =
         return failwith ""              
       | Recreate ->
         //Log.info "recovery_restarting"
-        let! ep' = create
+        let! ep' = create (Some ep)
         //Log.info "recovery_restarted"
         return ep' }
 
     member internal __.Create () = async {
-      return! cell |> MVar.putAsync create }
+      return! cell |> MVar.putAsync (create None) }
 
     member __.Recover (ep':Epoch<'r>, ex:exn) =
-      cell |> MVar.updateAsync (recover ex)
-// TODO: review
-//      if ep'.closed.TrySetException ex then
-//        cell |> MVar.updateAsync (recover ex)
-//      else
-//        cell |> MVar.get
+      cell |> MVar.updateIfAsync (fun ep -> ep.version = ep'.version) (recover ex)
         
     member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {      
-      let! ep = MVar.get cell
-      let epoch = ref ep
+      let! epoch = MVar.get cell
+      let epoch = ref epoch
       let rec go a = async {
         //Log.trace "performing_operation"
-        //let! ep = MVar.get cell
         let ep = !epoch
         try
           return! op ep.resource a
@@ -658,7 +706,8 @@ module Resource =
           //Log.info "caught_exception_on_injected_operation|input=%A error=%O" a ex
           let! epoch' = __.Recover (ep, ex)
           epoch := epoch'
-          //Log.info "recovery_complete"
+          Log.info "recovery_complete"
+          Log.info "retrying_operation"
           return! go a }
       return go }
 
@@ -672,32 +721,6 @@ module Resource =
 
   let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.Inject op
-   
-
-module AsyncFunc =
-  
-  let dimap (g:'c -> 'a) (h:'b -> 'd) (f:'a -> Async<'b>) : 'c -> Async<'d> =
-    g >> f >> Async.map h
-
-  let doBeforeAfter (before:'a -> unit) (after:'a * 'b -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-    fun a -> async {
-      do before a
-      let! b = f a
-      do after (a,b)
-      return b }
-
-  let doBeforeAfterError (before:'a -> unit) (after:'a * 'b -> unit) (error:'a * exn -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-    fun a -> async {
-      do before a
-      try
-        let! b = f a
-        do after (a,b)
-        return b
-      with ex ->
-        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
-        error (a,edi.SourceException)
-        edi.Throw ()
-        return failwith "undefined" }
 
 
 

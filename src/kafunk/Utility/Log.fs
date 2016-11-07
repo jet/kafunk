@@ -54,11 +54,13 @@ module Log =
   Async.Start (async {
     return!    
       buffer.GetConsumingEnumerable()
-      |> AsyncSeq.ofSeq
-      |> AsyncSeq.bufferByTimeAndCount 1000 500
-      |> AsyncSeq.iter (fun lines -> 
-        for line in lines do
-          System.Console.Out.WriteLine line)
+//      |> AsyncSeq.ofSeq
+//      |> AsyncSeq.bufferByTimeAndCount 1000 500
+//      |> AsyncSeq.iter (fun lines -> 
+      |> Seq.iter (fun line -> System.Console.Out.WriteLine line)
+      |> async.Return
+        //for line in lines do
+          //System.Console.Out.WriteLine line)
   })
 
   let create name = { name = name ; buffer = buffer }

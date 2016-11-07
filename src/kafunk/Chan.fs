@@ -336,12 +336,16 @@ module Chan =
     useNagle : bool    
     receiveBufferSize : int
     sendBufferSize : int
+    timeout : TimeSpan
+    backoff : Backoff
   } with
-    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize) =
+    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?timeout, ?backoff) =
       {
         useNagle=defaultArg useNagle false
         receiveBufferSize=defaultArg receiveBufferSize 8192
         sendBufferSize=defaultArg sendBufferSize 8192
+        timeout = defaultArg timeout (TimeSpan.FromSeconds 10.0)
+        backoff = defaultArg backoff (Backoff.linear 500 50 |> Backoff.maxAttempts 10)
       }
 
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -350,7 +354,7 @@ module Chan =
   let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
 
     /// Builds and connects the socket.
-    let conn = async {      
+    let rec conn = async {      
       let connSocket =
         new Socket(
           ep.AddressFamily,
@@ -371,14 +375,16 @@ module Chan =
         return sendRcvSocket 
       | Failure e ->
         Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ep e
-        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture e
-        edi.Throw()
-        return raise e }
+        do! Async.Sleep 1000
+        //let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture e
+        //edi.Throw()
+        return! conn }
 
+    // TODO: escalate to re-connecto to a different broker
     let recovery (s:Socket, ex:exn) = async {
       Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
       tryDispose s
-      do! Async.Sleep 5000
+      //do! Async.Sleep 1000
       match ex with
       | :? SocketException as _x ->        
         return Resource.Recovery.Recreate
@@ -429,9 +435,10 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
-    // TODO: channel-level fault tolerance
     let send = 
-      session.Send      
+      session.Send
+      |> AsyncFunc.timeoutResult config.timeout
+      |> Faults.AsyncFunc.retryResultThrowList (Exn.ofSeq) config.backoff
       |> AsyncFunc.doBeforeAfterError 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
