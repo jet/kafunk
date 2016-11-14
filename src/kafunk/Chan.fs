@@ -9,8 +9,6 @@ open System.Threading
 open System.Threading.Tasks
 
 open Kafunk
-open Kafunk.Prelude
-open Kafunk.Protocol
 
 module Message =
 

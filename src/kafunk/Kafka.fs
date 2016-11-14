@@ -1,6 +1,7 @@
 #nowarn "40"
 namespace Kafunk
 
+open FSharp.Control
 open System
 open System.Net
 open System.Net.Sockets

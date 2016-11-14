@@ -1,5 +1,6 @@
 namespace Kafunk
 
+open FSharp.Control
 open Kafunk
 open Kafunk.Prelude
 open Kafunk.Protocol
@@ -113,7 +114,7 @@ module Producer =
     mb
     |> boundedMbToAsyncSeq
     |> AsyncSeq.groupBy (fst >> partitionKey)
-    |> AsyncSeq.iterAsyncParallel (AsyncSeq.bufferByTimeAndCount count timeMs >> AsyncSeq.iterAsync sendBufferAndReply)
+    |> AsyncSeq.iterAsyncParallel (snd >> AsyncSeq.bufferByCountAndTime count timeMs >> AsyncSeq.iterAsync sendBufferAndReply)
     |> (fun x -> Async.Start(x, cts.Token))
            
     let send a = async {

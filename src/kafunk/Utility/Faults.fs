@@ -1,5 +1,7 @@
 ﻿namespace Kafunk
 
+open FSharp.Control
+
 /// Backoff represented as a sequence of wait times between retries.
 type Backoff = 
   private
@@ -96,7 +98,9 @@ module Exn =
 module Faults =
 
   let retryAsyncResultReference (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
-    AsyncSeq.interleave (AsyncSeq.replicateInfiniteAsync a) (Backoff.toAsyncSeq b)
+    AsyncSeq.interleave 
+      (AsyncSeq.replicateInfiniteAsync a |> AsyncSeq.map Choice1Of2) 
+      (Backoff.toAsyncSeq b |> AsyncSeq.map Choice2Of2)
     |> AsyncSeq.choose Choice.tryLeft
     |> AsyncSeq.sequenceResult m
 
@@ -157,8 +161,5 @@ module Faults =
 
     let retry (b:Backoff) (f:'a -> Async<'b>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> retryAsync b (f a))
-    
-//    let recover (recover:'a * exn -> Async<'a -> Async<'b>>) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-//      failwith "" 
 
 

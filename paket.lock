@@ -1,4 +1,6 @@
-
+NUGET
+  remote: http://api.nuget.org/v3/index.json
+    FSharp.Control.AsyncSeq (2.0.9)
 
 GROUP Build
 NUGET
@@ -22,7 +24,7 @@ NUGET
 GITHUB
   remote: fsharp/FAKE
     modules/Octokit/Octokit.fsx (a0841f44f03c7afbf1a3448ec20e55a75c9cf17f)
-      Octokit (>= 0.20)
+      Octokit
 GROUP Test
 NUGET
   remote: http://api.nuget.org/v3/index.json

@@ -1,9 +1,12 @@
+source https://api.nuget.org/v3/index.json
+nuget FSharp.Control.AsyncSeq
+
 group Build
   source https://api.nuget.org/v3/index.json
 
   nuget SourceLink.Fake
   nuget FAKE
-  nuget FSharp.Formatting
+  nuget FSharp.Formatting  
 
   github fsharp/FAKE modules/Octokit/Octokit.fsx
 

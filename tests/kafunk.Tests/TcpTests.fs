@@ -1,7 +1,7 @@
 ﻿module TcpTests
 
 open NUnit.Framework
-
+open FSharp.Control
 open System
 open System.Text
 open Kafunk
@@ -45,7 +45,6 @@ let ``framing should work`` () =
       let unframed = 
         Framing.LengthPrefix.unframe chunked
         |> AsyncSeq.toList
-        |> Async.RunSynchronously
         |> List.map (Binary.toArray >> Array.toList)
         |> List.concat
       shouldEqual msgList unframed (Some (sprintf "(message_size=%i chunks=%i)" msgSize chunks))

@@ -1,6 +1,7 @@
 #nowarn "40"
 namespace Kafunk
 
+open FSharp.Control
 open System
 open System.Net
 open System.Net.Sockets
@@ -183,46 +184,69 @@ module Framing =
             else loop headerBytes length (i + 1)
         loop headerBytes length data.Offset
 
+    type State =
+      struct
+        val offset : int
+        val remainder : Binary.Segment
+        val enumerator : Lazy<IAsyncEnumerator<Binary.Segment>>
+        new (e,o,r) = { enumerator = e ; remainder = r ; offset = o }
+      end
+
     /// Reads 32 bytes of the length prefix, then the length of the message, then yields, then continues.
     let unframe (s:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =
-      let rec go (offset:int) (s:AsyncSeq<Binary.Segment>) =
-        readLength 0 0 offset s
-      and readLength (headerBytes:int) (length:int) (offset:int) (s:AsyncSeq<Binary.Segment>) =
-        s |> Async.bind (function
-          | Nil -> async.Return Nil
-          | Cons (data, tl) as s ->
-            let data =
-              if offset > 0 then data |> Binary.shiftOffset (data.Count - offset)
-              else data
-            let readResult = tryReadLength headerBytes length data
-            let tl, offset =
-              if readResult.remainder.Count = 0 then tl,0
-              else (async.Return s),readResult.remainder.Count
-            if readResult.headerBytes = 0 then
-              let buffer = allocBuffer readResult.length
-              readData readResult.length buffer offset tl
+      
+      let rec go (s:State) = readLength 0 0 s
+      
+      and readLength (headerBytes:int) (length:int) (s:State) = async {
+        let! next = s.enumerator.Value.MoveNext()
+        match next with
+        | None -> 
+          return None
+        | Some data ->
+          let data =
+            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
+            else data
+          let readResult = tryReadLength headerBytes length data          
+          let s' =
+            if readResult.remainder.Count = 0 then 
+              State(s.enumerator, 0, Binary.Segment())
+              //tl,0
             else
-              readLength readResult.headerBytes readResult.length offset tl)
-      and readData (length:int) (buffer:Binary.Segment) (offset:int) (s:AsyncSeq<Binary.Segment>) =
-        s |> Async.bind (function
-          | Nil -> async.Return Nil
-          | Cons (data, tl) as s ->
-            let data =
-              if offset > 0 then data |> Binary.shiftOffset (data.Count - offset)
-              else data
-            let copy = min data.Count (length - buffer.Offset)
-            Binary.copy data buffer copy
-            let tl, offset =
-              if copy = data.Count then tl, 0
-              else (async.Return s, data.Count - copy)
-            let bufferIndex = buffer.Offset + copy
-            if bufferIndex = length then
-              let buffer = buffer |> Binary.offset 0
-              Cons (buffer, go offset tl) |> async.Return
-            else
-              let buffer = buffer |> Binary.offset bufferIndex
-              readData length buffer offset tl)
-      go 0 s
+              State(s.enumerator, 0, readResult.remainder) 
+          if readResult.headerBytes = 0 then
+            let buffer = allocBuffer readResult.length
+            return! readData readResult.length buffer s'
+          else
+            return! readLength readResult.headerBytes readResult.length s' }
+
+      and readData (length:int) (buffer:Binary.Segment) (s:State) = async {
+        let! next = s.enumerator.Value.MoveNext()
+        match next with
+        | None ->
+          return None
+        | Some data ->
+          let data =
+            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
+            else data
+          let copy = min data.Count (length - buffer.Offset)
+          Binary.copy data buffer copy
+          let s' =
+            if copy = data.Count then 
+              State(s.enumerator, 0, Binary.Segment())
+              //tl, 0
+            else 
+              // TODO: review
+              State(s.enumerator, 0, data |> Binary.shiftOffset copy)
+              //(async.Return s, data.Count - copy)
+          let bufferIndex = buffer.Offset + copy
+          if bufferIndex = length then
+            let buffer = buffer |> Binary.offset 0
+            return Some (buffer, s')
+          else
+            let buffer = buffer |> Binary.offset bufferIndex
+            return! readData length buffer s' }
+
+      AsyncSeq.unfoldAsync go (State(lazy (s.GetEnumerator()), 0, Binary.Segment()))
 
 // session layer (layer 5)
 

@@ -1,5 +1,6 @@
 namespace Kafunk
 
+open FSharp.Control
 open System
 open System.Threading
 open System.Threading.Tasks
@@ -370,7 +371,7 @@ module Consumer =
                    
     yield! generations None }
 
-  
+    
   let callback 
     (handler:MessageSet * Async<unit> -> Async<unit>) 
     (consumer:AsyncSeq<GenerationId * (TopicName * Partition * AsyncSeq<MessageSet * Async<unit>>)[]>) : Async<unit> = async {
@@ -383,19 +384,19 @@ module Consumer =
               return! stream |> AsyncSeq.iterAsync handler })
             |> Async.Parallel
             |> Async.Ignore }) }
-
-  let callbackCommit
-    (commit:MessageSet * Async<unit> -> Async<unit>)
-    (handler:MessageSet -> Async<unit>) =
-    callback (fun (ms,c) -> async {
-      do! handler ms
-      do! commit (ms,c) })
-
-  let callbackCommitAfter =
-    callbackCommit (fun (_,commit) -> commit)
-
-  let callbackCommitAsync =
-    callbackCommit (fun (_,commit) -> async { return Async.Start commit })
+//
+//  let callbackCommit
+//    (commit:MessageSet * Async<unit> -> Async<unit>)
+//    (handler:MessageSet -> Async<unit>) =
+//    callback (fun (ms,c) -> async {
+//      do! handler ms
+//      do! commit (ms,c) })
+//
+//  let callbackCommitAfter =
+//    callbackCommit (fun (_,commit) -> commit)
+//
+//  let callbackCommitAsync =
+//    callbackCommit (fun (_,commit) -> async { return Async.Start commit })
     
 
   
