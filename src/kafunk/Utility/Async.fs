@@ -548,7 +548,6 @@ module MVar =
 
 
 
-
 type internal BoundedMbReq<'a> =
   | Put of 'a * AsyncReplyChannel<unit>
   | Take of AsyncReplyChannel<'a>
@@ -643,7 +642,7 @@ module Resource =
 
   type Epoch<'r> = {
     resource : 'r
-    closed : TaskCompletionSource<unit>
+    closed : CancellationTokenSource
     version : int
   }
      
@@ -659,62 +658,61 @@ module Resource =
   /// Resources can form supervision hierarchy through a message passing and reaction system.
   /// Supervision hierarchies can be used to re-cycle chains of dependent resources.
   /// </notes>
-  type Resource<'r> internal (create:Async<'r>, handle:('r * exn) -> Async<Recovery>) =
+  type Resource<'r> internal (create:Async<'r>, handle:('r * obj * exn) -> Async<Recovery>) =
       
-    let Log = Log.create "Resource"
+    //let Log = Log.create "Resource"
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
    
     let create (prev:Epoch<'r> option) = async {
-      //Log.info "creating_resource"
       let! r = create
-      //Log.info "created_resource"
-      let closed = new TaskCompletionSource<unit>()
-      let v = prev |> Option.map (fun ep -> ep.version + 1) |> Option.getOr 0
+      let closed = new CancellationTokenSource()
+      let v = 
+        match prev with
+        | Some prev -> 
+          prev.closed.Cancel()
+          prev.version + 1
+        | None ->
+          0
       return { resource = r ; closed = closed ; version = v } }
 
-    let recover ex ep = async {
-      //Log.info "recovering_resource"
-      let! recovery = handle (ep.resource,ex)
+    let recover (req:obj) ex ep = async {
+      let! recovery = handle (ep.resource,req,ex)
       match recovery with
       | Escalate -> 
-        //Log.info "recovery_escalating"
         let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
         edi.Throw ()
         return failwith ""              
       | Recreate ->
-        //Log.info "recovery_restarting"
         let! ep' = create (Some ep)
-        //Log.info "recovery_restarted"
         return ep' }
 
     member internal __.Create () = async {
       return! cell |> MVar.putAsync (create None) }
 
-    member __.Recover (ep':Epoch<'r>, ex:exn) =
-      cell |> MVar.updateIfAsync (fun ep -> ep.version = ep'.version) (recover ex)
+    member __.Recover (ep':Epoch<'r>, req:obj, ex:exn) =
+      cell 
+      |> MVar.updateAsync (fun ep -> 
+        if ep.version = ep'.version then recover req ex ep 
+        else async.Return ep)
         
     member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {      
       let! epoch = MVar.get cell
       let epoch = ref epoch
       let rec go a = async {
-        //Log.trace "performing_operation"
         let ep = !epoch
         try
-          return! op ep.resource a
+          return! op ep.resource a |> Async.withCancellationToken ep.closed.Token
         with ex ->
-          //Log.info "caught_exception_on_injected_operation|input=%A error=%O" a ex
-          let! epoch' = __.Recover (ep, ex)
+          let! epoch' = __.Recover (ep, box a, ex)
           epoch := epoch'
-          Log.info "recovery_complete"
-          Log.info "retrying_operation"
           return! go a }
       return go }
 
     interface IDisposable with
       member __.Dispose () = ()
     
-  let recoverableRecreate (create:Async<'r>) (handleError:('r * exn) -> Async<Recovery>) = async {      
+  let recoverableRecreate (create:Async<'r>) (handleError:('r * obj * exn) -> Async<Recovery>) = async {      
     let r = new Resource<_>(create, handleError)
     let! _ = r.Create()
     return r }

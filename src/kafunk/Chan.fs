@@ -306,8 +306,10 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
 
 
-/// A request/reply channel to an individual Kafka broker.
-type Chan = RequestMessage -> Async<ResponseMessage>
+/// A request/reply channel to a Kafka broker.
+type Chan = 
+  private 
+  | Chan of (RequestMessage -> Async<ResponseMessage>)
 
 /// API operations on a generic request/reply channel.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -315,7 +317,7 @@ module Chan =
 
   let private Log = Log.create "Kafunk.Chan"
 
-  let send (ch:Chan) req  = ch req
+  let send (Chan(send)) req = send req
 
   let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
   let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
@@ -331,21 +333,34 @@ module Chan =
   let listGroups = AsyncFunc.dimap RequestMessage.ListGroups ResponseMessage.toListGroups
   let describeGroups = AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups
 
-  /// Configuration for an individual TCP connection.
+  /// Configuration for an individual TCP channel.
   type Config = {
+    
     useNagle : bool    
+    
     receiveBufferSize : int
+    
     sendBufferSize : int
-    timeout : TimeSpan
-    backoff : Backoff
+        
+    connectTimeout : TimeSpan
+
+    connectBackoff : Backoff
+
+    requestTimeout : TimeSpan
+    
+    requestBackoff : Backoff    
+
   } with
-    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?timeout, ?backoff) =
+    
+    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
       {
         useNagle=defaultArg useNagle false
         receiveBufferSize=defaultArg receiveBufferSize 8192
         sendBufferSize=defaultArg sendBufferSize 8192
-        timeout = defaultArg timeout (TimeSpan.FromSeconds 10.0)
-        backoff = defaultArg backoff (Backoff.linear 500 50 |> Backoff.maxAttempts 10)
+        connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 5.0)
+        connectBackoff = defaultArg connectBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 10)
+        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 5.0)
+        requestBackoff = defaultArg requestBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 10)
       }
 
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -353,8 +368,8 @@ module Chan =
   /// Only a single channel per endpoint is needed.
   let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
 
-    /// Builds and connects the socket.
-    let rec conn = async {      
+    /// Builds and connects the socket to the broker.
+    let conn = async {      
       let connSocket =
         new Socket(
           ep.AddressFamily,
@@ -367,31 +382,27 @@ module Chan =
       Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" ep clientId 
       let! sendRcvSocket = 
         Socket.connect connSocket ep
-        |> Async.timeoutAfter (TimeSpan.FromSeconds 5.0)
-        |> Async.Catch
+        |> Async.timeoutResult config.connectTimeout
+        |> Async.map (Result.mapError (fun ex -> ex :> exn))
       match sendRcvSocket with
-      | Success sendRcvSocket -> 
-        Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
+      | Success socket -> 
+        Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" socket.RemoteEndPoint socket.LocalEndPoint
         return sendRcvSocket 
       | Failure e ->
         Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ep e
-        do! Async.Sleep 1000
-        //let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture e
-        //edi.Throw()
-        return! conn }
+        return sendRcvSocket }
 
-    // TODO: escalate to re-connecto to a different broker
-    let recovery (s:Socket, ex:exn) = async {
+    let conn =
+      conn
+      |> Faults.retryResultThrow id Exn.monoid config.connectBackoff
+
+    let recovery (s:Socket, _req:obj, ex:exn) = async {
       Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
       tryDispose s
-      //do! Async.Sleep 1000
       match ex with
       | :? SocketException as _x ->        
         return Resource.Recovery.Recreate
-//      | :? _ as ae when Exn.existsT<ObjectDisposedException> ae ->
-//        return Resource.Recovery.Recreate
       | _ ->
-        //Log.info "escalating_tcp_connection_error"
         return Resource.Recovery.Recreate }
 
     let! sendRcvSocket = 
@@ -437,14 +448,14 @@ module Chan =
 
     let send = 
       session.Send
-      |> AsyncFunc.timeoutResult config.timeout
-      |> Faults.AsyncFunc.retryResultThrowList (Exn.ofSeq) config.backoff
+      |> AsyncFunc.timeoutResult config.requestTimeout
+      |> Faults.AsyncFunc.retryResultThrowList (Exn.ofSeq) config.requestBackoff
       |> AsyncFunc.doBeforeAfterError 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
           (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)
 
-    return send }
+    return Chan send }
 
   let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
     Log.info "discovering_dns_entries|host=%s" host

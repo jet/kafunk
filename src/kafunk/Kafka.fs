@@ -218,6 +218,7 @@ type RetryAction =
       | _ ->
         Some (RetryAction.Escalate)
 
+    /// TODO: collect all errors
     static member tryFindError (res:ResponseMessage) =
       match res with
       | ResponseMessage.MetadataResponse r ->
@@ -333,6 +334,9 @@ type KafkaConnCfg = {
 
   requestTimeout : TimeSpan
 
+//  let bootstrapConnectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
+//  let waitRetrySleepMs = 5000
+
 } with
 
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
@@ -350,14 +354,20 @@ type ConnState = {
   cfg : KafkaConnCfg
   channels : Map<Host * Port, Chan>
   routes : Routing.Routes
+  version : int
 } with
   
+  static member bootstrapChan (s:ConnState) : Chan option =
+    s.channels |> Map.tryFind s.routes.bootstrapHost
+
   static member tryFindChanByHost (h:Host,p:Port) (s:ConnState) =
     s.channels |> Map.tryFind (h,p)
 
   static member updateChannels (f:Map<Host * Port, Chan> -> Map<Host * Port, Chan>) (s:ConnState) =
     {
-      s with channels = f s.channels
+      s with 
+        channels = f s.channels
+        version = s.version + 1
     }
 
   static member addChannel ((h:Host, p:Port), ch:Chan) (s:ConnState) =
@@ -365,7 +375,9 @@ type ConnState = {
 
   static member updateRoutes (f:Routing.Routes -> Routing.Routes) (s:ConnState) =
     {
-      s with routes = f s.routes
+      s with 
+          routes = f s.routes
+          version = s.version + 1
     }
 
   static member ofBootstrap (cfg:KafkaConnCfg, bootstrapHost:Host, bootstrapPort:Port) =
@@ -373,6 +385,7 @@ type ConnState = {
       cfg = cfg
       channels = Map.empty
       routes = Routing.Routes.ofBootstrap (bootstrapHost,bootstrapPort)
+      version = 0
     }
 
 exception EscalationException of errorCode:ErrorCode * res:ResponseMessage
@@ -384,20 +397,18 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let connectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
+  let bootstrapConnectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
+  let waitRetrySleepMs = 5000
 
   let stateCell : MVar<ConnState> = MVar.create ()
   let cts = new CancellationTokenSource()
-
-  let connHost (cfg:KafkaConnCfg) (h:Host, p:Port) =
-    Chan.connectHost cfg.tcpConfig cfg.clientId (h,p)
 
   let connCh state host = async {
     match state |> ConnState.tryFindChanByHost host with
     | Some _ -> return state
     | None ->
       Log.info "creating_channel|host=%A" host
-      let! ch = connHost cfg host    
+      let! ch = Chan.connectHost cfg.tcpConfig cfg.clientId host
       return state |> ConnState.addChannel (host,ch) }      
 
   /// Connects to the first available broker in the bootstrap list and returns the 
@@ -406,7 +417,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
-      |> AsyncSeq.traverseAsyncResultList (fun uri -> async {
+      |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let state = ConnState.ofBootstrap (cfg, uri.Host,uri.Port)
@@ -415,65 +426,79 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
         with ex ->
           Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex
           return Failure ex })
-      |> Faults.retryResultThrowList 
-          (Seq.concat >> Exn.ofSeq) 
-          connectBackoff
+      |> Faults.retryResultThrow
+          id 
+          Exn.monoid
+          bootstrapConnectBackoff
     stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
-  and getMetadata (topics:TopicName[]) =
-    let update state = async {
-      let! metadata = Chan.metadata (send state) (Metadata.Request(topics))   
-      return state |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata) }
+  and getMetadata (state:ConnState) (topics:TopicName[]) =
+    let update state' = async {
+      if state'.version = state.version then
+        let! metadata = Chan.metadata (send state') (Metadata.Request(topics))   
+        return state' |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata)
+      else
+        return state' }
     stateCell |> MVar.updateAsync update
 
   /// Discovers a coordinator for the group.
-  and getGroupCoordinator (groupId:GroupId) =
-    let update state = async {
-      let! group = Chan.groupCoordinator (send state) (GroupCoordinatorRequest(groupId))
-      return state |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort)) }
+  and getGroupCoordinator (state:ConnState) (groupId:GroupId) =
+    let update state' = async {
+      if state'.version = state.version then
+        let! group = Chan.groupCoordinator (send state') (GroupCoordinatorRequest(groupId))
+        return state' |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
+      else
+        return state' }
     stateCell |> MVar.updateAsync update
 
   /// Sends the request based on discovered routes.
   and send (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state.routes req with
-    | Success reqRoutes ->
-      // NB: currently, calls outer send on retry.
+    | Success requestRoutes ->
       let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
         match state |> ConnState.tryFindChanByHost host with
         | Some ch -> 
           return!
             req
             |> Chan.send ch
+            |> Async.Catch
             |> Async.bind (fun res -> async {
-              match RetryAction.tryFindError res with
-              | None -> return res
-              | Some (errorCode,action,msg) ->   
-                Log.error "response_errored|error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
-                match action with
-                | RetryAction.PassThru ->
+              match res with
+              | Success res ->
+                match RetryAction.tryFindError res with
+                | None -> 
                   return res
-                | RetryAction.Escalate ->
-                  return raise (EscalationException (errorCode,res))
-                | RetryAction.RefreshGroupCoordinator gid ->
-                  let! state' = getGroupCoordinator gid
-                  return! send state' req
-                | RetryAction.RefreshMetadataAndRetry topics ->
-                  let! state' = getMetadata topics
-                  return! send state' req
-                | RetryAction.WaitAndRetry ->
-                  do! Async.Sleep 5000 // TODO: use Faults module
-                  return! send state req })
+                | Some (errorCode,action,msg) ->   
+                  Log.error "response_errored|error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
+                  match action with
+                  | RetryAction.PassThru ->
+                    return res
+                  | RetryAction.Escalate ->
+                    return raise (EscalationException (errorCode,res))
+                  | RetryAction.RefreshGroupCoordinator gid ->
+                    let! state' = getGroupCoordinator state gid
+                    return! send state' req
+                  | RetryAction.RefreshMetadataAndRetry topics ->
+                    let! state' = getMetadata state topics
+                    return! send state' req
+                  | RetryAction.WaitAndRetry ->
+                    do! Async.Sleep waitRetrySleepMs
+                    return! send state req
+              | Failure ex ->
+                Log.error "channel_failure_escalated|error=%O" ex
+                return raise ex })
         | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state -> connCh state host)
           return! send state' req }
       
+      /// Sends requests to routed hosts in parallel and gathers the results.
       let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
-        if reqRoutes.Length = 1 then
-          return! sendHost reqRoutes.[0]
+        if requestRoutes.Length = 1 then
+          return! sendHost requestRoutes.[0]
         else
           return!
-            reqRoutes
+            requestRoutes
             |> Seq.map sendHost
             |> Async.Parallel
             |> Async.map gather }        
@@ -486,16 +511,17 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
       | RequestMessage.Produce _ ->
         return! scatterGather Routing.concatProduceResponseMessages
       | _ -> 
-        return! sendHost reqRoutes.[0]
+        // single-broker request
+        return! sendHost requestRoutes.[0]
 
     | Failure (Routing.MissingTopicRoute topic) ->
       Log.warn "missing_topic_partition_route|topic=%s request=%A" topic req
-      let! state' = getMetadata [|topic|]      
+      let! state' = getMetadata state [|topic|]      
       return! send state' req
 
     | Failure (Routing.MissingGroupRoute group) ->      
       Log.warn "missing_group_goordinator_route|group=%s" group
-      let! state' = getGroupCoordinator group
+      let! state' = getGroupCoordinator state group
       return! send state' req
 
     }
@@ -503,9 +529,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
 
-  member internal __.Chan : Chan =
+  member internal __.Send (req:RequestMessage) : Async<ResponseMessage> = async {
     let state = MVar.getFastUnsafe stateCell
-    send state
+    return! send state req }
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
@@ -513,11 +539,13 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     return () }
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
-    return! getGroupCoordinator groupId }
+    let state = MVar.getFastUnsafe stateCell
+    return! getGroupCoordinator state groupId }
 
   member internal __.GetMetadata (topics:TopicName[]) = async {
-    let! state = getMetadata topics
-    return state.routes |> Routing.Routes.topicPartitions }
+    let state = MVar.getFastUnsafe stateCell
+    let! state' = getMetadata state topics
+    return state'.routes |> Routing.Routes.topicPartitions }
 
   member __.Close () =
     Log.info "closing_connection|client_id=%s" cfg.clientId
@@ -552,44 +580,44 @@ module Kafka =
     connHostAsync host |> Async.RunSynchronously
 
   let metadata (c:KafkaConn) (req:Metadata.Request) : Async<MetadataResponse> =
-    Chan.metadata c.Chan req
+    Chan.metadata c.Send req
 
   let fetch (c:KafkaConn) (req:FetchRequest) : Async<FetchResponse> =
-    Chan.fetch c.Chan req
+    Chan.fetch c.Send req
 
   let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> =
-    let chan = c.Chan
+    let chan = c.Send
     Chan.produce chan req
 
   let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> =
-    Chan.offset c.Chan req
+    Chan.offset c.Send req
 
   let groupCoordinator (c:KafkaConn) (req:GroupCoordinatorRequest) : Async<GroupCoordinatorResponse> =
-    Chan.groupCoordinator c.Chan req
+    Chan.groupCoordinator c.Send req
 
   let offsetCommit (c:KafkaConn) (req:OffsetCommitRequest) : Async<OffsetCommitResponse> =
-    Chan.offsetCommit c.Chan req
+    Chan.offsetCommit c.Send req
 
   let offsetFetch (c:KafkaConn) (req:OffsetFetchRequest) : Async<OffsetFetchResponse> =
-    Chan.offsetFetch c.Chan req
+    Chan.offsetFetch c.Send req
 
   let joinGroup (c:KafkaConn) (req:JoinGroup.Request) : Async<JoinGroup.Response> =
-    Chan.joinGroup c.Chan req
+    Chan.joinGroup c.Send req
 
   let syncGroup (c:KafkaConn) (req:SyncGroupRequest) : Async<SyncGroupResponse> =
-    Chan.syncGroup c.Chan req
+    Chan.syncGroup c.Send req
 
   let heartbeat (c:KafkaConn) (req:HeartbeatRequest) : Async<HeartbeatResponse> =
-    Chan.heartbeat c.Chan req
+    Chan.heartbeat c.Send req
 
   let leaveGroup (c:KafkaConn) (req:LeaveGroupRequest) : Async<LeaveGroupResponse> =
-    Chan.leaveGroup c.Chan req
+    Chan.leaveGroup c.Send req
 
   let listGroups (c:KafkaConn) (req:ListGroupsRequest) : Async<ListGroupsResponse> =
-    Chan.listGroups c.Chan req
+    Chan.listGroups c.Send req
 
   let describeGroups (c:KafkaConn) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
-    Chan.describeGroups c.Chan req
+    Chan.describeGroups c.Send req
 
   /// Composite operations.
   module Composite =

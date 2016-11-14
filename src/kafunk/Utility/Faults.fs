@@ -1,7 +1,9 @@
 ﻿namespace Kafunk
 
 /// Backoff represented as a sequence of wait times between retries.
-type Backoff = Backoff of seq<int>
+type Backoff = 
+  private
+  | Backoff of (int -> int option)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Backoff = 
@@ -10,23 +12,34 @@ module Backoff =
 
   let nu s = Backoff s
 
+  let at (attempt:int) (b:Backoff) : int option =
+    (un b) attempt
+
   let constant (wait:int) = 
-    nu <| Seq.initInfinite (fun _ -> wait)
+    nu <| fun _ -> Some wait
 
   let linear (init:int) (increment:int) = 
-    nu <| Seq.initInfinite (fun i -> init + (i * increment))
-
-  let toAsyncSeq (b:Backoff) =
-    AsyncSeq.ofSeq (un b)
-    |> AsyncSeq.mapAsync (fun wait -> async {
-      do! Async.Sleep wait
-      return wait })
-
-  let at (attempt:int) (b:Backoff) : int option =
-    Seq.tryItem attempt (un b)
+    nu <| fun i -> Some (init + (i * increment))
 
   let maxAttempts (maxAttempts:int) (b:Backoff) : Backoff =
-    (un b) |> Seq.truncate maxAttempts |> nu
+    nu <| function i when i < maxAttempts -> b |> at i | _ -> None
+
+  let toAsyncSeq (b:Backoff) =
+    AsyncSeq.unfoldAsync (fun i -> async { 
+      let bo = b |> at i
+      match bo with
+      | Some bo -> 
+        do! Async.Sleep bo
+        return Some (bo,i + 1)
+      | None -> 
+        return None }) 0
+  
+  let waitAt (attempt:int) (b:Backoff) : Async<unit> =
+    match at attempt b with
+    | Some sleep -> Async.Sleep sleep
+    | None -> Async.empty
+
+  
 
 
 /// Operations on System.Exception.
@@ -34,6 +47,7 @@ module Backoff =
 module Exn =
   
   open System
+  open System.Runtime.ExceptionServices
 
   let aggregate (msg:string) (exns:exn seq) =
     new AggregateException(msg, exns) :> exn
@@ -41,7 +55,7 @@ module Exn =
   let ofSeq (es:#exn seq) =
     new AggregateException(es |> Seq.cast) :> exn
 
-  let empty = ofSeq Seq.empty
+  let empty<'e> = ofSeq Seq.empty
 
   let merge e1 e2 = 
     ofSeq [e1;e2]
@@ -68,6 +82,14 @@ module Exn =
 
   let monoid : Monoid<exn> =
     Monoid.monoid empty merge
+
+  let inline throwEdi (edi:ExceptionDispatchInfo) =
+    edi.Throw ()
+    failwith "undefined"
+
+  let inline captureEdi (e:exn) =
+    ExceptionDispatchInfo.Capture e
+    
 
 
 /// Fault tolerance.
@@ -99,13 +121,13 @@ module Faults =
     
   /// Retries the specified async computation returning a Result.
   /// Returns the first successful value or throws an exception based on errors observed during retries.
-  let retryResultThrow (f:'e -> exn) (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
+  let retryResultThrow (f:'e -> #exn) (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryAsyncResult m b a
     |> Async.map (function
       | Success a -> a
       | Failure e -> raise (f e))
 
-  let retryResultThrowList (f:'e list -> exn) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
+  let retryResultThrowList (f:'e list -> #exn) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryResultThrow f Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
 
   let retryAsync (b:Backoff) (a:Async<'a>) : Async<'a> =
@@ -116,6 +138,8 @@ module Faults =
         (fun es -> Exn.aggregate (sprintf "Operation failed after %i attempts." (List.length es)) es) 
         Monoid.freeList
         b
+
+  //let retryWith 
       
   module AsyncFunc =
 
@@ -125,13 +149,16 @@ module Faults =
     let retryResultList (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e list>> =
       retryResult Monoid.freeList b (f >> Async.map (Result.mapError List.singleton))
 
-    let retryResultThrow (ex:'e -> exn) (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+    let retryResultThrow (ex:'e -> #exn) (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> retryResultThrow ex m b (f a)) 
 
-    let retryResultThrowList (ex:'e list -> exn) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+    let retryResultThrowList (ex:'e list -> #exn) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> retryResultThrowList ex b (f a))
 
     let retry (b:Backoff) (f:'a -> Async<'b>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> retryAsync b (f a))
+    
+//    let recover (recover:'a * exn -> Async<'a -> Async<'b>>) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+//      failwith "" 
 
 

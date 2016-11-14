@@ -42,16 +42,13 @@ module Socket =
       let args = alloc ()
       config args
       let rec k (_:obj) (args:SocketAsyncEventArgs) =
-        match args.SocketError with
-        | SocketError.Success ->
-          args.remove_Completed(k')
-          let result = map args
+        args.remove_Completed(k')
+        try
+          match args.SocketError with
+          | SocketError.Success -> ok (map args)
+          | e -> error (SocketException(int e))
+        finally
           free args
-          ok result
-        | e ->
-          args.remove_Completed(k')
-          free args
-          error (SocketException(int e))
       and k' = EventHandler<SocketAsyncEventArgs>(k)
       args.add_Completed(k')
       if not (op args) then
