@@ -154,7 +154,8 @@ module Routing =
   let route (routes:Routes) : RequestMessage -> RouteResult =
 
     // route to bootstrap broker
-    let bootstrapRoute req = Success [| req, routes.bootstrapHost |]
+    let bootstrapRoute (req:RequestMessage) : RouteResult = 
+      Success [| req, routes.bootstrapHost |]
 
     // route to leader of a topic/partition
     let topicRoute xs =
@@ -532,7 +533,9 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   member internal __.Send (req:RequestMessage) : Async<ResponseMessage> = async {
     let state = MVar.getFastUnsafe stateCell
-    return! send state req }
+    if state.IsNone then
+      return invalidOp "Connection state unavailable; must not be connected."
+    return! send state.Value req }
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
@@ -541,11 +544,15 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
     let state = MVar.getFastUnsafe stateCell
-    return! getGroupCoordinator state groupId }
+    if state.IsNone then
+      return invalidOp "Connection state unavailable; must not be connected."
+    return! getGroupCoordinator state.Value groupId }
 
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let state = MVar.getFastUnsafe stateCell
-    let! state' = getMetadata state topics
+    if state.IsNone then
+      return invalidOp "Connection state unavailable; must not be connected."
+    let! state' = getMetadata state.Value topics
     return state'.routes |> Routing.Routes.topicPartitions }
 
   member __.Close () =

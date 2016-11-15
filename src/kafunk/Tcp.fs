@@ -184,35 +184,86 @@ module Framing =
             else loop headerBytes length (i + 1)
         loop headerBytes length data.Offset
 
+
+//    type FramerState =
+//      | Await of (Binary.Segment option -> FramerState)
+//      | Yield of Binary.Segment * FramerState
+//      | Halt
+//
+//    let framer = 
+//
+//      let awaitHalt f = Await (function Some data -> f data | None -> Halt)
+//
+//      let rec awaitLength (headerBytes:int) (length:int) (rem:Binary.Segment) =
+//        awaitHalt (fun data' ->
+//          let data =
+//            if rem.Count > 0 then rem
+//            else data'
+//          let readResult = tryReadLength headerBytes length data
+//          if readResult.headerBytes = 0 then
+//            let buffer = allocBuffer readResult.length
+//            awaitMessage readResult.length buffer
+//          else
+//            awaitLength readResult.headerBytes readResult.length)
+//            
+//      and awaitMessage (length:int) (buffer:Binary.Segment) =
+//        awaitHalt (fun data ->
+//          let copy = min data.Count (length - buffer.Offset)
+//          Binary.copy data buffer copy
+//          let bufferIndex = buffer.Offset + copy
+//          if bufferIndex = length then
+//            let buffer = buffer |> Binary.offset 0
+//            Yield (buffer, awaitLength 0 0)
+//          else
+//            let buffer = buffer |> Binary.offset bufferIndex
+//            awaitMessage length buffer)
+//        
+//      awaitLength 0 0 (Binary.Segment())
+//
+//
+//    let unframe2 (f:FramerState) (input:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =      
+//      let rec go (en:IAsyncEnumerator<_>) (s:FramerState) = async {
+//        match s with
+//        | Halt ->
+//          return None
+//        | Yield (m,s') -> 
+//          return (Some (m,s'))
+//        | Await recv ->
+//          let! next = en.MoveNext ()
+//          let s' = recv next
+//          return! go en s' }      
+//      AsyncSeq.unfoldAsync (go (input.GetEnumerator())) f
+
+
     type State =
       struct
-        val offset : int
         val remainder : Binary.Segment
         val enumerator : Lazy<IAsyncEnumerator<Binary.Segment>>
-        new (e,o,r) = { enumerator = e ; remainder = r ; offset = o }
+        new (e,r) = { enumerator = e ; remainder = r }
       end
 
-    /// Reads 32 bytes of the length prefix, then the length of the message, then yields, then continues.
+    /// Reads 32 bytes of the length prefix, then the the message of the former length, then yields, then continues.
     let unframe (s:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =
-      
-      let rec go (s:State) = readLength 0 0 s
-      
-      and readLength (headerBytes:int) (length:int) (s:State) = async {
-        let! next = s.enumerator.Value.MoveNext()
+          
+      let rec readLength (headerBytes:int) (length:int) (s:State) = async {
+        let! next = async {
+          if s.remainder.Count > 0 then
+            return Some s.remainder
+          else
+            return! s.enumerator.Value.MoveNext() }
         match next with
         | None -> 
           return None
         | Some data ->
-          let data =
-            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
-            else data
-          let readResult = tryReadLength headerBytes length data          
-          let s' =
-            if readResult.remainder.Count = 0 then 
-              State(s.enumerator, 0, Binary.Segment())
-              //tl,0
-            else
-              State(s.enumerator, 0, readResult.remainder) 
+//          let data =
+//            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
+//            else data
+          let readResult = tryReadLength headerBytes length data
+          let s' = State(s.enumerator, readResult.remainder) 
+//            if readResult.remainder.Count = 0 then 
+//              State(s.enumerator, 0, Binary.Segment())
+//            else
+//              State(s.enumerator, 0, readResult.remainder) 
           if readResult.headerBytes = 0 then
             let buffer = allocBuffer readResult.length
             return! readData readResult.length buffer s'
@@ -220,23 +271,27 @@ module Framing =
             return! readLength readResult.headerBytes readResult.length s' }
 
       and readData (length:int) (buffer:Binary.Segment) (s:State) = async {
-        let! next = s.enumerator.Value.MoveNext()
+        let! next = async {
+          if s.remainder.Count > 0 then
+            return Some s.remainder
+          else
+            return! s.enumerator.Value.MoveNext() }
         match next with
         | None ->
           return None
         | Some data ->
-          let data =
-            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
-            else data
+//          let data =
+//            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
+//            else data
           let copy = min data.Count (length - buffer.Offset)
           Binary.copy data buffer copy
-          let s' =
-            if copy = data.Count then 
-              State(s.enumerator, 0, Binary.Segment())
-              //tl, 0
-            else 
-              // TODO: review
-              State(s.enumerator, 0, data |> Binary.shiftOffset copy)
+          let s' = State(s.enumerator, data |> Binary.shiftOffset copy)
+//            if copy = data.Count then 
+//              State(s.enumerator, Binary.Segment())
+//              //tl, 0
+//            else 
+//              // TODO: review
+//              State(s.enumerator, data |> Binary.shiftOffset copy)
               //(async.Return s, data.Count - copy)
           let bufferIndex = buffer.Offset + copy
           if bufferIndex = length then
@@ -246,7 +301,7 @@ module Framing =
             let buffer = buffer |> Binary.offset bufferIndex
             return! readData length buffer s' }
 
-      AsyncSeq.unfoldAsync go (State(lazy (s.GetEnumerator()), 0, Binary.Segment()))
+      AsyncSeq.unfoldAsync (readLength 0 0) (State(lazy (s.GetEnumerator()), Binary.Segment()))
 
 // session layer (layer 5)
 

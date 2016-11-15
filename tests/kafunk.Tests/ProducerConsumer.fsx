@@ -1,6 +1,8 @@
-﻿#r "bin/Release/kafunk.dll"
+﻿#r "bin/release/fsharp.control.asyncseq.dll"
+#r "bin/Release/kafunk.dll"
 #time "on"
 
+open FSharp.Control
 open Kafunk
 open System
 open System.Threading.Tasks

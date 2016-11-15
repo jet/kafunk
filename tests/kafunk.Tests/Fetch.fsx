@@ -1,11 +1,13 @@
-﻿#r "bin/release/kafunk.dll"
+﻿#r "bin/release/fsharp.control.asyncseq.dll"
+#r "bin/release/kafunk.dll"
 #time "on"
 
+open FSharp.Control
 open Kafunk
 open System
 
 let topic = "test-topic"
-let host = "localhost"
+let host = "localhost:9092"
 let conn = Kafka.connHost host
 
 let offsetRes =
@@ -21,8 +23,11 @@ for (tn,ps) in offsetRes.topics do
 
 let (tn,ps) = offsetRes.topics.[0]
 
+let fetchReq =
+  FetchRequest(-1, 0, 0, [| tn, [| ps.[0].partition, ps.[0].offsets.[0], 20000 |] |])
+
 let fetchRes = 
-  Kafka.fetch conn (FetchRequest.ofTopicPartition tn (ps.[0].partition) (ps.[0].offsets.[0]) 0 0 20000) 
+  Kafka.fetch conn fetchReq
   |> Async.RunSynchronously
 
 for (tn,pmds) in fetchRes.topics do

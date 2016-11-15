@@ -101,7 +101,7 @@ let ``should decode partial FetchResponse`` () =
   
 
 
-[<Test>]
+//[<Test>]
 let ``should decode ProduceResponse``() =
   let data =
     Binary.ofArray [|

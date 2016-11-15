@@ -18,7 +18,6 @@ let shouldEqual (expected:'a) (actual:'a) (msg:string option) =
 
 [<Test>]
 let ``framing should work`` () =
-  
   for msgSize in [1..100] do
   
     let msg : byte[] = Array.zeroCreate msgSize
@@ -31,8 +30,7 @@ let ``framing should work`` () =
     let framed = 
       Binary.Segment(msg)
       |> Framing.LengthPrefix.frame
-      |> Array.map Binary.toArray
-      |> Array.concat
+      |> Array.collect Binary.toArray
 
     for chunks in [1..framed.Length] do
       let chunkedList =
@@ -45,6 +43,5 @@ let ``framing should work`` () =
       let unframed = 
         Framing.LengthPrefix.unframe chunked
         |> AsyncSeq.toList
-        |> List.map (Binary.toArray >> Array.toList)
-        |> List.concat
+        |> List.collect (Binary.toArray >> Array.toList)
       shouldEqual msgList unframed (Some (sprintf "(message_size=%i chunks=%i)" msgSize chunks))

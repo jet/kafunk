@@ -366,7 +366,7 @@ type private MVarReq<'a> =
 /// A serialized variable.
 type MVar<'a> internal (?a:'a) =
 
-  let [<VolatileField>] mutable state : 'a = Unchecked.defaultof<_>
+  let [<VolatileField>] mutable state : 'a option = None
 
   let mbp = MailboxProcessor.Start (fun mbp -> async {
     let rec init (v:int) = async {
@@ -376,7 +376,7 @@ type MVar<'a> internal (?a:'a) =
           Some (async {
             try            
               let! a = a
-              state <- a
+              state <- Some a
               rep.SetResult a
               return! loop (a, v + 1)
             with ex ->
@@ -386,6 +386,7 @@ type MVar<'a> internal (?a:'a) =
           Some (async {
             try
               let! a = update None
+              state <- Some a
               rep.SetResult a  
               return! loop (a, v + 1)
             with ex ->
@@ -399,7 +400,7 @@ type MVar<'a> internal (?a:'a) =
       | PutAsync (a',rep) ->
         try
           let! a = a'
-          state <- a
+          state <- Some a
           rep.SetResult a
           return! loop (a, v + 1)
         with ex ->
@@ -408,7 +409,7 @@ type MVar<'a> internal (?a:'a) =
       | PutOrUpdateAsync (update,rep) ->
         try
           let! a = update (Some a)
-          state <- a
+          state <- Some a
           rep.SetResult a
           return! loop (a, v + 1)
         with ex ->
@@ -418,7 +419,8 @@ type MVar<'a> internal (?a:'a) =
         rep.SetResult a
         return! loop (a, v + 1)
       | Take (cond,rep) ->
-        if cond a then        
+        if cond a then
+          state <- None
           rep.SetResult a
           return! init (v + 1)
         else
@@ -428,7 +430,7 @@ type MVar<'a> internal (?a:'a) =
         try
           if cond a then
             let! a = f a
-            state <- a
+            state <- Some a
             rep.SetResult a
             return! loop (a, v + 1)
           else
@@ -439,7 +441,7 @@ type MVar<'a> internal (?a:'a) =
           return! loop (a, v) }
     match a with
     | Some a ->
-      state <- a
+      state <- Some a
       return! loop (a, 1)
     | None -> 
       return! init 0 })
@@ -460,7 +462,7 @@ type MVar<'a> internal (?a:'a) =
   member __.Take () : Async<'a> =
     __.TakeIf (konst true)
 
-  member __.GetFast () : 'a =
+  member __.GetFast () : 'a option =
     state
 
   member __.Put (a:'a) : Async<'a> =
@@ -512,7 +514,7 @@ module MVar =
   /// Returns the last known value, if any, without serialization.
   /// NB: unsafe because the value may be null, but helpful for supporting overlapping
   /// operations.
-  let getFastUnsafe (c:MVar<'a>) : 'a =
+  let getFastUnsafe (c:MVar<'a>) : 'a option =
     c.GetFast ()
 
   /// Puts an item into the MVar, returning the item that was put.

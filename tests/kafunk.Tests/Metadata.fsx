@@ -1,11 +1,13 @@
-﻿#r "bin/Release/kafunk.dll"
+﻿#r "bin/release/fsharp.control.asyncseq.dll"
+#r "bin/Release/kafunk.dll"
 #time "on"
 
+open FSharp.Control
 open Kafunk
 
-let conn = Kafka.connHost "127.0.0.1:9092"
+let conn = Kafka.connHost "localhost:9092"
 
-let metadata = Kafka.metadata conn (Metadata.Request([|"test-topic"|])) |> Async.RunSynchronously
+let metadata = Kafka.metadata conn (Metadata.Request([||])) |> Async.RunSynchronously
 
 for b in metadata.brokers do
   printfn "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId

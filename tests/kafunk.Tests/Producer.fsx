@@ -1,6 +1,8 @@
-﻿#r "bin/Release/kafunk.dll"
+﻿#r "bin/release/fsharp.control.asyncseq.dll"
+#r "bin/Release/kafunk.dll"
 #time "on"
 
+open FSharp.Control
 open Kafunk
 
 let conn = Kafka.connHost "127.0.0.1:9092" 

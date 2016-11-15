@@ -1,6 +1,8 @@
-﻿#r "bin/release/kafunk.dll"
+﻿#r "bin/release/fsharp.control.asyncseq.dll"
+#r "bin/release/kafunk.dll"
 #time "on"
 
+open FSharp.Control
 open Kafunk
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
