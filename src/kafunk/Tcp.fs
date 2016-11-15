@@ -252,18 +252,12 @@ module Framing =
           else
             return! s.enumerator.Value.MoveNext() }
         match next with
-        | None -> 
+        | None ->
+          s.enumerator.Value.Dispose() 
           return None
         | Some data ->
-//          let data =
-//            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
-//            else data
           let readResult = tryReadLength headerBytes length data
           let s' = State(s.enumerator, readResult.remainder) 
-//            if readResult.remainder.Count = 0 then 
-//              State(s.enumerator, 0, Binary.Segment())
-//            else
-//              State(s.enumerator, 0, readResult.remainder) 
           if readResult.headerBytes = 0 then
             let buffer = allocBuffer readResult.length
             return! readData readResult.length buffer s'
@@ -278,21 +272,12 @@ module Framing =
             return! s.enumerator.Value.MoveNext() }
         match next with
         | None ->
+          s.enumerator.Value.Dispose()
           return None
         | Some data ->
-//          let data =
-//            if s.offset > 0 then data |> Binary.shiftOffset (data.Count - s.offset)
-//            else data
           let copy = min data.Count (length - buffer.Offset)
           Binary.copy data buffer copy
           let s' = State(s.enumerator, data |> Binary.shiftOffset copy)
-//            if copy = data.Count then 
-//              State(s.enumerator, Binary.Segment())
-//              //tl, 0
-//            else 
-//              // TODO: review
-//              State(s.enumerator, data |> Binary.shiftOffset copy)
-              //(async.Return s, data.Count - copy)
           let bufferIndex = buffer.Offset + copy
           if bufferIndex = length then
             let buffer = buffer |> Binary.offset 0
@@ -368,7 +353,7 @@ type ReqRepSession<'a, 'b, 's> internal
     let rep = TaskCompletionSource<_>()
     let cancel () =
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
-        Log.error "request_timed_out|correlation_id=%i task_status=%A" correlationId rep.Task.Status
+        Log.error "request_timed_out|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore      
     ct.Register (Action(cancel)) |> ignore
@@ -376,9 +361,8 @@ type ReqRepSession<'a, 'b, 's> internal
     match awaitResponse req with
     | None ->      
       if not (txs.TryAdd(correlationId, (state,rep))) then
-        Log.error "clash of the sessions!"
-//      let rec t = new Timer(TimerCallback(fun _ -> cancel () ; t.Dispose()), null, timeoutMs, -1)
-//      ()
+        Log.error "clash_of_the_sessions"
+        invalidOp (sprintf "clash_of_the_sessions|correlation_id=%i" correlationId)
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
