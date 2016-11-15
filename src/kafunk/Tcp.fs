@@ -343,8 +343,6 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let timeoutMs = 1000 * 30
-
   let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
 
@@ -370,7 +368,7 @@ type ReqRepSession<'a, 'b, 's> internal
     let rep = TaskCompletionSource<_>()
     let cancel () =
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
-        Log.error "request_timed_out|correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
+        Log.error "request_timed_out|correlation_id=%i task_status=%A" correlationId rep.Task.Status
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore      
     ct.Register (Action(cancel)) |> ignore
@@ -388,7 +386,7 @@ type ReqRepSession<'a, 'b, 's> internal
   do
     receive
     |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.warn "session disconnected.")
+    |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
     |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
