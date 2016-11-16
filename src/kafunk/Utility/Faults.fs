@@ -2,10 +2,13 @@
 
 open FSharp.Control
 
-/// Backoff represented as a sequence of wait times between retries.
+/// The time to wait between retries.
+type WaitTimeMs = int
+
+/// Backoff represented as a sequence of wait times, in milliseconds, between retries.
 type Backoff = 
   private
-  | Backoff of (int -> int option)
+  | Backoff of (int -> WaitTimeMs option)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Backoff = 
@@ -17,15 +20,22 @@ module Backoff =
   let at (attempt:int) (b:Backoff) : int option =
     (un b) attempt
 
-  let constant (wait:int) = 
-    nu <| fun _ -> Some wait
+  let constant (waitMs:int) = 
+    nu <| fun _ -> Some waitMs
 
   let linear (init:int) (increment:int) = 
     nu <| fun i -> Some (init + (i * increment))
+ 
+  /// Returns a backoff strategy where no wait time is greater than the specified value.
+  let maxWait (maxWaitMs:int) (b:Backoff) : Backoff =
+    nu <| fun i -> at i b |> Option.map (max maxWaitMs)
 
+  /// Returns a backoff strategy which attempts at most a specified number of times.
   let maxAttempts (maxAttempts:int) (b:Backoff) : Backoff =
     nu <| function i when i < maxAttempts -> b |> at i | _ -> None
 
+  /// Returns an async sequence where each item is emitted after the corresponding backoff time
+  /// has elapsed.
   let toAsyncSeq (b:Backoff) =
     AsyncSeq.unfoldAsync (fun i -> async { 
       let bo = b |> at i
@@ -36,6 +46,8 @@ module Backoff =
       | None -> 
         return None }) 0
   
+  /// Returns an async computation that completes when the specified backoff wait time
+  /// elapses.
   let waitAt (attempt:int) (b:Backoff) : Async<unit> =
     match at attempt b with
     | Some sleep -> Async.Sleep sleep
@@ -142,8 +154,6 @@ module Faults =
         (fun es -> Exn.aggregate (sprintf "Operation failed after %i attempts." (List.length es)) es) 
         Monoid.freeList
         b
-
-  //let retryWith 
       
   module AsyncFunc =
 
@@ -161,5 +171,9 @@ module Faults =
 
     let retry (b:Backoff) (f:'a -> Async<'b>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> retryAsync b (f a))
+
+    let doAfterError (g:'a * 'e -> unit) : ('a -> Async<Result<'b, 'e>>) -> ('a -> Async<Result<'b, 'e>>) =
+      AsyncFunc.mapOut (fun (a,b) -> b |> Result.mapError (fun e -> g (a,e) ; e))
+      
 
 

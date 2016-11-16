@@ -334,7 +334,7 @@ module Chan =
   /// Configuration for an individual TCP channel.
   type Config = {
     
-    useNagle : bool    
+    useNagle : bool
     
     receiveBufferSize : int
     
@@ -346,19 +346,19 @@ module Chan =
 
     requestTimeout : TimeSpan
     
-    requestBackoff : Backoff    
+    requestBackoff : Backoff
 
   } with
     
     static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
       {
-        useNagle=defaultArg useNagle false
-        receiveBufferSize=defaultArg receiveBufferSize 8192
-        sendBufferSize=defaultArg sendBufferSize 8192
-        connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 5.0)
-        connectBackoff = defaultArg connectBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 10)
-        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 5.0)
-        requestBackoff = defaultArg requestBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 10)
+        useNagle = defaultArg useNagle false
+        receiveBufferSize = defaultArg receiveBufferSize 8192
+        sendBufferSize = defaultArg sendBufferSize 8192
+        connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
+        connectBackoff = defaultArg connectBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 1000)
+        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10.0)
+        requestBackoff = defaultArg requestBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 1000)
       }
 
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -367,7 +367,7 @@ module Chan =
   let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
 
     /// Builds and connects the socket to the broker.
-    let conn = async {      
+    let conn = async {
       let connSocket =
         new Socket(
           ep.AddressFamily,
@@ -397,11 +397,8 @@ module Chan =
     let recovery (s:Socket, _req:obj, ex:exn) = async {
       Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
       tryDispose s
-      match ex with
-      | :? SocketException as _x ->        
-        return Resource.Recovery.Recreate
-      | _ ->
-        return Resource.Recovery.Recreate }
+      // TODO: inspect error type
+      return Resource.Recovery.Recreate }
 
     let! sendRcvSocket = 
       Resource.recoverableRecreate 
@@ -410,17 +407,16 @@ module Chan =
 
     let! send =
       sendRcvSocket
-      |> Resource.inject Socket.sendAll   
+      |> Resource.inject Socket.sendAll
 
-    // re-connect -> restart
+    /// fault tolerant receive operation
     let! receive =
       let receive s b = 
         Socket.receive s b
         |> Async.map (fun received -> 
           if received = 0 then raise(SocketException(int SocketError.ConnectionAborted)) 
           else received)
-      sendRcvSocket
-      |> Resource.inject receive
+      sendRcvSocket |> Resource.inject receive
 
     /// An unframed input stream.
     let inputStream =
@@ -447,8 +443,10 @@ module Chan =
     let send = 
       session.Send
       |> AsyncFunc.timeoutResult config.requestTimeout
-      |> Faults.AsyncFunc.retryResultThrowList (Exn.ofSeq) config.requestBackoff
-      |> AsyncFunc.doBeforeAfterError 
+      |> Faults.AsyncFunc.doAfterError
+          (fun (_,e) -> Log.error "request_timed_out|timeout=%O error=%O" config.requestTimeout e)
+      |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
+      |> AsyncFunc.doBeforeAfterExn 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
           (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)

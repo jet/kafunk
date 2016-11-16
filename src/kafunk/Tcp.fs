@@ -335,18 +335,18 @@ type ReqRepSession<'a, 'b, 's> internal
     let sessionData = SessionMessage(data)
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
-    if txs.TryRemove(correlationId, &token) then      
+    if txs.TryRemove(correlationId, &token) then
       //Log.trace "received_response|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       let state,reply = token
-      try        
+      try
         let res = decode (correlationId,state,sessionData.payload)
         if not (reply.TrySetResult res) then
-          Log.warn "received_response_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
+          Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
-        Log.error "decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
+        Log.error "response_decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.SetException ex
     else
-      Log.error "received message but unabled to find session for correlation_id=%i" correlationId
+      Log.error "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
   let mux (ct:CancellationToken) (req:'a) =
     let correlationId = correlationId ()
@@ -355,11 +355,11 @@ type ReqRepSession<'a, 'b, 's> internal
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
         Log.error "request_timed_out|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
         let mutable token = Unchecked.defaultof<_>
-        txs.TryRemove(correlationId, &token) |> ignore      
+        txs.TryRemove(correlationId, &token) |> ignore
     ct.Register (Action(cancel)) |> ignore
     let sessionReq,state = encode (req,correlationId)
     match awaitResponse req with
-    | None ->      
+    | None ->
       if not (txs.TryAdd(correlationId, (state,rep))) then
         Log.error "clash_of_the_sessions"
         invalidOp (sprintf "clash_of_the_sessions|correlation_id=%i" correlationId)
@@ -375,9 +375,9 @@ type ReqRepSession<'a, 'b, 's> internal
 
   member x.Send (req:'a) = async {
     let! ct = Async.CancellationToken
-    let correlationId,sessionData,rep = mux ct req
+    let _correlationId,sessionData,rep = mux ct req
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
-    let! sent = send sessionData
+    let! _sent = send sessionData
     //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
     return! rep.Task |> Async.AwaitTask }
 

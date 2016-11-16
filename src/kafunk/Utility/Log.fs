@@ -26,11 +26,7 @@ module LoggerEx =
         match level with
         | Trace -> ()
         | _ ->
-          ts.buffer.Add (String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
-        //Console.WriteLine(String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
-//        match level with
-//        | LogLevel.Trace -> ()
-//        | _ -> Console.WriteLine(String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.Now, (level.ToString()), ts.name, m))
+          ts.buffer.Add (String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.UtcNow, (level.ToString()), ts.name, m))
       Printf.kprintf trace format
 
     member inline ts.fatal format = ts.log (format, LogLevel.Fatal)
@@ -48,19 +44,17 @@ module LoggerEx =
 module Log =
 
   open System.Collections.Concurrent
+  open FSharp.Control
 
-  let buffer = new BlockingCollection<string>()
+  let private buffer = new BlockingCollection<string>()
 
   Async.Start (async {
-    return!    
+    return!
       buffer.GetConsumingEnumerable()
-//      |> AsyncSeq.ofSeq
-//      |> AsyncSeq.bufferByTimeAndCount 1000 500
-//      |> AsyncSeq.iter (fun lines -> 
-      |> Seq.iter (fun line -> System.Console.Out.WriteLine line)
-      |> async.Return
-        //for line in lines do
-          //System.Console.Out.WriteLine line)
-  })
+      |> AsyncSeq.ofSeq
+      |> AsyncSeq.bufferByCountAndTime 1000 500
+      |> AsyncSeq.iter (fun lines ->
+        for line in lines do
+          System.Console.Out.WriteLine line) })
 
   let create name = { name = name ; buffer = buffer }

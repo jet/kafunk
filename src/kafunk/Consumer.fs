@@ -58,7 +58,7 @@ module Consumer =
     closed : Tasks.TaskCompletionSource<unit>
   } 
 
-  and TopicPartitionAssignment = {    
+  and TopicPartitionAssignment = {
     topic : TopicName
     partition : Partition
     initOffset : Offset
@@ -89,7 +89,7 @@ module Consumer =
     /// - Join group.
     /// - Sync group (assign partitions to members).
     /// - Fetch initial offsets.
-    let rec join (prevMemberId:MemberId option) = async {      
+    let rec join (prevMemberId:MemberId option) = async {
       match prevMemberId with
       | None -> 
         Log.info "initializing_consumer|group_id=%s" cfg.groupId
@@ -110,7 +110,7 @@ module Consumer =
           return Success res }
       
       match joinGroupRes with
-      | Failure ec ->        
+      | Failure ec ->
         Log.warn "join_group_error"
         do! Async.Sleep 100
         match ec with
@@ -129,17 +129,17 @@ module Consumer =
           joinGroupRes.groupProtocol
                           
         let! syncGroupRes = async {
-          if joinGroupRes.members.members.Length > 0 then          
+          if joinGroupRes.members.members.Length > 0 then
             Log.info "joined_as_leader"
-            let members = joinGroupRes.members.members      
-            let! topicPartitions = conn.GetMetadata cfg.topics          
+            let members = joinGroupRes.members.members
+            let! topicPartitions = conn.GetMetadata cfg.topics
             // TODO: consider cases where there are more consumers than partitions
             let topicPartitions =
               topicPartitions
               |> Map.toSeq
               |> Seq.collect (fun (t,ps) -> ps |> Seq.map (fun p -> t,p))
               |> Seq.toArray
-              |> Array.groupInto members.Length          
+              |> Array.groupInto members.Length
             let memberAssignments =
               (members,topicPartitions)
               ||> Array.zip 
@@ -150,7 +150,7 @@ module Consumer =
                   |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
                   |> Seq.toArray
                 let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment(assignment))
-                memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))                      
+                memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))
             let req = SyncGroupRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
             let! res = Kafka.syncGroup conn req
             match res.errorCode with
@@ -172,7 +172,7 @@ module Consumer =
         | None ->
           return! join (Some joinGroupRes.memberId)
 
-        | Some syncGroupRes ->           
+        | Some syncGroupRes ->
                 
           let assignment,_ = 
             ConsumerGroupMemberAssignment.read syncGroupRes.memberAssignment
@@ -268,7 +268,7 @@ module Consumer =
     let consume (state:GenerationState) = async {
 
       /// Returns an async sequence corresponding to the consumption of an individual partition.
-      let consumePartition (topic:TopicName, partition:Partition, initOffset:FetchOffset) = async {        
+      let consumePartition (topic:TopicName, partition:Partition, initOffset:FetchOffset) = async {
            
         /// Commits the specified offset within the consumer group.
         let commitOffset (offset:FetchOffset) : Async<unit> = async {
@@ -276,8 +276,8 @@ module Consumer =
           let req = OffsetCommitRequest(cfg.groupId, state.generationId, state.memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
           let! res = Kafka.offsetCommit conn req
           if res.topics.Length > 0 then
-            let (tn,ps) = res.topics.[0]
-            let (p,ec) = ps.[0]
+            let (_tn,ps) = res.topics.[0]
+            let (_p,ec) = ps.[0]
             match ec with
             | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode  ->
               do! close state
@@ -285,7 +285,7 @@ module Consumer =
             | _ ->
               //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
               return ()
-          else          
+          else
             Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
             return failwith "offset commit failed!" }
 
@@ -320,8 +320,8 @@ module Consumer =
             return! fetch offset
           with 
             | EscalationException (ec,res) when ec = ErrorCode.OffsetOutOfRange ->
-              Log.warn "offset_exception_escalated|topic=%s partition=%i error_code=%i res=%A" topic partition ec res   
-              let offsetReq = OffsetRequest(-1, [| topic, [| partition, cfg.initialFetchTime, 1 |] |])                         
+              Log.warn "offset_exception_escalated|topic=%s partition=%i error_code=%i res=%A" topic partition ec res
+              let offsetReq = OffsetRequest(-1, [| topic, [| partition, cfg.initialFetchTime, 1 |] |])
               let! offsetRes = Kafka.offset conn offsetReq
               let (tn,ps) = offsetRes.topics.[0]
               let p = ps.[0]
@@ -339,7 +339,7 @@ module Consumer =
               match res with
               | None -> 
                 return None
-              | Some res ->          
+              | Some res ->
                 let _,partitions = res.topics.[0]
                 let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
                 //let ms = Compression.decompress ms
@@ -361,11 +361,11 @@ module Consumer =
     /// Emits generations of the consumer group protocol.
     let generations =
       AsyncSeq.unfoldAsync
-        (fun (prevState:GenerationState option) -> async {          
+        (fun (prevState:GenerationState option) -> async {
           match prevState with
           | None -> ()
           | Some prevState ->
-            do! prevState.closed.Task |> Async.AwaitTask            
+            do! prevState.closed.Task |> Async.AwaitTask
           let! state = join (prevState |> Option.map (fun s -> s.memberId))
           let! topics = consume state
           return Some ((state.generationId,topics), Some state) })
@@ -378,10 +378,10 @@ module Consumer =
     (consumer:AsyncSeq<GenerationId * (TopicName * Partition * AsyncSeq<MessageSet * Async<unit>>)[]>) : Async<unit> = async {
       return!
         consumer
-        |> AsyncSeq.iterAsync (fun (_generationId,topics) -> async {          
+        |> AsyncSeq.iterAsync (fun (_generationId,topics) -> async {
           return!
             topics
-            |> Seq.map (fun (_tn,_p,stream) -> async {              
+            |> Seq.map (fun (_tn,_p,stream) -> async {
               return! stream |> AsyncSeq.iterAsync handler })
             |> Async.Parallel
             |> Async.Ignore }) }

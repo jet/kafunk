@@ -5,6 +5,8 @@
 open FSharp.Control
 open Kafunk
 
+let Log = Log.create __SOURCE_FILE__
+
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
 let host = argiDefault 1 "localhost"
@@ -17,14 +19,15 @@ let go = async {
     ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)
   return!
     Consumer.consume conn consumerCfg
-    |> AsyncSeq.iterAsync (fun (generationId,topics) -> async {      
+    |> AsyncSeq.iterAsync (fun (generationId,topics) -> async {
       return!
         topics
         |> Seq.map (fun (tn,p,stream) -> 
-          printfn "streaming|topic=%s partition=%i" tn p
+          Log.info "streaming|topic=%s partition=%i" tn p
           stream
           |> AsyncSeq.iterAsync (fun (ms,commitOffset) -> async {
-            printfn "consuming_message_set|count=%i size=%i first_offset=%i"
+            Log.info "consuming_message_set|partition=%i count=%i size=%i first_offset=%i"
+              p
               (ms.messages.Length)
               (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
               (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)

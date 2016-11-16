@@ -176,34 +176,6 @@ module AsyncEx =
       Async.Start(op, ct.Token)
       { new IDisposable with member x.Dispose() = ct.Cancel() }
 
-//    /// Returns an async computation which runs the argument computation but raises an exception if it doesn't complete
-//    /// by the specified timeout.
-//    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) = async {
-//      let! r = Async.StartChild(c, (int)timeout.TotalMilliseconds)
-//      return! r }
-
-//    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
-//      Async.FromContinuations <| fun (ok,err,cnc) ->
-//        let cts = new CancellationTokenSource()
-//        cts.CancelAfter timeout
-//        //cts.Token.Register (fun () -> printfn "cancelled!") |> ignore
-//        //let rec t = new Timer(cnc', null, int timeout.TotalMilliseconds, -1)
-////        and cnc' _ = 
-////          printfn "timeout!"
-////          cnc (OperationCanceledException())
-////          cts.Cancel()
-////          t.Dispose()          
-////        let ok a = 
-////          ok a
-////          t.Dispose()             
-////        let err e =           
-////          err e
-////          t.Dispose()
-//        let ok a = ok a ; cts.Dispose()
-//        let err e = err e ; cts.Dispose()
-//        let cnc e = cnc e ; cts.Dispose()
-//        Async.StartWithContinuations (c, ok, err, cnc, cts.Token)
-
     /// Creates a computation which returns the result of the first computation that
     /// produces a value as well as a handle to the other computation. The other
     /// computation will be memoized.
@@ -262,7 +234,7 @@ module AsyncEx =
         let inline cnc ex =
           if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
             cancel ()
-            cnc ex                
+            cnc ex
         Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
         Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
 
@@ -312,7 +284,7 @@ module AsyncFunc =
       do after (a,b)
       return b }
 
-  let doBeforeAfterError (before:'a -> unit) (after:'a * 'b -> unit) (error:'a * exn -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+  let doBeforeAfterExn (before:'a -> unit) (after:'a * 'b -> unit) (error:'a * exn -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
     fun a -> async {
       do before a
       try
@@ -372,9 +344,9 @@ type MVar<'a> internal (?a:'a) =
     let rec init (v:int) = async {
       state <- Unchecked.defaultof<_>
       return! mbp.Scan (function
-        | PutAsync (a,rep) ->          
+        | PutAsync (a,rep) ->
           Some (async {
-            try            
+            try
               let! a = a
               state <- Some a
               rep.SetResult a
@@ -382,12 +354,12 @@ type MVar<'a> internal (?a:'a) =
             with ex ->
               rep.SetException ex
               return! init (v + 1) })
-        | PutOrUpdateAsync (update,rep) ->          
+        | PutOrUpdateAsync (update,rep) ->
           Some (async {
             try
               let! a = update None
               state <- Some a
-              rep.SetResult a  
+              rep.SetResult a
               return! loop (a, v + 1)
             with ex ->
               rep.SetException ex
@@ -449,7 +421,7 @@ type MVar<'a> internal (?a:'a) =
   do mbp.Error.Add (fun x -> printfn "|MVar|ERROR|%O" x) // shouldn't happen
   
   let postAndAsyncReply f = 
-    let tcs = new TaskCompletionSource<'a>()    
+    let tcs = new TaskCompletionSource<'a>()
     mbp.Post (f tcs)
     tcs.Task |> Async.AwaitTask 
 
@@ -550,6 +522,8 @@ module MVar =
 
 
 
+
+
 type internal BoundedMbReq<'a> =
   | Put of 'a * AsyncReplyChannel<unit>
   | Take of AsyncReplyChannel<'a>
@@ -639,7 +613,7 @@ module Resource =
 
     /// The error should be escalated, notifying dependent
     /// resources.
-    | Escalate     
+    | Escalate
 
 
   type Epoch<'r> = {
@@ -681,10 +655,10 @@ module Resource =
     let recover (req:obj) ex ep = async {
       let! recovery = handle (ep.resource,req,ex)
       match recovery with
-      | Escalate -> 
+      | Escalate ->
         let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
         edi.Throw ()
-        return failwith ""              
+        return failwith ""
       | Recreate ->
         let! ep' = create (Some ep)
         return ep' }
@@ -696,15 +670,16 @@ module Resource =
       cell 
       |> MVar.updateAsync (fun ep -> 
         if ep.version = ep'.version then recover req ex ep 
-        else async.Return ep)
+        else async {
+          return ep })
         
-    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {      
+    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
       let! epoch = MVar.get cell
       let epoch = ref epoch
       let rec go a = async {
         let ep = !epoch
         try
-          return! op ep.resource a |> Async.withCancellationToken ep.closed.Token
+          return! op ep.resource a //|> Async.withCancellationToken ep.closed.Token
         with ex ->
           let! epoch' = __.Recover (ep, box a, ex)
           epoch := epoch'
@@ -714,7 +689,7 @@ module Resource =
     interface IDisposable with
       member __.Dispose () = ()
     
-  let recoverableRecreate (create:Async<'r>) (handleError:('r * obj * exn) -> Async<Recovery>) = async {      
+  let recoverableRecreate (create:Async<'r>) (handleError:('r * obj * exn) -> Async<Recovery>) = async {
     let r = new Resource<_>(create, handleError)
     let! _ = r.Create()
     return r }
