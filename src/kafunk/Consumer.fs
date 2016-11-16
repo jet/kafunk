@@ -65,17 +65,16 @@ module Consumer =
   }
 
   // TODO: refactor (back to Cancellation token, or Hopac Alt?)
-  let peekTask (f:'a -> 'b) (t:Task<'a>) (a:Async<'b>) = async {
+  let private peekTask (f:'a -> 'b) (t:Task<'a>) (a:Async<'b>) = async {
     if t.IsCompleted then return f t.Result
     else return! a }
-
 
   /// Returns an async sequence corresponding to generations of the consumer group protocol.
   /// A generation changes when the group changes, particularly when members join or leave.
   /// Each generation contains a set of async sequences corresponding to messages in a single topic-partition.
   /// The message set is accompanied by an async computation which when evaluated, commits the checkpoint
   /// corresponding to the message set.
-  let consume (conn:KafkaConn) (cfg:ConsumerConfig) = asyncSeq {
+  let consume (conn:KafkaConn) (cfg:ConsumerConfig) =
         
     // TODO: configurable
     let protocolType = ProtocolType.consumer
@@ -333,22 +332,20 @@ module Consumer =
         let fetch = fetch2
 
         /// Fetches a stream of messages starting at the specified offset.
-        let rec fetchStream (offset:FetchOffset) = asyncSeq {          
-          let! res = fetch offset
-          match res with
-          | None -> ()
-          | Some res ->          
-            let _,partitions = res.topics.[0]
-            let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
-            //let ms = Compression.decompress ms
-            let commit = commitOffset offset
-            yield ms,commit
-            try                                              
-              let nextOffset = MessageSet.nextOffset ms highWatermarkOffset
-              yield! fetchStream nextOffset
-            with ex ->
-              Log.error "next offset failed"
-              return raise ex }
+        let fetchStream =
+          AsyncSeq.unfoldAsync
+            (fun (offset:FetchOffset) -> async {
+              let! res = fetch offset
+              match res with
+              | None -> 
+                return None
+              | Some res ->          
+                let _,partitions = res.topics.[0]
+                let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
+                //let ms = Compression.decompress ms
+                let commit = commitOffset offset
+                let nextOffset = MessageSet.nextOffset ms highWatermarkOffset
+                return Some ((ms,commit), nextOffset) })
       
         return fetchStream initOffset }
      
@@ -362,14 +359,18 @@ module Consumer =
       return partitionStreams }
 
     /// Emits generations of the consumer group protocol.
-    let rec generations (prevState:GenerationState option) = asyncSeq {
-      let! state = join (prevState |> Option.map (fun s -> s.memberId))
-      let! topics = consume state
-      yield state.generationId,topics
-      do! state.closed.Task |> Async.AwaitTask
-      yield! generations (Some state) }
+    let generations =
+      AsyncSeq.unfoldAsync
+        (fun (prevState:GenerationState option) -> async {          
+          match prevState with
+          | None -> ()
+          | Some prevState ->
+            do! prevState.closed.Task |> Async.AwaitTask            
+          let! state = join (prevState |> Option.map (fun s -> s.memberId))
+          let! topics = consume state
+          return Some ((state.generationId,topics), Some state) })
                    
-    yield! generations None }
+    generations None
 
     
   let callback 
