@@ -458,20 +458,20 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   and send (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state.routes req with
     | Success requestRoutes ->
-      let sendHost (req:RequestMessage, host:(Host * Port)) = async {        
+      let sendHost (req:RequestMessage, host:(Host * Port)) = async {
         match state |> ConnState.tryFindChanByHost host with
         | Some ch -> 
           return!
             req
             |> Chan.send ch
-            |> Async.Catch
+            //|> Async.Catch
             |> Async.bind (fun res -> async {
-              match res with
-              | Success res ->
+//              match res with
+//              | Success res ->
                 match RetryAction.tryFindError res with
                 | None -> 
                   return res
-                | Some (errorCode,action,msg) ->   
+                | Some (errorCode,action,msg) ->
                   Log.error "response_errored|error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
                   match action with
                   | RetryAction.PassThru ->
@@ -486,12 +486,15 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                     return! send state' req
                   | RetryAction.WaitAndRetry ->
                     do! Async.Sleep waitRetrySleepMs
-                    return! send state req
-              | Failure ex ->
-                Log.error "channel_failure_escalated|error=%O" ex
-                return raise ex })
+                    return! send state req })
+//              | Failure ex ->
+//                Log.error "channel_failure_escalated|error=%O" ex
+//                //let! state' = getMetadata state topics
+//                do! Async.Sleep waitRetrySleepMs
+//                return! send state req })
+//                //return raise ex })
         | None ->
-          let! state' = stateCell |> MVar.updateAsync (fun state -> connCh state host)
+          let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' host)
           return! send state' req }
       
       /// Sends requests to routed hosts in parallel and gathers the results.
@@ -503,7 +506,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
             requestRoutes
             |> Seq.map sendHost
             |> Async.Parallel
-            |> Async.map gather }        
+            |> Async.map gather }
  
       match req with
       | RequestMessage.Offset _ -> 

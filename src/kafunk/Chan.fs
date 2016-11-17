@@ -356,9 +356,9 @@ module Chan =
         receiveBufferSize = defaultArg receiveBufferSize 8192
         sendBufferSize = defaultArg sendBufferSize 8192
         connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
-        connectBackoff = defaultArg connectBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 1000)
-        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10.0)
-        requestBackoff = defaultArg requestBackoff (Backoff.linear 500 50 |> Backoff.maxAttempts 1000)
+        connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 1000)
+        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
+        requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 1000)
       }
 
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -395,7 +395,7 @@ module Chan =
       |> Faults.retryResultThrow id Exn.monoid config.connectBackoff
 
     let recovery (s:Socket, _req:obj, ex:exn) = async {
-      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
+      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O socket_connected=%b error=%O" clientId ep s.Connected ex
       tryDispose s
       // TODO: inspect error type
       return Resource.Recovery.Recreate }
@@ -444,7 +444,7 @@ module Chan =
       session.Send
       |> AsyncFunc.timeoutResult config.requestTimeout
       |> Faults.AsyncFunc.doAfterError
-          (fun (_,e) -> Log.error "request_timed_out|timeout=%O error=%O" config.requestTimeout e)
+          (fun (req,e) -> Log.error "request_timed_out|request=%s timeout=%O error=%O" (RequestMessage.Print req) config.requestTimeout e)
       |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
       |> AsyncFunc.doBeforeAfterExn 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))

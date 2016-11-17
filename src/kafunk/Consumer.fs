@@ -14,12 +14,7 @@ type ConsumerConfig = {
   heartbeatFrequency : int32
   fetchMinBytes : MinBytes
   fetchMaxWaitMs : MaxWaitTime
-  metadataFetchTimeoutMs : int32
-  totalBufferMemory : int32
   fetchBufferBytes : MaxBytes
-  clientId : string
-  socketReceiveBuffer : int32
-  reconnectBackoffMs : int32
   offsetRetentionTime : int64
   initialFetchTime : Time
 }
@@ -32,12 +27,7 @@ type ConsumerConfig = {
         heartbeatFrequency = 4
         fetchMinBytes = 0
         fetchMaxWaitMs = 0
-        metadataFetchTimeoutMs = 0
-        totalBufferMemory = 10000
         fetchBufferBytes = defaultArg fetchBufferBytes 1000000
-        clientId = Guid.NewGuid().ToString("N")
-        socketReceiveBuffer = 1000
-        reconnectBackoffMs = 0
         offsetRetentionTime = -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
       }

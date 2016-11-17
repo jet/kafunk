@@ -666,20 +666,20 @@ module Resource =
     member internal __.Create () = async {
       return! cell |> MVar.putAsync (create None) }
 
-    member __.Recover (ep':Epoch<'r>, req:obj, ex:exn) =
+    member private __.Recover (ep':Epoch<'r>, req:obj, ex:exn) =
       cell 
       |> MVar.updateAsync (fun ep -> 
         if ep.version = ep'.version then recover req ex ep 
         else async {
           return ep })
         
-    member __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
+    member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
       let! epoch = MVar.get cell
       let epoch = ref epoch
       let rec go a = async {
         let ep = !epoch
         try
-          return! op ep.resource a //|> Async.withCancellationToken ep.closed.Token
+          return! op ep.resource a |> Async.withCancellationToken ep.closed.Token
         with ex ->
           let! epoch' = __.Recover (ep, box a, ex)
           epoch := epoch'

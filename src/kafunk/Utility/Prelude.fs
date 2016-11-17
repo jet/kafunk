@@ -256,7 +256,7 @@ module KafkaUri =
   let [<Literal>] UriSchemeKafka = "kafka"
   let private KafkaBrokerUriRegex = Regex("^(?<scheme>kafka://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
 
-  let parse (host:string) =    
+  let parse (host:string) =
     let m = KafkaBrokerUriRegex.Match host
     if not m.Success then invalidArg "host" (sprintf "invalid host string '%s'" host)
     else
