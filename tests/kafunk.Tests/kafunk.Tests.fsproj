@@ -136,9 +136,11 @@
   </Choose>
   <ItemGroup>
     <None Include="paket.references" />
+    <Compile Include="Shared.fs" />
     <Compile Include="CodecTests.fs" />
     <Compile Include="TcpTests.fs" />
     <Compile Include="CompressionGzipTests.fs" />
+    <Compile Include="FaultsTests.fs" />
     <None Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
     <None Include="Fetch.fsx" />

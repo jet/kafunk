@@ -7,15 +7,6 @@ open System.Text
 open Kafunk
 
 
-let shouldEqual (expected:'a) (actual:'a) (msg:string option) =
-  if expected <> actual then
-    let msg = 
-      match msg with
-      | Some msg -> sprintf "expected=%A\nactual=%A message=%s" expected actual msg
-      | None -> sprintf "expected=%A\nactual=%A" expected actual
-    Assert.Fail msg
-
-
 [<Test>]
 let ``framing should work`` () =
   for msgSize in [1..100] do

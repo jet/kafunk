@@ -159,6 +159,8 @@ module Map =
 
 type Result<'a, 'e> = Choice<'a, 'e>
 
+type ResultWarn<'a, 'e> = Result<'a * 'e list, 'e>
+
 [<AutoOpen>]
 module ResultEx =
 
