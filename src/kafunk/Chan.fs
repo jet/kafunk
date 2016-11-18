@@ -278,6 +278,11 @@ module internal ResponseEx =
     static member Print (x:HeartbeatResponse) =
       sprintf "HeartbeatResponse|error_code=%i" x.errorCode
 
+  type GroupCoordinatorResponse with
+    static member Print (x:GroupCoordinatorResponse) =
+      sprintf "GroupCoordinatorResponse|coordinator_id=%i host=%s port=%i error_code=%i" 
+        x.coordinatorId x.coordinatorHost x.coordinatorPort x.errorCode
+
   type RequestMessage with
     static member Print (x:RequestMessage) =
       match x with
@@ -299,6 +304,7 @@ module internal ResponseEx =
       | ResponseMessage.OffsetFetchResponse x -> OffsetFetchResponse.Print x
       | ResponseMessage.OffsetResponse x -> OffsetResponse.Print x
       | ResponseMessage.HeartbeatResponse x -> HeartbeatResponse.Print x
+      | ResponseMessage.GroupCoordinatorResponse x -> GroupCoordinatorResponse.Print x
       | x -> sprintf "%A" x
 
   // ------------------------------------------------------------------------------------------------------------------------------
@@ -356,9 +362,9 @@ module Chan =
         receiveBufferSize = defaultArg receiveBufferSize 8192
         sendBufferSize = defaultArg sendBufferSize 8192
         connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
-        connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 1000)
-        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
-        requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 1000)
+        connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10.0)
+        requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
       }
 
   /// Creates a fault-tolerant channel to the specified endpoint.
@@ -394,8 +400,8 @@ module Chan =
       conn
       |> Faults.retryResultThrow id Exn.monoid config.connectBackoff
 
-    let recovery (s:Socket, _req:obj, ex:exn) = async {
-      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O socket_connected=%b error=%O" clientId ep s.Connected ex
+    let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
+      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i socket_connected=%b error=%O" clientId ep ver s.Connected ex
       tryDispose s
       // TODO: inspect error type
       return Resource.Recovery.Recreate }
@@ -405,18 +411,26 @@ module Chan =
         conn
         recovery
 
+//    let send s = 
+//      Socket.sendAll s
+//      |> AsyncFunc.doExn
+//          (fun (_,ex) -> Log.warn "intercepted_error_on_socket_send|ep=%O error=%O" ep ex)
+
     let! send =
-      sendRcvSocket
+      sendRcvSocket      
       |> Resource.inject Socket.sendAll
 
     /// fault tolerant receive operation
     let! receive =
-      let receive s b = 
-        Socket.receive s b
-        |> Async.map (fun received -> 
+      let receive s = 
+        Socket.receive s
+        >> Async.map (fun received -> 
           if received = 0 then raise(SocketException(int SocketError.ConnectionAborted)) 
           else received)
-      sendRcvSocket |> Resource.inject receive
+//        |> AsyncFunc.doExn
+//            (fun (_,ex) -> Log.warn "intercepted_error_on_socket_receive|ep=%O error=%O" ep ex)
+      sendRcvSocket 
+      |> Resource.inject receive
 
     /// An unframed input stream.
     let inputStream =
@@ -440,11 +454,16 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
+    let send req = session.Send req
+
     let send = 
-      session.Send
+      send
       |> AsyncFunc.timeoutResult config.requestTimeout
       |> Faults.AsyncFunc.doAfterError
-          (fun (req,e) -> Log.error "request_timed_out|request=%s timeout=%O error=%O" (RequestMessage.Print req) config.requestTimeout e)
+          (fun (req,e) -> 
+            let v = sendRcvSocket.TryGetVersion() |> Option.getOr -1
+            //sendRcvSocket.Recover (req,e) |> Async.RunSynchronously
+            Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
       |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
       |> AsyncFunc.doBeforeAfterExn 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
@@ -453,10 +472,17 @@ module Chan =
 
     return Chan send }
 
-  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
-    Log.info "discovering_dns_entries|host=%s" host
-    let! ips = Dns.IPv4.getAllAsync host
-    let ip = ips.[0]
+  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {    
+    let! ip = async {
+      match IPAddress.tryParse host with
+      | None ->
+        Log.info "discovering_dns_entries|host=%s" host
+        let! ips = Dns.IPv4.getAllAsync host
+        Log.info "discovered_dns_entries|host=%s ips=%A" host ips
+        let ip = ips.[0]
+        return ip
+      | Some ip ->
+        return ip }    
     let ep = IPEndPoint(ip, port)
     let! ch = connect config clientId ep
     return ch }

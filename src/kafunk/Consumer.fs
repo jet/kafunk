@@ -226,14 +226,20 @@ module Consumer =
               state.closed.Task
               (async {
                 let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
-                let! res = Kafka.heartbeat conn req
-                match res.errorCode with
-                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode ->
+                let! res = Kafka.heartbeat conn req |> Async.Catch
+                match res with
+                | Success res ->
+                  match res.errorCode with
+                  | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode ->
+                    do! close state
+                    return ()
+                  | _ ->
+                    do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
+                    return! heartbeat state
+                | Failure ex ->
+                  Log.warn "heartbeat_failure|generation_id=%i error=%O" state.generationId ex
                   do! close state
-                  return ()
-                | _ ->
-                  do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
-                  return! heartbeat state })
+                  return () })
 
           Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
           //Async.Start (heartbeat state', cts.Token)
@@ -264,20 +270,26 @@ module Consumer =
         let commitOffset (offset:FetchOffset) : Async<unit> = async {
           //Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
           let req = OffsetCommitRequest(cfg.groupId, state.generationId, state.memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
-          let! res = Kafka.offsetCommit conn req
-          if res.topics.Length > 0 then
-            let (_tn,ps) = res.topics.[0]
-            let (_p,ec) = ps.[0]
-            match ec with
-            | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode  ->
-              do! close state
-              return ()
-            | _ ->
-              //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
-              return ()
-          else
-            Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
-            return failwith "offset commit failed!" }
+          let! res = Kafka.offsetCommit conn req |> Async.Catch
+          match res with
+          | Success res ->
+            if res.topics.Length > 0 then
+              let (_tn,ps) = res.topics.[0]
+              let (_p,ec) = ps.[0]
+              match ec with
+              | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode  ->
+                do! close state
+                return ()
+              | _ ->
+                //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
+                return ()
+            else
+              Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
+              return failwith "offset commit failed!"
+          | Failure ex ->
+            Log.warn "commit_offset_failure|generation_id=%i error=%O" state.generationId ex
+            do! close state
+            return () }
 
         /// Fetches the specified offset.
         let rec fetch (offset:FetchOffset) : Async<FetchResponse option> = 
@@ -286,24 +298,30 @@ module Consumer =
             (state.closed.Task)
             (async {
               let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
-              let! res = Kafka.fetch conn req
-              if res.topics.Length = 0 then
-                return failwith "nothing returned in fetch response!"
-              else
-                let _,partitions = res.topics.[0]
-                let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
-                match ec with
-                | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
-                  do! close state
-                  return None
-                | _ ->
-                  if ms.messages.Length = 0 then
-                    Log.info "reached_end_of_stream|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
-                    do! Async.Sleep 10000
-                    return! fetch offset 
-                  else
-                    //let ms = Compression.decompress ms
-                    return Some res })
+              let! res = Kafka.fetch conn req |> Async.Catch
+              match res with
+              | Success res ->
+                if res.topics.Length = 0 then
+                  return failwith "nothing returned in fetch response!"
+                else
+                  let _,partitions = res.topics.[0]
+                  let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
+                  match ec with
+                  | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
+                    do! close state
+                    return None
+                  | _ ->
+                    if ms.messages.Length = 0 then
+                      Log.info "reached_end_of_stream|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
+                      do! Async.Sleep 10000
+                      return! fetch offset 
+                    else
+                      //let ms = Compression.decompress ms
+                      return Some res
+              | Failure ex ->
+                Log.warn "fetch_failure|generation_id=%i error=%O" state.generationId ex
+                do! close state
+                return None })
 
         let rec fetch2 (offset:FetchOffset) = async {
           try
@@ -355,6 +373,7 @@ module Consumer =
           match prevState with
           | None -> ()
           | Some prevState ->
+            Log.warn "waiting_on_generation_to_complete|generation_id=%i member_id=%s" prevState.generationId prevState.memberId
             do! prevState.closed.Task |> Async.AwaitTask
           let! state = join (prevState |> Option.map (fun s -> s.memberId))
           let! topics = consume state

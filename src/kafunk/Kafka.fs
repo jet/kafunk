@@ -438,7 +438,8 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   and getMetadata (state:ConnState) (topics:TopicName[]) =
     let update state' = async {
       if state'.version = state.version then
-        let! metadata = Chan.metadata (send state') (Metadata.Request(topics))   
+        let! metadata = Chan.metadata (send state') (Metadata.Request(topics))
+        Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
         return state' |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata)
       else
         return state' }
@@ -449,7 +450,10 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     let update state' = async {
       if state'.version = state.version then
         let! group = Chan.groupCoordinator (send state') (GroupCoordinatorRequest(groupId))
-        return state' |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
+        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print group)
+        return 
+          state' 
+          |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
       else
         return state' }
     stateCell |> MVar.updateAsync update
@@ -464,10 +468,10 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
           return!
             req
             |> Chan.send ch
-            //|> Async.Catch
+            |> Async.Catch
             |> Async.bind (fun res -> async {
-//              match res with
-//              | Success res ->
+              match res with
+              | Success res ->
                 match RetryAction.tryFindError res with
                 | None -> 
                   return res
@@ -486,13 +490,13 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
                     return! send state' req
                   | RetryAction.WaitAndRetry ->
                     do! Async.Sleep waitRetrySleepMs
-                    return! send state req })
-//              | Failure ex ->
-//                Log.error "channel_failure_escalated|error=%O" ex
+                    return! send state req //})
+              | Failure ex ->
+                Log.error "channel_failure_escalated|host=%A request=%s error=%O" host (RequestMessage.Print req) ex
 //                //let! state' = getMetadata state topics
-//                do! Async.Sleep waitRetrySleepMs
-//                return! send state req })
-//                //return raise ex })
+                //do! Async.Sleep waitRetrySleepMs
+                //return! send state req })
+                return raise ex })
         | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' host)
           return! send state' req }

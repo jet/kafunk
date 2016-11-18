@@ -9,6 +9,16 @@ open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
 
+[<AutoOpen>]
+module internal NetEx =
+  
+  type IPAddress with
+    static member tryParse (ipString:string) =
+      let mutable ip = Unchecked.defaultof<_>
+      if IPAddress.TryParse (ipString, &ip) then Some ip
+      else None
+
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Dns =
 
@@ -351,13 +361,13 @@ type ReqRepSession<'a, 'b, 's> internal
   let mux (ct:CancellationToken) (req:'a) =
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()
+    let sessionReq,state = encode (req,correlationId)
     let cancel () =
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
-        Log.error "request_timed_out|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
+        Log.warn "request_timed_out|correlation_id=%i in_flight_requests=%i state=%A" correlationId txs.Count state
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore
     ct.Register (Action(cancel)) |> ignore
-    let sessionReq,state = encode (req,correlationId)
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (state,rep))) then
@@ -367,11 +377,25 @@ type ReqRepSession<'a, 'b, 's> internal
       rep.SetResult res
     correlationId,sessionReq,rep
 
-  do
-    receive
-    |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
-    |> (fun t -> Async.Start(t, cts.Token))
+  let rec receiveLoop = async {
+    try
+      do!
+        receive
+        |> AsyncSeq.iter demux
+        |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
+      Log.warn "restarting_receive_loop" 
+      return! receiveLoop
+    with ex ->
+      Log.error "receive_loop_faiure|error=%O" ex
+      return! receiveLoop }
+
+  do Async.Start(receiveLoop, cts.Token) 
+
+//  do
+//    receive
+//    |> AsyncSeq.iter demux
+//    |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
+//    |> (fun t -> Async.Start(t, cts.Token))
 
   member x.Send (req:'a) = async {
     let! ct = Async.CancellationToken

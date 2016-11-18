@@ -214,7 +214,7 @@ module Result =
     | Failure e -> raise e
 
   /// Returns a succesful result or raises an exception in case of failure.
-  let throwMap (f:'e -> exn) (r:Result<'a, 'e>) : 'a =
+  let throwMap (f:'e -> #exn) (r:Result<'a, 'e>) : 'a =
     match r with
     | Success a -> a
     | Failure e -> raise (f e)

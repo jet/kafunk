@@ -249,11 +249,17 @@ module AsyncEx =
         | Choice1Of2 a -> return a
         | Choice2Of2 e -> return raise e }
 
-    static member timeoutResult (timeout:TimeSpan) (c:Async<_>) : Async<Result<_, TimeoutException>> =
+    static member timeoutWith (f:unit -> 'a) (timeout:TimeSpan) (c:Async<'a>) : Async<'a> =
       let timeout = async {
         do! Async.Sleep (int timeout.TotalMilliseconds)
-        return Failure (TimeoutException()) }
-      Async.choose (Async.map Success c) timeout
+        return f () }
+      Async.choose c timeout
+
+    static member timeoutResultWith (f:unit -> 'e) (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, 'e>> =
+      Async.timeoutWith (f >> Failure) timeout (c |> Async.map Success)
+
+    static member timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeoutException>> =
+      Async.timeoutResultWith (fun () -> TimeoutException()) timeout c
 
     static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
       Async.timeoutResult timeout c |> Async.map Result.throw
@@ -292,16 +298,25 @@ module AsyncFunc =
         do after (a,b)
         return b
       with ex ->
-        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
-        error (a,edi.SourceException)
-        edi.Throw ()
-        return failwith "undefined" }
+        error (a,ex)
+        return raise ex }
+//        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
+//        error (a,edi.SourceException)
+//        edi.Throw ()
+//        return failwith "undefined" }
+
+  let doExn (error:'a * exn -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async {
+      try return! f a
+      with ex ->
+        error (a,ex)
+        return raise ex }
 
   let timeout (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-    fun a -> async.Delay (fun () -> Async.timeoutAfter t (f a))
+    fun a -> async.Delay (fun () -> f a) |> Async.timeoutAfter t
 
   let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
-    fun a -> async.Delay (fun () -> Async.timeoutResult t (f a))
+    fun a -> async.Delay (fun () -> f a) |> Async.timeoutResult t 
   
 
 
@@ -330,10 +345,10 @@ module Mb =
 
 type private MVarReq<'a> =
   | PutAsync of Async<'a> * TaskCompletionSource<'a>
-  | UpdateAsync of cond:('a -> bool) * update:('a -> Async<'a>) * TaskCompletionSource<'a>
+  | UpdateAsync of update:('a -> Async<'a>) * TaskCompletionSource<'a>
   | PutOrUpdateAsync of update:('a option -> Async<'a>) * TaskCompletionSource<'a>
   | Get of TaskCompletionSource<'a>
-  | Take of cond:('a -> bool) * TaskCompletionSource<'a>
+  | Take of TaskCompletionSource<'a>
 
 /// A serialized variable.
 type MVar<'a> internal (?a:'a) =
@@ -341,8 +356,7 @@ type MVar<'a> internal (?a:'a) =
   let [<VolatileField>] mutable state : 'a option = None
 
   let mbp = MailboxProcessor.Start (fun mbp -> async {
-    let rec init (v:int) = async {
-      state <- Unchecked.defaultof<_>
+    let rec init () = async {
       return! mbp.Scan (function
         | PutAsync (a,rep) ->
           Some (async {
@@ -350,23 +364,23 @@ type MVar<'a> internal (?a:'a) =
               let! a = a
               state <- Some a
               rep.SetResult a
-              return! loop (a, v + 1)
+              return! loop a
             with ex ->
               rep.SetException ex
-              return! init (v + 1) })
+              return! init () })
         | PutOrUpdateAsync (update,rep) ->
           Some (async {
             try
               let! a = update None
               state <- Some a
               rep.SetResult a
-              return! loop (a, v + 1)
+              return! loop (a)
             with ex ->
               rep.SetException ex
-              return! init v })
+              return! init () })
         | _ ->
           None) }
-    and loop (a:'a, v:int) = async {
+    and loop (a:'a) = async {
       let! msg = mbp.Receive()
       match msg with
       | PutAsync (a',rep) ->
@@ -374,49 +388,41 @@ type MVar<'a> internal (?a:'a) =
           let! a = a'
           state <- Some a
           rep.SetResult a
-          return! loop (a, v + 1)
+          return! loop (a)
         with ex ->
           rep.SetException ex
-          return! loop (a, v)
+          return! loop (a)
       | PutOrUpdateAsync (update,rep) ->
         try
           let! a = update (Some a)
           state <- Some a
           rep.SetResult a
-          return! loop (a, v + 1)
+          return! loop (a)
         with ex ->
           rep.SetException ex
-          return! loop (a, v)
+          return! loop (a)
       | Get rep ->
         rep.SetResult a
-        return! loop (a, v + 1)
-      | Take (cond,rep) ->
-        if cond a then
-          state <- None
-          rep.SetResult a
-          return! init (v + 1)
-        else
-          rep.SetResult a
-          return! loop (a, v)
-      | UpdateAsync (cond,f,rep) ->
+        return! loop (a)
+      | Take (rep) ->
+        state <- None
+        rep.SetResult a
+        return! init ()
+      | UpdateAsync (f,rep) ->
         try
-          if cond a then
-            let! a = f a
-            state <- Some a
-            rep.SetResult a
-            return! loop (a, v + 1)
-          else
-            rep.SetResult a
-            return! loop (a, v)
+          let! a = f a
+          state <- Some a
+          rep.SetResult a
+          return! loop (a)
         with ex ->
           rep.SetException ex
-          return! loop (a, v) }
+          return! loop (a) }
     match a with
     | Some a ->
       state <- Some a
-      return! loop (a, 1)
+      return! loop (a)
     | None -> 
-      return! init 0 })
+      return! init () })
 
   do mbp.Error.Add (fun x -> printfn "|MVar|ERROR|%O" x) // shouldn't happen
   
@@ -428,11 +434,8 @@ type MVar<'a> internal (?a:'a) =
   member __.Get () : Async<'a> =
     postAndAsyncReply (Get)
 
-  member __.TakeIf (cond:'a -> bool) : Async<'a> =
-    postAndAsyncReply (fun tcs -> Take(cond, tcs))
-
   member __.Take () : Async<'a> =
-    __.TakeIf (konst true)
+    postAndAsyncReply (fun tcs -> Take(tcs))
 
   member __.GetFast () : 'a option =
     state
@@ -446,11 +449,8 @@ type MVar<'a> internal (?a:'a) =
   member __.Update (f:'a -> 'a) : Async<'a> =
     __.UpdateAsync (f >> async.Return)
 
-  member __.UpdateIfAsync (cond:'a -> bool, update:'a -> Async<'a>) : Async<'a> =
-    postAndAsyncReply (fun ch -> UpdateAsync (cond, update, ch))
-
   member __.UpdateAsync (update:'a -> Async<'a>) : Async<'a> =
-    __.UpdateIfAsync (konst true, update)
+    postAndAsyncReply (fun ch -> UpdateAsync (update, ch))
 
   member __.PutOrUpdateAsync (update:'a option -> Async<'a>) : Async<'a> =
     postAndAsyncReply (fun ch -> PutOrUpdateAsync (update,ch))
@@ -472,12 +472,6 @@ module MVar =
   /// Gets the value of the MVar.
   let get (c:MVar<'a>) : Async<'a> =
     c.Get ()
-
-  /// Takes an item from an MVar if the item satisfied the condition.
-  /// If the item doesn't satisfy the condition, it is still returned, but
-  /// remains in the MVar.
-  let takeIf (cond:'a -> bool) (c:MVar<'a>) : Async<'a> =
-    c.TakeIf (cond)
 
   /// Takes an item from the MVar.
   let take (c:MVar<'a>) : Async<'a> =
@@ -513,12 +507,6 @@ module MVar =
   /// Returns when an item is available to update.
   let updateAsync (update:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
     c.UpdateAsync update
-
-  /// Updates an item in the MVar if it satisfies the condition.
-  /// Returns when an item is available to update.
-  /// If the item doesn't satisfy the condition, it is not updated, but it is returned.
-  let updateIfAsync (cond:'a -> bool) (update:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
-    c.UpdateIfAsync (cond, update)
 
 
 
@@ -634,31 +622,29 @@ module Resource =
   /// Resources can form supervision hierarchy through a message passing and reaction system.
   /// Supervision hierarchies can be used to re-cycle chains of dependent resources.
   /// </notes>
-  type Resource<'r> internal (create:Async<'r>, handle:('r * obj * exn) -> Async<Recovery>) =
+  type Resource<'r> internal (create:Async<'r>, handle:('r * int * obj * exn) -> Async<Recovery>) =
       
-    //let Log = Log.create "Resource"
+    let Log = Log.create "Resource"
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
    
-    let create (prev:Epoch<'r> option) = async {
-      let! r = create
-      let closed = new CancellationTokenSource()
-      let v = 
+    let create (prev:Epoch<'r> option) = async {      
+      let version = 
         match prev with
         | Some prev -> 
+          Log.warn "closing_previous_resource_epoch|version=%i" prev.version
           prev.closed.Cancel()
           prev.version + 1
         | None ->
           0
-      return { resource = r ; closed = closed ; version = v } }
+      let! r = create
+      return { resource = r ; closed = new CancellationTokenSource() ; version = version } }
 
     let recover (req:obj) ex ep = async {
-      let! recovery = handle (ep.resource,req,ex)
+      let! recovery = handle (ep.resource,ep.version,req,ex)
       match recovery with
       | Escalate ->
-        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture ex
-        edi.Throw ()
-        return failwith ""
+        return raise ex
       | Recreate ->
         let! ep' = create (Some ep)
         return ep' }
@@ -666,12 +652,22 @@ module Resource =
     member internal __.Create () = async {
       return! cell |> MVar.putAsync (create None) }
 
+    member internal __.TryGetVersion () =
+      MVar.getFastUnsafe cell |> Option.map (fun e -> e.version)
+
     member private __.Recover (ep':Epoch<'r>, req:obj, ex:exn) =
       cell 
       |> MVar.updateAsync (fun ep -> 
-        if ep.version = ep'.version then recover req ex ep 
+        if ep.version = ep'.version then 
+          recover req ex ep 
         else async {
+          Log.warn "resource_recovery_already_requested|requested_version=%i current_version=%i" ep'.version ep.version
           return ep })
+
+    member internal __.Recover (req:obj, ex:exn) = async {
+      let! ep = MVar.get cell
+      let! _ep' = __.Recover (ep, req, ex)
+      return () }
         
     member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
       let! epoch = MVar.get cell
@@ -679,7 +675,7 @@ module Resource =
       let rec go a = async {
         let ep = !epoch
         try
-          return! op ep.resource a |> Async.withCancellationToken ep.closed.Token
+          return! op ep.resource a //|> Async.withCancellationToken ep.closed.Token
         with ex ->
           let! epoch' = __.Recover (ep, box a, ex)
           epoch := epoch'
@@ -689,7 +685,7 @@ module Resource =
     interface IDisposable with
       member __.Dispose () = ()
     
-  let recoverableRecreate (create:Async<'r>) (handleError:('r * obj * exn) -> Async<Recovery>) = async {
+  let recoverableRecreate (create:Async<'r>) (handleError:('r * int * obj * exn) -> Async<Recovery>) = async {
     let r = new Resource<_>(create, handleError)
     let! _ = r.Create()
     return r }

@@ -109,6 +109,8 @@ module Exn =
 /// Fault tolerance.
 module Faults =
 
+  let private Log = Log.create "Kafunk.Faults"
+
   let retryAsyncResultReference (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
     AsyncSeq.interleave 
       (AsyncSeq.replicateInfiniteAsync a |> AsyncSeq.map Choice1Of2) 
@@ -128,6 +130,7 @@ module Faults =
         | None -> 
           return Failure e
         | Some wait ->
+          //Log.info "sleeping for %ims before retry" wait
           do! Async.Sleep wait
           return! loop (i + 1) e }
     loop 0 m.Zero
@@ -138,10 +141,7 @@ module Faults =
   /// Retries the specified async computation returning a Result.
   /// Returns the first successful value or throws an exception based on errors observed during retries.
   let retryResultThrow (f:'e -> #exn) (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
-    retryAsyncResult m b a
-    |> Async.map (function
-      | Success a -> a
-      | Failure e -> raise (f e))
+    retryAsyncResult m b a |> Async.map (Result.throwMap f)
 
   let retryResultThrowList (f:'e list -> #exn) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryResultThrow f Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
@@ -158,19 +158,19 @@ module Faults =
   module AsyncFunc =
 
     let retryResult (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e>> =
-      fun a -> async.Delay (fun () -> retryAsyncResult m b (f a))
+      fun a -> async.Delay (fun () -> f a) |> retryAsyncResult m b
 
     let retryResultList (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e list>> =
       retryResult Monoid.freeList b (f >> Async.map (Result.mapError List.singleton))
 
-    let retryResultThrow (ex:'e -> #exn) (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
-      fun a -> async.Delay (fun () -> retryResultThrow ex m b (f a)) 
+    let retryResultThrow (ex:'e -> exn) (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+      fun a -> async.Delay (fun () -> f a) |> retryResultThrow ex m b
 
-    let retryResultThrowList (ex:'e list -> #exn) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
-      fun a -> async.Delay (fun () -> retryResultThrowList ex b (f a))
+    let retryResultThrowList (ex:'e list -> exn) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+      fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex b
 
     let retry (b:Backoff) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-      fun a -> async.Delay (fun () -> retryAsync b (f a))
+      fun a -> async.Delay (fun () -> f a) |> retryAsync b
 
     let doAfterError (g:'a * 'e -> unit) : ('a -> Async<Result<'b, 'e>>) -> ('a -> Async<Result<'b, 'e>>) =
       AsyncFunc.mapOut (fun (a,b) -> b |> Result.mapError (fun e -> g (a,e) ; e))

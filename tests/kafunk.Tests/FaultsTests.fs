@@ -7,23 +7,37 @@ open System.Threading
 open Kafunk
 
 [<Test>]
-let ``should timeout`` () =
+let ``should return timeout result and cancel when past timeout`` () =
   
-  let time = TimeSpan.FromMilliseconds 50.0
+  let serviceTime = TimeSpan.FromMilliseconds 50.0
 
-  let sleepEcho () = async {
-    do! Async.Sleep (int time.TotalMilliseconds * 2)
-    return () }
+  for timeout in [true;false] do
 
-  let sleepEcho =
-    sleepEcho
-    |> AsyncFunc.timeoutResult time
-    |> AsyncFunc.mapOut (snd >> Result.mapError ignore)
+    let sleepTime = 
+      if timeout then int serviceTime.TotalMilliseconds * 2
+      else 0
 
-  let expected = Failure ()
-  let actual = sleepEcho () |> Async.RunSynchronously
+    let cancelled = ref false
+
+    let sleepEcho () = async {
+      use! _cnc = Async.OnCancel (fun () -> cancelled := true)
+      do! Async.Sleep sleepTime
+      return () }
+
+    let sleepEcho =
+      sleepEcho
+      |> AsyncFunc.timeoutResult serviceTime
+      |> AsyncFunc.mapOut (snd >> Result.mapError ignore)
+
+    let expected = 
+      if timeout then Failure ()
+      else Success ()
+
+    let actual = sleepEcho () |> Async.RunSynchronously
   
-  shouldEqual expected actual None
+    shouldEqual expected actual None
+    shouldEqual timeout !cancelled None
+
   
 [<Test>]
 let ``should retry with reevaluation`` () =
