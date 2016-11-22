@@ -46,8 +46,8 @@ module Resource =
     let create (prev:Epoch<'r> option) = async {      
       let version = 
         match prev with
-        | Some prev -> 
-          Log.warn "closing_previous_resource_epoch|version=%i" prev.version
+        | Some prev ->           
+          Log.warn "closing_previous_resource_epoch|version=%i cancellation_requested=%b" prev.version prev.closed.IsCancellationRequested
           prev.closed.Cancel()
           prev.version + 1
         | None ->

@@ -87,7 +87,7 @@ module Consumer =
 
       | Some prevMemberId -> 
         Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
-        do! Async.Sleep (cfg.sessionTimeout + 1000)
+        //do! Async.Sleep (cfg.sessionTimeout + 1000)
 
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
@@ -103,12 +103,13 @@ module Consumer =
       
       match joinGroupRes with
       | Failure ec ->
-        Log.warn "join_group_error"
-        //do! Async.Sleep 100
+        Log.warn "join_group_error|error_code=%i" ec
         match ec with
         | ErrorCode.UnknownMemberIdCode -> 
           Log.warn "resetting_member_id"
+          do! Async.Sleep cfg.sessionTimeout
           return! join None
+          //return! join prevMemberId
         | _ -> 
           return! join prevMemberId
 
@@ -311,6 +312,7 @@ module Consumer =
                   let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
                   match ec with
                   | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
+                    Log.warn "consumer_group_fetch_error|error_code=%i" ec
                     do! close state
                     return None
                   | _ ->
@@ -348,7 +350,7 @@ module Consumer =
             (fun (offset:FetchOffset) -> async {
               let! res = fetch offset
               match res with
-              | None -> 
+              | None ->                
                 return None
               | Some res ->
                 let _,partitions = res.topics.[0]
