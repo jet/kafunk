@@ -462,7 +462,6 @@ module Chan =
       |> Faults.AsyncFunc.doAfterError
           (fun (req,e) -> 
             let v = sendRcvSocket.TryGetVersion() |> Option.getOr -1
-            //sendRcvSocket.Recover (req,e) |> Async.RunSynchronously
             Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
       |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
       |> AsyncFunc.doBeforeAfterExn 

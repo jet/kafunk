@@ -66,6 +66,9 @@
     <Compile Include="Utility\Binary.fs" />
     <Compile Include="Utility\Crc.fs" />
     <Compile Include="Utility\Async.fs" />
+    <Compile Include="Utility\MVar.fs" />
+    <Compile Include="Utility\BoundedMb.fs" />
+    <Compile Include="Utility\Resource.fs" />
     <Compile Include="Utility\AsyncSeq.fs" />
     <Compile Include="Utility\Faults.fs" />
     <Compile Include="Tcp.fs" />
