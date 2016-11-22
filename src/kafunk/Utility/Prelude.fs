@@ -187,11 +187,6 @@ module Result =
     | Choice1Of2 a -> f a
     | Choice2Of2 e -> Choice2Of2 e
  
-  let join (c:Result<Result<'a, 'e>, 'e>) : Result<'a, 'e> =
-    match c with
-    | Choice1Of2 (Choice1Of2 a) -> Choice1Of2 a
-    | Choice1Of2 (Choice2Of2 e) | Choice2Of2 e -> Choice2Of2 e
-
   let fold f g (r:Result<'a, 'e>) : 'b = 
     Choice.fold f g r
 
