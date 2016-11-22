@@ -168,52 +168,6 @@ module AsyncEx =
       do! Async.ParallelIgnore parallelism comps
       return results }
 
-    /// Starts the specified operation using a new CancellationToken and returns
-    /// IDisposable object that cancels the computation. This method can be used
-    /// when implementing the Subscribe method of IObservable interface.
-    static member StartDisposable (op:Async<unit>) =
-      let ct = new System.Threading.CancellationTokenSource()
-      Async.Start(op, ct.Token)
-      { new IDisposable with member x.Dispose() = ct.Cancel() }
-
-    /// Creates a computation which returns the result of the first computation that
-    /// produces a value as well as a handle to the other computation. The other
-    /// computation will be memoized.
-    static member chooseBoth (a:Async<'a>) (b:Async<'a>) : Async<'a * Async<'a>> =
-      Async.FromContinuations <| fun (ok,err,cnc) ->
-        let state = ref 0
-        let iv = new TaskCompletionSource<_>()
-        let inline ok a =
-          if (Interlocked.CompareExchange(state, 1, 0) = 0) then
-            ok (a, iv.Task |> Async.AwaitTask)
-          else
-            iv.SetResult a
-        let inline err (ex:exn) =
-          if (Interlocked.CompareExchange(state, 1, 0) = 0) then err ex
-          else iv.SetException ex
-        let inline cnc ex =
-          if (Interlocked.CompareExchange(state, 1, 0) = 0) then cnc ex
-          else iv.SetCanceled ()
-        Async.StartThreadPoolWithContinuations (a, ok, err, cnc)
-        Async.StartThreadPoolWithContinuations (b, ok, err, cnc)
-
-    static member chooseTasks (a:Task<'a>) (b:Task<'a>) : Async<'a * Task<'a>> = async {
-      let! ct = Async.CancellationToken
-      let i = Task.WaitAny([| (a :> Task) ; (b :> Task) |], ct)
-      if i = 0 then return (a.Result, b)
-      elif i = 1 then return (b.Result, a)
-      else return! failwith (sprintf "unreachable, i = %d" i) }
-
-    /// Creates a computation which produces a tuple consiting of the value produces by the first
-    /// argument computation to complete and a handle to the other computation. The second computation
-    /// to complete is memoized.
-    static member internal chooseBothAny (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a * Async<'b>, 'b * Async<'a>>> =
-      Async.chooseBoth (a |> Async.map Choice1Of2) (b |> Async.map Choice2Of2)
-      |> Async.map (fun (first,second) ->
-        match first with
-        | Choice1Of2 a -> (a,(second |> Async.map (function Choice2Of2 b -> b | _ -> failwith "invalid state"))) |> Choice1Of2
-        | Choice2Of2 b -> (b,(second |> Async.map (function Choice1Of2 a -> a | _ -> failwith "invalid state"))) |> Choice2Of2)
-
     /// Creates an async computation which completes when any of the argument computations completes.
     /// The other argument computation is cancelled.
     static member choose (a:Async<'a>) (b:Async<'a>) : Async<'a> =

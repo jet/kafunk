@@ -80,12 +80,14 @@ module Consumer =
     /// - Sync group (assign partitions to members).
     /// - Fetch initial offsets.
     let rec join (prevMemberId:MemberId option) = async {
+      
       match prevMemberId with
       | None -> 
         Log.info "initializing_consumer|group_id=%s" cfg.groupId
 
       | Some prevMemberId -> 
         Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
+        do! Async.Sleep (cfg.sessionTimeout + 1000)
 
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
@@ -102,12 +104,13 @@ module Consumer =
       match joinGroupRes with
       | Failure ec ->
         Log.warn "join_group_error"
-        do! Async.Sleep 100
+        //do! Async.Sleep 100
         match ec with
         | ErrorCode.UnknownMemberIdCode -> 
           Log.warn "resetting_member_id"
           return! join None
-        | _ -> return! join prevMemberId
+        | _ -> 
+          return! join prevMemberId
 
       | Success joinGroupRes ->
                            

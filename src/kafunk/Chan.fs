@@ -363,7 +363,7 @@ module Chan =
         sendBufferSize = defaultArg sendBufferSize 8192
         connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
         connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
-        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10.0)
+        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 20.0)
         requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
       }
 
@@ -411,11 +411,6 @@ module Chan =
         conn
         recovery
 
-//    let send s = 
-//      Socket.sendAll s
-//      |> AsyncFunc.doExn
-//          (fun (_,ex) -> Log.warn "intercepted_error_on_socket_send|ep=%O error=%O" ep ex)
-
     let! send =
       sendRcvSocket      
       |> Resource.inject Socket.sendAll
@@ -427,8 +422,6 @@ module Chan =
         >> Async.map (fun received -> 
           if received = 0 then raise(SocketException(int SocketError.ConnectionAborted)) 
           else received)
-//        |> AsyncFunc.doExn
-//            (fun (_,ex) -> Log.warn "intercepted_error_on_socket_receive|ep=%O error=%O" ep ex)
       sendRcvSocket 
       |> Resource.inject receive
 
