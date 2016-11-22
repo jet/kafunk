@@ -87,7 +87,6 @@ module Consumer =
 
       | Some prevMemberId -> 
         Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
-        //do! Async.Sleep (cfg.sessionTimeout + 1000)
 
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
@@ -109,7 +108,6 @@ module Consumer =
           Log.warn "resetting_member_id"
           do! Async.Sleep cfg.sessionTimeout
           return! join None
-          //return! join prevMemberId
         | _ -> 
           return! join prevMemberId
 

@@ -310,6 +310,25 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
 
 
+
+[<CustomEquality;CustomComparison>]
+type EndPoint = 
+  | EndPoint of IPEndPoint
+  with
+    static member un (EndPoint ep) = ep
+    static member parse (ipString:string, port:int) = EndPoint (IPEndPoint.parse (ipString, port))
+    static member ofIPEndPoint (ep:IPEndPoint) = EndPoint ep
+    override this.Equals (o:obj) = (EndPoint.un this).Equals(o)
+    override this.GetHashCode () = (EndPoint.un this).GetHashCode()
+    override this.ToString () = (EndPoint.un this).ToString()
+    interface IEquatable<EndPoint> with
+      member this.Equals (other:EndPoint) =
+        (EndPoint.un this).Equals(EndPoint.un other)
+    interface IComparable with
+      member this.CompareTo (other) =
+        this.ToString().CompareTo(other.ToString())
+      
+  
 /// A request/reply channel to a Kafka broker.
 type Chan = 
   private 
@@ -370,7 +389,9 @@ module Chan =
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
+  let connect (config:Config) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
+
+    let ep = EndPoint.un ep
 
     /// Builds and connects the socket to the broker.
     let conn = async {
@@ -412,7 +433,7 @@ module Chan =
         recovery
 
     let! send =
-      sendRcvSocket      
+      sendRcvSocket
       |> Resource.inject Socket.sendAll
 
     /// fault tolerant receive operation
@@ -464,7 +485,11 @@ module Chan =
 
     return Chan send }
 
-  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {    
+  let connectEndPoint (config:Config) (clientId:ClientId) (ep:EndPoint) = async {
+    let! ch = connect config clientId ep
+    return (ep,ch) }
+
+  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->
@@ -474,7 +499,6 @@ module Chan =
         let ip = ips.[0]
         return ip
       | Some ip ->
-        return ip }    
-    let ep = IPEndPoint(ip, port)
-    let! ch = connect config clientId ep
-    return ch }
+        return ip }
+    let ep = EndPoint.ofIPEndPoint (IPEndPoint(ip, port))
+    return! connectEndPoint config clientId ep }

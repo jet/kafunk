@@ -18,6 +18,12 @@ module internal NetEx =
       if IPAddress.TryParse (ipString, &ip) then Some ip
       else None
 
+  type IPEndPoint with
+    static member tryParse (ipString:string, port:int) =
+      IPAddress.tryParse ipString |> Option.map (fun ip -> IPEndPoint(ip, port))
+    static member parse (ipString:string, port:int) =
+      IPEndPoint.tryParse (ipString, port) |> Option.get
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Dns =

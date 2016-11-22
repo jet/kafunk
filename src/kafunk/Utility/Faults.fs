@@ -118,6 +118,9 @@ module Faults =
 //    |> AsyncSeq.choose Choice.tryLeft
 //    |> AsyncSeq.sequenceResult m
 
+  /// Retries an async computation returning a result according to the specified backoff strategy.
+  /// Returns an async computation containing a result, which is Success of a pair of the successful result and errors
+  /// accumulated during retries, if any, and otherwise, a Failure of accumulated errors.
   let retryAsyncResultWarn (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
     AsyncSeq.interleaveChoice 
       (AsyncSeq.replicateInfiniteAsync a)
