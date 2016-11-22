@@ -338,7 +338,7 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
+  let txs = new ConcurrentDictionary<int, DateTime * 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
 
   let demux (data:Binary.Segment) =
@@ -347,7 +347,7 @@ type ReqRepSession<'a, 'b, 's> internal
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
       //Log.trace "received_response|correlation_id=%i size=%i" correlationId sessionData.payload.Count
-      let state,reply = token
+      let _dt,state,reply = token
       try
         let res = decode (correlationId,state,sessionData.payload)
         if not (reply.TrySetResult res) then
@@ -359,18 +359,21 @@ type ReqRepSession<'a, 'b, 's> internal
       Log.error "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
   let mux (ct:CancellationToken) (req:'a) =
+    let startTime = DateTime.UtcNow
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()
-    let sessionReq,state = encode (req,correlationId)
+    let sessionReq,state = encode (req,correlationId)    
     let cancel () =
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
-        Log.warn "request_timed_out|correlation_id=%i in_flight_requests=%i state=%A" correlationId txs.Count state
+        let endTime = DateTime.UtcNow
+        let elapsed = endTime - startTime
+        Log.warn "request_timed_out|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore
     ct.Register (Action(cancel)) |> ignore
     match awaitResponse req with
     | None ->
-      if not (txs.TryAdd(correlationId, (state,rep))) then
+      if not (txs.TryAdd(correlationId, (startTime,state,rep))) then
         Log.error "clash_of_the_sessions"
         invalidOp (sprintf "clash_of_the_sessions|correlation_id=%i" correlationId)
     | Some res ->
@@ -389,13 +392,7 @@ type ReqRepSession<'a, 'b, 's> internal
       Log.error "receive_loop_faiure|error=%O" ex
       return! receiveLoop }
 
-  do Async.Start(receiveLoop, cts.Token) 
-
-//  do
-//    receive
-//    |> AsyncSeq.iter demux
-//    |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
-//    |> (fun t -> Async.Start(t, cts.Token))
+  do Async.Start(receiveLoop, cts.Token)
 
   member x.Send (req:'a) = async {
     let! ct = Async.CancellationToken
