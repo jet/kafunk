@@ -256,7 +256,7 @@ module KafkaUri =
 
   let [<Literal>] DefaultPortKafka = 9092
   let [<Literal>] UriSchemeKafka = "kafka"
-  let private KafkaBrokerUriRegex = Regex("^(?<scheme>kafka://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
+  let private KafkaBrokerUriRegex = Regex("^(?<scheme>(kafka|tcp)://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
 
   let parse (host:string) =
     let m = KafkaBrokerUriRegex.Match host

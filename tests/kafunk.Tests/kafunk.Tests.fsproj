@@ -137,6 +137,7 @@
   <ItemGroup>
     <None Include="paket.references" />
     <Compile Include="Shared.fs" />
+    <Compile Include="PreludeTests.fs" />
     <Compile Include="CodecTests.fs" />
     <Compile Include="TcpTests.fs" />
     <Compile Include="CompressionGzipTests.fs" />
