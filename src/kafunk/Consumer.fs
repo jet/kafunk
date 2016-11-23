@@ -23,8 +23,8 @@ type ConsumerConfig = {
       {
         groupId = groupId
         topics = topics
-        sessionTimeout = 10000
-        heartbeatFrequency = 4
+        sessionTimeout = 20000
+        heartbeatFrequency = 10
         fetchMinBytes = 0
         fetchMaxWaitMs = 0
         fetchBufferBytes = defaultArg fetchBufferBytes 1000000
@@ -66,7 +66,6 @@ module Consumer =
   /// corresponding to the message set.
   let consume (conn:KafkaConn) (cfg:ConsumerConfig) =
         
-    // TODO: configurable
     let protocolType = ProtocolType.consumer
     let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Binary.empty)
     let assignmentStrategy : AssignmentStrategy = "range" // roundrobin
@@ -74,7 +73,6 @@ module Consumer =
       GroupProtocols(
         [| assignmentStrategy, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta |])
                             
-
     /// Joins the consumer group.
     /// - Join group.
     /// - Sync group (assign partitions to members).
@@ -221,13 +219,15 @@ module Consumer =
           
           conn.CancellationToken.Register (fun () -> state.closed.TrySetResult() |> ignore) |> ignore
 
+          let heartbeatSleep = cfg.sessionTimeout / cfg.heartbeatFrequency
+
           /// Starts the hearbeat process.
           let rec heartbeat (state:GenerationState) =
             peekTask
               id
               state.closed.Task
               (async {
-                let req = HeartbeatRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId)
+                let req = HeartbeatRequest(cfg.groupId, state.generationId, state.memberId)
                 let! res = Kafka.heartbeat conn req |> Async.Catch
                 match res with
                 | Success res ->
@@ -236,16 +236,16 @@ module Consumer =
                     do! close state
                     return ()
                   | _ ->
-                    do! Async.Sleep (cfg.sessionTimeout / cfg.heartbeatFrequency)
+                    do! Async.Sleep heartbeatSleep
                     return! heartbeat state
                 | Failure ex ->
                   Log.warn "heartbeat_failure|generation_id=%i error=%O" state.generationId ex
                   do! close state
                   return () })
 
-          Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i" cfg.heartbeatFrequency cfg.sessionTimeout
-          //Async.Start (heartbeat state', cts.Token)
+          Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleep
           Async.Start (heartbeat state)
+
           return state }
 
     /// Closes a consumer group.
@@ -269,29 +269,33 @@ module Consumer =
       let consumePartition (topic:TopicName, partition:Partition, initOffset:FetchOffset) = async {
            
         /// Commits the specified offset within the consumer group.
-        let commitOffset (offset:FetchOffset) : Async<unit> = async {
-          //Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
-          let req = OffsetCommitRequest(cfg.groupId, state.generationId, state.memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
-          let! res = Kafka.offsetCommit conn req |> Async.Catch
-          match res with
-          | Success res ->
-            if res.topics.Length > 0 then
-              let (_tn,ps) = res.topics.[0]
-              let (_p,ec) = ps.[0]
-              match ec with
-              | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode  ->
+        let commitOffset (offset:FetchOffset) : Async<unit> = 
+          peekTask
+            (ignore)
+            (state.closed.Task)
+            (async {
+              //Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
+              let req = OffsetCommitRequest(cfg.groupId, state.generationId, state.memberId, cfg.offsetRetentionTime, [| topic, [| partition, offset, "" |] |])
+              let! res = Kafka.offsetCommit conn req |> Async.Catch
+              match res with
+              | Success res ->
+                if res.topics.Length > 0 then
+                  let (_tn,ps) = res.topics.[0]
+                  let (_p,ec) = ps.[0]
+                  match ec with
+                  | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode  ->
+                    do! close state
+                    return ()
+                  | _ ->
+                    //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
+                    return ()
+                else
+                  Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
+                  return failwith "offset commit failed!"
+              | Failure ex ->
+                Log.warn "commit_offset_failure|generation_id=%i error=%O" state.generationId ex
                 do! close state
-                return ()
-              | _ ->
-                //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
-                return ()
-            else
-              Log.error "offset_committ_failed|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" topic partition cfg.groupId state.memberId state.generationId offset
-              return failwith "offset commit failed!"
-          | Failure ex ->
-            Log.warn "commit_offset_failure|generation_id=%i error=%O" state.generationId ex
-            do! close state
-            return () }
+                return () })
 
         /// Fetches the specified offset.
         let rec fetch (offset:FetchOffset) : Async<FetchResponse option> = 

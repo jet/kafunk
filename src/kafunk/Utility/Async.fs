@@ -213,7 +213,7 @@ module AsyncEx =
       Async.timeoutWith (f >> Failure) timeout (c |> Async.map Success)
 
     static member timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeoutException>> =
-      Async.timeoutResultWith (fun () -> TimeoutException()) timeout c
+      Async.timeoutResultWith (fun () -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)) timeout c
 
     static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
       Async.timeoutResult timeout c |> Async.map Result.throw

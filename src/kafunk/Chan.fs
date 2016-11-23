@@ -382,7 +382,7 @@ module Chan =
         sendBufferSize = defaultArg sendBufferSize 8192
         connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
         connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
-        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 20.0)
+        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
         requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
       }
 
@@ -474,8 +474,8 @@ module Chan =
       send
       |> AsyncFunc.timeoutResult config.requestTimeout
       |> Faults.AsyncFunc.doAfterError
-          (fun (req,e) -> 
-            let v = sendRcvSocket.TryGetVersion() |> Option.getOr -1
+          (fun (req,e) ->
+            let v = sendRcvSocket.TryGetVersion () |> Option.getOr -1
             Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
       |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
       |> AsyncFunc.doBeforeAfterExn 
