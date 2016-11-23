@@ -424,27 +424,27 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
-  and getMetadata (state:ConnState) (topics:TopicName[]) =
-    let update state' = async {
-      if state'.version = state.version then
-        let! metadata = Chan.metadata (send state') (Metadata.Request(topics))
+  and getMetadata (callerState:ConnState) (topics:TopicName[]) =
+    let update currentState = async {
+      if currentState.version = callerState.version then
+        let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
-        return state' |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata)
+        return currentState |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata)
       else
-        return state' }
+        return currentState }
     stateCell |> MVar.updateAsync update
 
   /// Discovers a coordinator for the group.
-  and getGroupCoordinator (state:ConnState) (groupId:GroupId) =
-    let update state' = async {
-      if state'.version = state.version then
-        let! group = Chan.groupCoordinator (send state') (GroupCoordinatorRequest(groupId))
+  and getGroupCoordinator (callerState:ConnState) (groupId:GroupId) =
+    let update currentState = async {
+      if currentState.version = callerState.version then
+        let! group = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
         Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print group)
         return 
-          state' 
+          currentState 
           |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
       else
-        return state' }
+        return currentState }
     stateCell |> MVar.updateAsync update
 
   /// Sends the request based on discovered routes.
@@ -527,11 +527,16 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
 
-  member internal __.Send (req:RequestMessage) : Async<ResponseMessage> = async {
+  member private __.GetState () =
     let state = MVar.getFastUnsafe stateCell
     if state.IsNone then
-      return invalidOp "Connection state unavailable; must not be connected."
-    return! send state.Value req }
+      invalidOp "Connection state unavailable; must not be connected."
+    else
+      state.Value
+
+  member internal __.Send (req:RequestMessage) : Async<ResponseMessage> = async {
+    let state = __.GetState ()
+    return! send state req }
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
@@ -539,16 +544,12 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
     return () }
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
-    let state = MVar.getFastUnsafe stateCell
-    if state.IsNone then
-      return invalidOp "Connection state unavailable; must not be connected."
-    return! getGroupCoordinator state.Value groupId }
+    let state = __.GetState ()
+    return! getGroupCoordinator state groupId }
 
   member internal __.GetMetadata (topics:TopicName[]) = async {
-    let state = MVar.getFastUnsafe stateCell
-    if state.IsNone then
-      return invalidOp "Connection state unavailable; must not be connected."
-    let! state' = getMetadata state.Value topics
+    let state = __.GetState ()
+    let! state' = getMetadata state topics
     return state'.routes |> Routing.Routes.topicPartitions }
 
   member __.Close () =
