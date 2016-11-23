@@ -323,7 +323,7 @@ type RetryAction =
 
 /// Kafka connection configuration.
 /// http://kafka.apache.org/documentation.html#connectconfigs
-type KafkaConnCfg = {
+type KafkaConnConfig = {
   
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
@@ -332,7 +332,7 @@ type KafkaConnCfg = {
   clientId : ClientId
   
   /// TCP connection configuration.
-  tcpConfig : Chan.Config 
+  tcpConfig : ChanConfig 
 
 } with
 
@@ -342,7 +342,7 @@ type KafkaConnCfg = {
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig) =
     { bootstrapServers = bootstrapServers
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
-      tcpConfig = defaultArg tcpConfig (Chan.Config.create()) }
+      tcpConfig = defaultArg tcpConfig (ChanConfig.create ()) }
 
 
 /// Connection state.
@@ -384,7 +384,7 @@ exception EscalationException of errorCode:ErrorCode * res:ResponseMessage
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
 /// It acts as a context for API operations, providing filtering and fault tolerance.
-type KafkaConn internal (cfg:KafkaConnCfg) =
+type KafkaConn internal (cfg:KafkaConnConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
 
@@ -404,7 +404,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
 
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  let rec bootstrap (cfg:KafkaConnCfg) =
+  let rec bootstrap (cfg:KafkaConnConfig) =
     let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -412,7 +412,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let! ep,ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
-          let state = ConnState.bootstrap (ep, ch)
+          let state = ConnState.bootstrap (ep,ch)
           return Success state
         with ex ->
           Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex
@@ -568,7 +568,7 @@ module Kafka =
 
   let private Log = Log.create "Kafunk"
   
-  let connAsync (cfg:KafkaConnCfg) = async {
+  let connAsync (cfg:KafkaConnConfig) = async {
     let conn = new KafkaConn(cfg)
     do! conn.Connect ()
     return conn }
@@ -578,7 +578,7 @@ module Kafka =
 
   let connHostAsync (host:string) =
     let uri = KafkaUri.parse host
-    let cfg = KafkaConnCfg.create [uri]
+    let cfg = KafkaConnConfig.create [uri]
     connAsync cfg
 
   let connHost host =

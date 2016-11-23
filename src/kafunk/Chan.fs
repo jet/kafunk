@@ -337,6 +337,38 @@ type Chan =
   private 
   | Chan of send:(RequestMessage -> Async<ResponseMessage>)
 
+
+/// Configuration for an individual TCP channel.
+type ChanConfig = {
+    
+  useNagle : bool
+    
+  receiveBufferSize : int
+    
+  sendBufferSize : int
+        
+  connectTimeout : TimeSpan
+
+  connectBackoff : Backoff
+
+  requestTimeout : TimeSpan
+    
+  requestBackoff : Backoff
+
+} with
+    
+  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
+    {
+      useNagle = defaultArg useNagle false
+      receiveBufferSize = defaultArg receiveBufferSize 8192
+      sendBufferSize = defaultArg sendBufferSize 8192
+      connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
+      connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
+      requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+    }
+
+
 /// API operations on a generic request/reply channel.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Chan =
@@ -359,40 +391,10 @@ module Chan =
   let listGroups = AsyncFunc.dimap RequestMessage.ListGroups ResponseMessage.toListGroups
   let describeGroups = AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups
 
-  /// Configuration for an individual TCP channel.
-  type Config = {
-    
-    useNagle : bool
-    
-    receiveBufferSize : int
-    
-    sendBufferSize : int
-        
-    connectTimeout : TimeSpan
-
-    connectBackoff : Backoff
-
-    requestTimeout : TimeSpan
-    
-    requestBackoff : Backoff
-
-  } with
-    
-    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
-      {
-        useNagle = defaultArg useNagle false
-        receiveBufferSize = defaultArg receiveBufferSize 8192
-        sendBufferSize = defaultArg sendBufferSize 8192
-        connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
-        connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
-        requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
-        requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
-      }
-
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (config:Config) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
+  let connect (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
 
     let ep = EndPoint.endpoint ep
 
@@ -488,11 +490,11 @@ module Chan =
 
     return Chan send }
 
-  let connectEndPoint (config:Config) (clientId:ClientId) (ep:EndPoint) = async {
+  let connectEndPoint (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) = async {
     let! ch = connect config clientId ep
     return (ep,ch) }
 
-  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
+  let connectHost (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->
