@@ -90,7 +90,7 @@ module internal ResponseEx =
   let wrongResponse () =
     failwith (sprintf "Wrong response!")
 
-  type RequestMessage with    
+  type RequestMessage with
     /// If a request does not expect a response, returns the default response.
     /// Used to generate responses for requests which don't expect a response from the server.
     static member awaitResponse (x:RequestMessage) =
@@ -111,8 +111,8 @@ module internal ResponseEx =
     static member internal toHeartbeat res = match res with HeartbeatResponse x -> x | _ -> wrongResponse ()
     static member internal toLeaveGroup res = match res with LeaveGroupResponse x -> x | _ -> wrongResponse ()
     static member internal toListGroups res = match res with ListGroupsResponse x -> x | _ -> wrongResponse ()
-    static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()      
-    static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()      
+    static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()
+    static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()
 
   // ------------------------------------------------------------------------------------------------------------------------------
   // printers
@@ -168,7 +168,7 @@ module internal ResponseEx =
           let ps = 
             ps
             |> Seq.map (fun (p,o,_mb) -> sprintf "(partition=%i offset=%i)" p o)
-            |> String.concat " ; "        
+            |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
       sprintf "FetchRequest|%s" ts
@@ -310,20 +310,23 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
 
 
-
-[<CustomEquality;CustomComparison>]
+/// A broker endpoint.
+[<CustomEquality;CustomComparison;StructuredFormatDisplay("{Display}")>]
 type EndPoint = 
+  private
   | EndPoint of IPEndPoint
   with
-    static member un (EndPoint ep) = ep
+    static member endpoint (EndPoint ep) = ep
     static member parse (ipString:string, port:int) = EndPoint (IPEndPoint.parse (ipString, port))
     static member ofIPEndPoint (ep:IPEndPoint) = EndPoint ep
-    override this.Equals (o:obj) = (EndPoint.un this).Equals(o)
-    override this.GetHashCode () = (EndPoint.un this).GetHashCode()
-    override this.ToString () = (EndPoint.un this).ToString()
+    static member ofIPAddressAndPort (ip:IPAddress, port:int) = EndPoint.ofIPEndPoint (IPEndPoint(ip,port))
+    member this.Display = this.ToString()
+    override this.Equals (o:obj) = (EndPoint.endpoint this).Equals(o)
+    override this.GetHashCode () = (EndPoint.endpoint this).GetHashCode()
+    override this.ToString () = (EndPoint.endpoint this).ToString()
     interface IEquatable<EndPoint> with
       member this.Equals (other:EndPoint) =
-        (EndPoint.un this).Equals(EndPoint.un other)
+        (EndPoint.endpoint this).Equals(EndPoint.endpoint other)
     interface IComparable with
       member this.CompareTo (other) =
         this.ToString().CompareTo(other.ToString())
@@ -332,7 +335,7 @@ type EndPoint =
 /// A request/reply channel to a Kafka broker.
 type Chan = 
   private 
-  | Chan of (RequestMessage -> Async<ResponseMessage>)
+  | Chan of send:(RequestMessage -> Async<ResponseMessage>)
 
 /// API operations on a generic request/reply channel.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -391,7 +394,7 @@ module Chan =
   /// Only a single channel per endpoint is needed.
   let connect (config:Config) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
 
-    let ep = EndPoint.un ep
+    let ep = EndPoint.endpoint ep
 
     /// Builds and connects the socket to the broker.
     let conn = async {
@@ -500,5 +503,5 @@ module Chan =
         return ip
       | Some ip ->
         return ip }
-    let ep = EndPoint.ofIPEndPoint (IPEndPoint(ip, port))
+    let ep = EndPoint.ofIPAddressAndPort (ip, port)
     return! connectEndPoint config clientId ep }

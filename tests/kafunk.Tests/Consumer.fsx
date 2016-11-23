@@ -18,23 +18,16 @@ let go = async {
   let consumerCfg = 
     ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)
   return!
-    Consumer.consume conn consumerCfg
-    |> AsyncSeq.iterAsync (fun (generationId,topics) -> async {
-      return!
-        topics
-        |> Seq.map (fun (tn,p,stream) -> 
-          Log.info "streaming|topic=%s partition=%i" tn p
-          stream
-          |> AsyncSeq.iterAsync (fun (ms,commitOffset) -> async {
-            Log.info "consuming_message_set|partition=%i count=%i size=%i first_offset=%i"
-              p
-              (ms.messages.Length)
-              (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
-              (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
-            do! commitOffset
-            return () })) 
-        |> Async.Parallel
-        |> Async.Ignore })
+    Consumer.create conn consumerCfg
+    |> Consumer.consume (fun tn p ms commit -> async {
+      Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i"
+        tn
+        p
+        (ms.messages.Length)
+        (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
+        (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
+      do! commit
+    })
 }
 
 Async.RunSynchronously go

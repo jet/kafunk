@@ -6,7 +6,6 @@ open System
 open System.Text
 open Kafunk
 
-
 [<Test>]
 let ``framing should work`` () =
   for msgSize in [1..100] do
@@ -29,7 +28,7 @@ let ``framing should work`` () =
         |> Array.groupInto chunks
       let chunked =
         chunkedList
-        |> Array.map (fun c -> Binary.Segment(c))    
+        |> Array.map (fun c -> Binary.Segment(c))
         |> AsyncSeq.ofSeq
       let unframed = 
         Framing.LengthPrefix.unframe chunked

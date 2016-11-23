@@ -11,7 +11,6 @@ open System.Threading.Tasks
 open System.Collections.Generic
 
 open Kafunk
-open Kafunk.Protocol
 
 /// Routing topic/partition and groups to channels.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -335,28 +334,21 @@ type KafkaConnCfg = {
   /// TCP connection configuration.
   tcpConfig : Chan.Config 
 
-  requestTimeout : TimeSpan
-
-//  let bootstrapConnectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
-//  let waitRetrySleepMs = 5000
-
 } with
 
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
-  static member ofBootstrapServers (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?requestTimeout) =
+  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig) =
     { bootstrapServers = bootstrapServers
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
-      tcpConfig = defaultArg tcpConfig (Chan.Config.create())
-      requestTimeout = defaultArg requestTimeout (TimeSpan.FromMilliseconds 5000.0)  }
+      tcpConfig = defaultArg tcpConfig (Chan.Config.create()) }
 
 
 /// Connection state.
 type ConnState = {
-  cfg : KafkaConnCfg
-  channels : Map<EndPoint, Chan>
   routes : Routing.Routes
+  channels : Map<EndPoint, Chan>
   version : int
 } with
   
@@ -380,9 +372,8 @@ type ConnState = {
           version = s.version + 1
     }
 
-  static member ofBootstrap (cfg:KafkaConnCfg, bootstrapEp:EndPoint, bootstrapCh:Chan) =
+  static member bootstrap (bootstrapEp:EndPoint, bootstrapCh:Chan) =
     {
-      cfg = cfg
       channels = [bootstrapEp,bootstrapCh] |> Map.ofList
       routes = Routing.Routes.ofBootstrap bootstrapEp
       version = 0
@@ -421,7 +412,7 @@ type KafkaConn internal (cfg:KafkaConnCfg) =
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let! ep,ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
-          let state = ConnState.ofBootstrap (cfg, ep, ch)
+          let state = ConnState.bootstrap (ep, ch)
           return Success state
         with ex ->
           Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex
@@ -586,7 +577,7 @@ module Kafka =
 
   let connHostAsync (host:string) =
     let uri = KafkaUri.parse host
-    let cfg = KafkaConnCfg.ofBootstrapServers [uri]
+    let cfg = KafkaConnCfg.create [uri]
     connAsync cfg
 
   let connHost host =

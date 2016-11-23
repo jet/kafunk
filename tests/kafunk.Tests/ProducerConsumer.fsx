@@ -53,7 +53,7 @@ let producer () = async {
         |> Seq.toArray
       let! res = Producer.produce producer messages
       return () })
-    |> Async.ParallelIgnore producerThreads    
+    |> Async.ParallelIgnore producerThreads
 
   Log.error "producer_done"
 }
@@ -72,7 +72,7 @@ let consumer () = async {
       initialFetchTime=Time.EarliestOffset, 
       fetchBufferBytes=100000)
 
-  let handle (ms:MessageSet) = async {    
+  let handle _tn _p (ms:MessageSet) = async {
     ms.messages
     |> Seq.iter (fun (o,ms,m) -> 
       try
@@ -82,7 +82,7 @@ let consumer () = async {
           if ReceiveSet.TryAdd (i,i) then
             if ReceiveSet.Count >= messageCount then
               Log.warn "received_complete_set|receive_count=%i" ReceiveSet.Count
-              tcs.SetResult()            
+              tcs.SetResult()
           else 
             Duplicates.Add i
         else
@@ -92,7 +92,7 @@ let consumer () = async {
 
   return!
     Async.choose
-      (Consumer.consume conn consumerCfg |> Consumer.callbackCommitAfter handle)
+      (Consumer.create conn consumerCfg |> Consumer.consumeCommitAfter handle)
       (tcs.Task |> Async.AwaitTask)
 }
 

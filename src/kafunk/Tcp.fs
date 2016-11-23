@@ -368,7 +368,7 @@ type ReqRepSession<'a, 'b, 's> internal
     let startTime = DateTime.UtcNow
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()
-    let sessionReq,state = encode (req,correlationId)    
+    let sessionReq,state = encode (req,correlationId)
     let cancel () =
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
         let endTime = DateTime.UtcNow

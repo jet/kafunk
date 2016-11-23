@@ -7,6 +7,7 @@ open System.Threading.Tasks
 
 open Kafunk
 
+/// Kafka consumer configuration.
 type ConsumerConfig = {
   groupId : GroupId
   topics : TopicName[]
@@ -17,28 +18,35 @@ type ConsumerConfig = {
   fetchBufferBytes : MaxBytes
   offsetRetentionTime : int64
   initialFetchTime : Time
-}
-  with
-    static member create (groupId:GroupId, topics:TopicName[], ?initialFetchTime, ?fetchBufferBytes) =
+} with
+    static member create 
+      (groupId:GroupId, topics:TopicName[], ?initialFetchTime, ?fetchBufferBytes, ?sessionTimeout, 
+          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs) =
       {
         groupId = groupId
         topics = topics
-        sessionTimeout = 20000
-        heartbeatFrequency = 10
-        fetchMinBytes = 0
-        fetchMaxWaitMs = 0
+        sessionTimeout = defaultArg sessionTimeout 20000
+        heartbeatFrequency = defaultArg heartbeatFrequency 10
+        fetchMinBytes = defaultArg fetchMinBytes 0
+        fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
         fetchBufferBytes = defaultArg fetchBufferBytes 1000000
-        offsetRetentionTime = -1L
+        offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
       }
 
-
+/// A consumer.
+type Consumer = 
+  private
+  | Consumer of AsyncSeq<GenerationId * (TopicName * Partition * AsyncSeq<MessageSet * Async<unit>>)[]>
 
 /// High-level consumer API.
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Consumer =
 
   let private Log = Log.create "Kafunk.Consumer"
   
+  let private generations (Consumer(gs)) = gs
+
   /// Stats corresponding to a single generation of the consumer group protocol.
   type GenerationState = {
     generationId : GenerationId
@@ -59,12 +67,12 @@ module Consumer =
     if t.IsCompleted then return f t.Result
     else return! a }
 
-  /// Returns an async sequence corresponding to generations of the consumer group protocol.
-  /// A generation changes when the group changes, particularly when members join or leave.
+  /// Creates a participant in the consumer groups protocol.
+  /// A generation changes when the group changes, such as when members join or leave.
   /// Each generation contains a set of async sequences corresponding to messages in a single topic-partition.
   /// The message set is accompanied by an async computation which when evaluated, commits the checkpoint
   /// corresponding to the message set.
-  let consume (conn:KafkaConn) (cfg:ConsumerConfig) =
+  let create (conn:KafkaConn) (cfg:ConsumerConfig) =
         
     let protocolType = ProtocolType.consumer
     let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, cfg.topics, Binary.empty)
@@ -76,6 +84,7 @@ module Consumer =
     /// Joins the consumer group.
     /// - Join group.
     /// - Sync group (assign partitions to members).
+    /// - Start heartbeats.
     /// - Fetch initial offsets.
     let rec join (prevMemberId:MemberId option) = async {
       
@@ -195,7 +204,6 @@ module Consumer =
                   return offset
             with ex ->
               Log.error "fetch_offset_error|error=%O" ex
-              //do! close ()
               return raise ex }
 
           let! initOffsets =
@@ -217,7 +225,9 @@ module Consumer =
               closed = Tasks.TaskCompletionSource<unit>()
             }
           
-          conn.CancellationToken.Register (fun () -> state.closed.TrySetResult() |> ignore) |> ignore
+          conn.CancellationToken.Register (fun () ->
+            Log.info "closing_consumer_group_on_connection_close" 
+            state.closed.TrySetResult() |> ignore) |> ignore
 
           let heartbeatSleep = cfg.sessionTimeout / cfg.heartbeatFrequency
 
@@ -352,7 +362,7 @@ module Consumer =
             (fun (offset:FetchOffset) -> async {
               let! res = fetch offset
               match res with
-              | None ->                
+              | None ->
                 return None
               | Some res ->
                 let _,partitions = res.topics.[0]
@@ -386,34 +396,32 @@ module Consumer =
           let! topics = consume state
           return Some ((state.generationId,topics), Some state) })
                    
-    generations None
+    Consumer (generations None)
 
-    
-  let callback 
-    (handler:MessageSet * Async<unit> -> Async<unit>) 
-    (consumer:AsyncSeq<GenerationId * (TopicName * Partition * AsyncSeq<MessageSet * Async<unit>>)[]>) : Async<unit> = async {
-      return!
-        consumer
-        |> AsyncSeq.iterAsync (fun (_generationId,topics) -> async {
-          return!
-            topics
-            |> Seq.map (fun (_tn,_p,stream) -> async {
-              return! stream |> AsyncSeq.iterAsync handler })
-            |> Async.Parallel
-            |> Async.Ignore }) }
+  /// Starts consumption using the specified handler.
+  /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
+  /// The handler accepts the topic, partition, message set and an async computation which commits offsets corresponding to the message set.
+  let consume 
+    (handler:TopicName -> Partition -> MessageSet -> Async<unit> -> Async<unit>) 
+    (consumer:Consumer) : Async<unit> =
+      consumer
+      |> generations 
+      |> AsyncSeq.iterAsync (fun (_generationId,topics) -> async {
+        return!
+          topics
+          |> Seq.map (fun (tn,p,stream) -> async {
+            return! stream |> AsyncSeq.iterAsync (fun (ms,commit) -> handler tn p ms commit) })
+          |> Async.Parallel
+          |> Async.Ignore })
 
-  let callbackCommit
-    (commit:MessageSet * Async<unit> -> Async<unit>)
-    (handler:MessageSet -> Async<unit>) =
-    callback (fun (ms,c) -> async {
-      do! handler ms
-      do! commit (ms,c) })
+  /// Starts consumption using the specified handler.
+  /// Offsets for the corresponding topic/partition/message-set are committed after the handler completes.
+  let consumeCommitAfter 
+    (handler:TopicName -> Partition -> MessageSet -> Async<unit>) =
+    consume (fun tn p ms commit -> async {
+        do! handler tn p ms
+        do! commit })
 
-  let callbackCommitAfter handler =
-    callbackCommit (fun (_,commit) -> commit) handler
-
-  let callbackCommitAsync handler =
-    callbackCommit (fun (_,commit) -> async { return Async.Start commit }) handler
     
 
   

@@ -43,10 +43,10 @@ module Resource =
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
    
-    let create (prev:Epoch<'r> option) = async {      
+    let create (prev:Epoch<'r> option) = async {
       let version = 
         match prev with
-        | Some prev ->           
+        | Some prev ->
           Log.warn "closing_previous_resource_epoch|version=%i cancellation_requested=%b" prev.version prev.closed.IsCancellationRequested
           prev.closed.Cancel()
           prev.version + 1

@@ -104,7 +104,7 @@ module Producer =
     let mb = BoundedMb.create count
     let cts = new CancellationTokenSource()
 
-    let sendBufferAndReply (buf:('a * TaskCompletionSource<_>)[]) = async {      
+    let sendBufferAndReply (buf:('a * TaskCompletionSource<_>)[]) = async {
       let! res = sendBatch (Array.map fst buf)
       (buf,res) 
       ||> Array.zip
@@ -144,7 +144,7 @@ module Producer =
               let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
               let ms = Compression.compress cfg.compression messages
               p,ms)
-            |> Seq.toArray          
+            |> Seq.toArray
           let req = ProduceRequest.ofMessageSetTopics [| cfg.topic, pms |] cfg.requiredAcks cfg.timeout
           send req
 
@@ -183,7 +183,7 @@ module Producer =
               let ms = Compression.compress cfg.compression messages
               p,ms)
             |> Seq.toArray
-          return!          
+          return!
             pms
             |> Seq.map (fun (p,ms) -> ProduceRequest.ofMessageSetTopics [| cfg.topic, [| p,ms |] |] cfg.requiredAcks cfg.timeout)
             |> Seq.map send
@@ -192,7 +192,7 @@ module Producer =
 
         sendBatch
 
-    let init (_prevState:ProducerState option) = async {            
+    let init (_prevState:ProducerState option) = async {
       let state = async {
         let! topicPartitions = conn.GetMetadata [| cfg.topic |]
         let topicPartitions = topicPartitions |> Map.find cfg.topic
@@ -213,6 +213,7 @@ module Producer =
     let! state = init None
     return P (produce state) }
 
+  /// Creates a producer.
   let create (conn:KafkaConn) (cfg:ProducerCfg) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
 
