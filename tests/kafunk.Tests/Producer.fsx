@@ -9,7 +9,7 @@ let conn = Kafka.connHost "127.0.0.1:9092"
 let topicName = "test-topic_1019"
 
 let producerCfg =
-  ProducerCfg.create (topicName, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
+  ProducerConfig.create (topicName, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
 
 let producer =
   Producer.createAsync conn producerCfg

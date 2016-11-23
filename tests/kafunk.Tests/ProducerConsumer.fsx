@@ -30,7 +30,7 @@ let producer () = async {
   use conn = Kafka.connHost host
 
   let producerCfg =
-    ProducerCfg.create (
+    ProducerConfig.create (
       topicName, 
       Partitioner.roundRobin, 
       requiredAcks=RequiredAcks.Local)

@@ -25,28 +25,34 @@ type ProducerMessage =
         let keyBuf = defaultArg (key |> Option.map Binary.ofArray) Binary.empty
         ProducerMessage(Binary.ofArray value, keyBuf)
 
+/// A partition function.
+type Partitioner = TopicName * Partition[] * ProducerMessage -> Partition
+
+/// Partition functions.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Partitioner =
 
   /// Constantly returns the same partition.
-  let konst (p:Partition) : TopicName * Partition[] * ProducerMessage -> Partition =
+  let konst (p:Partition) : Partitioner =
     konst p
 
   /// Round-robins across partitions.
-  let roundRobin : TopicName * Partition[] * ProducerMessage -> Partition =
+  let roundRobin : Partitioner =
     let i = ref 0
     fun (_,ps,_) -> ps.[System.Threading.Interlocked.Increment i % ps.Length]
 
   /// Computes the hash-code of the routing key to get the topic partition.
-  let hashKey (h:Binary.Segment -> int) : TopicName * Partition[] * ProducerMessage -> Partition =
+  let hashKey (h:Binary.Segment -> int) : Partitioner =
     fun (_,ps,pm) -> ps.[(h pm.key) % ps.Length]
 
 
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
-type Producer = P of (ProducerMessage[] -> Async<ProduceResponse>)
+type Producer = 
+  private
+  | P of send:(ProducerMessage[] -> Async<ProduceResponse>)
 
 /// Producer configuration.
-type ProducerCfg = {
+type ProducerConfig = {
 
   /// The topic to produce to.
   topic : TopicName
@@ -62,20 +68,19 @@ type ProducerCfg = {
 
   /// A partition function which given a topic name, cluster topic metadata and the message payload, returns the partition
   /// which the message should be written to.
-  partition : TopicName * Partition[] * ProducerMessage -> Partition
+  partitioner : Partitioner
 
   /// When specified, buffers requests by the specified buffer size and buffer timeout to take advantage of batching.
   bufferCountAndTime : (int * int) option
 
-}
-with
-  static member create (topic:TopicName, partition, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, ?bufferTimeoutMs:int) =
+} with
+  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, ?bufferTimeoutMs:int) =
     {
       topic = topic
       requiredAcks = defaultArg requiredAcks RequiredAcks.Local
       compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
-      partition = partition
+      partitioner = partition
       bufferCountAndTime = 
         match bufferSize, bufferTimeoutMs with
         | Some x, Some y -> Some (x,y)
@@ -93,6 +98,9 @@ module Producer =
     partitions : Partition[]
     version : int
   }
+
+  // -------------------------------------------------------------------------------------------------------------------------------------
+  // TODO: move to Async shared
 
   let private boundedMbToAsyncSeq (mb:BoundedMb<'a>) : AsyncSeq<'a> =
     AsyncSeq.unfoldAsync (fun () -> async { 
@@ -124,10 +132,10 @@ module Producer =
 
     send
  
-  /// Creates a producer given a Kafka connection and producer configuration.
-  let createAsync (conn:KafkaConn) (cfg:ProducerCfg) : Async<Producer> = async {
+  // -------------------------------------------------------------------------------------------------------------------------------------
 
-    let producerState : MVar<ProducerState> = MVar.create ()
+  /// Creates a producer.
+  let createAsync (conn:KafkaConn) (cfg:ProducerConfig) : Async<Producer> = async {
 
     let send = Kafka.produce conn
 
@@ -139,7 +147,7 @@ module Producer =
         let sendBatch (partitions:Partition[]) (ms:ProducerMessage[]) =
           let pms =
             ms
-            |> Seq.groupBy (fun pm -> cfg.partition (cfg.topic, partitions, pm))
+            |> Seq.groupBy (fun pm -> cfg.partitioner (cfg.topic, partitions, pm))
             |> Seq.map (fun (p,pms) ->
               let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
               let ms = Compression.compress cfg.compression messages
@@ -177,7 +185,7 @@ module Producer =
         let sendBatch (partitions:Partition[]) (ms:ProducerMessage[]) = async {
           let pms =
             ms
-            |> Seq.groupBy (fun pm -> cfg.partition (cfg.topic, partitions, pm))
+            |> Seq.groupBy (fun pm -> cfg.partitioner (cfg.topic, partitions, pm))
             |> Seq.map (fun (p,pms) ->
               let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
               let ms = Compression.compress cfg.compression messages
@@ -192,30 +200,53 @@ module Producer =
 
         sendBatch
 
-    let init (_prevState:ProducerState option) = async {
-      let state = async {
-        let! topicPartitions = conn.GetMetadata [| cfg.topic |]
-        let topicPartitions = topicPartitions |> Map.find cfg.topic
-        return { partitions = topicPartitions ; version = 0 } }
-      // TODO: optimistic concurrency to address overlapping recoveries
-      let! state = producerState |> MVar.putAsync state
-      return state }
+
+    let getState oldVersion = async {
+      let! topicPartitions = conn.GetMetadata [| cfg.topic |]
+      // TODO: handle missing topic errors
+      let topicPartitions = topicPartitions |> Map.find cfg.topic
+      return { partitions = topicPartitions ; version = oldVersion + 1 } }
+
+    let stateCell : MVar<ProducerState> = MVar.create ()
+
+    let init () =
+      stateCell |> MVar.putAsync (getState 0)
+
+    /// Resets producer state if caller state has matching version,
+    /// otherwise returns the newer version of producer state.
+    let reset (callerState:ProducerState) =
+      stateCell 
+      |> MVar.updateAsync (fun (currentState:ProducerState) -> async {
+        if callerState.version = currentState.version then
+          return! getState currentState.version 
+        else
+          return currentState })
 
     let rec produce (state:ProducerState) (ms:ProducerMessage[]) = async {
       let! res = sendBatch state.partitions ms
       if res.topics.Length = 0 then
-        // TODO: handle errors
-        let! state' = init (Some state)
+        // TODO: handle errors here rather than inside of connection
+        let! state' = reset state
         return! produce state' ms
       else 
         return res }
 
-    let! state = init None
-    return P (produce state) }
+    let! _ = init ()
+
+    let produce ms = async {
+      let state = MVar.getFastUnsafe stateCell
+      if state.IsNone then
+        return invalidOp "producer state not initialized!"
+      return! produce state.Value ms }
+
+    return P produce }
 
   /// Creates a producer.
-  let create (conn:KafkaConn) (cfg:ProducerCfg) : Producer =
+  let create (conn:KafkaConn) (cfg:ProducerConfig) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
 
+  /// Produces a batch of messages.
+  /// Messages are routed based on the configured routing function and
+  /// metadata retrieved by the producer.
   let produce (P(p)) ms =
     p ms
