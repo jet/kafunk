@@ -335,7 +335,7 @@ type EndPoint =
 /// A request/reply channel to a Kafka broker.
 type Chan = 
   private 
-  | Chan of send:(RequestMessage -> Async<ResponseMessage>)
+  | Chan of send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
 
 
 /// Configuration for an individual TCP channel.
@@ -375,7 +375,11 @@ module Chan =
 
   let private Log = Log.create "Kafunk.Chan"
 
-  let send (Chan(send)) req = send req
+  /// Sends a request.
+  let send (Chan(send,_,_)) req = send req
+  
+  /// Re-established the connection to the socket.
+  let reconnect (Chan(_,reconnect,_)) = reconnect
 
   let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
   let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
@@ -488,7 +492,7 @@ module Chan =
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
           (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)
 
-    return Chan send }
+    return Chan (send, async.Delay (sendRcvSocket.Recreate), Async.empty) }
 
   let connectEndPoint (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) = async {
     let! ch = connect config clientId ep

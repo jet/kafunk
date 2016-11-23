@@ -65,7 +65,11 @@ module Resource =
         return ep' }
 
     member internal __.Create () = async {
-      return! cell |> MVar.putAsync (create None) }
+      return! cell |> MVar.putOrUpdateAsync create }
+
+    member internal __.Recreate () = async {
+      let! _ = __.Create ()
+      return () }
 
     member internal __.TryGetVersion () =
       MVar.getFastUnsafe cell |> Option.map (fun e -> e.version)

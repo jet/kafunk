@@ -94,6 +94,7 @@ module Consumer =
 
       | Some prevMemberId -> 
         Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
+        do! conn.ReconnectChans ()
 
       let! _ = conn.GetGroupCoordinator (cfg.groupId)
 
