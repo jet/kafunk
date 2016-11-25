@@ -62,6 +62,36 @@
   </Target>
   -->
   <Import Project="..\..\.paket\paket.targets" />
+  <ItemGroup>
+    <None Include="paket.references" />
+    <Compile Include="Shared.fs" />
+    <Compile Include="PreludeTests.fs" />
+    <Compile Include="CodecTests.fs" />
+    <Compile Include="TcpTests.fs" />
+    <Compile Include="CompressionGzipTests.fs" />
+    <Compile Include="AsyncTests.fs" />
+    <Compile Include="FaultsTests.fs" />
+    <None Include="Metadata.fsx" />
+    <None Include="Producer.fsx" />
+    <None Include="Fetch.fsx" />
+    <None Include="Consumer.fsx" />
+    <None Include="ProducerConsumer.fsx" />
+    <Content Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <ProjectReference Include="..\..\src\kafunk\kafunk.fsproj">
+      <Name>kafunk</Name>
+      <Project>{18629b6b-ace4-4c73-b058-efa494eb42ce}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6' Or $(TargetFrameworkVersion) == 'v4.6.1' Or $(TargetFrameworkVersion) == 'v4.6.2' Or $(TargetFrameworkVersion) == 'v4.6.3')">
       <ItemGroup>
@@ -134,34 +164,4 @@
       </ItemGroup>
     </When>
   </Choose>
-  <ItemGroup>
-    <None Include="paket.references" />
-    <Compile Include="Shared.fs" />
-    <Compile Include="PreludeTests.fs" />
-    <Compile Include="CodecTests.fs" />
-    <Compile Include="TcpTests.fs" />
-    <Compile Include="CompressionGzipTests.fs" />
-    <Compile Include="AsyncTests.fs" />
-    <Compile Include="FaultsTests.fs" />
-    <None Include="Metadata.fsx" />
-    <None Include="Producer.fsx" />
-    <None Include="Fetch.fsx" />
-    <None Include="Consumer.fsx" />
-    <None Include="ProducerConsumer.fsx" />
-    <Content Include="App.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <ProjectReference Include="..\..\src\kafunk\kafunk.fsproj">
-      <Name>kafunk</Name>
-      <Project>{18629b6b-ace4-4c73-b058-efa494eb42ce}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
 </Project>

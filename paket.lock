@@ -1,6 +1,6 @@
 NUGET
   remote: http://api.nuget.org/v3/index.json
-    FSharp.Control.AsyncSeq (2.0.9)
+    FSharp.Control.AsyncSeq (2.0.10)
 
 GROUP Build
 NUGET
