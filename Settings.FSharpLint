@@ -1,12 +1,73 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <FSharpLintSettings xmlns="https://github.com/fsprojects/FSharpLint/blob/master/ConfigurationSchema.xsd">
-  <IgnoreFiles Update="Overwrite"><![CDATA[assemblyinfo.*
-]]></IgnoreFiles>
+  <IgnoreFiles Update="Overwrite"><![CDATA[assemblyinfo.*]]></IgnoreFiles>
   <Analysers>
-    <CyclomaticComplexity>
-      <Rules />
+    <Binding>
+      <Rules>
+        <FavourIgnoreOverLetWild>
+          <Enabled>False</Enabled>
+        </FavourIgnoreOverLetWild>
+        <TupleOfWildcards>
+          <Enabled>False</Enabled>
+        </TupleOfWildcards>
+        <UselessBinding>
+          <Enabled>False</Enabled>
+        </UselessBinding>
+        <WildcardNamedWithAsPattern>
+          <Enabled>False</Enabled>
+        </WildcardNamedWithAsPattern>
+      </Rules>
       <Enabled>False</Enabled>
-    </CyclomaticComplexity>
+    </Binding>
+    <FunctionReimplementation>
+      <Rules>
+        <CanBeReplacedWithComposition>
+          <Enabled>False</Enabled>
+        </CanBeReplacedWithComposition>
+        <ReimplementsFunction>
+          <Enabled>False</Enabled>
+        </ReimplementsFunction>
+      </Rules>
+      <Enabled>False</Enabled>
+    </FunctionReimplementation>
+    <NameConventions>
+      <Rules>
+        <EnumCasesMustBePascalCase>
+          <Enabled>False</Enabled>
+        </EnumCasesMustBePascalCase>
+        <ExceptionNamesMustEndWithException>
+          <Enabled>False</Enabled>
+        </ExceptionNamesMustEndWithException>
+        <IdentifiersMustNotContainUnderscores>
+          <Enabled>False</Enabled>
+        </IdentifiersMustNotContainUnderscores>
+        <InterfaceNamesMustBeginWithI>
+          <Enabled>False</Enabled>
+        </InterfaceNamesMustBeginWithI>
+        <LiteralNamesMustBePascalCase>
+          <Enabled>False</Enabled>
+        </LiteralNamesMustBePascalCase>
+        <MemberNamesMustBePascalCase>
+          <Enabled>False</Enabled>
+        </MemberNamesMustBePascalCase>
+        <ModuleNamesMustBePascalCase>
+          <Enabled>False</Enabled>
+        </ModuleNamesMustBePascalCase>
+        <NamespaceNamesMustBePascalCase>
+          <Enabled>False</Enabled>
+        </NamespaceNamesMustBePascalCase>
+        <NonPublicValuesCamelCase>
+          <Enabled>False</Enabled>
+        </NonPublicValuesCamelCase>
+        <ParameterMustBeCamelCase>
+          <Enabled>False</Enabled>
+        </ParameterMustBeCamelCase>
+        <TypeNamesMustBePascalCase>
+          <Enabled>False</Enabled>
+        </TypeNamesMustBePascalCase>
+      </Rules>
+      <Enabled>False</Enabled>
+    </NameConventions>
     <NestedStatements>
       <Rules />
       <Enabled>False</Enabled>
@@ -85,5 +146,18 @@
       </Rules>
       <Enabled>False</Enabled>
     </SourceLength>
+    <Typography>
+      <Rules>
+        <TrailingNewLineInFile>
+          <Enabled>True</Enabled>
+        </TrailingNewLineInFile>
+        <TrailingWhitespaceOnLine>
+          <Enabled>True</Enabled>
+          <IgnoreBlankLines>True</IgnoreBlankLines>
+          <NumberOfSpacesAllowed>1</NumberOfSpacesAllowed>
+          <OneSpaceAllowedAfterOperator>True</OneSpaceAllowedAfterOperator>
+        </TrailingWhitespaceOnLine>
+      </Rules>
+    </Typography>
   </Analysers>
 </FSharpLintSettings>

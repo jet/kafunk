@@ -41,36 +41,61 @@ module Choice =
     | Choice2Of2 b -> Choice2Of2 (f b)
 
   let codiag = function Choice1Of2 a -> a | Choice2Of2 a -> a
+
+  let tryLeft = function Choice1Of2 x -> Some x | _ -> None
+
+  let tryRight = function Choice2Of2 x -> Some x | _ -> None
     
 
 
+// --------------------------------------------------------------------------------------------------
+
+type Semigroup<'a> =
+  abstract Merge : 'a * 'a -> 'a
+
+type Monoid<'a> =
+  inherit Semigroup<'a>
+  abstract Zero : 'a
+
+module Monoid =
+  
+  let inline zero (m:Monoid<_>) = m.Zero
+
+  let inline merge (m:Monoid<_>) a b = m.Merge (a,b)
+
+  let monoid (z:'a) (m:'a -> 'a -> 'a) =
+    { new Monoid<'a> with
+        member __.Zero = z
+        member __.Merge (a,b) = m a b }
+
+  let product (m1:Monoid<'a>) (m2:Monoid<'b>) : Monoid<'a * 'b> =
+    monoid (m1.Zero, m2.Zero) (fun (a1,b1) (a2,b2) -> m1.Merge (a1,a2), m2.Merge (b1,b2))
+
+  let freeList<'a> : Monoid<'a list> = 
+    monoid [] List.append
+
+  let stringAppend : Monoid<string> =
+    monoid "" (+)
+  
+  let stringConcat (s:string) : Monoid<string> =
+    monoid "" (fun a b -> a + s + b)
+
+// --------------------------------------------------------------------------------------------------
 
 
 
-// pooling
-
-open System.Collections.Concurrent
-
-type ObjectPool<'a>(initial:int, create:unit -> 'a) =
-
-  let pool = new ConcurrentStack<'a>(Seq.init initial (fun _ -> create()))
-
-  member x.Push(a:'a) =
-    pool.Push(a)
-
-  member x.Pop() =
-    let mutable a = Unchecked.defaultof<'a>
-    if not (pool.TryPop(&a)) then
-      failwith "out of sockets!"
-      //create ()
-    else a
 
 
 
-
+// --------------------------------------------------------------------------------------------------
 // collection helpers
 
 open System.Collections.Generic
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module List =
+  
+  let inline singleton a = [a]
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Seq =
@@ -127,7 +152,14 @@ module Map =
 // --------------------------------------------------------------------------------------------------
 
 
+
+
+// --------------------------------------------------------------------------------------------------
+// result
+
 type Result<'a, 'e> = Choice<'a, 'e>
+
+type ResultWarn<'a, 'e> = Result<'a * 'e list, 'e>
 
 [<AutoOpen>]
 module ResultEx =
@@ -155,11 +187,6 @@ module Result =
     | Choice1Of2 a -> f a
     | Choice2Of2 e -> Choice2Of2 e
  
-  let join (c:Result<Result<'a, 'e>, 'e>) : Result<'a, 'e> =
-    match c with
-    | Choice1Of2 (Choice1Of2 a) -> Choice1Of2 a
-    | Choice1Of2 (Choice2Of2 e) | Choice2Of2 e -> Choice2Of2 e
-
   let fold f g (r:Result<'a, 'e>) : 'b = 
     Choice.fold f g r
 
@@ -175,6 +202,47 @@ module Result =
     | Some e -> Choice2Of2 e
     | None -> Choice1Of2 (oks.ToArray())
 
+  /// Returns a succesful result or raises an exception in case of failure.
+  let throw (r:Result<'a, #exn>) : 'a =
+    match r with
+    | Success a -> a
+    | Failure e -> raise e
+
+  /// Returns a succesful result or raises an exception in case of failure.
+  let throwMap (f:'e -> #exn) (r:Result<'a, 'e>) : 'a =
+    match r with
+    | Success a -> a
+    | Failure e -> raise (f e)
+
+// --------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+// --------------------------------------------------------------------------------------------------
+// pooling
+
+open System.Collections.Concurrent
+
+type ObjectPool<'a>(initial:int, create:unit -> 'a) =
+
+  let pool = new ConcurrentStack<'a>(Seq.init initial (fun _ -> create()))
+
+  member x.Push(a:'a) =
+    pool.Push(a)
+
+  member x.Pop() =
+    let mutable a = Unchecked.defaultof<'a>
+    if not (pool.TryPop(&a)) then
+      failwith "out of sockets!"
+      //create ()
+    else a
+
+// --------------------------------------------------------------------------------------------------
+
+
 
 module KafkaUri =
 
@@ -183,9 +251,9 @@ module KafkaUri =
 
   let [<Literal>] DefaultPortKafka = 9092
   let [<Literal>] UriSchemeKafka = "kafka"
-  let private KafkaBrokerUriRegex = Regex("^(?<scheme>kafka://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
+  let private KafkaBrokerUriRegex = Regex("^(?<scheme>(kafka|tcp)://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
 
-  let parse (host:string) =    
+  let parse (host:string) =
     let m = KafkaBrokerUriRegex.Match host
     if not m.Success then invalidArg "host" (sprintf "invalid host string '%s'" host)
     else

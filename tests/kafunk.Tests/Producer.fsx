@@ -1,13 +1,15 @@
-﻿#r "bin/Release/kafunk.dll"
+﻿#r "bin/release/fsharp.control.asyncseq.dll"
+#r "bin/Release/kafunk.dll"
 #time "on"
 
+open FSharp.Control
 open Kafunk
 
 let conn = Kafka.connHost "127.0.0.1:9092" 
 let topicName = "test-topic_1019"
 
 let producerCfg =
-  ProducerCfg.create (topicName, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
+  ProducerConfig.create (topicName, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -34,7 +36,7 @@ Seq.init N id
   //printfn "sending request=%i" i
 
   let! prodRes =
-    Producer.produceSingle producer (topicName, [| ProducerMessage.ofBytes payload |])
+    Producer.produce producer [| ProducerMessage.ofBytes payload |]
 
   return ()
 

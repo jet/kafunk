@@ -1,12 +1,29 @@
 #nowarn "40"
 namespace Kafunk
 
+open FSharp.Control
 open System
 open System.Net
 open System.Net.Sockets
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
+
+[<AutoOpen>]
+module internal NetEx =
+  
+  type IPAddress with
+    static member tryParse (ipString:string) =
+      let mutable ip = Unchecked.defaultof<_>
+      if IPAddress.TryParse (ipString, &ip) then Some ip
+      else None
+
+  type IPEndPoint with
+    static member tryParse (ipString:string, port:int) =
+      IPAddress.tryParse ipString |> Option.map (fun ip -> IPEndPoint(ip, port))
+    static member parse (ipString:string, port:int) =
+      IPEndPoint.tryParse (ipString, port) |> Option.get
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Dns =
@@ -42,16 +59,13 @@ module Socket =
       let args = alloc ()
       config args
       let rec k (_:obj) (args:SocketAsyncEventArgs) =
-        match args.SocketError with
-        | SocketError.Success ->
-          args.remove_Completed(k')
-          let result = map args
+        args.remove_Completed(k')
+        try
+          match args.SocketError with
+          | SocketError.Success -> ok (map args)
+          | e -> error (SocketException(int e))
+        finally
           free args
-          ok result
-        | e ->
-          args.remove_Completed(k')
-          free args
-          error (SocketException(int e))
       and k' = EventHandler<SocketAsyncEventArgs>(k)
       args.add_Completed(k')
       if not (op args) then
@@ -186,46 +200,109 @@ module Framing =
             else loop headerBytes length (i + 1)
         loop headerBytes length data.Offset
 
-    /// Reads 32 bytes of the length prefix, then the length of the message, then yields, then continues.
+
+//    type FramerState =
+//      | Await of (Binary.Segment option -> FramerState)
+//      | Yield of Binary.Segment * FramerState
+//      | Halt
+//
+//    let framer = 
+//
+//      let awaitHalt f = Await (function Some data -> f data | None -> Halt)
+//
+//      let rec awaitLength (headerBytes:int) (length:int) (rem:Binary.Segment) =
+//        awaitHalt (fun data' ->
+//          let data =
+//            if rem.Count > 0 then rem
+//            else data'
+//          let readResult = tryReadLength headerBytes length data
+//          if readResult.headerBytes = 0 then
+//            let buffer = allocBuffer readResult.length
+//            awaitMessage readResult.length buffer
+//          else
+//            awaitLength readResult.headerBytes readResult.length)
+//            
+//      and awaitMessage (length:int) (buffer:Binary.Segment) =
+//        awaitHalt (fun data ->
+//          let copy = min data.Count (length - buffer.Offset)
+//          Binary.copy data buffer copy
+//          let bufferIndex = buffer.Offset + copy
+//          if bufferIndex = length then
+//            let buffer = buffer |> Binary.offset 0
+//            Yield (buffer, awaitLength 0 0)
+//          else
+//            let buffer = buffer |> Binary.offset bufferIndex
+//            awaitMessage length buffer)
+//        
+//      awaitLength 0 0 (Binary.Segment())
+//
+//
+//    let unframe2 (f:FramerState) (input:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =      
+//      let rec go (en:IAsyncEnumerator<_>) (s:FramerState) = async {
+//        match s with
+//        | Halt ->
+//          return None
+//        | Yield (m,s') -> 
+//          return (Some (m,s'))
+//        | Await recv ->
+//          let! next = en.MoveNext ()
+//          let s' = recv next
+//          return! go en s' }      
+//      AsyncSeq.unfoldAsync (go (input.GetEnumerator())) f
+
+
+    type State =
+      struct
+        val remainder : Binary.Segment
+        val enumerator : Lazy<IAsyncEnumerator<Binary.Segment>>
+        new (e,r) = { enumerator = e ; remainder = r }
+      end
+
+    /// Reads 32 bytes of the length prefix, then the the message of the former length, then yields, then continues.
     let unframe (s:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =
-      let rec go (offset:int) (s:AsyncSeq<Binary.Segment>) =
-        readLength 0 0 offset s
-      and readLength (headerBytes:int) (length:int) (offset:int) (s:AsyncSeq<Binary.Segment>) =
-        s |> Async.bind (function
-          | Nil -> async.Return Nil
-          | Cons (data, tl) as s ->
-            let data =
-              if offset > 0 then data |> Binary.shiftOffset (data.Count - offset)
-              else data
-            let readResult = tryReadLength headerBytes length data
-            let tl, offset =
-              if readResult.remainder.Count = 0 then tl,0
-              else (async.Return s),readResult.remainder.Count
-            if readResult.headerBytes = 0 then
-              let buffer = allocBuffer readResult.length
-              readData readResult.length buffer offset tl
-            else
-              readLength readResult.headerBytes readResult.length offset tl)
-      and readData (length:int) (buffer:Binary.Segment) (offset:int) (s:AsyncSeq<Binary.Segment>) =
-        s |> Async.bind (function
-          | Nil -> async.Return Nil
-          | Cons (data, tl) as s ->
-            let data =
-              if offset > 0 then data |> Binary.shiftOffset (data.Count - offset)
-              else data
-            let copy = min data.Count (length - buffer.Offset)
-            Binary.copy data buffer copy
-            let tl, offset =
-              if copy = data.Count then tl, 0
-              else (async.Return s, data.Count - copy)
-            let bufferIndex = buffer.Offset + copy
-            if bufferIndex = length then
-              let buffer = buffer |> Binary.offset 0
-              Cons (buffer, go offset tl) |> async.Return
-            else
-              let buffer = buffer |> Binary.offset bufferIndex
-              readData length buffer offset tl)
-      go 0 s
+          
+      let rec readLength (headerBytes:int) (length:int) (s:State) = async {
+        let! next = async {
+          if s.remainder.Count > 0 then
+            return Some s.remainder
+          else
+            return! s.enumerator.Value.MoveNext() }
+        match next with
+        | None ->
+          s.enumerator.Value.Dispose() 
+          return None
+        | Some data ->
+          let readResult = tryReadLength headerBytes length data
+          let s' = State(s.enumerator, readResult.remainder) 
+          if readResult.headerBytes = 0 then
+            let buffer = allocBuffer readResult.length
+            return! readData readResult.length buffer s'
+          else
+            return! readLength readResult.headerBytes readResult.length s' }
+
+      and readData (length:int) (buffer:Binary.Segment) (s:State) = async {
+        let! next = async {
+          if s.remainder.Count > 0 then
+            return Some s.remainder
+          else
+            return! s.enumerator.Value.MoveNext() }
+        match next with
+        | None ->
+          s.enumerator.Value.Dispose()
+          return None
+        | Some data ->
+          let copy = min data.Count (length - buffer.Offset)
+          Binary.copy data buffer copy
+          let s' = State(s.enumerator, data |> Binary.shiftOffset copy)
+          let bufferIndex = buffer.Offset + copy
+          if bufferIndex = length then
+            let buffer = buffer |> Binary.offset 0
+            return Some (buffer, s')
+          else
+            let buffer = buffer |> Binary.offset bufferIndex
+            return! readData length buffer s' }
+
+      AsyncSeq.unfoldAsync (readLength 0 0) (State(lazy (s.GetEnumerator()), Binary.Segment()))
 
 // session layer (layer 5)
 
@@ -267,55 +344,67 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let timeoutMs = 10000
-
-  let txs = new ConcurrentDictionary<int, 's * TaskCompletionSource<'b>>()
+  let txs = new ConcurrentDictionary<int, DateTime * 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
 
   let demux (data:Binary.Segment) =
     let sessionData = SessionMessage(data)
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
-    if txs.TryRemove(correlationId, &token) then      
+    if txs.TryRemove(correlationId, &token) then
       //Log.trace "received_response|correlation_id=%i size=%i" correlationId sessionData.payload.Count
-      let state,reply = token
-      try        
+      let _dt,state,reply = token
+      try
         let res = decode (correlationId,state,sessionData.payload)
         if not (reply.TrySetResult res) then
-          Log.warn "received_response_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
+          Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
-        Log.error "decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
+        Log.error "response_decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.SetException ex
     else
-      Log.error "received message but unabled to find session for correlation_id=%i" correlationId
+      Log.error "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
-  let mux (req:'a) =
+  let mux (ct:CancellationToken) (req:'a) =
+    let startTime = DateTime.UtcNow
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()
     let sessionReq,state = encode (req,correlationId)
+    let cancel () =
+      if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
+        let endTime = DateTime.UtcNow
+        let elapsed = endTime - startTime
+        Log.warn "request_timed_out|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
+        let mutable token = Unchecked.defaultof<_>
+        txs.TryRemove(correlationId, &token) |> ignore
+    ct.Register (Action(cancel)) |> ignore
     match awaitResponse req with
-    | None ->      
-      if not (txs.TryAdd(correlationId, (state,rep))) then
-        Log.error "clash of the sessions!"
-      let rec t = new Timer(TimerCallback(fun _ ->        
-        if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
-          Log.error "request_timed_out|correlation_id=%i timeout_ms=%i task_status=%A" correlationId timeoutMs rep.Task.Status
-          t.Dispose()), null, timeoutMs, -1)
-      ()
+    | None ->
+      if not (txs.TryAdd(correlationId, (startTime,state,rep))) then
+        Log.error "clash_of_the_sessions"
+        invalidOp (sprintf "clash_of_the_sessions|correlation_id=%i" correlationId)
     | Some res ->
       rep.SetResult res
     correlationId,sessionReq,rep
 
-  do
-    receive
-    |> AsyncSeq.iter demux
-    |> Async.tryFinally (fun () -> Log.info "session disconnected.")
-    |> (fun t -> Async.Start(t, cts.Token))
+  let rec receiveLoop = async {
+    try
+      do!
+        receive
+        |> AsyncSeq.iter demux
+        |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
+      Log.warn "restarting_receive_loop" 
+      return! receiveLoop
+    with ex ->
+      Log.error "receive_loop_faiure|error=%O" ex
+      return! receiveLoop }
+
+  do Async.Start(receiveLoop, cts.Token)
 
   member x.Send (req:'a) = async {
-    let correlationId,sessionData,rep = mux req
+    let! ct = Async.CancellationToken
+    let _correlationId,sessionData,rep = mux ct req
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
-    let! sent = send sessionData
+    let! _sent = send sessionData
     //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
     return! rep.Task |> Async.AwaitTask }
 

@@ -9,8 +9,6 @@ open System.Threading
 open System.Threading.Tasks
 
 open Kafunk
-open Kafunk.Prelude
-open Kafunk.Protocol
 
 module Message =
 
@@ -92,7 +90,7 @@ module internal ResponseEx =
   let wrongResponse () =
     failwith (sprintf "Wrong response!")
 
-  type RequestMessage with    
+  type RequestMessage with
     /// If a request does not expect a response, returns the default response.
     /// Used to generate responses for requests which don't expect a response from the server.
     static member awaitResponse (x:RequestMessage) =
@@ -113,8 +111,8 @@ module internal ResponseEx =
     static member internal toHeartbeat res = match res with HeartbeatResponse x -> x | _ -> wrongResponse ()
     static member internal toLeaveGroup res = match res with LeaveGroupResponse x -> x | _ -> wrongResponse ()
     static member internal toListGroups res = match res with ListGroupsResponse x -> x | _ -> wrongResponse ()
-    static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()      
-    static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()      
+    static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()
+    static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()
 
   // ------------------------------------------------------------------------------------------------------------------------------
   // printers
@@ -170,7 +168,7 @@ module internal ResponseEx =
           let ps = 
             ps
             |> Seq.map (fun (p,o,_mb) -> sprintf "(partition=%i offset=%i)" p o)
-            |> String.concat " ; "        
+            |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
       sprintf "FetchRequest|%s" ts
@@ -280,6 +278,11 @@ module internal ResponseEx =
     static member Print (x:HeartbeatResponse) =
       sprintf "HeartbeatResponse|error_code=%i" x.errorCode
 
+  type GroupCoordinatorResponse with
+    static member Print (x:GroupCoordinatorResponse) =
+      sprintf "GroupCoordinatorResponse|coordinator_id=%i host=%s port=%i error_code=%i" 
+        x.coordinatorId x.coordinatorHost x.coordinatorPort x.errorCode
+
   type RequestMessage with
     static member Print (x:RequestMessage) =
       match x with
@@ -301,13 +304,70 @@ module internal ResponseEx =
       | ResponseMessage.OffsetFetchResponse x -> OffsetFetchResponse.Print x
       | ResponseMessage.OffsetResponse x -> OffsetResponse.Print x
       | ResponseMessage.HeartbeatResponse x -> HeartbeatResponse.Print x
+      | ResponseMessage.GroupCoordinatorResponse x -> GroupCoordinatorResponse.Print x
       | x -> sprintf "%A" x
 
   // ------------------------------------------------------------------------------------------------------------------------------
 
 
-/// A request/reply channel to an individual Kafka broker.
-type Chan = RequestMessage -> Async<ResponseMessage>
+/// A broker endpoint.
+[<CustomEquality;CustomComparison;StructuredFormatDisplay("{Display}")>]
+type EndPoint = 
+  private
+  | EndPoint of IPEndPoint
+  with
+    static member endpoint (EndPoint ep) = ep
+    static member parse (ipString:string, port:int) = EndPoint (IPEndPoint.parse (ipString, port))
+    static member ofIPEndPoint (ep:IPEndPoint) = EndPoint ep
+    static member ofIPAddressAndPort (ip:IPAddress, port:int) = EndPoint.ofIPEndPoint (IPEndPoint(ip,port))
+    member this.Display = this.ToString()
+    override this.Equals (o:obj) = (EndPoint.endpoint this).Equals(o)
+    override this.GetHashCode () = (EndPoint.endpoint this).GetHashCode()
+    override this.ToString () = (EndPoint.endpoint this).ToString()
+    interface IEquatable<EndPoint> with
+      member this.Equals (other:EndPoint) =
+        (EndPoint.endpoint this).Equals(EndPoint.endpoint other)
+    interface IComparable with
+      member this.CompareTo (other) =
+        this.ToString().CompareTo(other.ToString())
+      
+  
+/// A request/reply channel to a Kafka broker.
+type Chan = 
+  private 
+  | Chan of send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
+
+
+/// Configuration for an individual TCP channel.
+type ChanConfig = {
+    
+  useNagle : bool
+    
+  receiveBufferSize : int
+    
+  sendBufferSize : int
+        
+  connectTimeout : TimeSpan
+
+  connectBackoff : Backoff
+
+  requestTimeout : TimeSpan
+    
+  requestBackoff : Backoff
+
+} with
+    
+  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
+    {
+      useNagle = defaultArg useNagle false
+      receiveBufferSize = defaultArg receiveBufferSize 8192
+      sendBufferSize = defaultArg sendBufferSize 8192
+      connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
+      connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
+      requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+    }
+
 
 /// API operations on a generic request/reply channel.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -315,7 +375,11 @@ module Chan =
 
   let private Log = Log.create "Kafunk.Chan"
 
-  let send (ch:Chan) req  = ch req
+  /// Sends a request.
+  let send (Chan(send,_,_)) req = send req
+  
+  /// Re-established the connection to the socket.
+  let reconnect (Chan(_,reconnect,_)) = reconnect
 
   let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
   let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
@@ -331,26 +395,15 @@ module Chan =
   let listGroups = AsyncFunc.dimap RequestMessage.ListGroups ResponseMessage.toListGroups
   let describeGroups = AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups
 
-  /// Configuration for an individual TCP connection.
-  type Config = {
-    useNagle : bool    
-    receiveBufferSize : int
-    sendBufferSize : int
-  } with
-    static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize) =
-      {
-        useNagle=defaultArg useNagle false
-        receiveBufferSize=defaultArg receiveBufferSize 8192
-        sendBufferSize=defaultArg sendBufferSize 8192
-      }
-
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (config:Config) (clientId:ClientId) (ep:IPEndPoint) : Async<Chan> = async {
+  let connect (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
 
-    /// Builds and connects the socket.
-    let conn = async {      
+    let ep = EndPoint.endpoint ep
+
+    /// Builds and connects the socket to the broker.
+    let conn = async {
       let connSocket =
         new Socket(
           ep.AddressFamily,
@@ -363,30 +416,25 @@ module Chan =
       Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" ep clientId 
       let! sendRcvSocket = 
         Socket.connect connSocket ep
-        |> Async.timeoutAfter (TimeSpan.FromSeconds 5.0)
-        |> Async.Catch
+        |> Async.timeoutResult config.connectTimeout
+        |> Async.map (Result.mapError (fun ex -> ex :> exn))
       match sendRcvSocket with
-      | Success sendRcvSocket -> 
-        Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" sendRcvSocket.RemoteEndPoint sendRcvSocket.LocalEndPoint
+      | Success socket -> 
+        Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" socket.RemoteEndPoint socket.LocalEndPoint
         return sendRcvSocket 
       | Failure e ->
         Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ep e
-        let edi = Runtime.ExceptionServices.ExceptionDispatchInfo.Capture e
-        edi.Throw()
-        return raise e }
+        return sendRcvSocket }
 
-    let recovery (s:Socket, ex:exn) = async {
-      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
+    let conn =
+      conn
+      |> Faults.retryResultThrow id Exn.monoid config.connectBackoff
+
+    let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
+      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i socket_connected=%b error=%O" clientId ep ver s.Connected ex
       tryDispose s
-      do! Async.Sleep 5000
-      match ex with
-      | :? SocketException as _x ->        
-        return Resource.Recovery.Recreate
-//      | :? _ as ae when Exn.existsT<ObjectDisposedException> ae ->
-//        return Resource.Recovery.Recreate
-      | _ ->
-        //Log.info "escalating_tcp_connection_error"
-        return Resource.Recovery.Recreate }
+      // TODO: inspect error type
+      return Resource.Recovery.Recreate }
 
     let! sendRcvSocket = 
       Resource.recoverableRecreate 
@@ -395,16 +443,16 @@ module Chan =
 
     let! send =
       sendRcvSocket
-      |> Resource.inject Socket.sendAll   
+      |> Resource.inject Socket.sendAll
 
-    // re-connect -> restart
+    /// fault tolerant receive operation
     let! receive =
-      let receive s b = 
-        Socket.receive s b
-        |> Async.map (fun received -> 
+      let receive s = 
+        Socket.receive s
+        >> Async.map (fun received -> 
           if received = 0 then raise(SocketException(int SocketError.ConnectionAborted)) 
           else received)
-      sendRcvSocket
+      sendRcvSocket 
       |> Resource.inject receive
 
     /// An unframed input stream.
@@ -429,20 +477,37 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
-    // TODO: channel-level fault tolerance
+    let send req = session.Send req
+
     let send = 
-      session.Send      
-      |> AsyncFunc.doBeforeAfterError 
+      send
+      |> AsyncFunc.timeoutResult config.requestTimeout
+      |> Faults.AsyncFunc.doAfterError
+          (fun (req,e) ->
+            let v = sendRcvSocket.TryGetVersion () |> Option.getOr -1
+            Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
+      |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
+      |> AsyncFunc.doBeforeAfterExn 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
           (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)
 
-    return send }
+    return Chan (send, async.Delay (sendRcvSocket.Recreate), Async.empty) }
 
-  let connectHost (config:Config) (clientId:ClientId) (host:Host, port:Port) = async {
-    Log.info "discovering_dns_entries|host=%s" host
-    let! ips = Dns.IPv4.getAllAsync host
-    let ip = ips.[0]
-    let ep = IPEndPoint(ip, port)
+  let connectEndPoint (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) = async {
     let! ch = connect config clientId ep
-    return ch }
+    return (ep,ch) }
+
+  let connectHost (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
+    let! ip = async {
+      match IPAddress.tryParse host with
+      | None ->
+        Log.info "discovering_dns_entries|host=%s" host
+        let! ips = Dns.IPv4.getAllAsync host
+        Log.info "discovered_dns_entries|host=%s ips=%A" host ips
+        let ip = ips.[0]
+        return ip
+      | Some ip ->
+        return ip }
+    let ep = EndPoint.ofIPAddressAndPort (ip, port)
+    return! connectEndPoint config clientId ep }
