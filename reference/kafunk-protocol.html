@@ -105,7 +105,9 @@
           <td class="type-name">
             <a href="kafunk-protocol-consumergroup.html">ConsumerGroup</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>The id of the consumer group (same as GroupId).</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -730,9 +732,19 @@ leader provides the group's assignment.</p>
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-throttletime.html">ThrottleTime</a>
+          </td>
+          <td class="xmldoc"><p>Duration in milliseconds for which the request was throttled due to quota violation.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-time.html">Time</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>Used to ask for all messages before a certain time (ms).</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -832,6 +844,12 @@ receipt of the number of acknowledgements in RequiredAcks.</p>
 
 </td>
         </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-protocol-timemodule.html">Time</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
     </tbody>
   </table>
 
@@ -846,15 +864,15 @@ receipt of the number of acknowledgements in RequiredAcks.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '316', 316)" onmouseover="showTip(event, '316', 316)">
+          <code onmouseout="hideTip(event, '263', 263)" onmouseover="showTip(event, '263', 263)">
             toArraySeg size write x
           </code>
-          <div class="tip" id="316">
+          <div class="tip" id="263">
             <strong>Signature:</strong> size:(&#39;a -&gt; int) -&gt; write:(&#39;a -&gt; Segment -&gt; &#39;b) -&gt; x:&#39;a -&gt; Segment<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1275-1275" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1332-1332" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

@@ -40,6 +40,8 @@
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
+<p>Partition functions.</p>
+
 </div>
 
 <!-- Render nested types and modules, if there are any -->
@@ -53,15 +55,35 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '303', 303)" onmouseover="showTip(event, '303', 303)">
-            konst p
+          <code onmouseout="hideTip(event, '249', 249)" onmouseover="showTip(event, '249', 249)">
+            hashKey h (arg2, ps, pm)
           </code>
-          <div class="tip" id="303">
-            <strong>Signature:</strong> p:Partition -&gt; TopicName * TopicMetadata * ProducerMessage -&gt; Partition<br />
+          <div class="tip" id="249">
+            <strong>Signature:</strong> h:(Segment -&gt; int) -&gt; (TopicName * ps:Partition [] * pm:ProducerMessage) -&gt; Partition<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L33-33" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L45-45" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Computes the hash-code of the routing key to get the topic partition.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '250', 250)" onmouseover="showTip(event, '250', 250)">
+            konst p
+          </code>
+          <div class="tip" id="250">
+            <strong>Signature:</strong> p:Partition -&gt; Partitioner<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L36-36" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -73,19 +95,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '304', 304)" onmouseover="showTip(event, '304', 304)">
-            routeKeyHash (arg1, tmd, pm)
+          <code onmouseout="hideTip(event, '251', 251)" onmouseover="showTip(event, '251', 251)">
+            roundRobin 
           </code>
-          <div class="tip" id="304">
-            <strong>Signature:</strong> (TopicName * tmd:TopicMetadata * pm:ProducerMessage) -&gt; Partition<br />
+          <div class="tip" id="251">
+            <strong>Signature:</strong> Partitioner<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L37-37" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L40-40" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Computes the hash-code of the routing key to get the topic partition.</p>
+          <p>Round-robins across partitions.</p>
 
 
         </td>

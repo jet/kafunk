@@ -45,26 +45,6 @@
 </div>
 
 <!-- Render nested types and modules, if there are any -->
-  <h2>Nested types and modules</h2>
-  <div>
-      <table class="table table-bordered type-list">
-    <thead>
-      <tr><td>Type</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-asyncseq-asyncseqbuilder.html">AsyncSeqBuilder</a>
-          </td>
-          <td class="xmldoc"><p>Computation builder that allows creating of asynchronous
-sequences using the 'asyncSeq { ... }' syntax</p>
-
-</td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
 
   <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
@@ -75,61 +55,110 @@ sequences using the 'asyncSeq { ... }' syntax</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '105', 105)" onmouseover="showTip(event, '105', 105)">
-            append seq1 seq2
+          <code onmouseout="hideTip(event, '48', 48)" onmouseover="showTip(event, '48', 48)">
+            interleaveChoice a b
           </code>
-          <div class="tip" id="105">
-            <strong>Signature:</strong> seq1:AsyncSeq&lt;&#39;T&gt; -&gt; seq2:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
+          <div class="tip" id="48">
+            <strong>Signature:</strong> a:AsyncSeq&lt;&#39;a&gt; -&gt; b:AsyncSeq&lt;&#39;b&gt; -&gt; AsyncSeq&lt;Choice&lt;&#39;a,&#39;b&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L34-34" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L11-11" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Yields all elements of the first asynchronous sequence and then
-all elements of the second asynchronous sequence.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '106', 106)" onmouseover="showTip(event, '106', 106)">
-            asyncSeq 
+          <code onmouseout="hideTip(event, '49', 49)" onmouseover="showTip(event, '49', 49)">
+            iterAsyncParallel f s
           </code>
-          <div class="tip" id="106">
-            <strong>Signature:</strong> AsyncSeqBuilder<br />
-                      </div>
+          <div class="tip" id="49">
+            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;unit&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;unit&gt;<br />
+                          <strong>Type parameters:</strong> 'a          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L75-75" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '50', 50)" onmouseover="showTip(event, '50', 50)">
+            sequenceResult m s
+          </code>
+          <div class="tip" id="50">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; s:AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L69-69" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '51', 51)" onmouseover="showTip(event, '51', 51)">
+            sequenceResultList s
+          </code>
+          <div class="tip" id="51">
+            <strong>Signature:</strong> s:AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e list&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'e          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L72-72" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '52', 52)" onmouseover="showTip(event, '52', 52)">
+            sequenceResultWarn m s
+          </code>
+          <div class="tip" id="52">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; s:AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e),&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L66-66" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Builds an asynchronou sequence using the computation builder syntax</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '107', 107)" onmouseover="showTip(event, '107', 107)">
-            bufferByCount bufferSize s
+          <code onmouseout="hideTip(event, '53', 53)" onmouseover="showTip(event, '53', 53)">
+            traverseAsyncResult m f s
           </code>
-          <div class="tip" id="107">
-            <strong>Signature:</strong> bufferSize:int -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;a []&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
+          <div class="tip" id="53">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L352-352" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L16-16" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Buffer items from the async sequence into buffers of a specified size.
-The last buffer returned may be less than the specified buffer size.</p>
+          <p>A traversal of an async sequence specialized to the Result type.
+Returns the first successful result or a list of all erroneous results.</p>
 
 
         </td>
@@ -137,316 +166,15 @@ The last buffer returned may be less than the specified buffer size.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '108', 108)" onmouseover="showTip(event, '108', 108)">
-            bufferByTimeAndCount (...)
+          <code onmouseout="hideTip(event, '54', 54)" onmouseover="showTip(event, '54', 54)">
+            traverseAsyncResultList f s
           </code>
-          <div class="tip" id="108">
-            <strong>Signature:</strong> bufferSize:int -&gt; timeoutMs:int -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;a []&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
+          <div class="tip" id="54">
+            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e list&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'e          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L376-376" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Buffers an async sequence by waiting for a the buffer to reach a certain size or for a specific
-amount of time to pass.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '109', 109)" onmouseover="showTip(event, '109', 109)">
-            choose f input
-          </code>
-          <div class="tip" id="109">
-            <strong>Signature:</strong> f:(&#39;T -&gt; &#39;?8510 option) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;?8510&gt;<br />
-                          <strong>Type parameters:</strong> 'T, '?8510          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L335-335" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Same as AsyncSeq.chooseAsync, but the specified function is synchronous
-and processes the input element immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '110', 110)" onmouseover="showTip(event, '110', 110)">
-            chooseAsync f input
-          </code>
-          <div class="tip" id="110">
-            <strong>Signature:</strong> f:(&#39;T -&gt; Async&lt;&#39;R option&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;R&gt;<br />
-                          <strong>Type parameters:</strong> 'T, 'R          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L175-175" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Asynchronously iterates over the input sequence and generates 'x' for
-every input element for which the specified asynchronous function
-returned 'Some(x)'</p>
-<p>The specified function is asynchronous (and the input sequence will
-be asked for the next element after the processing of an element completes).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '111', 111)" onmouseover="showTip(event, '111', 111)">
-            collect f input
-          </code>
-          <div class="tip" id="111">
-            <strong>Signature:</strong> f:(&#39;T -&gt; AsyncSeq&lt;&#39;TResult&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;TResult&gt;<br />
-                          <strong>Type parameters:</strong> 'T, 'TResult          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L106-106" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Creates an asynchronou sequence that iterates over the given input sequence.
-For every input element, it calls the the specified function and iterates
-over all elements generated by that asynchronous sequence.
-This is the 'bind' operation of the computation expression (exposed using
-the 'for' keyword in asyncSeq computation).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
-            collectSeq f s
-          </code>
-          <div class="tip" id="112">
-            <strong>Signature:</strong> f:(&#39;a -&gt; &#39;?8547) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'a, '?8547, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L576-576" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Flattens a projection of AsyncSeq to sequences.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '113', 113)" onmouseover="showTip(event, '113', 113)">
-            concatSeq s
-          </code>
-          <div class="tip" id="113">
-            <strong>Signature:</strong> s:AsyncSeq&lt;&#39;?8550&gt; -&gt; AsyncSeq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> '?8550, 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L585-585" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Flattens an AsyncSeq of sequences.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '114', 114)" onmouseover="showTip(event, '114', 114)">
-            empty 
-          </code>
-          <div class="tip" id="114">
-            <strong>Signature:</strong> AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L27-27" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Creates an empty asynchronou sequence that immediately ends</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '115', 115)" onmouseover="showTip(event, '115', 115)">
-            filter f input
-          </code>
-          <div class="tip" id="115">
-            <strong>Signature:</strong> f:(&#39;T -&gt; bool) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L343-343" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Same as AsyncSeq.filterAsync, but the specified predicate is synchronous
-and processes the input element immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '116', 116)" onmouseover="showTip(event, '116', 116)">
-            filterAsync f input
-          </code>
-          <div class="tip" id="116">
-            <strong>Signature:</strong> f:(&#39;T -&gt; Async&lt;bool&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L187-187" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Builds a new asynchronous sequence whose elements are those from the
-input sequence for which the specified function returned true.</p>
-<p>The specified function is asynchronous (and the input sequence will
-be asked for the next element after the processing of an element completes).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '117', 117)" onmouseover="showTip(event, '117', 117)">
-            firstOrDefault def input
-          </code>
-          <div class="tip" id="117">
-            <strong>Signature:</strong> def:&#39;T -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L202-202" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Asynchronously returns the first element that was generated by the
-given asynchronous sequence (or the specified default value).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '118', 118)" onmouseover="showTip(event, '118', 118)">
-            fold f state input
-          </code>
-          <div class="tip" id="118">
-            <strong>Signature:</strong> f:(&#39;TState -&gt; &#39;T -&gt; &#39;TState) -&gt; state:&#39;TState -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;TState&gt;<br />
-                          <strong>Type parameters:</strong> 'TState, 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L283-283" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Same as AsyncSeq.foldAsync, but the specified function is synchronous
-and returns the result of aggregation immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '119', 119)" onmouseover="showTip(event, '119', 119)">
-            foldAsync f state input
-          </code>
-          <div class="tip" id="119">
-            <strong>Signature:</strong> f:(&#39;TState -&gt; &#39;T -&gt; Async&lt;&#39;TState&gt;) -&gt; state:&#39;TState -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;TState&gt;<br />
-                          <strong>Type parameters:</strong> 'TState, 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L278-278" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Aggregates the elements of the input asynchronous sequence using the
-specified 'aggregation' function. The result is an asynchronous
-workflow that returns the final result.</p>
-<p>The aggregation function is asynchronous (and the input sequence will
-be asked for the next element after the processing of an element completes).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '120', 120)" onmouseover="showTip(event, '120', 120)">
-            foldAsyncT f state input
-          </code>
-          <div class="tip" id="120">
-            <strong>Signature:</strong> f:(&#39;State -&gt; &#39;T -&gt; Async&lt;&#39;State option&gt;) -&gt; state:&#39;State -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;State&gt;<br />
-                          <strong>Type parameters:</strong> 'State, 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L287-287" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Like AsyncSeq.foldAsync but with a possibility of early termination.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '121', 121)" onmouseover="showTip(event, '121', 121)">
-            groupBy p s
-          </code>
-          <div class="tip" id="121">
-            <strong>Signature:</strong> p:(&#39;a -&gt; &#39;k) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;AsyncSeq&lt;&#39;a&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'k          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L664-664" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Partitions an async sequence into groups based on the specified partition function.
-The groups remain for the duration of the sequence, therefore care must be take to ensure that too many groups aren't created.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '122', 122)" onmouseover="showTip(event, '122', 122)">
-            interleave 
-          </code>
-          <div class="tip" id="122">
-            <strong>Signature:</strong> AsyncSeq&lt;&#39;?8539&gt; -&gt; AsyncSeq&lt;&#39;?8540&gt; -&gt; AsyncSeq&lt;Choice&lt;&#39;?8539,&#39;?8540&gt;&gt;<br />
-                          <strong>Type parameters:</strong> '?8539, '?8540          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L525-525" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L54-54" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -456,701 +184,73 @@ The groups remain for the duration of the sequence, therefore care must be take 
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '123', 123)" onmouseover="showTip(event, '123', 123)">
-            isEmpty input
+          <code onmouseout="hideTip(event, '55', 55)" onmouseover="showTip(event, '55', 55)">
+            traverseAsyncResultWarn m f s
           </code>
-          <div class="tip" id="123">
-            <strong>Signature:</strong> input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;bool&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
+          <div class="tip" id="55">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;(&#39;b * &#39;e),&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L210-210" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Asynchronously returns true if the asynchronous sequence contains
-no elements, false otherwise</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '124', 124)" onmouseover="showTip(event, '124', 124)">
-            iter f input
-          </code>
-          <div class="tip" id="124">
-            <strong>Signature:</strong> f:(&#39;c -&gt; unit) -&gt; input:AsyncSeq&lt;&#39;c&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'c          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L331-331" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Same as AsyncSeq.iterAsync, but the specified function is synchronous
-and performs the side-effect immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '125', 125)" onmouseover="showTip(event, '125', 125)">
-            iterAsync f input
-          </code>
-          <div class="tip" id="125">
-            <strong>Signature:</strong> f:(&#39;T -&gt; Async&lt;unit&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L236-236" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Iterates over the input sequence and calls the specified function for
-every value (to perform some side-effect asynchronously).</p>
-<p>The specified function is asynchronous (and the input sequence will
-be asked for the next element after the processing of an element completes).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '126', 126)" onmouseover="showTip(event, '126', 126)">
-            iterAsyncFetchParallel f s
-          </code>
-          <div class="tip" id="126">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;unit&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L540-540" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Iterates the async sequence using the specified function. After the first item is retrieved, retrieval of subseqent items runs in parrallel to the
-function.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '127', 127)" onmouseover="showTip(event, '127', 127)">
-            iterAsyncParallel f s
-          </code>
-          <div class="tip" id="127">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;unit&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L551-551" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Iterates the async sequence using the specified function, starting each invocation concurrently on a thread pool thread.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '128', 128)" onmouseover="showTip(event, '128', 128)">
-            lastOrDefault def input
-          </code>
-          <div class="tip" id="128">
-            <strong>Signature:</strong> def:&#39;T -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L194-194" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Asynchronously returns the last element that was generated by the
-given asynchronous sequence (or the specified default value).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '129', 129)" onmouseover="showTip(event, '129', 129)">
-            map f input
-          </code>
-          <div class="tip" id="129">
-            <strong>Signature:</strong> f:(&#39;T -&gt; &#39;?8505) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;?8505&gt;<br />
-                          <strong>Type parameters:</strong> 'T, '?8505          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L327-327" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Same as AsyncSeq.mapAsync, but the specified function is synchronous
-and returns the result of projection immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '130', 130)" onmouseover="showTip(event, '130', 130)">
-            mapAsync f input
-          </code>
-          <div class="tip" id="130">
-            <strong>Signature:</strong> f:(&#39;T -&gt; Async&lt;&#39;TResult&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;TResult&gt;<br />
-                          <strong>Type parameters:</strong> 'T, 'TResult          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L164-164" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Builds a new asynchronous sequence whose elements are generated by
-applying the specified function to all elements of the input sequence.</p>
-<p>The specified function is asynchronous (and the input sequence will
-be asked for the next element after the processing of an element completes).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '131', 131)" onmouseover="showTip(event, '131', 131)">
-            mapAsyncParallel f s
-          </code>
-          <div class="tip" id="131">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L242-242" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Maps an async function over an async sequence in parallel.
-The output is returned in order, which results in the potential for head-of-line blocking.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '132', 132)" onmouseover="showTip(event, '132', 132)">
-            merge a b
-          </code>
-          <div class="tip" id="132">
-            <strong>Signature:</strong> a:AsyncSeq&lt;&#39;a&gt; -&gt; b:AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L624-624" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Merges two async sequences into an async sequence non-deterministically.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '133', 133)" onmouseover="showTip(event, '133', 133)">
-            mergeAll ss
-          </code>
-          <div class="tip" id="133">
-            <strong>Signature:</strong> ss:AsyncSeq&lt;&#39;a&gt; list -&gt; AsyncSeq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L632-632" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Merges all specified async sequences into an async sequence non-deterministically.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '134', 134)" onmouseover="showTip(event, '134', 134)">
-            ofSeq input
-          </code>
-          <div class="tip" id="134">
-            <strong>Signature:</strong> input:seq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L348-348" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Creates an asynchronous sequence that lazily takes element from an
-input synchronous sequence and returns them one-by-one.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '135', 135)" onmouseover="showTip(event, '135', 135)">
-            pairwise input
-          </code>
-          <div class="tip" id="135">
-            <strong>Signature:</strong> input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T * &#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L262-262" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Returns an asynchronous sequence that returns pairs containing an element
-from the input sequence and its predecessor. Empty sequence is returned for
-singleton input sequence.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '136', 136)" onmouseover="showTip(event, '136', 136)">
-            scan f state input
-          </code>
-          <div class="tip" id="136">
-            <strong>Signature:</strong> f:(&#39;TState -&gt; &#39;T -&gt; &#39;TState) -&gt; state:&#39;TState -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;TState&gt;<br />
-                          <strong>Type parameters:</strong> 'TState, 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L322-322" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Same as AsyncSeq.scanAsync, but the specified function is synchronous
-and returns the result of aggregation immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '137', 137)" onmouseover="showTip(event, '137', 137)">
-            scanAsync f state input
-          </code>
-          <div class="tip" id="137">
-            <strong>Signature:</strong> f:(&#39;TState -&gt; &#39;T -&gt; Async&lt;&#39;TState&gt;) -&gt; state:&#39;TState -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;TState&gt;<br />
-                          <strong>Type parameters:</strong> 'TState, 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L222-222" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Aggregates the elements of the input asynchronous sequence using the
-specified 'aggregation' function. The result is an asynchronous
-sequence of intermediate aggregation result.</p>
-<p>The aggregation function is asynchronous (and the input sequence will
-be asked for the next element after the processing of an element completes).</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '138', 138)" onmouseover="showTip(event, '138', 138)">
-            seqOfAsyncToArray s
-          </code>
-          <div class="tip" id="138">
-            <strong>Signature:</strong> s:seq&lt;Async&lt;&#39;a&gt;&gt; -&gt; Async&lt;&#39;a []&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L616-616" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Iterates a sequnce of async computations and collects their results into an array.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '139', 139)" onmouseover="showTip(event, '139', 139)">
-            singleton v
-          </code>
-          <div class="tip" id="139">
-            <strong>Signature:</strong> v:&#39;T -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L30-30" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Creates an asynchronous sequence that generates a single element and then ends</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '140', 140)" onmouseover="showTip(event, '140', 140)">
-            skip count input
-          </code>
-          <div class="tip" id="140">
-            <strong>Signature:</strong> count:int -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L516-516" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Skips the first N elements of an asynchronous sequence and
-then returns the rest of the sequence unmodified.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '141', 141)" onmouseover="showTip(event, '141', 141)">
-            skipWhile p input
-          </code>
-          <div class="tip" id="141">
-            <strong>Signature:</strong> p:(&#39;T -&gt; bool) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;AsyncSeqInner&lt;&#39;T&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L497-497" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Skips elements from an asynchronous sequence while the specified
-predicate holds and then returns the rest of the sequence. The
-predicate is evaluated asynchronously.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '142', 142)" onmouseover="showTip(event, '142', 142)">
-            skipWhileAsync p input
-          </code>
-          <div class="tip" id="142">
-            <strong>Signature:</strong> p:(&#39;T -&gt; Async&lt;bool&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L480-480" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Skips elements from an asynchronous sequence while the specified
-predicate holds and then returns the rest of the sequence. The
-predicate is evaluated asynchronously.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '143', 143)" onmouseover="showTip(event, '143', 143)">
-            take count input
-          </code>
-          <div class="tip" id="143">
-            <strong>Signature:</strong> count:int -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L506-506" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Returns the first N elements of an asynchronous sequence</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '144', 144)" onmouseover="showTip(event, '144', 144)">
-            takeWhile p input
-          </code>
-          <div class="tip" id="144">
-            <strong>Signature:</strong> p:(&#39;T -&gt; bool) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L491-491" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Returns elements from an asynchronous sequence while the specified
-predicate holds. The predicate is evaluated synchronously.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '145', 145)" onmouseover="showTip(event, '145', 145)">
-            takeWhileAsync p input
-          </code>
-          <div class="tip" id="145">
-            <strong>Signature:</strong> p:(&#39;T -&gt; Async&lt;bool&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; AsyncSeq&lt;&#39;T&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L467-467" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Returns elements from an asynchronous sequence while the specified
-predicate holds. The predicate is evaluated asynchronously.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '146', 146)" onmouseover="showTip(event, '146', 146)">
-            toArray s
-          </code>
-          <div class="tip" id="146">
-            <strong>Signature:</strong> s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;&#39;a []&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L604-604" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Iterates the AsyncSeq and collects the output into an array.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '147', 147)" onmouseover="showTip(event, '147', 147)">
-            toBlockingSeq s
-          </code>
-          <div class="tip" id="147">
-            <strong>Signature:</strong> s:AsyncSeq&lt;&#39;a&gt; -&gt; seq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L429-429" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Converts an AsyncSeq into a blocking sequence.
-Disposal of the resulting sequence causes iteration to stop.
-Exceptions raised during iteration are propagated.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '148', 148)" onmouseover="showTip(event, '148', 148)">
-            toList s
-          </code>
-          <div class="tip" id="148">
-            <strong>Signature:</strong> s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;&#39;a list&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L610-610" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Iterates the AsyncSeq and collects the output into a list.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '149', 149)" onmouseover="showTip(event, '149', 149)">
-            toObservable s
-          </code>
-          <div class="tip" id="149">
-            <strong>Signature:</strong> s:AsyncSeq&lt;&#39;?8520&gt; -&gt; IObservable&lt;&#39;?8520&gt;<br />
-                          <strong>Type parameters:</strong> '?8520          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L416-416" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Converts asynchronous sequence to an IObservable<_>. When the client subscribes
-to the observable, a new copy of asynchronous sequence is started and is
-sequentially iterated over (at the maximal possible speed). Disposing of the
-observer cancels the iteration over asynchronous sequence.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '150', 150)" onmouseover="showTip(event, '150', 150)">
-            tryFind f input
-          </code>
-          <div class="tip" id="150">
-            <strong>Signature:</strong> f:(&#39;T -&gt; bool) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;T option&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L301-301" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Returns the first element for which the given function returns true.
-Returns None if no such element exists.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '151', 151)" onmouseover="showTip(event, '151', 151)">
-            tryPickAsync f input
-          </code>
-          <div class="tip" id="151">
-            <strong>Signature:</strong> f:(&#39;T -&gt; Async&lt;&#39;U option&gt;) -&gt; input:AsyncSeq&lt;&#39;T&gt; -&gt; Async&lt;&#39;U option&gt;<br />
-                          <strong>Type parameters:</strong> 'T, 'U          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L310-310" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Applies the specified function to successive elements returning the first returning Some.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '152', 152)" onmouseover="showTip(event, '152', 152)">
-            unfoldAsync f s
-          </code>
-          <div class="tip" id="152">
-            <strong>Signature:</strong> f:(&#39;State -&gt; Async&lt;(&#39;a * &#39;State) option&gt;) -&gt; s:&#39;State -&gt; AsyncSeq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'State, 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L595-595" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Generates an async sequence using the specified generator function.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '153', 153)" onmouseover="showTip(event, '153', 153)">
-            zip input1 input2
-          </code>
-          <div class="tip" id="153">
-            <strong>Signature:</strong> input1:AsyncSeq&lt;&#39;T1&gt; -&gt; input2:AsyncSeq&lt;&#39;T2&gt; -&gt; AsyncSeq&lt;&#39;T1 * &#39;T2&gt;<br />
-                          <strong>Type parameters:</strong> 'T1, 'T2          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L456-456" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Combines two asynchronous sequences into a sequence of pairs.
-The values from sequences are retrieved in parallel.</p>
-
-
-        </td>
-      </tr>
-    </tbody>
-  </table>
-  <h3>Type extensions</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Type extension</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '154', 154)" onmouseover="showTip(event, '154', 154)">
-            For(seq, action)
-          </code>
-          <div class="tip" id="154">
-            <strong>Signature:</strong> (seq:AsyncSeq&lt;&#39;T&gt; * action:(&#39;T -&gt; Async&lt;unit&gt;)) -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'T          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L145-145" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L35-35" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           
-              <p>CompiledName: <code>AsyncBuilder.For</code></p>
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '155', 155)" onmouseover="showTip(event, '155', 155)">
-            For(seq, action)
+          <code onmouseout="hideTip(event, '56', 56)" onmouseover="showTip(event, '56', 56)">
+            traverseResult m f s
           </code>
-          <div class="tip" id="155">
-            <strong>Signature:</strong> (seq:AsyncSeq&lt;&#39;a&gt; * action:(&#39;a -&gt; unit)) -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
+          <div class="tip" id="56">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Result&lt;&#39;b,&#39;e&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L150-150" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L57-57" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           
-              <p>CompiledName: <code>AsyncBuilder.For</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '57', 57)" onmouseover="showTip(event, '57', 57)">
+            traverseResultList f s
+          </code>
+          <div class="tip" id="57">
+            <strong>Signature:</strong> f:(&#39;a -&gt; Result&lt;&#39;b,&#39;e&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e list&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'e          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L63-63" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '58', 58)" onmouseover="showTip(event, '58', 58)">
+            traverseResultWarn m f s
+          </code>
+          <div class="tip" id="58">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Result&lt;&#39;b,&#39;e&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;(&#39;b * &#39;e),&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L60-60" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
         </td>
       </tr>
     </tbody>

@@ -46,6 +46,23 @@
 </div>
 
 <!-- Render nested types and modules, if there are any -->
+  <h2>Nested types and modules</h2>
+  <div>
+      <table class="table table-bordered type-list">
+    <thead>
+      <tr><td>Type</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-framing-lengthprefix-state.html">State</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+    </tbody>
+  </table>
+
+  </div>
 
   <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
@@ -56,15 +73,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '254', 254)" onmouseover="showTip(event, '254', 254)">
+          <code onmouseout="hideTip(event, '183', 183)" onmouseover="showTip(event, '183', 183)">
             allocBuffer length
           </code>
-          <div class="tip" id="254">
+          <div class="tip" id="183">
             <strong>Signature:</strong> length:int -&gt; Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L149-149" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L168-168" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -74,15 +91,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '255', 255)" onmouseover="showTip(event, '255', 255)">
+          <code onmouseout="hideTip(event, '184', 184)" onmouseover="showTip(event, '184', 184)">
             frame data
           </code>
-          <div class="tip" id="255">
+          <div class="tip" id="184">
             <strong>Signature:</strong> data:Segment -&gt; Segment []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L159-159" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L178-178" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -92,15 +109,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '256', 256)" onmouseover="showTip(event, '256', 256)">
+          <code onmouseout="hideTip(event, '185', 185)" onmouseover="showTip(event, '185', 185)">
             frameSeq data
           </code>
-          <div class="tip" id="256">
+          <div class="tip" id="185">
             <strong>Signature:</strong> data:seq&lt;Segment&gt; -&gt; Segment []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L163-163" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L182-182" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -110,15 +127,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '257', 257)" onmouseover="showTip(event, '257', 257)">
+          <code onmouseout="hideTip(event, '186', 186)" onmouseover="showTip(event, '186', 186)">
             HeaderLength 
           </code>
-          <div class="tip" id="257">
+          <div class="tip" id="186">
             <strong>Signature:</strong> int<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L147-147" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L166-166" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -128,19 +145,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '258', 258)" onmouseover="showTip(event, '258', 258)">
+          <code onmouseout="hideTip(event, '187', 187)" onmouseover="showTip(event, '187', 187)">
             unframe s
           </code>
-          <div class="tip" id="258">
+          <div class="tip" id="187">
             <strong>Signature:</strong> s:AsyncSeq&lt;Segment&gt; -&gt; AsyncSeq&lt;Segment&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L185-185" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L262-262" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Reads 32 bytes of the length prefix, then the length of the message, then yields, then continues.</p>
+          <p>Reads 32 bytes of the length prefix, then the the message of the former length, then yields, then continues.</p>
 
 
         </td>

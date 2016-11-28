@@ -40,78 +40,9 @@
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>High-level consumer API.</p>
+<p>A consumer.</p>
 
 </div>
-
-<!-- Render nested types and modules, if there are any -->
-  <h2>Nested types and modules</h2>
-  <div>
-      <table class="table table-bordered type-list">
-    <thead>
-      <tr><td>Type</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-consumer-autooffsetreset.html">AutoOffsetReset</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-consumer-consumerconfig.html">ConsumerConfig</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-consumer-consumergroupresponse.html">ConsumerGroupResponse</a>
-          </td>
-          <td class="xmldoc"><p>Possible responses of a consumer group protocol.
-These may be received by several concurrent processes: heartbeating, fetching, committing.</p>
-
-</td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
-
-  <h3>Functions and values</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Function or value</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '222', 222)" onmouseover="showTip(event, '222', 222)">
-            consume conn cfg
-          </code>
-          <div class="tip" id="222">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; AsyncSeq&lt;GenerationId * MemberId * (TopicName * Partition * AsyncSeq&lt;MessageSet * Async&lt;unit&gt;&gt;) []&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L137-137" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Given a consumer configuration, initiates the consumer group protocol.
-Returns an async sequence of states where each state corresponds to a
-generation in the group protocol. The state contains streams for the
-topics specified in the configuration. Whenever there is a change in
-the consumer group, or a failure, the protocol restarts and returns a
-new generation once successful. If there are failures surpassing
-configured thresholds, the resulting sequence throws an exception.</p>
-
-
-        </td>
-      </tr>
-    </tbody>
-  </table>
 
         </div>
         <div class="span3">

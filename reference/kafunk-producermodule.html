@@ -55,37 +55,39 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '312', 312)" onmouseover="showTip(event, '312', 312)">
+          <code onmouseout="hideTip(event, '260', 260)" onmouseover="showTip(event, '260', 260)">
             create conn cfg
           </code>
-          <div class="tip" id="312">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ProducerCfg -&gt; Producer<br />
+          <div class="tip" id="260">
+            <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ProducerConfig -&gt; Producer<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L119-119" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L245-245" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Creates a producer.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '313', 313)" onmouseover="showTip(event, '313', 313)">
+          <code onmouseout="hideTip(event, '261', 261)" onmouseover="showTip(event, '261', 261)">
             createAsync conn cfg
           </code>
-          <div class="tip" id="313">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ProducerCfg -&gt; Async&lt;Producer&gt;<br />
+          <div class="tip" id="261">
+            <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ProducerConfig -&gt; Async&lt;Producer&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L87-87" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L138-138" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Creates a producer given a Kafka connection and producer configuration.</p>
+          <p>Creates a producer.</p>
 
 
         </td>
@@ -93,37 +95,23 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '314', 314)" onmouseover="showTip(event, '314', 314)">
-            produce p ms
+          <code onmouseout="hideTip(event, '262', 262)" onmouseover="showTip(event, '262', 262)">
+            produce arg1 ms
           </code>
-          <div class="tip" id="314">
-            <strong>Signature:</strong> p:Producer -&gt; ms:MessageBundle [] -&gt; Async&lt;ProduceResponse&gt;<br />
+          <div class="tip" id="262">
+            <strong>Signature:</strong> Producer -&gt; ms:ProducerMessage [] -&gt; Async&lt;ProduceResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L122-122" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L251-251" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
+          <p>Produces a batch of messages.
+Messages are routed based on the configured routing function and
+metadata retrieved by the producer.</p>
 
-          <code onmouseout="hideTip(event, '315', 315)" onmouseover="showTip(event, '315', 315)">
-            produceSingle p (tn, pms)
-          </code>
-          <div class="tip" id="315">
-            <strong>Signature:</strong> p:Producer -&gt; (tn:TopicName * pms:ProducerMessage []) -&gt; Async&lt;ProduceResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L125-125" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
+
         </td>
       </tr>
     </tbody>
