@@ -15,11 +15,10 @@ This is a work in progress and not yet published as a packge. See the issue list
 | Wire Protocol   | Complete |
 | Base API        | Complete |
 | Compression     | GZip     |
-| Routing         | Partial  |
-| Consumer Groups | Partial  |
-| Producers       | Partial  |
-| Fault Tolerance | Partial  |
-| v0.9            | Partial  |
+| Routing         | Complete |
+| Consumer Groups | Complete |
+| Producers       | Complete |
+| v0.9            | Complete |
 | v0.10           | Partial  |
 
 # Hello World
@@ -28,8 +27,12 @@ This is a work in progress and not yet published as a packge. See the issue list
 
 open Kafunk
 
-let conn = Kafka.connHost "existentialhost"
+// connect
 
+let conn = Kafka.connHost "existential-host"
+
+
+// metadata
 
 let metadata = 
   Kafka.metadata conn (Metadata.Request([|"absurd-topic"|])) 
@@ -44,16 +47,17 @@ for t in metadata.topicMetadata do
     printfn "topic|topic_name=%s|partition|partition_id=%i" t.topicName p.partitionId
 
 
+// producer
 
-let producerCfg = 
-  ProducerCfg.create ([|"absurd-topic"|], Partitioner.konst 0, requiredAcks=RequiredAcks.Local)
+let producerCfg =
+  ProducerConfig.create ("absurd-topic", Partitioner.roundRobin, requiredAcks = RequiredAcks.Local)
 
-let producer = 
-  Producer.createAsync conn producerCfg 
+let producer =
+  Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
 
 let prodRes =
-  Producer.produceSingle producer ("absurd-topic", [| ProducerMessage.ofBytes ("hello world"B) |])
+  Producer.produce producer [| ProducerMessage.ofBytes ("hello world"B) |]
   |> Async.RunSynchronously
 
 for (tn,offsets) in prodRes.topics do
@@ -62,34 +66,20 @@ for (tn,offsets) in prodRes.topics do
     printfn "partition=%i error_code=%i offset=%i" p ec offset
 
 
-
-let fetchRes = 
-  Kafka.fetch conn (FetchRequest.ofTopicPartition "absurd-topic" 0 0L 0 0 1000) 
-  |> Async.RunSynchronously
-
-for (tn,pmds) in fetchRes.topics do
-  for (p,ec,hmo,mss,ms) in pmds do
-    printfn "topic=%s partition=%i error=%i" tn p ec
-
-
+// consumer
 
 let consumerCfg = 
-  Consumer.ConsumerConfig.create ("consumer-group", [|"absurd-topic"|])
+  ConsumerConfig.create ("consumer-group", [|"absurd-topic"|])
 
-Consumer.consume conn consumerCfg
-|> AsyncSeq.iterAsync (fun (generationId,memberId,topics) ->
-  // the outer AsyncSeq yield on every generation of the consumer groups protocol
-  topics
-  |> Seq.map (fun (topic,partition,stream) ->
-    // the inner AsyncSeqs correspond to individual topic-partitions
-    stream
-    |> AsyncSeq.iterAsync (fun (ms,commit) -> async {
-      for (offset,_,msg) in ms.messages do          
-        printfn "processing topic=%s partition=%i offset=%i key=%s" topic partition offset (Message.keyString msg)
-      do! commit }))
-  |> Async.Parallel
-  |> Async.Ignore)
-|> Async.RunSynchronously
+let consumer =
+  Consumer.create conn consumerCfg
+
+consumer
+|> Consumer.consume (fun tn p ms commit -> async {
+  printfn "topic=%s partition=%i" tn p
+  do! commit })
+|> Async.RunSynchronously  
+
 ```
 
 # Maintainer(s)
