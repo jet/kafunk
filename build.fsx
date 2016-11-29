@@ -380,7 +380,7 @@ Target "All" DoNothing
   ==> "All"
   =?> ("ReleaseDocs",isLocalBuild)
 
-"All"
+"CopyBinaries"
 #if MONO
 #else
   =?> ("SourceLink", Pdbstr.tryFind().IsSome )
