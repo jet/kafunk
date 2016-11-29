@@ -1,3 +1,5 @@
+### 0.0.3 - TDB
+
 ### 0.0.2 - 29.11.2016
 
 * A more complete consumer API is now available
