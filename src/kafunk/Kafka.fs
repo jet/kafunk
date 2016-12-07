@@ -12,6 +12,69 @@ open System.Collections.Generic
 
 open Kafunk
 
+/// The routing table provides host information for the leader of a topic/partition
+/// or a group coordinator.
+type Routes = private {
+  bootstrapHost : EndPoint
+  nodeToHost : Map<NodeId, EndPoint>
+  topicToNode : Map<TopicName * Partition, NodeId>
+  groupToHost : Map<GroupId, EndPoint>
+} with
+  
+  static member ofBootstrap (ep:EndPoint) =
+    {
+      bootstrapHost = ep
+      nodeToHost = Map.empty
+      topicToNode = Map.empty
+      groupToHost = Map.empty
+    }
+
+  static member tryFindHostForTopic (rt:Routes) (tn:TopicName, p:Partition) =
+    rt.topicToNode |> Map.tryFind (tn,p) |> Option.bind (fun nid -> rt.nodeToHost |> Map.tryFind nid)
+  
+  static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
+    rt.groupToHost |> Map.tryFind gid
+  
+  static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
+    {
+      rt with
+        
+        nodeToHost = 
+          rt.nodeToHost
+          |> Map.addMany (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.parse (b.host, b.port)))
+        
+        topicToNode = 
+          rt.topicToNode
+          |> Map.addMany (
+              metadata.topicMetadata
+              |> Seq.collect (fun tmd ->
+                tmd.partitionMetadata
+                |> Seq.map (fun pmd -> (tmd.topicName, pmd.partitionId), pmd.leader)))
+    }
+
+  static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
+    {
+      rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
+    }
+
+  static member topicPartitions (x:Routes) =
+    x.topicToNode 
+    |> Map.toSeq 
+    |> Seq.map fst 
+    |> Seq.groupBy fst
+    |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
+    |> Map.ofSeq
+      
+/// A route is a result where success is a set of request and host pairs
+/// and failure is a set of request and missing route pairs.
+/// A request can target multiple topics and as such, multiple brokers.
+type RouteResult = Result<(RequestMessage * EndPoint)[], MissingRouteResult>
+        
+/// Indicates a missing route.
+and MissingRouteResult =
+  | MissingTopicRoute of topic:TopicName
+  | MissingGroupRoute of group:GroupId
+
 /// Routing topic/partition and groups to channels.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Routing =
@@ -82,71 +145,6 @@ module Routing =
     rs
     |> Array.map ResponseMessage.toOffset
     |> (fun rs -> new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse)
-
-
-  /// The routing table provides host information for the leader of a topic/partition
-  /// or a group coordinator.
-  type Routes = {
-    bootstrapHost : EndPoint
-    nodeToHost : Map<NodeId, EndPoint>
-    topicToNode : Map<TopicName * Partition, NodeId>
-    groupToHost : Map<GroupId, EndPoint>
-  } with
-  
-    static member ofBootstrap (ep:EndPoint) =
-      {
-        bootstrapHost = ep
-        nodeToHost = Map.empty
-        topicToNode = Map.empty
-        groupToHost = Map.empty
-      }
-
-    static member tryFindHostForTopic (rt:Routes) (tn:TopicName, p:Partition) =
-      rt.topicToNode |> Map.tryFind (tn,p) |> Option.bind (fun nid -> rt.nodeToHost |> Map.tryFind nid)
-  
-    static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
-      rt.groupToHost |> Map.tryFind gid
-  
-    static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
-      {
-        rt with
-        
-          nodeToHost = 
-            rt.nodeToHost
-            |> Map.addMany (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.parse (b.host, b.port)))
-        
-          topicToNode = 
-            rt.topicToNode
-            |> Map.addMany (
-                metadata.topicMetadata
-                |> Seq.collect (fun tmd ->
-                  tmd.partitionMetadata
-                  |> Seq.map (fun pmd -> (tmd.topicName, pmd.partitionId), pmd.leader)))
-      }
-
-    static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
-      {
-        rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
-      }
-
-    static member topicPartitions (x:Routes) =
-      x.topicToNode 
-      |> Map.toSeq 
-      |> Seq.map fst 
-      |> Seq.groupBy fst
-      |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
-      |> Map.ofSeq
-      
-
-  /// A route is a result where success is a set of request and host pairs
-  /// and failure is a set of request and missing route pairs.
-  /// A request can target multiple topics and as such, multiple brokers.
-  type RouteResult = Result<(RequestMessage * EndPoint)[], MissingRouteResult>
-        
-  /// Indicates a missing route.
-  and MissingRouteResult =
-    | MissingTopicRoute of topic:TopicName
-    | MissingGroupRoute of group:GroupId
 
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
@@ -347,7 +345,7 @@ type KafkaConnConfig = {
 
 /// Connection state.
 type ConnState = {
-  routes : Routing.Routes
+  routes : Routes
   channels : Map<EndPoint, Chan>
   version : int
 } with
@@ -365,7 +363,7 @@ type ConnState = {
   static member addChannel (ep:EndPoint, ch:Chan) (s:ConnState) =
     ConnState.updateChannels (Map.add ep ch) s
 
-  static member updateRoutes (f:Routing.Routes -> Routing.Routes) (s:ConnState) =
+  static member updateRoutes (f:Routes -> Routes) (s:ConnState) =
     {
       s with 
           routes = f s.routes
@@ -375,7 +373,7 @@ type ConnState = {
   static member bootstrap (bootstrapEp:EndPoint, bootstrapCh:Chan) =
     {
       channels = [bootstrapEp,bootstrapCh] |> Map.ofList
-      routes = Routing.Routes.ofBootstrap bootstrapEp
+      routes = Routes.ofBootstrap bootstrapEp
       version = 0
     }
 
@@ -388,7 +386,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let bootstrapConnectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
+  let bootstrapConnectRetry = RetryPolicy.constant 5000 |> RetryPolicy.maxAttempts 3
   let waitRetrySleepMs = 5000
 
   let stateCell : MVar<ConnState> = MVar.create ()
@@ -420,7 +418,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> Faults.retryResultThrow
           id 
           Exn.monoid
-          bootstrapConnectBackoff
+          bootstrapConnectRetry
     stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
@@ -429,7 +427,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       if currentState.version = callerState.version then
         let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
-        return currentState |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata)
+        return currentState |> ConnState.updateRoutes (Routes.addMetadata metadata)
       else
         return currentState }
     stateCell |> MVar.updateAsync update
@@ -442,7 +440,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
         Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print group)
         return 
           currentState 
-          |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
+          |> ConnState.updateRoutes (Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
       else
         return currentState }
     stateCell |> MVar.updateAsync update
@@ -512,12 +510,12 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
         // single-broker request
         return! sendHost requestRoutes.[0]
 
-    | Failure (Routing.MissingTopicRoute topic) ->
+    | Failure (MissingTopicRoute topic) ->
       Log.warn "missing_topic_partition_route|topic=%s request=%A" topic req
       let! state' = getMetadata state [|topic|]
       return! send state' req
 
-    | Failure (Routing.MissingGroupRoute group) ->
+    | Failure (MissingGroupRoute group) ->
       Log.warn "missing_group_goordinator_route|group=%s" group
       let! state' = getGroupCoordinator state group
       return! send state' req
@@ -560,7 +558,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let state = __.GetState ()
     let! state' = getMetadata state topics
-    return state'.routes |> Routing.Routes.topicPartitions }
+    return state'.routes |> Routes.topicPartitions }
 
   member __.Close () =
     Log.info "closing_connection|client_id=%s" cfg.clientId

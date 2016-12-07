@@ -54,7 +54,7 @@ let ``should retry with reevaluation`` () =
       else
         async.Return (Failure ())
 
-    let backoff = Backoff.constant 10 |> Backoff.maxAttempts attempts
+    let backoff = RetryPolicy.constant 10 |> RetryPolicy.maxAttempts attempts
 
     let sleepEcho =
       sleepEcho 
@@ -86,7 +86,7 @@ let ``should retry timeout with backoff and succeed`` () =
             do! Async.Sleep (int time.TotalMilliseconds * 2)
             return () }
 
-      let backoff = Backoff.constant 10 |> Backoff.maxAttempts attempts
+      let backoff = RetryPolicy.constant 10 |> RetryPolicy.maxAttempts attempts
 
       let sleepEcho =
         sleepEcho

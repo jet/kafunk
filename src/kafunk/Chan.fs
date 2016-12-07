@@ -349,23 +349,23 @@ type ChanConfig = {
         
   connectTimeout : TimeSpan
 
-  connectBackoff : Backoff
+  connectRetryPolicy : RetryPolicy
 
   requestTimeout : TimeSpan
     
-  requestBackoff : Backoff
+  requestRetryPolicy : RetryPolicy
 
 } with
     
-  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
+  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
       useNagle = defaultArg useNagle false
       receiveBufferSize = defaultArg receiveBufferSize 8192
       sendBufferSize = defaultArg sendBufferSize 8192
       connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
-      connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+      connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constant 1000 |> RetryPolicy.maxAttempts 5)
       requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
-      requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+      requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constant 1000 |> RetryPolicy.maxAttempts 5)
     }
 
 
@@ -417,7 +417,7 @@ module Chan =
       let! sendRcvSocket = 
         Socket.connect connSocket ep
         |> Async.timeoutResult config.connectTimeout
-        |> Async.map (Result.mapError (fun ex -> ex :> exn))
+        |> Async.map (Result.mapError (fun _ -> new TimeoutException() :> exn))
       match sendRcvSocket with
       | Success socket -> 
         Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" socket.RemoteEndPoint socket.LocalEndPoint
@@ -428,7 +428,7 @@ module Chan =
 
     let conn =
       conn
-      |> Faults.retryResultThrow id Exn.monoid config.connectBackoff
+      |> Faults.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
       Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i socket_connected=%b error=%O" clientId ep ver s.Connected ex
@@ -486,7 +486,7 @@ module Chan =
           (fun (req,e) ->
             let v = sendRcvSocket.TryGetVersion () |> Option.getOr -1
             Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
-      |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
+      |> Faults.AsyncFunc.retryResultThrowList (fun _times -> TimeoutException() :> exn)  config.requestRetryPolicy
       |> AsyncFunc.doBeforeAfterExn 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))

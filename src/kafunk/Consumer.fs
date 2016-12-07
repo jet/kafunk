@@ -67,6 +67,10 @@ module Consumer =
     if t.IsCompleted then return f t.Result
     else return! a }
 
+
+//  let (|FetchOK|FetchError|) (r:FetchResponse) =
+//    FetchOK
+
   /// Creates a participant in the consumer groups protocol.
   /// A generation changes when the group changes, such as when members join or leave.
   /// Each generation contains a set of async sequences corresponding to messages in a single topic-partition.
