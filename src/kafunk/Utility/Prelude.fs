@@ -80,20 +80,14 @@ module Monoid =
   let stringConcat (s:string) : Monoid<string> =
     monoid "" (fun a b -> a + s + b)
 
+  /// A monoid for 'a option returning the first non-None value.
   [<GeneralizableValue>]
-  let optionLeft<'a> : Monoid<'a option> =
-    monoid None (fun a _ -> a)
-
-  [<GeneralizableValue>]
-  let optionRight<'a> : Monoid<'a option> =
-    monoid None (fun _ b -> b)
-
-  [<GeneralizableValue>]
-  let optionMergeLeft<'a> : Monoid<'a option> =
+  let optionFirst<'a> : Monoid<'a option> =
     monoid None (fun a b -> match a,b with Some _,_ -> a | None,b -> b)
 
+  /// A monoid for 'a option returning the last non-None value.
   [<GeneralizableValue>]
-  let optionMergeRight<'a> : Monoid<'a option> =
+  let optionLast<'a> : Monoid<'a option> =
     monoid None (fun a b -> match a,b with _,Some _ -> b | a,None -> a)
     
 
@@ -256,11 +250,6 @@ module Result =
     match r with
     | Success a -> a
     | Failure e -> raise (f e)
-
-  let monoid (ma:Monoid<'a>) (me:Monoid<'e>) : Monoid<Result<'a, 'e>> =
-    Monoid.monoid 
-      (Failure me.Zero) 
-      (map2 (Monoid.merge me) (Monoid.merge ma))
 
 // --------------------------------------------------------------------------------------------------
 

@@ -212,12 +212,12 @@ module AsyncEx =
     static member timeoutResultWith (f:unit -> 'e) (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, 'e>> =
       Async.timeoutWith (f >> Failure) timeout (c |> Async.map Success)
 
-    static member timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeSpan>> =
-      Async.timeoutResultWith (fun () -> timeout) timeout c
+    static member timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeoutException>> =
+      Async.timeoutResultWith (fun () -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)) timeout c
 
     static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
       Async.timeoutResult timeout c 
-      |> Async.map (Result.throwMap (fun timeout -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)))
+      |> Async.map (Result.throw)
 
 
 
@@ -266,7 +266,7 @@ module AsyncFunc =
   let timeout (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<'b> =
     fun a -> async.Delay (fun () -> f a) |> Async.timeoutAfter t
 
-  let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeSpan>> =
+  let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
     fun a -> async.Delay (fun () -> f a) |> Async.timeoutResult t 
   
 

@@ -153,10 +153,12 @@ module Faults =
           return! loop (i + 1) e }
     loop 0 m.Zero
 
+  /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
+  /// Returns None when shouldRetry returns false.
   let retryAsync (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
     let a = a |> Async.map (fun a -> if shouldRetry a then Failure (Some a) else Success (Some a))
     retryAsyncResult 
-      Monoid.optionRight
+      Monoid.optionLast
       p 
       a
     |> Async.map (Result.codiag)

@@ -541,15 +541,15 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
     let! _ = bootstrap cfg
     return () }
 
-  // TODO: reconsider this design!
-  member internal __.ReconnectChans () = async {
-    let state = __.GetState ()
-    let! _ =
-      state.channels
-      |> Map.toSeq
-      |> Seq.map (fun (_,ch) -> Chan.reconnect ch)
-      |> Async.Parallel
-    return () }
+//  // TODO: reconsider this design!
+//  member internal __.ReconnectChans () = async {
+//    let state = __.GetState ()
+//    let! _ =
+//      state.channels
+//      |> Map.toSeq
+//      |> Seq.map (fun (_,ch) -> Chan.reconnect ch)
+//      |> Async.Parallel
+//    return () }
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
     let state = __.GetState ()
