@@ -24,10 +24,8 @@ This is a work in progress and not yet published as a packge. See the issue list
 # Hello World
 
 ```fsharp
-
 open Kafunk
 
-// connect
 
 let conn = Kafka.connHost "existential-host"
 
@@ -78,8 +76,27 @@ consumer
 |> Consumer.consume (fun tn p ms commit -> async {
   printfn "topic=%s partition=%i" tn p
   do! commit })
-|> Async.RunSynchronously  
+|> Async.RunSynchronously
 
+
+
+// consumer offsets
+
+Consumer.commitOffsets consumer [| "absurd-topic", [| 0, 1L |] |]
+|> Async.RunSynchronously
+
+
+
+// offsets
+
+let offsets = 
+  Kafka.Composite.offsets conn "absurd-topic" [ Time.EarliestOffset ; Time.LatestOffset ] 1
+  |> Async.RunSynchronously
+
+for kvp in offsets do
+  for (tn,offsets) in kvp.Value.topics do
+    for p in offsets do
+      printfn "time=%i topic=%s partition=%i offsets=%A" kvp.Key tn p.partition p.offsets
 ```
 
 # Maintainer(s)
