@@ -76,6 +76,7 @@
     <None Include="Fetch.fsx" />
     <None Include="Consumer.fsx" />
     <None Include="ProducerConsumer.fsx" />
+    <None Include="Offsets.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>

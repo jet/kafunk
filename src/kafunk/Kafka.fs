@@ -635,16 +635,23 @@ module Kafka =
   /// Composite operations.
   module Composite =
 
-    let topicOffsets (conn:KafkaConn) (time:Time, maxOffsets:MaxNumberOfOffsets) (topic:TopicName) = async {
-      Log.info "getting_offsets|topic=%s time=%i" topic time
+    /// Gets offsets for the specified topic at the specified times.
+    /// Returns a map of times to offset responses.
+    let offsets (conn:KafkaConn) (topic:TopicName) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
+      Log.info "requesting_offsets|topic=%s times=%A" topic times
       let! metadata = conn.GetMetadata [|topic|]
-      let topics =
-        metadata
-        |> Map.toSeq
-        |> Seq.map (fun (tn,ps) ->
-          let ps = ps |> Array.map (fun p -> p,time,maxOffsets)
-          tn,ps)
-        |> Seq.toArray
-      let offsetReq = OffsetRequest(-1, topics)
-      let! offsetRes = offset conn offsetReq
-      return offsetRes }
+      return!
+        times
+        |> Seq.map (fun time -> async {
+          let topics =
+            metadata
+            |> Map.toSeq
+            |> Seq.map (fun (tn,ps) ->
+              let ps = ps |> Array.map (fun p -> p,time,maxOffsets)
+              tn,ps)
+            |> Seq.toArray
+          let offsetReq = OffsetRequest(-1, topics)
+          let! offsetRes = offset conn offsetReq
+          return time,offsetRes })
+        |> Async.Parallel
+        |> Async.map (Map.ofArray) }
