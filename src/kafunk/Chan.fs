@@ -486,7 +486,7 @@ module Chan =
           (fun (req,e) ->
             let v = sendRcvSocket.TryGetVersion () |> Option.getOr -1
             Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
-      |> Faults.AsyncFunc.retryResultThrowList (fun _times -> TimeoutException() :> exn)  config.requestRetryPolicy
+      |> Faults.AsyncFunc.retryResultThrowList (Exn.ofSeq) config.requestRetryPolicy
       |> AsyncFunc.doBeforeAfterExn 
           (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
           (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))

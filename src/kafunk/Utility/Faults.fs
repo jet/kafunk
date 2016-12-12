@@ -103,36 +103,21 @@ module Faults =
 
   let private Log = Log.create "Kafunk.Faults"
 
-//  let retryAsyncResultReference (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
-//    AsyncSeq.interleaveChoice
-//      (AsyncSeq.replicateInfiniteAsync a) 
-//      (Backoff.toAsyncSeq b)
-//    |> AsyncSeq.choose Choice.tryLeft
-//    |> AsyncSeq.sequenceResult m
+  /// Returns a stream of async computations corresponding to invocations of the argument 
+  /// computation until the computations succeeds.
+  let retryAsyncResultStream (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : AsyncSeq<Result<'a, 'e>> =
+    (AsyncSeq.replicateInfiniteAsync a, RetryPolicy.delayToAsyncSeq p)
+    ||> AsyncSeq.interleaveChoice
+    |> AsyncSeq.choose Choice.tryLeft
 
-//  let retry (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
-//    let rec loop i = async {
-//      let! a = a
-//      if not (shouldRetry a) then
-//        return Some a
-//      else
-//        match RetryPolicy.delayAt i p with
-//        | None -> 
-//          return None
-//        | Some wait ->
-//          do! Async.Sleep wait
-//          return! loop (i + 1) }
-//    loop 0
-
+  let retryAsyncResultReference (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
+    retryAsyncResultStream p a |> AsyncSeq.sequenceResult m
+    
   /// Retries an async computation returning a result according to the specified backoff strategy.
   /// Returns an async computation containing a result, which is Success of a pair of the successful result and errors
   /// accumulated during retries, if any, and otherwise, a Failure of accumulated errors.
-  let retryAsyncResultWarn (m:Monoid<'e>) (policy:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
-    AsyncSeq.interleaveChoice 
-      (AsyncSeq.replicateInfiniteAsync a)
-      (RetryPolicy.delayToAsyncSeq policy)
-    |> AsyncSeq.choose Choice.tryLeft
-    |> AsyncSeq.sequenceResultWarn m
+  let retryAsyncResultWarn (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
+    retryAsyncResultStream p a |> AsyncSeq.sequenceResultWarn m
 
   let retryAsyncResultWarnList (policy:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e list, 'e list>> =
     retryAsyncResultWarn Monoid.freeList policy (a |> Async.map (Result.mapError List.singleton))
@@ -182,11 +167,29 @@ module Faults =
 //        (fun es -> Exn.aggregate (sprintf "Operation failed after %i attempts." (List.length es)) es) 
 //        Monoid.freeList
 //        b
+
+//  let retry (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
+//    let rec loop i = async {
+//      let! a = a
+//      if not (shouldRetry a) then
+//        return Some a
+//      else
+//        match RetryPolicy.delayAt i p with
+//        | None -> 
+//          return None
+//        | Some wait ->
+//          do! Async.Sleep wait
+//          return! loop (i + 1) }
+//    loop 0
+
+
       
   module AsyncFunc =
 
-    let retry (shouldRetry:'b -> bool) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsync p shouldRetry
+    // retry
+
+    let retry (shouldRetry:'a * 'b -> bool) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsync p (fun b -> shouldRetry (a,b))
 
     let retryResult (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e>> =
       fun a -> async.Delay (fun () -> f a) |> retryAsyncResult m p
@@ -205,6 +208,13 @@ module Faults =
 
     let retryResultThrowList (ex:'e list -> exn) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex p
+    
+    // end retry
+
+//    let timeoutWithRetry (timeout:System.TimeSpan) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
+//      AsyncFunc.timeoutResult timeout f
+//      |> retry (function (_,Failure _) -> true | _ -> false) p
+//      |> AsyncFunc.mapOut (snd >> Option.bind Result.trySuccess)
 
     let doAfterError (g:'a * 'e -> unit) : ('a -> Async<Result<'b, 'e>>) -> ('a -> Async<Result<'b, 'e>>) =
       AsyncFunc.mapOut (fun (a,b) -> b |> Result.mapError (fun e -> g (a,e) ; e))

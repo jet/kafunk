@@ -18,10 +18,11 @@ type ConsumerConfig = {
   fetchBufferBytes : MaxBytes
   offsetRetentionTime : int64
   initialFetchTime : Time
+  endOfTopicPollPolicy : RetryPolicy
 } with
     static member create 
       (groupId:GroupId, topics:TopicName[], ?initialFetchTime, ?fetchBufferBytes, ?sessionTimeout, 
-          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs) =
+          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy) =
       {
         groupId = groupId
         topics = topics
@@ -32,6 +33,7 @@ type ConsumerConfig = {
         fetchBufferBytes = defaultArg fetchBufferBytes 1000000
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
+        endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constant 10000)
       }
 
 /// A consumer.
@@ -313,6 +315,7 @@ module Consumer =
                 return () })
 
         /// Fetches the specified offset.
+        /// Returns None of generation closed.
         let rec fetch (offset:FetchOffset) : Async<FetchResponse option> = 
           peekTask
             (fun _ -> None)
@@ -326,46 +329,42 @@ module Consumer =
                   return failwith "nothing returned in fetch response!"
                 else
                   let _,partitions = res.topics.[0]
-                  let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
+                  let _,ec,_highWatermarkOffset,_mss,ms = partitions.[0]
                   match ec with
                   | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
                     Log.warn "consumer_group_fetch_error|error_code=%i" ec
                     do! close state
                     return None
                   | _ ->
-                    if ms.messages.Length = 0 then
-                      Log.info "reached_end_of_stream|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
-                      do! Async.Sleep 10000
-                      return! fetch offset 
-                    else
-                      //let ms = Compression.decompress ms
-                      return Some res
+                    //let ms = Compression.decompress ms
+                    return (Some res)
               | Failure ex ->
                 Log.warn "fetch_failure|generation_id=%i error=%O" state.generationId ex
                 do! close state
                 return None })
 
-        let rec fetch2 (offset:FetchOffset) = async {
-          try
-            return! fetch offset
-          with 
-            | EscalationException (ec,res) when ec = ErrorCode.OffsetOutOfRange ->
-              Log.warn "offset_exception_escalated|topic=%s partition=%i error_code=%i res=%A" topic partition ec res
-              let offsetReq = OffsetRequest(-1, [| topic, [| partition, cfg.initialFetchTime, 1 |] |])
-              let! offsetRes = Kafka.offset conn offsetReq
-              let (tn,ps) = offsetRes.topics.[0]
-              let p = ps.[0]
-              Log.warn "fetched_topic_offsets|topic=%s partition=%i latest_offset=%i attempted_offset=%i delta=%i" tn p.partition p.offsets.[0] offset (p.offsets.[0] - offset)
-              do! Async.Sleep 5000
-              return! fetch2 p.offsets.[0] }
-
-        let fetch = fetch2
+        /// Poll on end of topic.
+        let fetchAndPoll =
+          Faults.AsyncFunc.retry
+            (function
+              | offset, Some (res:FetchResponse) ->
+                let _,partitions = res.topics.[0]
+                let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
+                if ms.messages.Length = 0 then
+                  Log.info "reached_end_of_topic|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
+                  true
+                else
+                  false
+              | _ -> false)
+            cfg.endOfTopicPollPolicy
+            fetch
+          |> AsyncFunc.mapOut (snd >> Option.bind id)
 
         /// Fetches a stream of messages starting at the specified offset.
         let fetchStream =
           AsyncSeq.unfoldAsync
             (fun (offset:FetchOffset) -> async {
-              let! res = fetch offset
+              let! res = fetchAndPoll offset
               match res with
               | None ->
                 return None
