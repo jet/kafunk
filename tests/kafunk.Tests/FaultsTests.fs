@@ -67,6 +67,19 @@ let ``should retry with reevaluation`` () =
 
     shouldEqual expected actual None
 
+
+
+let partitionByCount 
+  (count:int) 
+  (before:'a -> Async<'b>)
+  (after:'a -> Async<'b>) : 'a -> Async<'b> =
+  let mutable i = 0
+  fun a -> async {
+    if Interlocked.Increment &i > count then
+      return! after a
+    else
+      return! before a }
+
 [<Test>]
 let ``should retry timeout with backoff and succeed`` () = 
 
@@ -75,6 +88,8 @@ let ``should retry timeout with backoff and succeed`` () =
   for attempts in [1..5] do
 
     for fail in [true;false] do
+
+      let policy = RetryPolicy.constant 10 |> RetryPolicy.maxAttempts attempts
 
       let sleepEcho =
         let mutable i = 0
@@ -86,13 +101,11 @@ let ``should retry timeout with backoff and succeed`` () =
             do! Async.Sleep (int time.TotalMilliseconds * 2)
             return () }
 
-      let backoff = RetryPolicy.constant 10 |> RetryPolicy.maxAttempts attempts
-
       let sleepEcho =
         sleepEcho
         |> AsyncFunc.timeoutResult time
         |> AsyncFunc.mapOut (snd >> Result.mapError ignore)
-        |> Faults.AsyncFunc.retryResultList backoff
+        |> Faults.AsyncFunc.retryResultList policy
 
       let expected = 
         if fail then Failure (List.init (attempts + 1) ignore)
@@ -100,5 +113,24 @@ let ``should retry timeout with backoff and succeed`` () =
 
       let actual = sleepEcho () |> Async.RunSynchronously
 
-      shouldEqual expected actual None
+      shouldEqual expected actual (Some (sprintf "[fail=%A attempts=%i]" fail attempts))
+
+//[<Test>]
+let ``should retry with condition and retry policy``() =
+  
+  let shouldRetry (a,b) = false
+  let policy = RetryPolicy.constant 10 |> RetryPolicy.maxAttempts 10
+
+  let service (x:int) = async {
+    
+    return x }
+
+  let serviceWithRetry =
+    service
+    |> Faults.AsyncFunc.retry shouldRetry policy
+
+  let actual = serviceWithRetry 1 |> Async.RunSynchronously
+  let expected = None
+
+  shouldEqual expected actual None
 

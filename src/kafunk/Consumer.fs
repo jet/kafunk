@@ -342,7 +342,7 @@ module Consumer =
                   let _,partitions = res.topics.[0]
                   let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
                   match ec with
-                  | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
+                  | ErrorCode.UnknownMemberIdCode | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
                     Log.warn "consumer_group_fetch_error|error_code=%i" ec
                     do! close state
                     return None
@@ -360,8 +360,6 @@ module Consumer =
           |> Faults.AsyncFunc.retry
             (function
               | offset, Some (ms:MessageSet,highWatermarkOffset) ->
-                //let _,partitions = res.topics.[0]
-                //let _,_ec,highWatermarkOffset,_mss,ms = partitions.[0]
                 if ms.messages.Length = 0 then
                   Log.info "reached_end_of_topic|topic=%s partition=%i offset=%i high_watermark_offset=%i" topic partition offset highWatermarkOffset
                   true
@@ -401,7 +399,9 @@ module Consumer =
         let! state = MVar.get consumer.state
         let! topics = consume state
         yield state.generationId,topics
+        Log.info "waiting_on_group_to_close"
         do! state.closed.Task |> Async.AwaitTask
+        Log.info "group_closed;rejoining"
         let! _ = join consumer (Some state.memberId)
         () }
 
@@ -437,9 +437,3 @@ module Consumer =
       |> Seq.collect (fun (t,ps) -> ps |> Seq.map (fun (p,o) -> commitOffset c.conn c.cfg state t p o))
       |> Async.Parallel
     return () }
-
-  
-
-    
-
-  
