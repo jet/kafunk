@@ -33,7 +33,7 @@ type ConsumerConfig = {
         fetchBufferBytes = defaultArg fetchBufferBytes 1000000
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
-        endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constant 10000)
+        endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
       }
 
 /// State corresponding to a single generation of the consumer group protocol.
@@ -357,7 +357,7 @@ module Consumer =
         /// Poll on end of topic.
         let fetchAndPoll =
           fetch
-          |> Faults.AsyncFunc.retry
+          |> Faults.AsyncFunc.retryAsync
             (function
               | offset, Some (ms:MessageSet,highWatermarkOffset) ->
                 if ms.messages.Length = 0 then
@@ -399,9 +399,9 @@ module Consumer =
         let! state = MVar.get consumer.state
         let! topics = consume state
         yield state.generationId,topics
-        Log.info "waiting_on_group_to_close"
+        //Log.info "waiting_on_group_to_close"
         do! state.closed.Task |> Async.AwaitTask
-        Log.info "group_closed;rejoining"
+        //Log.info "group_closed;rejoining"
         let! _ = join consumer (Some state.memberId)
         () }
 

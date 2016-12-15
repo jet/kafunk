@@ -17,8 +17,7 @@ module AsyncEx =
 
   let empty : Async<unit> = async.Return()
 
-  let never : Async<unit> = 
-    Async.Sleep Timeout.Infinite
+  let never : Async<unit> = Async.Sleep Timeout.Infinite
 
   let awaitTaskUnit (t:Task) =
     Async.FromContinuations <| fun (ok,err,cnc) ->
@@ -120,89 +119,92 @@ module AsyncEx =
     /// when all computations in the sequence complete. Up to parallelism computations will
     /// be in-flight at any given point in time. Error or cancellation of any computation in
     /// the sequence causes the resulting computation to error or cancel, respectively.
-    static member ParallelIgnoreCT (ct:CancellationToken) (parallelism:int) (xs:seq<Async<_>>) = async {
-      let sm = new SemaphoreSlim(parallelism)
-      let cde = new CountdownEvent(1)
+    static member ParallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
+      let! ct = Async.CancellationToken
+      use sm = new SemaphoreSlim(parallelism)
+      use cde = new CountdownEvent(1)
       let tcs = new TaskCompletionSource<unit>()
-      ct.Register(Action(fun () -> tcs.TrySetCanceled() |> ignore)) |> ignore
-      let inline tryComplete () =
-        if cde.Signal() then
-          tcs.SetResult(())
-      let inline ok _ =
-        sm.Release() |> ignore
-        tryComplete ()
-      let inline err (ex:exn) =
-        tcs.TrySetException ex |> ignore
-        sm.Release() |> ignore
-      let inline cnc (_:OperationCanceledException) =
-        tcs.TrySetCanceled() |> ignore
-        sm.Release() |> ignore
-      try
-        use en = xs.GetEnumerator()
-        while not (tcs.Task.IsCompleted) && en.MoveNext() do
-          sm.Wait()
-          cde.AddCount(1)
-          Async.StartWithContinuations (en.Current, ok, err, cnc, ct)
-        tryComplete ()
-        do! tcs.Task |> Async.AwaitTask
-      finally
-        cde.Dispose()
-        sm.Dispose() }
+      ct.Register (fun () -> tcs.TrySetCanceled () |> ignore) |> ignore
+      let wrap a = async {
+        cde.AddCount 1
+        sm.Wait ()
+        try
+          let! _a = a
+          sm.Release () |> ignore
+          if (cde.Signal ()) then
+            tcs.TrySetResult () |> ignore
+          return ()
+        with ex ->
+          tcs.TrySetException ex |> ignore }
+      let wrap = wrap >> Async.tryCancelled (fun _ -> tcs.TrySetCanceled () |> ignore)
+      use en = xs.GetEnumerator()
+      while not (tcs.Task.IsCompleted) && en.MoveNext() do
+        Async.Start (wrap en.Current, ct)
+      if (cde.Signal ()) then
+        tcs.TrySetResult () |> ignore
+      return! tcs.Task |> Async.AwaitTask }
 
-    /// Creates an async computation which runs the provided sequence of computations and completes
-    /// when all computations in the sequence complete. Up to parallelism computations will
-    /// be in-flight at any given point in time. Error or cancellation of any computation in
-    /// the sequence causes the resulting computation to error or cancel, respectively.
-    static member ParallelIgnore (parallelism:int) (xs:seq<Async<_>>) =
-      Async.ParallelIgnoreCT CancellationToken.None parallelism xs
-
-    /// Creates an async computation which runs the provided sequence of computations and completes
-    /// when all computations in the sequence complete. Up to parallelism computations will
-    /// be in-flight at any given point in time. Error or cancellation of any computation in
-    /// the sequence causes the resulting computation to error or cancel, respectively.
-    /// Like Async.Parallel but with support for throttling.
-    /// Note that an array is allocated to contain the results of all computations.
-    static member ParallelThrottled (parallelism:int) (xs:seq<Async<'a>>) : Async<'a[]> = async {
-      let rec comps  = xs |> Seq.toArray |> Array.mapi (fun i -> Async.map (fun a -> Array.set results i a))
-      and results = Array.zeroCreate comps.Length
-      do! Async.ParallelIgnore parallelism comps
-      return results }
+//    /// Creates an async computation which completes when any of the argument computations completes.
+//    /// The other argument computation is cancelled.
+//    static member choose (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {
+//      let! ct = Async.CancellationToken
+//      use cts = CancellationTokenSource.CreateLinkedTokenSource ct
+//      let tcs = new TaskCompletionSource<'a>()
+//      let wrap a = async {
+//        try
+//          let! a = a
+//          if tcs.TrySetResult a then
+//            if not cts.IsCancellationRequested then
+//              cts.Cancel()
+//        with ex ->
+//          if tcs.TrySetException ex then
+//            if not cts.IsCancellationRequested then 
+//              cts.Cancel() }
+//      let wrap = wrap >> Async.tryCancelled (fun _ -> tcs.TrySetCanceled () |> ignore)
+//      Async.Start (wrap a, cts.Token)
+//      Async.Start (wrap b, cts.Token)
+//      return! tcs.Task |> Async.AwaitTask }
 
     /// Creates an async computation which completes when any of the argument computations completes.
-    /// The other argument computation is cancelled.
-    static member choose (a:Async<'a>) (b:Async<'a>) : Async<'a> =
-      Async.FromContinuations <| fun (ok,err,cnc) ->
-        let state = ref 0
-        let cts = new CancellationTokenSource()
-        let inline cancel () =
-          cts.Cancel()
-          cts.Dispose()
-        let inline ok a =
-          if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
-            cancel ()
-            ok a
-        let inline err (ex:exn) =
-          if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
-            cancel ()
-            err ex
-        let inline cnc ex =
-          if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
-            cancel ()
-            cnc ex
-        Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
-        Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
+    /// The other computation is cancelled.
+    static member choose (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {
+      let! ct = Async.CancellationToken
+      return!
+        Async.FromContinuations <| fun (ok,err,cnc) ->
+          let state = ref 0
+          let cts = CancellationTokenSource.CreateLinkedTokenSource ct
+          let cancel () =
+            cts.Cancel()
+            cts.Dispose()
+          let ok a =
+            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
+              ok a
+              cancel ()
+          let err (ex:exn) =
+            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
+              cancel ()
+              err ex
+          let cnc ex =
+            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
+              cancel ()
+              cnc ex
+          Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
+          Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token) }
+
+    static member chooseChoice (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a, 'b>> =
+      Async.choose (a |> Async.map Choice1Of2) (b |> Async.map Choice2Of2)
+
+    /// Returns an async computation which completes successfully when the cancellation is triggered.
+    static member FromCancellationToken (ct:CancellationToken) : Async<unit> =
+      Async.FromContinuations (fun (ok,_,_) -> ct.Register (Action(ok)) |> ignore)
 
     /// Associates an async computation to a cancellation token.
-    static member withCancellationToken (ct:CancellationToken) (a:Async<'a>) : Async<'a> =
-      Async.FromContinuations (fun (ok,err,cnc) -> Async.StartThreadPoolWithContinuations(a, ok, err, cnc, ct))
-
-    static member Throw (a:Async<Choice<'a, exn>>) : Async<'a> =
-      async {
-        let! r = a
-        match r with
-        | Choice1Of2 a -> return a
-        | Choice2Of2 e -> return raise e }
-
+    static member cancelWithToken (ct:CancellationToken) (a:Async<'a>) : Async<'a option> =
+      Async.chooseChoice a (Async.FromCancellationToken ct) |> Async.map (Choice.tryLeft)
+        
+    static member Sleep (s:TimeSpan) : Async<unit> =
+      Async.Sleep (int s.TotalMilliseconds)
+      
     static member timeoutWith (f:unit -> 'a) (timeout:TimeSpan) (c:Async<'a>) : Async<'a> =
       let timeout = async {
         do! Async.Sleep (int timeout.TotalMilliseconds)
@@ -225,6 +227,9 @@ module AsyncFunc =
   
   let catch (f:'a -> Async<'b>) : 'a -> Async<Result<'b, exn>> =
     f >> Async.Catch
+
+  let catchResult (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, Choice<'e, exn>>> =
+    f >> Async.Catch >> Async.map Result.join
 
   let dimap (g:'c -> 'a) (h:'b -> 'd) (f:'a -> Async<'b>) : 'c -> Async<'d> =
     g >> f >> Async.map h
@@ -264,10 +269,10 @@ module AsyncFunc =
         return raise ex }
 
   let timeout (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-    fun a -> async.Delay (fun () -> f a) |> Async.timeoutAfter t
+    fun a -> Async.timeoutAfter t (async.Delay (fun () -> f a))
 
   let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
-    fun a -> async.Delay (fun () -> f a) |> Async.timeoutResult t 
+    fun a -> Async.timeoutResult t (async.Delay (fun () -> f a))
   
 
 

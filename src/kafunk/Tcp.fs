@@ -56,20 +56,29 @@ module Socket =
   /// Executes an async socket operation.
   let exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (config:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
     Async.FromContinuations <| fun (ok, error, _) ->
-      let args = alloc ()
-      config args
-      let rec k (_:obj) (args:SocketAsyncEventArgs) =
-        args.remove_Completed(k')
-        try
-          match args.SocketError with
-          | SocketError.Success -> ok (map args)
-          | e -> error (SocketException(int e))
-        finally
-          free args
-      and k' = EventHandler<SocketAsyncEventArgs>(k)
-      args.add_Completed(k')
-      if not (op args) then
+      try
+        let cnt = ref 0
+        let args = alloc ()
+        config args
+        let rec k (_:obj) (args:SocketAsyncEventArgs) =
+          if Interlocked.Increment cnt > 1 then
+            printfn "Socket|multiple continuation invokes!"
+          args.remove_Completed(k')
+          try
+            try
+              match args.SocketError with
+              | SocketError.Success -> ok (map args)
+              | e -> error (SocketException(int e))
+            finally
+              free args
+          with ex ->
+            printfn "Socket|ERROR|%O" ex
+        and k' = EventHandler<SocketAsyncEventArgs>(k)
+        args.add_Completed(k')
+        if not (op args) then
           k null args
+      with ex ->
+        error ex
 
   let argsAlloc =
     let pool = new ObjectPool<_>(10000, fun () -> new SocketAsyncEventArgs())
@@ -396,6 +405,7 @@ type ReqRepSession<'a, 'b, 's> internal
       return! receiveLoop
     with ex ->
       Log.error "receive_loop_faiure|error=%O" ex
+      //do! Async.Sleep 1000
       return! receiveLoop }
 
   do Async.Start(receiveLoop, cts.Token)

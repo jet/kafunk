@@ -360,8 +360,8 @@ type ConnState = {
         version = s.version + 1
     }
 
-  static member addChannel (ep:EndPoint, ch:Chan) (s:ConnState) =
-    ConnState.updateChannels (Map.add ep ch) s
+  static member addChannel (ch:Chan) (s:ConnState) =
+    ConnState.updateChannels (Map.add (Chan.endpoint ch) ch) s
 
   static member updateRoutes (f:Routes -> Routes) (s:ConnState) =
     {
@@ -370,10 +370,11 @@ type ConnState = {
           version = s.version + 1
     }
 
-  static member bootstrap (bootstrapEp:EndPoint, bootstrapCh:Chan) =
+  static member bootstrap (bootstrapCh:Chan) =
+    let ep = Chan.endpoint bootstrapCh
     {
-      channels = [bootstrapEp,bootstrapCh] |> Map.ofList
-      routes = Routes.ofBootstrap bootstrapEp
+      channels = [ep,bootstrapCh] |> Map.ofList
+      routes = Routes.ofBootstrap ep
       version = 0
     }
 
@@ -386,19 +387,19 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let bootstrapConnectRetry = RetryPolicy.constant 5000 |> RetryPolicy.maxAttempts 3
+  let bootstrapConnectRetry = RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3
   let waitRetrySleepMs = 5000
 
   let stateCell : MVar<ConnState> = MVar.create ()
   let cts = new CancellationTokenSource()
 
-  let connCh state host = async {
-    match state |> ConnState.tryFindChanByEndPoint host with
+  let connCh state ep = async {
+    match state |> ConnState.tryFindChanByEndPoint ep with
     | Some _ -> return state
     | None ->
-      Log.info "creating_channel|host=%A" host
-      let! ep,ch = Chan.connectEndPoint cfg.tcpConfig cfg.clientId host
-      return state |> ConnState.addChannel (ep,ch) }
+      Log.info "creating_channel|endpoint=%A" ep
+      let! ch = Chan.connect cfg.tcpConfig cfg.clientId ep
+      return state |> ConnState.addChannel ch }
 
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
@@ -409,8 +410,8 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
-          let! ep,ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
-          let state = ConnState.bootstrap (ep,ch)
+          let! ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
+          let state = ConnState.bootstrap ch
           return Success state
         with ex ->
           Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex

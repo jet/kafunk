@@ -42,21 +42,30 @@ module Resource =
     let Log = Log.create "Resource"
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
+
+    //let updateCount = ref 0
+    //let st = ref 0
    
-    let create (prev:Epoch<'r> option) = async {
+    let create (prevEpoch:Epoch<'r> option) = async {
       let version = 
-        match prev with
+        match prevEpoch with
         | Some prev ->
           Log.warn "closing_previous_resource_epoch|version=%i cancellation_requested=%b" prev.version prev.closed.IsCancellationRequested
           prev.closed.Cancel()
           prev.version + 1
         | None ->
           0
-      let! r = create
-      return { resource = r ; closed = new CancellationTokenSource() ; version = version } }
+      let! r = create |> Async.Catch
+      match r with
+      | Success r ->
+        //Log.info "created_resource|version=%i" version
+        return { resource = r ; closed = new CancellationTokenSource() ; version = version }
+      | Failure e ->
+        //Log.error "resource_creation_failed|error=%O" e
+        return raise e }
 
-    let recover (req:obj) ex ep = async {
-      let! recovery = handle (ep.resource,ep.version,req,ex)
+    let recover (req:obj) (ex:exn) (ep:Epoch<'r>) = async {
+      let! recovery = handle (ep.resource, ep.version, req, ex)
       match recovery with
       | Escalate ->
         return raise ex
@@ -67,37 +76,55 @@ module Resource =
     member internal __.Create () = async {
       return! cell |> MVar.putOrUpdateAsync create }
 
-    member internal __.Recreate () = async {
-      let! _ = __.Create ()
-      return () }
+//    member internal __.Recreate () = async {
+//      let! _ = __.Create ()
+//      return () }
 
     member internal __.TryGetVersion () =
       MVar.getFastUnsafe cell |> Option.map (fun e -> e.version)
 
-    member private __.Recover (ep':Epoch<'r>, req:obj, ex:exn) =
-      cell 
-      |> MVar.updateAsync (fun ep -> 
-        if ep.version = ep'.version then 
-          recover req ex ep 
-        else async {
-          Log.warn "resource_recovery_already_requested|requested_version=%i current_version=%i" ep'.version ep.version
-          return ep })
+    member private __.Recover (callingEpoch:Epoch<'r>, req:obj, ex:exn) =
+      let update currentEpoch = async {
+        if currentEpoch.version = callingEpoch.version then
+          //let cnt = Interlocked.Increment updateCount
+          //let st' = Interlocked.CompareExchange (st, 1, 0)
+          //if st' <> 0 then return failwith "overlapping update detected!"
+          //Log.info "started_update_to_resource|current_version=%i calling_version=%i update_count=%i st'=%i" currentEpoch.version callingEpoch.version cnt st'
+          try
+            let! ep2 = recover req ex callingEpoch 
+            //let st' = Interlocked.CompareExchange (st, 0, 1)
+            //if st' <> 1 then return failwith "overlapping update detected!"
+            //Log.info "completed_updated_to_resource|current_version=%i calling_vesion=%i new_version=%i update_count=%i st'=%i" currentEpoch.version callingEpoch.version ep2.version cnt st'
+            return ep2
+          with ex ->
+            Log.error "recovery_failed|error=%O" ex
+            do! Async.Sleep 2000
+            return currentEpoch
+        else
+          Log.warn "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
+          return currentEpoch }
+      cell |> MVar.updateAsync update
 
-    member internal __.Recover (req:obj, ex:exn) = async {
-      let! ep = MVar.get cell
-      let! _ep' = __.Recover (ep, req, ex)
-      return () }
+//    member internal __.Recover (req:obj, ex:exn) = async {
+//      let! ep = MVar.get cell
+//      let! _ep' = __.Recover (ep, req, ex)
+//      return () }
         
     member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
-      let! epoch = MVar.get cell
-      let epoch = ref epoch
+      //let! epoch = MVar.get cell
+      //let epoch = ref epoch
       let rec go a = async {
-        let ep = !epoch
+        //let ep = !epoch
+        let! ep = MVar.get cell
         try
-          return! op ep.resource a //|> Async.withCancellationToken ep.closed.Token
+          let! res = op ep.resource a |> Async.cancelWithToken ep.closed.Token
+          match res with
+          | None -> return! go a
+          | Some res -> return res
         with ex ->
-          let! epoch' = __.Recover (ep, box a, ex)
-          epoch := epoch'
+          let! _epoch' = __.Recover (ep, box a, ex)
+          //epoch := epoch'
+          //Interlocked.Exchange (epoch, epoch') |> ignore
           return! go a }
       return go }
 
@@ -109,5 +136,9 @@ module Resource =
     let! _ = r.Create()
     return r }
 
+  /// Injects a resource into a resource-dependent computation.
+  /// Returns a computation with the resource injected.
+  /// Exceptions raised by the computation are caught and recovered using the recovery strategy associated
+  /// with the resource.
   let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.Inject op

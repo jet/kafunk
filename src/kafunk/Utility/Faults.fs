@@ -1,49 +1,79 @@
 ﻿namespace Kafunk
 
+open System
 open FSharp.Control
+
+/// The state of a retry workflow.
+type RetryState =
+  struct
+    val attempt : int
+    new (a) = { attempt = a }
+  end
 
 /// Retry policy.
 type RetryPolicy = 
   private
   /// Given an attempt number, returns the delay or None if done.
-  | RP of (int -> int option)
+  | RP of (RetryState -> TimeSpan option)
 
 /// Operations on retry policies.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RetryPolicy = 
   
-  let un (RP s) = s
+  let private un (RP f) = f
+  
+  /// Creates a retry policy.
+  let create f = RP f
 
-  let nu s = RP s
+  /// The initial retry state.
+  let initState = RetryState(0)
 
-  let delayAt (attempt:int) (b:RetryPolicy) : int option =
-    (un b) attempt
+  /// Returns the next retry state.
+  let nextState (s:RetryState) = RetryState (s.attempt + 1)
 
-  let constant (waitMs:int) = 
-    nu <| fun _ -> Some waitMs
+  /// No retry.
+  let none = create (konst None)
 
-  let linear (init:int) (increment:int) = 
-    nu <| fun i -> Some (init + (i * increment))
+  /// Returns the delay for the specified retry state.
+  let delayAt (s:RetryState) (b:RetryPolicy) : TimeSpan option =
+    (un b) s
+
+  /// Returns an unbounded retry policy with a constant delay of the specified duration.
+  let constant (delay:TimeSpan) = 
+    create <| fun _ -> Some delay
+
+  /// Returns an unbounded retry policy with a constant delay of the specified duration.
+  let constantMs (delayMs:int) =
+    constant (TimeSpan.FromMilliseconds delayMs)
+
+  /// Returns an unbounded retry policy with a linearly increasing delay.
+  let linear (init:TimeSpan) (increment:TimeSpan) = 
+    create <| fun s -> Some (init + (TimeSpan.Mutiply increment s.attempt))
  
   /// Returns a backoff strategy where no wait time is greater than the specified value.
-  let maxDelay (maxDelayMs:int) (b:RetryPolicy) : RetryPolicy =
-    nu <| fun i -> delayAt i b |> Option.map (max maxDelayMs)
+  let maxDelay (maxDelay:TimeSpan) (b:RetryPolicy) : RetryPolicy =
+    create <| fun s -> delayAt s b |> Option.map (max maxDelay)
 
   /// Returns a backoff strategy which attempts at most a specified number of times.
   let maxAttempts (maxAttempts:int) (p:RetryPolicy) : RetryPolicy =
-    nu <| function i when i <= maxAttempts -> p |> delayAt i | _ -> None
+    create <| fun s -> if s.attempt <= maxAttempts then delayAt s p else None
 
-  /// Returns an async sequence where each item is emitted after the corresponding backoff time
+  /// Returns an async sequence where each item is emitted after the corresponding delay
   /// has elapsed.
-  let delayToAsyncSeq (p:RetryPolicy) =
-    AsyncSeq.unfoldAsync (fun i -> async { 
-      let bo = p |> delayAt i
-      match bo with
-      | Some bo -> 
-        do! Async.Sleep bo
-        return Some (bo,i + 1)
+  let delayStreamAt (p:RetryPolicy) =
+    AsyncSeq.unfoldAsync (fun s -> async { 
+      let delay = delayAt s p
+      match delay with
+      | Some delay -> 
+        do! Async.Sleep delay
+        return Some (delay, nextState s)
       | None -> 
-        return None }) 0
+        return None })
+
+  /// Returns an async sequence where each item is emitted after the corresponding delay
+  /// has elapsed.
+  let delayStream (p:RetryPolicy) =
+    delayStreamAt p initState
 
   
 
@@ -106,11 +136,11 @@ module Faults =
   /// Returns a stream of async computations corresponding to invocations of the argument 
   /// computation until the computations succeeds.
   let retryAsyncResultStream (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : AsyncSeq<Result<'a, 'e>> =
-    (AsyncSeq.replicateInfiniteAsync a, RetryPolicy.delayToAsyncSeq p)
+    (AsyncSeq.replicateInfiniteAsync a, RetryPolicy.delayStream p)
     ||> AsyncSeq.interleaveChoice
     |> AsyncSeq.choose Choice.tryLeft
 
-  let retryAsyncResultReference (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
+  let retryAsyncResultRef (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
     retryAsyncResultStream p a |> AsyncSeq.sequenceResult m
     
   /// Retries an async computation returning a result according to the specified backoff strategy.
@@ -135,8 +165,8 @@ module Faults =
           return Failure e
         | Some wait ->
           do! Async.Sleep wait
-          return! loop (i + 1) e }
-    loop 0 m.Zero
+          return! loop (RetryPolicy.nextState i) e }
+    loop RetryPolicy.initState m.Zero
 
   /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
   /// Returns None when shouldRetry returns false.
@@ -146,7 +176,7 @@ module Faults =
       Monoid.optionLast
       p 
       a
-    |> Async.map (Result.codiag)
+    |> Async.map (Result.trySuccess >> Option.bind id)
 
   let retryAsyncResultList (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
     retryAsyncResult Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
@@ -159,36 +189,9 @@ module Faults =
   let retryResultThrowList (f:'e list -> #exn) (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryResultThrow f Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
 
-//  let retryAsync (b:RetryPolicy) (a:Async<'a>) : Async<'a> =
-//    a 
-//    |> Async.Catch
-//    |> Async.map (Result.mapError List.singleton)
-//    |> retryResultThrow 
-//        (fun es -> Exn.aggregate (sprintf "Operation failed after %i attempts." (List.length es)) es) 
-//        Monoid.freeList
-//        b
-
-//  let retry (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
-//    let rec loop i = async {
-//      let! a = a
-//      if not (shouldRetry a) then
-//        return Some a
-//      else
-//        match RetryPolicy.delayAt i p with
-//        | None -> 
-//          return None
-//        | Some wait ->
-//          do! Async.Sleep wait
-//          return! loop (i + 1) }
-//    loop 0
-
-
-      
   module AsyncFunc =
 
-    // retry
-
-    let retry (shouldRetry:'a * 'b -> bool) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
+    let retryAsync (shouldRetry:'a * 'b -> bool) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
       fun a -> async.Delay (fun () -> f a) |> retryAsync p (fun b -> shouldRetry (a,b))
 
     let retryResult (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e>> =
@@ -209,13 +212,6 @@ module Faults =
     let retryResultThrowList (ex:'e list -> exn) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex p
     
-    // end retry
-
-//    let timeoutWithRetry (timeout:System.TimeSpan) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
-//      AsyncFunc.timeoutResult timeout f
-//      |> retry (function (_,Failure _) -> true | _ -> false) p
-//      |> AsyncFunc.mapOut (snd >> Option.bind Result.trySuccess)
-
     let doAfterError (g:'a * 'e -> unit) : ('a -> Async<Result<'b, 'e>>) -> ('a -> Async<Result<'b, 'e>>) =
       AsyncFunc.mapOut (fun (a,b) -> b |> Result.mapError (fun e -> g (a,e) ; e))
       

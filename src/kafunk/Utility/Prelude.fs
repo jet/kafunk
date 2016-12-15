@@ -18,6 +18,23 @@ module Prelude =
     try d.Dispose() finally ()
 
 
+[<AutoOpen>]  
+module TimeSpanEx =
+  
+  open System
+
+  type TimeSpan with
+    static member FromMilliseconds (ms:int) =
+      TimeSpan.FromMilliseconds (float ms)
+    static member FromSeconds (sec:int) =
+      TimeSpan.FromSeconds (float sec)
+    static member Mutiply (s:TimeSpan) (x:int) =
+      let mutable s = s
+      for _ in [1..x] do
+        s <- s.Add s
+      s
+
+
 module Option =
   
   let getOr (defaultValue:'a) = function Some a -> a | None -> defaultValue
@@ -210,7 +227,7 @@ module Result =
   let trySecond (r1:Result<'a, 'e>) (r2:Result<'a, 'e>) : Result<'a, 'e> =
     match r1, r2 with
     | _, Success r2 -> Success r2
-    | Success r1, _ -> Success r1    
+    | Success r1, _ -> Success r1
     | _, Failure e2 -> Failure e2
 
   let bind (f:'a -> Result<'b, 'e>) (r:Result<'a, 'e>) : Result<'b, 'e> =
@@ -250,6 +267,12 @@ module Result =
     match r with
     | Success a -> a
     | Failure e -> raise (f e)
+
+  let join (r:Result<Result<'a, 'e1>, 'e2>) : Result<'a, Choice<'e1, 'e2>> =
+    match r with
+    | Failure e -> Failure (Choice2Of2 e)
+    | Success (Success a) -> Success a
+    | Success (Failure e) -> Failure (Choice1Of2 e)
 
 // --------------------------------------------------------------------------------------------------
 

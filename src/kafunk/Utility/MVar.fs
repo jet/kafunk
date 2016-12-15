@@ -3,6 +3,7 @@
 // TODO: https://github.com/fsprojects/FSharpx.Async
 
 open System
+open System.Threading
 open System.Threading.Tasks
 
 type private MVarReq<'a> =
@@ -88,10 +89,10 @@ type MVar<'a> internal (?a:'a) =
 
   do mbp.Error.Add (fun x -> printfn "|MVar|ERROR|%O" x) // shouldn't happen
   
-  let postAndAsyncReply f = 
+  let postAndAsyncReply f = async {
     let tcs = new TaskCompletionSource<'a>()
     mbp.Post (f tcs)
-    tcs.Task |> Async.AwaitTask 
+    return! tcs.Task |> Async.AwaitTask }
 
   member __.Get () : Async<'a> =
     postAndAsyncReply (Get)
@@ -158,7 +159,7 @@ module MVar =
   /// Puts a new value into an MVar or updates an existing value.
   /// Returns the value that was put or the updated value.
   let putOrUpdateAsync (update:'a option -> Async<'a>) (c:MVar<'a>) : Async<'a> =
-    c.PutOrUpdateAsync (update)
+    c.PutOrUpdateAsync update
 
   /// Updates an item in the MVar.
   /// Returns when an item is available to update.

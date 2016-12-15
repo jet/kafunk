@@ -8,6 +8,9 @@ open System.Threading.Tasks
 /// Module with helper functions for working with asynchronous sequences
 module AsyncSeq =
 
+  let unfoldInfiniteAsync (s:'s) (f:'s -> Async<'a * 's>) : AsyncSeq<'a> =
+    AsyncSeq.unfoldAsync (f >> Async.map Some) s 
+
   let interleaveChoice (a:AsyncSeq<'a>) (b:AsyncSeq<'b>) : AsyncSeq<Choice<'a, 'b>> =
     AsyncSeq.interleave (a |> AsyncSeq.map Choice1Of2) (b |> AsyncSeq.map Choice2Of2)
 
