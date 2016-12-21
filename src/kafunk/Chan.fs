@@ -364,7 +364,7 @@ type ChanConfig = {
       sendBufferSize = defaultArg sendBufferSize 8192
       connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
       connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 5)
-      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30)
+      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10)
       requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 5)
     }
 
@@ -478,24 +478,25 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
-    let send req = session.Send req
-
     let send = 
-      send
-      |> AsyncFunc.timeoutResult config.requestTimeout
-      |> Faults.AsyncFunc.doAfterError
-          (fun (req,e) ->
-            let v = socketAgent.TryGetVersion () |> Option.getOr -1
-            Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
-      |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestRetryPolicy
-      |> AsyncFunc.doBeforeAfterExn 
-          (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
-          (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
-          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)
+      Session.send session
+      |> AsyncFunc.timeoutOption config.requestTimeout
+      |> Resource.timeoutIndep socketAgent
+      |> AsyncFunc.mapOut (snd >> Option.bind id >> Result.ofOption)
+      |> AsyncFunc.doBeforeAfter
+          (fun req -> Log.trace "sending_request|request=%A" (RequestMessage.Print req))
+          (fun (req,res) -> 
+            match res with
+            | Success res -> 
+              Log.trace "received_response|response=%A" (ResponseMessage.Print res)
+            | Failure _ -> 
+              Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout)
+      |> Faults.AsyncFunc.retryResultThrowList (fun _timouts -> TimeoutException()) config.requestRetryPolicy
 
     return Chan (ep, send, Async.empty, Async.empty) }
 
-  let connectHost (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
+  /// Discovers brokers via DNS and connects to the first IPv4.
+  let discoverConnect (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->

@@ -316,8 +316,9 @@ module Consumer =
   /// Returns an async sequence corresponding to generations of the consumer group protocol.
   let generations (consumer:Consumer) =
 
-    let conn = consumer.conn
     let cfg = consumer.cfg
+    let fetch = Kafka.fetch consumer.conn |> AsyncFunc.catch
+    let commitOffset = commitOffset consumer.conn
 
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:ConsumerState) = async {
@@ -326,14 +327,14 @@ module Consumer =
       let consumePartition (topic:TopicName, partition:Partition, initOffset:FetchOffset) = async {
            
         /// Fetches the specified offset.
-        /// Returns None of generation closed.
-        let rec fetch (offset:FetchOffset) : Async<(MessageSet * HighwaterMarkOffset) option> = 
+        /// Returns None if the generation closed.
+        let rec tryFetch (offset:FetchOffset) : Async<(MessageSet * HighwaterMarkOffset) option> = 
           peekTask
             (fun _ -> None)
             (state.closed.Task)
             (async {
               let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
-              let! res = Kafka.fetch conn req |> Async.Catch
+              let! res = fetch req
               match res with
               | Success res ->
                 if res.topics.Length = 0 then
@@ -350,13 +351,15 @@ module Consumer =
                     //let ms = Compression.decompress ms
                     return Some (ms,highWatermarkOffset)
               | Failure ex ->
-                Log.warn "fetch_failure|generation_id=%i error=%O" state.generationId ex
+                Log.warn "fetch_failure|generation_id=%i topic=%s partition=%i offset=%i error=%O" state.generationId topic partition offset ex
                 do! close state
-                return None })
+                //do! Async.Sleep 1000 // allow logs to flush
+                return raise ex })
+                //return None })
 
         /// Poll on end of topic.
-        let fetchAndPoll =
-          fetch
+        let tryFetchAndPoll =
+          tryFetch
           |> Faults.AsyncFunc.retryAsync
             (function
               | offset, Some (ms:MessageSet,highWatermarkOffset) ->
@@ -374,12 +377,12 @@ module Consumer =
         let fetchStream =
           AsyncSeq.unfoldAsync
             (fun (offset:FetchOffset) -> async {
-              let! res = fetchAndPoll offset
+              let! res = tryFetchAndPoll offset
               match res with
               | None ->
                 return None
               | Some (ms,highWatermarkOffset) ->
-                let commit = commitOffset conn cfg state topic partition offset
+                let commit = commitOffset cfg state topic partition offset
                 let nextOffset = MessageSet.nextOffset ms highWatermarkOffset
                 return Some ((ms,commit), nextOffset) })
       

@@ -410,7 +410,7 @@ type ReqRepSession<'a, 'b, 's> internal
 
   do Async.Start(receiveLoop, cts.Token)
 
-  member x.Send (req:'a) = async {
+  member internal x.Send (req:'a) = async {
     let! ct = Async.CancellationToken
     let _correlationId,sessionData,rep = mux ct req
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
@@ -454,3 +454,6 @@ module Session =
     (receive:AsyncSeq<Binary.Segment>)
     (send:Binary.Segment -> Async<int>) =
       new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, awaitResponse, receive, send)
+
+  /// Sends a request on the session and awaits the response.
+  let send (session:ReqRepSession<_, _, _>) req = session.Send req

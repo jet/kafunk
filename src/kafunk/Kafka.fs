@@ -206,13 +206,13 @@ type RetryAction =
       | ErrorCode.NoError -> None
       
       | ErrorCode.LeaderNotAvailable | ErrorCode.RequestTimedOut | ErrorCode.GroupLoadInProgressCode | ErrorCode.GroupCoordinatorNotAvailableCode
-      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->      
+      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->
         Some (RetryAction.WaitAndRetry)
       
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition ->
         Some (RetryAction.RefreshMetadataAndRetry [||])
 
-      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode -> 
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode (*| ErrorCode.OffsetOutOfRange*) -> 
         Some (RetryAction.PassThru) // escalate to consumer group logic.
       
       | _ ->
@@ -378,7 +378,8 @@ type ConnState = {
       version = 0
     }
 
-exception EscalationException of errorCode:ErrorCode * res:ResponseMessage
+type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage) =
+  inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A" errorCode (RequestMessage.Print req) (ResponseMessage.Print res))
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
@@ -410,7 +411,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
-          let! ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
+          let! ch = Chan.discoverConnect cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
           let state = ConnState.bootstrap ch
           return Success state
         with ex ->
@@ -469,7 +470,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
                   | RetryAction.PassThru ->
                     return res
                   | RetryAction.Escalate ->
-                    return raise (EscalationException (errorCode,res))
+                    return raise (EscalationException (errorCode,req,res))
                   | RetryAction.RefreshGroupCoordinator gid ->
                     let! state' = getGroupCoordinator state gid
                     return! send state' req
@@ -478,12 +479,10 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
                     return! send state' req
                   | RetryAction.WaitAndRetry ->
                     do! Async.Sleep waitRetrySleepMs
-                    return! send state req //})
+                    return! send state req
               | Failure ex ->
                 Log.error "channel_failure_escalated|host=%A request=%s error=%O" host (RequestMessage.Print req) ex
-//                //let! state' = getMetadata state topics
-                //do! Async.Sleep waitRetrySleepMs
-                //return! send state req })
+                // TODO: retry?
                 return raise ex })
         | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' host)
@@ -519,9 +518,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
     | Failure (MissingGroupRoute group) ->
       Log.warn "missing_group_goordinator_route|group=%s" group
       let! state' = getGroupCoordinator state group
-      return! send state' req
-
-    }
+      return! send state' req }
     
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token

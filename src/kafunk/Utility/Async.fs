@@ -191,6 +191,33 @@ module AsyncEx =
           Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
           Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token) }
 
+    /// Creates an async computation which completes when any of the argument computations completes.
+    /// The other computations are cancelled.
+    static member select (xs:seq<Async<'a>>) : Async<'a> = async {
+      let! ct = Async.CancellationToken
+      return!
+        Async.FromContinuations <| fun (ok,err,cnc) ->
+          let state = ref 0
+          let cts = CancellationTokenSource.CreateLinkedTokenSource ct
+          let cancel () =
+            cts.Cancel()
+            cts.Dispose()
+          let ok a =
+            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
+              ok a
+              cancel ()
+          let err (ex:exn) =
+            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
+              cancel ()
+              err ex
+          let cnc ex =
+            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
+              cancel ()
+              cnc ex
+          use en = xs.GetEnumerator ()
+          while (not cts.IsCancellationRequested) && en.MoveNext () do
+            Async.StartThreadPoolWithContinuations (en.Current, ok, err, cnc, cts.Token) }
+
     static member chooseChoice (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a, 'b>> =
       Async.choose (a |> Async.map Choice1Of2) (b |> Async.map Choice2Of2)
 
@@ -198,28 +225,32 @@ module AsyncEx =
     static member FromCancellationToken (ct:CancellationToken) : Async<unit> =
       Async.FromContinuations (fun (ok,_,_) -> ct.Register (Action(ok)) |> ignore)
 
-    /// Associates an async computation to a cancellation token.
+    /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
+    /// computation completes.
     static member cancelWithToken (ct:CancellationToken) (a:Async<'a>) : Async<'a option> =
       Async.chooseChoice a (Async.FromCancellationToken ct) |> Async.map (Choice.tryLeft)
+
+    static member cancelWithTokens (cts:CancellationToken[]) (a:Async<'a>) : Async<'a option> = async {
+      use cts = CancellationTokenSource.CreateLinkedTokenSource (cts)
+      return! Async.chooseChoice a (Async.FromCancellationToken cts.Token) |> Async.map (Choice.tryLeft) }
         
     static member Sleep (s:TimeSpan) : Async<unit> =
       Async.Sleep (int s.TotalMilliseconds)
       
-    static member timeoutWith (f:unit -> 'a) (timeout:TimeSpan) (c:Async<'a>) : Async<'a> =
+    static member timeoutWith (g:'a -> 'b) (f:unit -> 'b) (timeout:TimeSpan) (c:Async<'a>) : Async<'b> =
       let timeout = async {
-        do! Async.Sleep (int timeout.TotalMilliseconds)
+        do! Async.Sleep timeout
         return f () }
-      Async.choose c timeout
+      Async.choose (Async.map g c) timeout
+
+    static member timeoutOption (timeout:TimeSpan) (c:Async<'a>) : Async<'a option> =
+      Async.timeoutWith Some (fun () -> None) timeout c
 
     static member timeoutResultWith (f:unit -> 'e) (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, 'e>> =
-      Async.timeoutWith (f >> Failure) timeout (c |> Async.map Success)
+      Async.timeoutWith Success (f >> Failure) timeout c
 
     static member timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeoutException>> =
       Async.timeoutResultWith (fun () -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)) timeout c
-
-    static member timeoutAfter (timeout:TimeSpan) (c:Async<'a>) =
-      Async.timeoutResult timeout c 
-      |> Async.map (Result.throw)
 
 
 
@@ -227,6 +258,9 @@ module AsyncFunc =
   
   let catch (f:'a -> Async<'b>) : 'a -> Async<Result<'b, exn>> =
     f >> Async.Catch
+
+  let catchWith (e:exn -> 'b) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    f >> Async.Catch >> Async.map (Result.fold id e)
 
   let catchResult (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, Choice<'e, exn>>> =
     f >> Async.Catch >> Async.map Result.join
@@ -268,8 +302,8 @@ module AsyncFunc =
         error (a,ex)
         return raise ex }
 
-  let timeout (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<'b> =
-    fun a -> Async.timeoutAfter t (async.Delay (fun () -> f a))
+  let timeoutOption (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
+    fun a -> Async.timeoutOption t (async.Delay (fun () -> f a))
 
   let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
     fun a -> Async.timeoutResult t (async.Delay (fun () -> f a))

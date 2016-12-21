@@ -18,7 +18,7 @@ module Prelude =
     try d.Dispose() finally ()
 
 
-[<AutoOpen>]  
+[<AutoOpen>]
 module TimeSpanEx =
   
   open System
@@ -273,6 +273,12 @@ module Result =
     | Failure e -> Failure (Choice2Of2 e)
     | Success (Success a) -> Success a
     | Success (Failure e) -> Failure (Choice1Of2 e)
+
+  let ofOptionMap (e:unit -> 'e) (o:'a option) : Result<'a, 'e> =
+    match o with Some a -> Success a | None -> Failure (e ())
+
+  let ofOption (o:'a option) : Result<'a, unit> =
+    match o with Some a -> Success a | None -> Failure ()
 
 // --------------------------------------------------------------------------------------------------
 

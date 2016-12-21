@@ -76,10 +76,6 @@ module Resource =
     member internal __.Create () = async {
       return! cell |> MVar.putOrUpdateAsync create }
 
-//    member internal __.Recreate () = async {
-//      let! _ = __.Create ()
-//      return () }
-
     member internal __.TryGetVersion () =
       MVar.getFastUnsafe cell |> Option.map (fun e -> e.version)
 
@@ -99,22 +95,19 @@ module Resource =
           with ex ->
             Log.error "recovery_failed|error=%O" ex
             do! Async.Sleep 2000
-            return currentEpoch
+            return raise ex
         else
           Log.warn "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
           return currentEpoch }
       cell |> MVar.updateAsync update
-
-//    member internal __.Recover (req:obj, ex:exn) = async {
-//      let! ep = MVar.get cell
-//      let! _ep' = __.Recover (ep, req, ex)
-//      return () }
+    
+    member internal __.Timeout<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b option> =
+      fun a -> async {
+        let! ep = MVar.get cell
+        return! op ep.resource a |> Async.cancelWithToken ep.closed.Token }
         
     member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
-      //let! epoch = MVar.get cell
-      //let epoch = ref epoch
       let rec go a = async {
-        //let ep = !epoch
         let! ep = MVar.get cell
         try
           let! res = op ep.resource a |> Async.cancelWithToken ep.closed.Token
@@ -123,8 +116,6 @@ module Resource =
           | Some res -> return res
         with ex ->
           let! _epoch' = __.Recover (ep, box a, ex)
-          //epoch := epoch'
-          //Interlocked.Exchange (epoch, epoch') |> ignore
           return! go a }
       return go }
 
@@ -142,3 +133,9 @@ module Resource =
   /// with the resource.
   let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.Inject op
+
+  let timeout (r:Resource<'r>) : ('r -> ('a -> Async<'b>)) -> ('a -> Async<'b option>) =
+    r.Timeout
+
+  let timeoutIndep (r:Resource<'r>) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
+    timeout r (konst f)
