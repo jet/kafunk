@@ -85,39 +85,27 @@ module Exn =
   open System
   open System.Runtime.ExceptionServices
 
-  let aggregate (msg:string) (exns:exn seq) =
-    new AggregateException(msg, exns) :> exn
-
-  let ofSeq (es:#exn seq) =
-    new AggregateException(es |> Seq.cast) :> exn
-
-  let empty<'e> = ofSeq Seq.empty
-
-  let merge e1 e2 = 
-    ofSeq [e1;e2]
-
   let rec toSeq (e:exn) =
     match e with
     | :? AggregateException as ae -> 
-      seq { 
-        yield e
+      seq {
         for ie in ae.InnerExceptions do 
           yield! toSeq ie }
-    | _ -> Seq.singleton e
+    | _ -> 
+      Seq.singleton e
 
-  let tryPick (f:exn -> 'a option) (e:exn) : 'a option =
-    e |> toSeq |> Seq.tryPick f
-
-  let exists (f:exn -> bool) (e:exn) : bool =
-    e |> toSeq |> Seq.exists f
-
-  let throw (e:exn) : 'a =
-    raise e
-
-  let existsT<'e> (e:exn) = exists (fun e -> e.GetType() = typeof<'e>) e
+  let ofSeq (es:#exn seq) =
+    new AggregateException(es |> Seq.collect toSeq) :> exn
 
   let monoid : Monoid<exn> =
-    Monoid.monoid empty merge
+    Monoid.monoid 
+      (ofSeq Seq.empty) 
+      (fun e1 e2 -> ofSeq [e1;e2])
+
+//  let isCritical (e:exn) =
+//    match e with
+//    | :? OutOfMemoryException | :? StackOverflowException -> true
+//    | _ -> false
 
   let inline throwEdi (edi:ExceptionDispatchInfo) =
     edi.Throw ()

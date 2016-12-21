@@ -30,7 +30,7 @@ type ConsumerConfig = {
         heartbeatFrequency = defaultArg heartbeatFrequency 10
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
-        fetchBufferBytes = defaultArg fetchBufferBytes 1000000
+        fetchBufferBytes = defaultArg fetchBufferBytes 100000
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
@@ -182,7 +182,7 @@ module Consumer =
       match ec with
       | ErrorCode.UnknownMemberIdCode -> 
         Log.warn "resetting_member_id"
-        do! Async.Sleep cfg.sessionTimeout
+        //do! Async.Sleep cfg.sessionTimeout
         return! join consumer None
       | _ -> 
         return! join consumer prevMemberId

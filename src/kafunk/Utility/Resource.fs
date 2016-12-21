@@ -109,6 +109,7 @@ module Resource =
     member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
       let rec go a = async {
         let! ep = MVar.get cell
+        //let ep = MVar.getFastUnsafe cell |> Option.get
         try
           let! res = op ep.resource a |> Async.cancelWithToken ep.closed.Token
           match res with

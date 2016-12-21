@@ -363,9 +363,9 @@ type ChanConfig = {
       receiveBufferSize = defaultArg receiveBufferSize 8192
       sendBufferSize = defaultArg sendBufferSize 8192
       connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
-      connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 5)
+      connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
       requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10)
-      requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 5)
+      requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
     }
 
 
@@ -450,11 +450,12 @@ module Chan =
 
     /// fault tolerant receive operation
     let! receive =
-      let receive s buf = async {
-        let! received = Socket.receive s buf
-        if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
-        else return received }
-      socketAgent |> Resource.inject receive
+//      let receive s buf = async {
+//        let! received = Socket.receive s buf
+//        if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
+//        else return received }
+      //socketAgent |> Resource.inject receive
+      socketAgent |> Resource.inject Socket.receive
 
     /// An unframed input stream.
     let inputStream =
