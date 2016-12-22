@@ -209,10 +209,10 @@ type RetryAction =
       | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->
         Some (RetryAction.WaitAndRetry)
       
-      | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition ->
+      | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition (*| ErrorCode.OffsetOutOfRange*) ->
         Some (RetryAction.RefreshMetadataAndRetry [||])
 
-      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode (*| ErrorCode.OffsetOutOfRange*) -> 
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange -> 
         Some (RetryAction.PassThru) // escalate to consumer group logic.
       
       | _ ->
@@ -378,8 +378,8 @@ type ConnState = {
       version = 0
     }
 
-type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage) =
-  inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A" errorCode (RequestMessage.Print req) (ResponseMessage.Print res))
+type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage, msg:string) =
+  inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A message=%s" errorCode (RequestMessage.Print req) (ResponseMessage.Print res) msg)
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
@@ -451,8 +451,8 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
   and send (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state.routes req with
     | Success requestRoutes ->
-      let sendHost (req:RequestMessage, host:EndPoint) = async {
-        match state |> ConnState.tryFindChanByEndPoint host with
+      let sendHost (req:RequestMessage, ep:EndPoint) = async {
+        match state |> ConnState.tryFindChanByEndPoint ep with
         | Some ch -> 
           return!
             req
@@ -465,12 +465,12 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
                 | None -> 
                   return res
                 | Some (errorCode,action,msg) ->
-                  Log.error "response_errored|error_code=%i retry_action=%A message=%s res=%A" errorCode action msg res
+                  Log.error "response_errored|endpoint=%O error_code=%i retry_action=%A message=%s res=%s" ep errorCode action msg (ResponseMessage.Print res)
                   match action with
                   | RetryAction.PassThru ->
                     return res
                   | RetryAction.Escalate ->
-                    return raise (EscalationException (errorCode,req,res))
+                    return raise (EscalationException (errorCode,req,res,(sprintf "endpoint=%O" ep)))
                   | RetryAction.RefreshGroupCoordinator gid ->
                     let! state' = getGroupCoordinator state gid
                     return! send state' req
@@ -481,11 +481,11 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
                     do! Async.Sleep waitRetrySleepMs
                     return! send state req
               | Failure ex ->
-                Log.error "channel_failure_escalated|host=%A request=%s error=%O" host (RequestMessage.Print req) ex
+                Log.error "channel_failure_escalated|endpoint=%O request=%s error=%O" ep (RequestMessage.Print req) ex
                 // TODO: retry?
                 return raise ex })
         | None ->
-          let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' host)
+          let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' ep)
           return! send state' req }
       
       /// Sends requests to routed hosts in parallel and gathers the results.
@@ -635,18 +635,22 @@ module Kafka =
 
     /// Gets offsets for the specified topic at the specified times.
     /// Returns a map of times to offset responses.
-    let offsets (conn:KafkaConn) (topic:TopicName) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
-      Log.info "requesting_offsets|topic=%s times=%A" topic times
+    /// If [||] is passed in for Partitions, will use partition information from metadata.
+    let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition[]) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
       let! metadata = conn.GetMetadata [|topic|]
+      let partitions = set partitions
       return!
         times
         |> Seq.map (fun time -> async {
           let topics =
             metadata
             |> Map.toSeq
-            |> Seq.map (fun (tn,ps) ->
-              let ps = ps |> Array.map (fun p -> p,time,maxOffsets)
-              tn,ps)
+            |> Seq.choose (fun (tn,ps) ->
+              let ps =
+                if partitions.Count = 0 then ps |> Array.map (fun p -> p,time,maxOffsets)
+                else ps |> Array.filter (fun x -> Set.contains x partitions) |> Array.map (fun p -> p,time,maxOffsets)
+              if ps.Length > 0 then Some (tn,ps)
+              else None)
             |> Seq.toArray
           let offsetReq = OffsetRequest(-1, topics)
           let! offsetRes = offset conn offsetReq

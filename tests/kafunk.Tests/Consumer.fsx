@@ -16,7 +16,7 @@ let group = argiDefault 3 "leo_test16"
 let go = async {
   let! conn = Kafka.connHostAsync host
   let consumerCfg = 
-    ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000)
+    ConsumerConfig.create (group, [|topic|], initialFetchTime=Time.EarliestOffset, fetchBufferBytes=100000, outOfRangeAction=ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime)
   return!
     Consumer.create conn consumerCfg
     |> Consumer.consume (fun tn p ms commit -> async {
@@ -26,7 +26,8 @@ let go = async {
         (ms.messages.Length)
         (ms.messages |> Seq.sumBy (fun (_,s,_) -> s))
         (if ms.messages.Length > 0 then ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.min else -1L)
-      do! commit
+      //do! commit
+      Async.Start commit
     })
 }
 
