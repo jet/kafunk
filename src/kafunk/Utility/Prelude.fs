@@ -18,6 +18,23 @@ module Prelude =
     try d.Dispose() finally ()
 
 
+[<AutoOpen>]
+module TimeSpanEx =
+  
+  open System
+
+  type TimeSpan with
+    static member FromMilliseconds (ms:int) =
+      TimeSpan.FromMilliseconds (float ms)
+    static member FromSeconds (sec:int) =
+      TimeSpan.FromSeconds (float sec)
+    static member Mutiply (s:TimeSpan) (x:int) =
+      let mutable s = s
+      for _ in [1..x] do
+        s <- s.Add s
+      s
+
+
 module Option =
   
   let getOr (defaultValue:'a) = function Some a -> a | None -> defaultValue
@@ -63,7 +80,7 @@ module Monoid =
 
   let inline merge (m:Monoid<_>) a b = m.Merge (a,b)
 
-  let monoid (z:'a) (m:'a -> 'a -> 'a) =
+  let inline monoid (z:'a) (m:'a -> 'a -> 'a) =
     { new Monoid<'a> with
         member __.Zero = z
         member __.Merge (a,b) = m a b }
@@ -79,6 +96,17 @@ module Monoid =
   
   let stringConcat (s:string) : Monoid<string> =
     monoid "" (fun a b -> a + s + b)
+
+  /// A monoid for 'a option returning the first non-None value.
+  [<GeneralizableValue>]
+  let optionFirst<'a> : Monoid<'a option> =
+    monoid None (fun a b -> match a,b with Some _,_ -> a | None,b -> b)
+
+  /// A monoid for 'a option returning the last non-None value.
+  [<GeneralizableValue>]
+  let optionLast<'a> : Monoid<'a option> =
+    monoid None (fun a b -> match a,b with _,Some _ -> b | a,None -> a)
+    
 
 // --------------------------------------------------------------------------------------------------
 
@@ -170,6 +198,7 @@ module ResultEx =
 
   let inline Failure e : Result<'a, 'e> = Choice2Of2 e
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Result =
 
   let inline success a : Result<'a, 'e> = Choice1Of2 a
@@ -182,13 +211,38 @@ module Result =
   let inline mapError f (r:Result<'a, 'e>) : Result<'a, 'e2> =
      Choice.mapRight f r
 
+  let map2 (g:'e -> 'e -> 'e) (f:'a -> 'b -> 'c) (r1:Result<'a, 'e>) (r2:Result<'b, 'e>) : Result<'c, 'e> =
+    match r1, r2 with
+    | Success a, Success b -> Success (f a b)
+    | Failure e1, Failure e2 -> Failure (g e1 e2)
+    | Failure e1, _ -> Failure e1
+    | _, Failure e2 -> Failure e2
+
+  let tryFirst (r1:Result<'a, 'e>) (r2:Result<'a, 'e>) : Result<'a, 'e> =
+    match r1, r2 with
+    | Success r1, _ -> Success r1
+    | _, Success r2 -> Success r2
+    | Failure e1, _ -> Failure e1
+
+  let trySecond (r1:Result<'a, 'e>) (r2:Result<'a, 'e>) : Result<'a, 'e> =
+    match r1, r2 with
+    | _, Success r2 -> Success r2
+    | Success r1, _ -> Success r1
+    | _, Failure e2 -> Failure e2
+
   let bind (f:'a -> Result<'b, 'e>) (r:Result<'a, 'e>) : Result<'b, 'e> =
     match r with
     | Choice1Of2 a -> f a
     | Choice2Of2 e -> Choice2Of2 e
  
-  let fold f g (r:Result<'a, 'e>) : 'b = 
+  let inline fold f g (r:Result<'a, 'e>) : 'b = 
     Choice.fold f g r
+
+  let trySuccess (r:Result<'a, 'e>) : 'a option =
+    fold Some (fun _ -> None) r
+
+  let inline codiag (r:Result<'a, 'a>) : 'a = 
+    fold id id r
 
   let traverse (f:'a -> Result<'b, 'e>) (xs:seq<'a>) : Result<'b[], 'e> =
     use en = xs.GetEnumerator()
@@ -213,6 +267,18 @@ module Result =
     match r with
     | Success a -> a
     | Failure e -> raise (f e)
+
+  let join (r:Result<Result<'a, 'e1>, 'e2>) : Result<'a, Choice<'e1, 'e2>> =
+    match r with
+    | Failure e -> Failure (Choice2Of2 e)
+    | Success (Success a) -> Success a
+    | Success (Failure e) -> Failure (Choice1Of2 e)
+
+  let ofOptionMap (e:unit -> 'e) (o:'a option) : Result<'a, 'e> =
+    match o with Some a -> Success a | None -> Failure (e ())
+
+  let ofOption (o:'a option) : Result<'a, unit> =
+    match o with Some a -> Success a | None -> Failure ()
 
 // --------------------------------------------------------------------------------------------------
 

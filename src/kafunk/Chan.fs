@@ -335,7 +335,7 @@ type EndPoint =
 /// A request/reply channel to a Kafka broker.
 type Chan = 
   private 
-  | Chan of send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
+  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
 
 
 /// Configuration for an individual TCP channel.
@@ -349,23 +349,23 @@ type ChanConfig = {
         
   connectTimeout : TimeSpan
 
-  connectBackoff : Backoff
+  connectRetryPolicy : RetryPolicy
 
   requestTimeout : TimeSpan
     
-  requestBackoff : Backoff
+  requestRetryPolicy : RetryPolicy
 
 } with
     
-  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectBackoff, ?requestTimeout, ?requestBackoff) =
+  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
       useNagle = defaultArg useNagle false
       receiveBufferSize = defaultArg receiveBufferSize 8192
       sendBufferSize = defaultArg sendBufferSize 8192
-      connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10.0)
-      connectBackoff = defaultArg connectBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
-      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30.0)
-      requestBackoff = defaultArg requestBackoff (Backoff.constant 1000 |> Backoff.maxAttempts 5)
+      connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
+      connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
+      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10)
+      requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
     }
 
 
@@ -376,10 +376,13 @@ module Chan =
   let private Log = Log.create "Kafunk.Chan"
 
   /// Sends a request.
-  let send (Chan(send,_,_)) req = send req
+  let send (Chan(_,send,_,_)) req = send req
   
-  /// Re-established the connection to the socket.
-  let reconnect (Chan(_,reconnect,_)) = reconnect
+  /// Gets the endpoint.
+  let endpoint (Chan(ep,_,_,_)) = ep
+
+//  /// Re-established the connection to the socket.
+//  let reconnect (Chan(_,reconnect,_)) = reconnect
 
   let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
   let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
@@ -400,60 +403,59 @@ module Chan =
   /// Only a single channel per endpoint is needed.
   let connect (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
 
-    let ep = EndPoint.endpoint ep
-
-    /// Builds and connects the socket to the broker.
-    let conn = async {
+    let conn (ep:EndPoint) = async {
+      let ipep = EndPoint.endpoint ep
       let connSocket =
         new Socket(
-          ep.AddressFamily,
+          ipep.AddressFamily,
           SocketType.Stream,
           ProtocolType.Tcp,
           NoDelay=not(config.useNagle),
           ExclusiveAddressUse=true,
           ReceiveBufferSize=config.receiveBufferSize,
           SendBufferSize=config.receiveBufferSize)
-      Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" ep clientId 
-      let! sendRcvSocket = 
-        Socket.connect connSocket ep
-        |> Async.timeoutResult config.connectTimeout
-        |> Async.map (Result.mapError (fun ex -> ex :> exn))
-      match sendRcvSocket with
-      | Success socket -> 
-        Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" socket.RemoteEndPoint socket.LocalEndPoint
-        return sendRcvSocket 
-      | Failure e ->
-        Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ep e
-        return sendRcvSocket }
-
+      return! Socket.connect connSocket ipep }
+    
     let conn =
       conn
-      |> Faults.retryResultThrow id Exn.monoid config.connectBackoff
+      |> AsyncFunc.timeoutResult config.connectTimeout
+      |> AsyncFunc.catchResult
+      |> AsyncFunc.doBeforeAfter
+          (fun ep -> Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" (EndPoint.endpoint ep) clientId)
+          (fun (ep,res) ->
+            let ipep = EndPoint.endpoint ep
+            match res with
+            | Success s ->
+              Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" s.RemoteEndPoint s.LocalEndPoint
+            | Failure (Choice1Of2 _) ->
+              Log.error "tcp_connection_timed_out|remote_endpoint=%O timeout=%O" ipep config.connectTimeout
+            | Failure (Choice2Of2 e) ->
+              Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ipep e)
+      |> AsyncFunc.mapOut (snd >> Result.mapError (Choice.fold (fun e -> e :> exn) id))
+      |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
-      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i socket_connected=%b error=%O" clientId ep ver s.Connected ex
+      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i error=%O" clientId (EndPoint.endpoint ep) ver ex
       tryDispose s
-      // TODO: inspect error type
       return Resource.Recovery.Recreate }
 
-    let! sendRcvSocket = 
+    let! socketAgent = 
       Resource.recoverableRecreate 
-        conn
+        (conn ep)
         recovery
 
     let! send =
-      sendRcvSocket
+      socketAgent
       |> Resource.inject Socket.sendAll
 
     /// fault tolerant receive operation
     let! receive =
-      let receive s = 
-        Socket.receive s
-        >> Async.map (fun received -> 
-          if received = 0 then raise(SocketException(int SocketError.ConnectionAborted)) 
-          else received)
-      sendRcvSocket 
-      |> Resource.inject receive
+//      let receive s buf = async {
+//        let! received = Socket.receive s buf
+//        if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
+//        else return received }
+      //socketAgent |> Resource.inject receive
+      socketAgent |> Resource.inject Socket.receive
 
     /// An unframed input stream.
     let inputStream =
@@ -477,28 +479,27 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse inputStream send
 
-    let send req = session.Send req
-
     let send = 
-      send
-      |> AsyncFunc.timeoutResult config.requestTimeout
-      |> Faults.AsyncFunc.doAfterError
-          (fun (req,e) ->
-            let v = sendRcvSocket.TryGetVersion () |> Option.getOr -1
-            Log.warn "request_timed_out|ep=%O resource_version=%i request=%s timeout=%O error=%O" ep v (RequestMessage.Print req) config.requestTimeout e)
-      |> Faults.AsyncFunc.retryResultThrowList Exn.ofSeq config.requestBackoff
-      |> AsyncFunc.doBeforeAfterExn 
-          (fun a -> Log.trace "sending_request|request=%A" (RequestMessage.Print a))
-          (fun (_,b) -> Log.trace "received_response|response=%A" (ResponseMessage.Print b))
-          (fun (a,e) -> Log.error "request_errored|request=%A error=%O" (RequestMessage.Print a) e)
+      Session.send session
+      |> AsyncFunc.timeoutOption config.requestTimeout
+      |> Resource.timeoutIndep socketAgent
+      |> AsyncFunc.mapOut (snd >> Option.bind id >> Result.ofOption)
+      |> AsyncFunc.doBeforeAfter
+          (fun req -> Log.trace "sending_request|request=%A" (RequestMessage.Print req))
+          (fun (req,res) -> 
+            match res with
+            | Success res -> 
+              Log.trace "received_response|response=%A" (ResponseMessage.Print res)
+            | Failure _ -> 
+              Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout)
+      |> Faults.AsyncFunc.retryResultThrowList 
+          (fun timeouts -> TimeoutException(sprintf "Broker request retries terminated after %i timeouts." timeouts.Length)) 
+          config.requestRetryPolicy
 
-    return Chan (send, async.Delay (sendRcvSocket.Recreate), Async.empty) }
+    return Chan (ep, send, Async.empty, Async.empty) }
 
-  let connectEndPoint (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) = async {
-    let! ch = connect config clientId ep
-    return (ep,ch) }
-
-  let connectHost (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
+  /// Discovers brokers via DNS and connects to the first IPv4.
+  let discoverConnect (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->
@@ -510,4 +511,4 @@ module Chan =
       | Some ip ->
         return ip }
     let ep = EndPoint.ofIPAddressAndPort (ip, port)
-    return! connectEndPoint config clientId ep }
+    return! connect config clientId ep }

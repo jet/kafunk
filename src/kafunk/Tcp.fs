@@ -56,20 +56,29 @@ module Socket =
   /// Executes an async socket operation.
   let exec (alloc:unit -> SocketAsyncEventArgs, free:SocketAsyncEventArgs -> unit) (config:SocketAsyncEventArgs -> unit) (op:SocketAsyncEventArgs -> bool) (map:SocketAsyncEventArgs -> 'a) =
     Async.FromContinuations <| fun (ok, error, _) ->
-      let args = alloc ()
-      config args
-      let rec k (_:obj) (args:SocketAsyncEventArgs) =
-        args.remove_Completed(k')
-        try
-          match args.SocketError with
-          | SocketError.Success -> ok (map args)
-          | e -> error (SocketException(int e))
-        finally
-          free args
-      and k' = EventHandler<SocketAsyncEventArgs>(k)
-      args.add_Completed(k')
-      if not (op args) then
+      try
+        let cnt = ref 0
+        let args = alloc ()
+        config args
+        let rec k (_:obj) (args:SocketAsyncEventArgs) =
+          if Interlocked.Increment cnt > 1 then
+            printfn "Socket|multiple continuation invokes!"
+          args.remove_Completed(k')
+          try
+            try
+              match args.SocketError with
+              | SocketError.Success -> ok (map args)
+              | e -> error (SocketException(int e))
+            finally
+              free args
+          with ex ->
+            printfn "Socket|ERROR|%O" ex
+        and k' = EventHandler<SocketAsyncEventArgs>(k)
+        args.add_Completed(k')
+        if not (op args) then
           k null args
+      with ex ->
+        error ex
 
   let argsAlloc =
     let pool = new ObjectPool<_>(10000, fun () -> new SocketAsyncEventArgs())
@@ -130,24 +139,24 @@ module Socket =
   /// operation. The sequence finishes when a receive operation completes
   /// transferring 0 bytes. Socket errors are propagated as exceptions.
   let receiveStreamFrom (bufferSize:int) (receive:Binary.Segment -> Async<int>) : AsyncSeq<Binary.Segment> =
-    let remBuff = ref None
-    let inline getBuffer () =
-      match !remBuff with
-      | Some rem -> rem
-      | None -> bufferSize |> Binary.zeros
-    let rec go () = asyncSeq {
-      let buff = getBuffer ()
-      let! received = receive buff
-      if received = 0 then ()
-      else
-        let remainder = buff.Count - received
-        if remainder > 0 then
-          remBuff := Some (Binary.shiftOffset remainder buff)
+    AsyncSeq.unfoldAsync
+      (fun remBuff -> async {
+        let buff =
+          match remBuff with
+          | Some rem -> rem
+          | None -> bufferSize |> Binary.zeros
+        let! received = receive buff
+        if received = 0 then 
+          return None
         else
-          remBuff := None
-        yield buff |> Binary.resize received
-        yield! go () }
-    go ()
+          let remainder = buff.Count - received
+          let remBuff =
+            if remainder > 0 then
+              Some (Binary.shiftOffset remainder buff)
+            else
+              None
+          return Some (Binary.resize received buff, remBuff) })
+      (None)
 
   /// Returns an async sequence each item of which corresponds to a receive on
   /// the specified socket. The sequence finishes when a receive operation
@@ -162,10 +171,12 @@ module Framing =
   /// 32 bit length prefix framer
   module LengthPrefix =
 
+    open FSharp.Core.Operators.Checked
+
     [<Literal>]
     let HeaderLength = 4
 
-    let inline allocBuffer length = Binary.zeros length
+    let inline allocBuffer length = Binary.zeros length 
 
     [<Struct>]
     type private ReadResult =
@@ -200,57 +211,6 @@ module Framing =
             else loop headerBytes length (i + 1)
         loop headerBytes length data.Offset
 
-
-//    type FramerState =
-//      | Await of (Binary.Segment option -> FramerState)
-//      | Yield of Binary.Segment * FramerState
-//      | Halt
-//
-//    let framer = 
-//
-//      let awaitHalt f = Await (function Some data -> f data | None -> Halt)
-//
-//      let rec awaitLength (headerBytes:int) (length:int) (rem:Binary.Segment) =
-//        awaitHalt (fun data' ->
-//          let data =
-//            if rem.Count > 0 then rem
-//            else data'
-//          let readResult = tryReadLength headerBytes length data
-//          if readResult.headerBytes = 0 then
-//            let buffer = allocBuffer readResult.length
-//            awaitMessage readResult.length buffer
-//          else
-//            awaitLength readResult.headerBytes readResult.length)
-//            
-//      and awaitMessage (length:int) (buffer:Binary.Segment) =
-//        awaitHalt (fun data ->
-//          let copy = min data.Count (length - buffer.Offset)
-//          Binary.copy data buffer copy
-//          let bufferIndex = buffer.Offset + copy
-//          if bufferIndex = length then
-//            let buffer = buffer |> Binary.offset 0
-//            Yield (buffer, awaitLength 0 0)
-//          else
-//            let buffer = buffer |> Binary.offset bufferIndex
-//            awaitMessage length buffer)
-//        
-//      awaitLength 0 0 (Binary.Segment())
-//
-//
-//    let unframe2 (f:FramerState) (input:AsyncSeq<Binary.Segment>) : AsyncSeq<Binary.Segment> =      
-//      let rec go (en:IAsyncEnumerator<_>) (s:FramerState) = async {
-//        match s with
-//        | Halt ->
-//          return None
-//        | Yield (m,s') -> 
-//          return (Some (m,s'))
-//        | Await recv ->
-//          let! next = en.MoveNext ()
-//          let s' = recv next
-//          return! go en s' }      
-//      AsyncSeq.unfoldAsync (go (input.GetEnumerator())) f
-
-
     type State =
       struct
         val remainder : Binary.Segment
@@ -275,6 +235,7 @@ module Framing =
           let readResult = tryReadLength headerBytes length data
           let s' = State(s.enumerator, readResult.remainder) 
           if readResult.headerBytes = 0 then
+            if readResult.length > 101000 then printfn "message_size=%i" readResult.length
             let buffer = allocBuffer readResult.length
             return! readData readResult.length buffer s'
           else
@@ -303,6 +264,7 @@ module Framing =
             return! readData length buffer s' }
 
       AsyncSeq.unfoldAsync (readLength 0 0) (State(lazy (s.GetEnumerator()), Binary.Segment()))
+
 
 // session layer (layer 5)
 
@@ -388,19 +350,20 @@ type ReqRepSession<'a, 'b, 's> internal
 
   let rec receiveLoop = async {
     try
-      do!
-        receive
-        |> AsyncSeq.iter demux
-        |> Async.tryFinally (fun () -> Log.warn "session_disconnected|in_flight_requests=%i" txs.Count)
+      do! receive |> AsyncSeq.iter demux
       Log.warn "restarting_receive_loop" 
       return! receiveLoop
     with ex ->
       Log.error "receive_loop_faiure|error=%O" ex
-      return! receiveLoop }
+      do! Async.Sleep 1000
+      cts.Cancel ()
+      return raise ex }
 
-  do Async.Start(receiveLoop, cts.Token)
+  do Async.Start (receiveLoop, cts.Token)
 
-  member x.Send (req:'a) = async {
+  member internal x.Send (req:'a) = async {
+    if cts.IsCancellationRequested then 
+      return failwith "session is closed!"
     let! ct = Async.CancellationToken
     let _correlationId,sessionData,rep = mux ct req
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
@@ -444,3 +407,6 @@ module Session =
     (receive:AsyncSeq<Binary.Segment>)
     (send:Binary.Segment -> Async<int>) =
       new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, awaitResponse, receive, send)
+
+  /// Sends a request on the session and awaits the response.
+  let send (session:ReqRepSession<_, _, _>) req = session.Send req

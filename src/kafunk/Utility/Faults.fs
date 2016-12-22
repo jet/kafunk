@@ -1,57 +1,79 @@
 ﻿namespace Kafunk
 
+open System
 open FSharp.Control
 
-/// The time to wait between retries.
-type WaitTimeMs = int
+/// The state of a retry workflow.
+type RetryState =
+  struct
+    val attempt : int
+    new (a) = { attempt = a }
+  end
 
-/// Backoff represented as a sequence of wait times, in milliseconds, between retries.
-type Backoff = 
+/// Retry policy.
+type RetryPolicy = 
   private
-  | Backoff of (int -> WaitTimeMs option)
+  /// Given an attempt number, returns the delay or None if done.
+  | RP of (RetryState -> TimeSpan option)
 
+/// Operations on retry policies.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Backoff = 
+module RetryPolicy = 
   
-  let un (Backoff s) = s
+  let private un (RP f) = f
+  
+  /// Creates a retry policy.
+  let create f = RP f
 
-  let nu s = Backoff s
+  /// The initial retry state.
+  let initState = RetryState(0)
 
-  let at (attempt:int) (b:Backoff) : int option =
-    (un b) attempt
+  /// Returns the next retry state.
+  let nextState (s:RetryState) = RetryState (s.attempt + 1)
 
-  let constant (waitMs:int) = 
-    nu <| fun _ -> Some waitMs
+  /// No retry.
+  let none = create (konst None)
 
-  let linear (init:int) (increment:int) = 
-    nu <| fun i -> Some (init + (i * increment))
+  /// Returns the delay for the specified retry state.
+  let delayAt (s:RetryState) (b:RetryPolicy) : TimeSpan option =
+    (un b) s
+
+  /// Returns an unbounded retry policy with a constant delay of the specified duration.
+  let constant (delay:TimeSpan) = 
+    create <| fun _ -> Some delay
+
+  /// Returns an unbounded retry policy with a constant delay of the specified duration.
+  let constantMs (delayMs:int) =
+    constant (TimeSpan.FromMilliseconds delayMs)
+
+  /// Returns an unbounded retry policy with a linearly increasing delay.
+  let linear (init:TimeSpan) (increment:TimeSpan) = 
+    create <| fun s -> Some (init + (TimeSpan.Mutiply increment s.attempt))
  
   /// Returns a backoff strategy where no wait time is greater than the specified value.
-  let maxWait (maxWaitMs:int) (b:Backoff) : Backoff =
-    nu <| fun i -> at i b |> Option.map (max maxWaitMs)
+  let maxDelay (maxDelay:TimeSpan) (b:RetryPolicy) : RetryPolicy =
+    create <| fun s -> delayAt s b |> Option.map (max maxDelay)
 
   /// Returns a backoff strategy which attempts at most a specified number of times.
-  let maxAttempts (maxAttempts:int) (b:Backoff) : Backoff =
-    nu <| function i when i < maxAttempts -> b |> at i | _ -> None
+  let maxAttempts (maxAttempts:int) (p:RetryPolicy) : RetryPolicy =
+    create <| fun s -> if s.attempt <= maxAttempts then delayAt s p else None
 
-  /// Returns an async sequence where each item is emitted after the corresponding backoff time
+  /// Returns an async sequence where each item is emitted after the corresponding delay
   /// has elapsed.
-  let toAsyncSeq (b:Backoff) =
-    AsyncSeq.unfoldAsync (fun i -> async { 
-      let bo = b |> at i
-      match bo with
-      | Some bo -> 
-        do! Async.Sleep bo
-        return Some (bo,i + 1)
+  let delayStreamAt (p:RetryPolicy) =
+    AsyncSeq.unfoldAsync (fun s -> async { 
+      let delay = delayAt s p
+      match delay with
+      | Some delay -> 
+        do! Async.Sleep delay
+        return Some (delay, nextState s)
       | None -> 
-        return None }) 0
-  
-  /// Returns an async computation that completes when the specified backoff wait time
-  /// elapses.
-  let waitAt (attempt:int) (b:Backoff) : Async<unit> =
-    match at attempt b with
-    | Some sleep -> Async.Sleep sleep
-    | None -> Async.empty
+        return None })
+
+  /// Returns an async sequence where each item is emitted after the corresponding delay
+  /// has elapsed.
+  let delayStream (p:RetryPolicy) =
+    delayStreamAt p initState
 
   
 
@@ -63,39 +85,27 @@ module Exn =
   open System
   open System.Runtime.ExceptionServices
 
-  let aggregate (msg:string) (exns:exn seq) =
-    new AggregateException(msg, exns) :> exn
-
-  let ofSeq (es:#exn seq) =
-    new AggregateException(es |> Seq.cast) :> exn
-
-  let empty<'e> = ofSeq Seq.empty
-
-  let merge e1 e2 = 
-    ofSeq [e1;e2]
-
   let rec toSeq (e:exn) =
     match e with
     | :? AggregateException as ae -> 
-      seq { 
-        yield e
+      seq {
         for ie in ae.InnerExceptions do 
           yield! toSeq ie }
-    | _ -> Seq.singleton e
+    | _ -> 
+      Seq.singleton e
 
-  let tryPick (f:exn -> 'a option) (e:exn) : 'a option =
-    e |> toSeq |> Seq.tryPick f
-
-  let exists (f:exn -> bool) (e:exn) : bool =
-    e |> toSeq |> Seq.exists f
-
-  let throw (e:exn) : 'a =
-    raise e
-
-  let existsT<'e> (e:exn) = exists (fun e -> e.GetType() = typeof<'e>) e
+  let ofSeq (es:#exn seq) =
+    new AggregateException(es |> Seq.collect toSeq) :> exn
 
   let monoid : Monoid<exn> =
-    Monoid.monoid empty merge
+    Monoid.monoid 
+      (ofSeq Seq.empty) 
+      (fun e1 e2 -> ofSeq [e1;e2])
+
+//  let isCritical (e:exn) =
+//    match e with
+//    | :? OutOfMemoryException | :? StackOverflowException -> true
+//    | _ -> false
 
   let inline throwEdi (edi:ExceptionDispatchInfo) =
     edi.Throw ()
@@ -111,27 +121,26 @@ module Faults =
 
   let private Log = Log.create "Kafunk.Faults"
 
-//  let retryAsyncResultReference (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
-//    AsyncSeq.interleaveChoice
-//      (AsyncSeq.replicateInfiniteAsync a) 
-//      (Backoff.toAsyncSeq b)
-//    |> AsyncSeq.choose Choice.tryLeft
-//    |> AsyncSeq.sequenceResult m
+  /// Returns a stream of async computations corresponding to invocations of the argument 
+  /// computation until the computations succeeds.
+  let retryAsyncResultStream (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : AsyncSeq<Result<'a, 'e>> =
+    (AsyncSeq.replicateInfiniteAsync a, RetryPolicy.delayStream p)
+    ||> AsyncSeq.interleaveChoice
+    |> AsyncSeq.choose Choice.tryLeft
 
+  let retryAsyncResultRef (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
+    retryAsyncResultStream p a |> AsyncSeq.sequenceResult m
+    
   /// Retries an async computation returning a result according to the specified backoff strategy.
   /// Returns an async computation containing a result, which is Success of a pair of the successful result and errors
   /// accumulated during retries, if any, and otherwise, a Failure of accumulated errors.
-  let retryAsyncResultWarn (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
-    AsyncSeq.interleaveChoice 
-      (AsyncSeq.replicateInfiniteAsync a)
-      (Backoff.toAsyncSeq b)
-    |> AsyncSeq.choose Choice.tryLeft
-    |> AsyncSeq.sequenceResultWarn m
+  let retryAsyncResultWarn (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
+    retryAsyncResultStream p a |> AsyncSeq.sequenceResultWarn m
 
-  let retryAsyncResultWarnList (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e list, 'e list>> =
-    retryAsyncResultWarn Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
+  let retryAsyncResultWarnList (policy:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e list, 'e list>> =
+    retryAsyncResultWarn Monoid.freeList policy (a |> Async.map (Result.mapError List.singleton))
 
-  let retryAsyncResult (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
+  let retryAsyncResult (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
     let rec loop i e = async {
       let! r = a
       match r with
@@ -139,54 +148,58 @@ module Faults =
         return Success a
       | Failure e' ->
         let e = m.Merge (e,e')
-        match Backoff.at i b with
+        match RetryPolicy.delayAt i p with
         | None -> 
           return Failure e
         | Some wait ->
           do! Async.Sleep wait
-          return! loop (i + 1) e }
-    loop 0 m.Zero
+          return! loop (RetryPolicy.nextState i) e }
+    loop RetryPolicy.initState m.Zero
 
-  let retryAsyncResultList (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
+  /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
+  /// Returns None when shouldRetry returns false.
+  let retryAsync (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
+    let a = a |> Async.map (fun a -> if shouldRetry a then Failure (Some a) else Success (Some a))
+    retryAsyncResult 
+      Monoid.optionLast
+      p 
+      a
+    |> Async.map (Result.trySuccess >> Option.bind id)
+
+  let retryAsyncResultList (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
     retryAsyncResult Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
     
   /// Retries the specified async computation returning a Result.
   /// Returns the first successful value or throws an exception based on errors observed during retries.
-  let retryResultThrow (f:'e -> #exn) (m:Monoid<'e>) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
+  let retryResultThrow (f:'e -> #exn) (m:Monoid<'e>) (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryAsyncResult m b a |> Async.map (Result.throwMap f)
 
-  let retryResultThrowList (f:'e list -> #exn) (b:Backoff) (a:Async<Result<'a, 'e>>) : Async<'a> =
+  let retryResultThrowList (f:'e list -> #exn) (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryResultThrow f Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
 
-  let retryAsync (b:Backoff) (a:Async<'a>) : Async<'a> =
-    a 
-    |> Async.Catch
-    |> Async.map (Result.mapError List.singleton)
-    |> retryResultThrow 
-        (fun es -> Exn.aggregate (sprintf "Operation failed after %i attempts." (List.length es)) es) 
-        Monoid.freeList
-        b
-      
   module AsyncFunc =
 
-    let retryResult (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e>> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsyncResult m b
+    let retryAsync (shouldRetry:'a * 'b -> bool) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsync p (fun b -> shouldRetry (a,b))
 
-    let retryResultList (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e list>> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultList b
+    let retryResult (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e>> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsyncResult m p
 
-    let retryResultWarn (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b * 'e, 'e>> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultWarn m b
+    let retryResultList (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e list>> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultList p
 
-    let retryResultWarnList (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b * 'e list, 'e list>> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultWarnList b
+    let retryResultWarn (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b * 'e, 'e>> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultWarn m p
 
-    let retryResultThrow (ex:'e -> exn) (m:Monoid<'e>) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
-      fun a -> async.Delay (fun () -> f a) |> retryResultThrow ex m b
+    let retryResultWarnList (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b * 'e list, 'e list>> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultWarnList p
 
-    let retryResultThrowList (ex:'e list -> exn) (b:Backoff) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
-      fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex b
+    let retryResultThrow (ex:'e -> #exn) (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+      fun a -> async.Delay (fun () -> f a) |> retryResultThrow ex m p
 
+    let retryResultThrowList (ex:'e list -> #exn) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+      fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex p
+    
     let doAfterError (g:'a * 'e -> unit) : ('a -> Async<Result<'b, 'e>>) -> ('a -> Async<Result<'b, 'e>>) =
       AsyncFunc.mapOut (fun (a,b) -> b |> Result.mapError (fun e -> g (a,e) ; e))
       

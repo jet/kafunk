@@ -12,6 +12,69 @@ open System.Collections.Generic
 
 open Kafunk
 
+/// The routing table provides host information for the leader of a topic/partition
+/// or a group coordinator.
+type Routes = private {
+  bootstrapHost : EndPoint
+  nodeToHost : Map<NodeId, EndPoint>
+  topicToNode : Map<TopicName * Partition, NodeId>
+  groupToHost : Map<GroupId, EndPoint>
+} with
+  
+  static member ofBootstrap (ep:EndPoint) =
+    {
+      bootstrapHost = ep
+      nodeToHost = Map.empty
+      topicToNode = Map.empty
+      groupToHost = Map.empty
+    }
+
+  static member tryFindHostForTopic (rt:Routes) (tn:TopicName, p:Partition) =
+    rt.topicToNode |> Map.tryFind (tn,p) |> Option.bind (fun nid -> rt.nodeToHost |> Map.tryFind nid)
+  
+  static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
+    rt.groupToHost |> Map.tryFind gid
+  
+  static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
+    {
+      rt with
+        
+        nodeToHost = 
+          rt.nodeToHost
+          |> Map.addMany (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.parse (b.host, b.port)))
+        
+        topicToNode = 
+          rt.topicToNode
+          |> Map.addMany (
+              metadata.topicMetadata
+              |> Seq.collect (fun tmd ->
+                tmd.partitionMetadata
+                |> Seq.map (fun pmd -> (tmd.topicName, pmd.partitionId), pmd.leader)))
+    }
+
+  static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
+    {
+      rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
+    }
+
+  static member topicPartitions (x:Routes) =
+    x.topicToNode 
+    |> Map.toSeq 
+    |> Seq.map fst 
+    |> Seq.groupBy fst
+    |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
+    |> Map.ofSeq
+      
+/// A route is a result where success is a set of request and host pairs
+/// and failure is a set of request and missing route pairs.
+/// A request can target multiple topics and as such, multiple brokers.
+type RouteResult = Result<(RequestMessage * EndPoint)[], MissingRouteResult>
+        
+/// Indicates a missing route.
+and MissingRouteResult =
+  | MissingTopicRoute of topic:TopicName
+  | MissingGroupRoute of group:GroupId
+
 /// Routing topic/partition and groups to channels.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Routing =
@@ -83,71 +146,6 @@ module Routing =
     |> Array.map ResponseMessage.toOffset
     |> (fun rs -> new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse)
 
-
-  /// The routing table provides host information for the leader of a topic/partition
-  /// or a group coordinator.
-  type Routes = {
-    bootstrapHost : EndPoint
-    nodeToHost : Map<NodeId, EndPoint>
-    topicToNode : Map<TopicName * Partition, NodeId>
-    groupToHost : Map<GroupId, EndPoint>
-  } with
-  
-    static member ofBootstrap (ep:EndPoint) =
-      {
-        bootstrapHost = ep
-        nodeToHost = Map.empty
-        topicToNode = Map.empty
-        groupToHost = Map.empty
-      }
-
-    static member tryFindHostForTopic (rt:Routes) (tn:TopicName, p:Partition) =
-      rt.topicToNode |> Map.tryFind (tn,p) |> Option.bind (fun nid -> rt.nodeToHost |> Map.tryFind nid)
-  
-    static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
-      rt.groupToHost |> Map.tryFind gid
-  
-    static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
-      {
-        rt with
-        
-          nodeToHost = 
-            rt.nodeToHost
-            |> Map.addMany (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.parse (b.host, b.port)))
-        
-          topicToNode = 
-            rt.topicToNode
-            |> Map.addMany (
-                metadata.topicMetadata
-                |> Seq.collect (fun tmd ->
-                  tmd.partitionMetadata
-                  |> Seq.map (fun pmd -> (tmd.topicName, pmd.partitionId), pmd.leader)))
-      }
-
-    static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
-      {
-        rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
-      }
-
-    static member topicPartitions (x:Routes) =
-      x.topicToNode 
-      |> Map.toSeq 
-      |> Seq.map fst 
-      |> Seq.groupBy fst
-      |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
-      |> Map.ofSeq
-      
-
-  /// A route is a result where success is a set of request and host pairs
-  /// and failure is a set of request and missing route pairs.
-  /// A request can target multiple topics and as such, multiple brokers.
-  type RouteResult = Result<(RequestMessage * EndPoint)[], MissingRouteResult>
-        
-  /// Indicates a missing route.
-  and MissingRouteResult =
-    | MissingTopicRoute of topic:TopicName
-    | MissingGroupRoute of group:GroupId
-
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
   /// Group related requests are routed to the respective broker.
@@ -208,13 +206,13 @@ type RetryAction =
       | ErrorCode.NoError -> None
       
       | ErrorCode.LeaderNotAvailable | ErrorCode.RequestTimedOut | ErrorCode.GroupLoadInProgressCode | ErrorCode.GroupCoordinatorNotAvailableCode
-      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->      
+      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->
         Some (RetryAction.WaitAndRetry)
       
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition ->
         Some (RetryAction.RefreshMetadataAndRetry [||])
 
-      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode -> 
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode (*| ErrorCode.OffsetOutOfRange*) -> 
         Some (RetryAction.PassThru) // escalate to consumer group logic.
       
       | _ ->
@@ -347,7 +345,7 @@ type KafkaConnConfig = {
 
 /// Connection state.
 type ConnState = {
-  routes : Routing.Routes
+  routes : Routes
   channels : Map<EndPoint, Chan>
   version : int
 } with
@@ -362,24 +360,26 @@ type ConnState = {
         version = s.version + 1
     }
 
-  static member addChannel (ep:EndPoint, ch:Chan) (s:ConnState) =
-    ConnState.updateChannels (Map.add ep ch) s
+  static member addChannel (ch:Chan) (s:ConnState) =
+    ConnState.updateChannels (Map.add (Chan.endpoint ch) ch) s
 
-  static member updateRoutes (f:Routing.Routes -> Routing.Routes) (s:ConnState) =
+  static member updateRoutes (f:Routes -> Routes) (s:ConnState) =
     {
       s with 
           routes = f s.routes
           version = s.version + 1
     }
 
-  static member bootstrap (bootstrapEp:EndPoint, bootstrapCh:Chan) =
+  static member bootstrap (bootstrapCh:Chan) =
+    let ep = Chan.endpoint bootstrapCh
     {
-      channels = [bootstrapEp,bootstrapCh] |> Map.ofList
-      routes = Routing.Routes.ofBootstrap bootstrapEp
+      channels = [ep,bootstrapCh] |> Map.ofList
+      routes = Routes.ofBootstrap ep
       version = 0
     }
 
-exception EscalationException of errorCode:ErrorCode * res:ResponseMessage
+type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage) =
+  inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A" errorCode (RequestMessage.Print req) (ResponseMessage.Print res))
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
@@ -388,19 +388,19 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let bootstrapConnectBackoff = Backoff.constant 5000 |> Backoff.maxAttempts 3
+  let bootstrapConnectRetry = RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3
   let waitRetrySleepMs = 5000
 
   let stateCell : MVar<ConnState> = MVar.create ()
   let cts = new CancellationTokenSource()
 
-  let connCh state host = async {
-    match state |> ConnState.tryFindChanByEndPoint host with
+  let connCh state ep = async {
+    match state |> ConnState.tryFindChanByEndPoint ep with
     | Some _ -> return state
     | None ->
-      Log.info "creating_channel|host=%A" host
-      let! ep,ch = Chan.connectEndPoint cfg.tcpConfig cfg.clientId host
-      return state |> ConnState.addChannel (ep,ch) }
+      Log.info "creating_channel|endpoint=%A" ep
+      let! ch = Chan.connect cfg.tcpConfig cfg.clientId ep
+      return state |> ConnState.addChannel ch }
 
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
@@ -411,8 +411,8 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
-          let! ep,ch = Chan.connectHost cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
-          let state = ConnState.bootstrap (ep,ch)
+          let! ch = Chan.discoverConnect cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
+          let state = ConnState.bootstrap ch
           return Success state
         with ex ->
           Log.error "errored_connecting_to_bootstrap_host|host=%s:%i error=%O" uri.Host uri.Port ex
@@ -420,7 +420,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> Faults.retryResultThrow
           id 
           Exn.monoid
-          bootstrapConnectBackoff
+          bootstrapConnectRetry
     stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
@@ -429,7 +429,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       if currentState.version = callerState.version then
         let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
-        return currentState |> ConnState.updateRoutes (Routing.Routes.addMetadata metadata)
+        return currentState |> ConnState.updateRoutes (Routes.addMetadata metadata)
       else
         return currentState }
     stateCell |> MVar.updateAsync update
@@ -442,7 +442,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
         Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print group)
         return 
           currentState 
-          |> ConnState.updateRoutes (Routing.Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
+          |> ConnState.updateRoutes (Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
       else
         return currentState }
     stateCell |> MVar.updateAsync update
@@ -470,7 +470,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
                   | RetryAction.PassThru ->
                     return res
                   | RetryAction.Escalate ->
-                    return raise (EscalationException (errorCode,res))
+                    return raise (EscalationException (errorCode,req,res))
                   | RetryAction.RefreshGroupCoordinator gid ->
                     let! state' = getGroupCoordinator state gid
                     return! send state' req
@@ -479,12 +479,10 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
                     return! send state' req
                   | RetryAction.WaitAndRetry ->
                     do! Async.Sleep waitRetrySleepMs
-                    return! send state req //})
+                    return! send state req
               | Failure ex ->
                 Log.error "channel_failure_escalated|host=%A request=%s error=%O" host (RequestMessage.Print req) ex
-//                //let! state' = getMetadata state topics
-                //do! Async.Sleep waitRetrySleepMs
-                //return! send state req })
+                // TODO: retry?
                 return raise ex })
         | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' host)
@@ -512,17 +510,15 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
         // single-broker request
         return! sendHost requestRoutes.[0]
 
-    | Failure (Routing.MissingTopicRoute topic) ->
+    | Failure (MissingTopicRoute topic) ->
       Log.warn "missing_topic_partition_route|topic=%s request=%A" topic req
       let! state' = getMetadata state [|topic|]
       return! send state' req
 
-    | Failure (Routing.MissingGroupRoute group) ->
+    | Failure (MissingGroupRoute group) ->
       Log.warn "missing_group_goordinator_route|group=%s" group
       let! state' = getGroupCoordinator state group
-      return! send state' req
-
-    }
+      return! send state' req }
     
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
@@ -543,15 +539,15 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
     let! _ = bootstrap cfg
     return () }
 
-  // TODO: reconsider this design!
-  member internal __.ReconnectChans () = async {
-    let state = __.GetState ()
-    let! _ =
-      state.channels
-      |> Map.toSeq
-      |> Seq.map (fun (_,ch) -> Chan.reconnect ch)
-      |> Async.Parallel
-    return () }
+//  // TODO: reconsider this design!
+//  member internal __.ReconnectChans () = async {
+//    let state = __.GetState ()
+//    let! _ =
+//      state.channels
+//      |> Map.toSeq
+//      |> Seq.map (fun (_,ch) -> Chan.reconnect ch)
+//      |> Async.Parallel
+//    return () }
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
     let state = __.GetState ()
@@ -560,7 +556,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let state = __.GetState ()
     let! state' = getMetadata state topics
-    return state'.routes |> Routing.Routes.topicPartitions }
+    return state'.routes |> Routes.topicPartitions }
 
   member __.Close () =
     Log.info "closing_connection|client_id=%s" cfg.clientId
@@ -637,16 +633,23 @@ module Kafka =
   /// Composite operations.
   module Composite =
 
-    let topicOffsets (conn:KafkaConn) (time:Time, maxOffsets:MaxNumberOfOffsets) (topic:TopicName) = async {
-      Log.info "getting_offsets|topic=%s time=%i" topic time
+    /// Gets offsets for the specified topic at the specified times.
+    /// Returns a map of times to offset responses.
+    let offsets (conn:KafkaConn) (topic:TopicName) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
+      Log.info "requesting_offsets|topic=%s times=%A" topic times
       let! metadata = conn.GetMetadata [|topic|]
-      let topics =
-        metadata
-        |> Map.toSeq
-        |> Seq.map (fun (tn,ps) ->
-          let ps = ps |> Array.map (fun p -> p,time,maxOffsets)
-          tn,ps)
-        |> Seq.toArray
-      let offsetReq = OffsetRequest(-1, topics)
-      let! offsetRes = offset conn offsetReq
-      return offsetRes }
+      return!
+        times
+        |> Seq.map (fun time -> async {
+          let topics =
+            metadata
+            |> Map.toSeq
+            |> Seq.map (fun (tn,ps) ->
+              let ps = ps |> Array.map (fun p -> p,time,maxOffsets)
+              tn,ps)
+            |> Seq.toArray
+          let offsetReq = OffsetRequest(-1, topics)
+          let! offsetRes = offset conn offsetReq
+          return time,offsetRes })
+        |> Async.Parallel
+        |> Async.map (Map.ofArray) }
