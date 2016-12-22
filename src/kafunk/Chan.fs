@@ -492,7 +492,9 @@ module Chan =
               Log.trace "received_response|response=%A" (ResponseMessage.Print res)
             | Failure _ -> 
               Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout)
-      |> Faults.AsyncFunc.retryResultThrowList (fun _timouts -> TimeoutException()) config.requestRetryPolicy
+      |> Faults.AsyncFunc.retryResultThrowList 
+          (fun timeouts -> TimeoutException(sprintf "Broker request retries terminated after %i timeouts." timeouts.Length)) 
+          config.requestRetryPolicy
 
     return Chan (ep, send, Async.empty, Async.empty) }
 

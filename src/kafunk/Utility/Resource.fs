@@ -109,14 +109,10 @@ module Resource =
     member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
       let rec go a = async {
         let! ep = MVar.get cell
-        //let ep = MVar.getFastUnsafe cell |> Option.get
         try
-          let! res = op ep.resource a |> Async.cancelWithToken ep.closed.Token
-          match res with
-          | None -> return! go a
-          | Some res -> return res
+          return! op ep.resource a
         with ex ->
-          let! _epoch' = __.Recover (ep, box a, ex)
+          let! _ = __.Recover (ep, box a, ex)
           return! go a }
       return go }
 
@@ -139,4 +135,4 @@ module Resource =
     r.Timeout
 
   let timeoutIndep (r:Resource<'r>) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
-    timeout r (konst f)
+    r.Timeout (fun _ -> f)
