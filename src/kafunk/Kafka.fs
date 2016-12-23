@@ -639,30 +639,86 @@ module Kafka =
   let describeGroups (c:KafkaConn) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
     Chan.describeGroups c.Send req
 
-  /// Composite operations.
-  module Composite =
 
-    /// Gets offsets for the specified topic at the specified times.
-    /// Returns a map of times to offset responses.
-    /// If [||] is passed in for Partitions, will use partition information from metadata.
-    let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition[]) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
-      let! metadata = conn.GetMetadata [|topic|]
-      let partitions = set partitions
-      return!
-        times
-        |> Seq.map (fun time -> async {
-          let topics =
-            metadata
-            |> Map.toSeq
-            |> Seq.choose (fun (tn,ps) ->
-              let ps =
-                if partitions.Count = 0 then ps |> Array.map (fun p -> p,time,maxOffsets)
-                else ps |> Array.filter (fun x -> Set.contains x partitions) |> Array.map (fun p -> p,time,maxOffsets)
-              if ps.Length > 0 then Some (tn,ps)
-              else None)
-            |> Seq.toArray
-          let offsetReq = OffsetRequest(-1, topics)
-          let! offsetRes = offset conn offsetReq
-          return time,offsetRes })
-        |> Async.Parallel
-        |> Async.map (Map.ofArray) }
+
+/// Operations on offsets.
+module Offsets =
+
+  /// Gets available offsets for the specified topic, at the specified times.
+  /// Returns a map of times to offset responses.
+  /// If [||] is passed in for Partitions, will use partition information from metadata.
+  let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition[]) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
+    let! metadata = conn.GetMetadata [|topic|]
+    let partitions = set partitions
+    return!
+      times
+      |> Seq.map (fun time -> async {
+        let topics =
+          metadata
+          |> Map.toSeq
+          |> Seq.choose (fun (tn,ps) ->
+            let ps =
+              if partitions.Count = 0 then ps |> Array.map (fun p -> p,time,maxOffsets)
+              else ps |> Array.filter (fun x -> Set.contains x partitions) |> Array.map (fun p -> p,time,maxOffsets)
+            if ps.Length > 0 then Some (tn,ps)
+            else None)
+          |> Seq.toArray
+        let offsetReq = OffsetRequest(-1, topics)
+        let! offsetRes = Kafka.offset conn offsetReq
+        return time,offsetRes })
+      |> Async.Parallel
+      |> Async.map (Map.ofArray) }
+
+
+  type private PeriodicCommitQueueMsg =
+    | Enqueue of TopicName * Partition * Async<unit>
+    | Commit
+
+  type PeriodicCommitQueue (interval:TimeSpan) =
+  
+    let cts = new CancellationTokenSource()
+
+    let rec enqueueLoop (commits:Map<TopicName * Partition, Async<unit>>) (mb:Mb<_>) = async {
+      let! msg = mb.Receive ()
+      match msg with
+      | Enqueue (t,p,c) ->
+        let commits' = commits |> Map.add (t,p) c
+        return! enqueueLoop commits' mb
+      | Commit ->
+        let! _ =
+          commits
+          |> Map.toSeq
+          |> Seq.map snd
+          |> Async.Parallel
+        return! enqueueLoop Map.empty mb }
+
+    let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
+  
+    let rec commitLoop = async {
+      do! Async.Sleep interval
+      mbp.Post Commit
+      return! commitLoop }
+
+    do Async.Start (commitLoop, cts.Token)
+
+    member __.Enqueue (t:TopicName, p:Partition, commit:Async<unit>) =
+      mbp.Post (Enqueue (t,p,commit))
+
+    interface IDisposable with
+      member __.Dispose () =
+        cts.Cancel ()
+        (mbp :> IDisposable).Dispose ()
+
+  /// Creates a periodic offset commit queue which commits enqueued commits at the specified interval.
+  let createPeriodicCommitQueue interval = 
+    new PeriodicCommitQueue (interval)
+
+  /// Asynchronously enqueues an offset commit, replacing any existing commit for the specified topic-partition.
+  /// The commit will be invoked at the next commit interval.
+  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (t:TopicName) (p:Partition) (commit:Async<unit>) =
+    q.Enqueue (t, p, commit)
+    
+
+  
+
+  
