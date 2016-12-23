@@ -388,7 +388,7 @@ module Consumer =
                   let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
                   match ec with
                   | ErrorCode.OffsetOutOfRange ->
-                    let! offsets = Kafka.Composite.offsets consumer.conn topic [|partition|] [|Time.EarliestOffset;Time.LatestOffset|] 1
+                    let! offsets = Offsets.offsets consumer.conn topic [|partition|] [|Time.EarliestOffset;Time.LatestOffset|] 1
                     let msg =
                       offsets
                       |> Map.toSeq
@@ -499,6 +499,20 @@ module Consumer =
             return! stream |> AsyncSeq.iterAsync (fun (ms,commit) -> handler tn p ms commit) })
           |> Async.Parallel
           |> Async.Ignore })
+
+  /// Starts consumption using the specified handler.
+  /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
+  /// The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
+  /// the specified interval.
+  let consumePeriodicCommit 
+      (commitInterval:TimeSpan)
+      (handler:TopicName -> Partition -> MessageSet -> Async<unit>)
+      (consumer:Consumer) : Async<unit> = async {
+        use commitQueue = Offsets.createPeriodicCommitQueue commitInterval
+        let handler t p ms c = async {
+          do! handler t p ms
+          Offsets.enqueuePeriodicCommit commitQueue t p c }
+        return! consumer |> consume handler }
 
   /// Explicitly commits offsets to a consumer group.
   let commitOffsets (c:Consumer) (offsets:(TopicName * (Partition * Offset)[])[]) = async {
