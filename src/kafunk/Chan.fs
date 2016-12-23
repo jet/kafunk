@@ -45,17 +45,42 @@ module MessageSet =
   let ofMessages ms =
     MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
 
-  /// Returns the next offset to fetch, by taking the max offset in the
-  /// message set and adding one.
-  let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) =
+  /// Returns the latest offset in the message set.
+  let lastOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      let (maxOffset,_,_) = ms.messages.[ms.messages.Length - 1]
-      let no = maxOffset + 1L
-      if no <= hwm then no
-      else 
-        failwithf "invalid offset computation maxOffset=%i hwm=%i" maxOffset hwm
+      let (lastOffset,_,_) = ms.messages.[ms.messages.Length - 1] in
+      lastOffset
     else
-      1L
+      0L
+
+  /// Returns the next offset to fetch, by taking the max offset in the
+  /// message set and adding 1.
+  /// Ensures the next offset is bellow high watermark offset.
+  let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) : Offset =
+    let lastOffset = lastOffset ms
+    let nextOffset = lastOffset + 1L
+    if nextOffset <= hwm then 
+      nextOffset
+    else 
+      failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
+
+module FetchResponse =
+  
+  /// Returns the next set of offsets to fetch.
+  let nextOffsets (res:FetchResponse) : (TopicName * (Partition * Offset)[])[] =
+    res.topics
+    |> Seq.map (fun (t,ps) ->
+      let os =
+        ps
+        |> Seq.map (fun (p,_,hwmo,_,ms) ->
+          let nextOffset = MessageSet.nextOffset ms hwmo
+          p,nextOffset)
+        |> Seq.toArray
+      t,os)
+    |> Seq.toArray
+      
+
+
 
 module ProduceRequest =
 
@@ -321,7 +346,10 @@ type EndPoint =
     static member ofIPEndPoint (ep:IPEndPoint) = EndPoint ep
     static member ofIPAddressAndPort (ip:IPAddress, port:int) = EndPoint.ofIPEndPoint (IPEndPoint(ip,port))
     member this.Display = this.ToString()
-    override this.Equals (o:obj) = (EndPoint.endpoint this).Equals(o)
+    override this.Equals (o:obj) = 
+      match o with 
+      | :? EndPoint as ep -> (EndPoint.endpoint this).Equals(EndPoint.endpoint ep)
+      | _ -> false
     override this.GetHashCode () = (EndPoint.endpoint this).GetHashCode()
     override this.ToString () = (EndPoint.endpoint this).ToString()
     interface IEquatable<EndPoint> with
@@ -439,7 +467,7 @@ module Chan =
               Log.error "tcp_connection_timed_out|remote_endpoint=%O timeout=%O" ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
               Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ipep e)
-      |> AsyncFunc.mapOut (snd >> Result.mapError (Choice.fold (fun e -> e :> exn) id))
+      |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {

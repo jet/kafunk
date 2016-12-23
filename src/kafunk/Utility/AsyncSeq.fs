@@ -77,3 +77,9 @@ module AsyncSeq =
 
   let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> =
     AsyncSeq.mapAsyncParallel f s |> AsyncSeq.iter ignore
+
+  let replicateUntilNoneAsync (next:Async<'a option>) : AsyncSeq<'a> =
+    AsyncSeq.unfoldAsync 
+      (fun () -> next |> Async.map (Option.map (fun a -> a,()))) 
+      ()
+    

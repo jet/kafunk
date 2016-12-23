@@ -75,11 +75,65 @@ module RetryPolicy =
   let delayStream (p:RetryPolicy) =
     delayStreamAt p initState
 
+
+/// A retry queue.
+type RetryQueue<'k, 'a when 'k : comparison> = private {
+  policy : RetryPolicy
+  key : 'a -> 'k
+  items : Map<'k, RetryState * DateTime * 'a> }
+
+/// Operations on RetryQueue.
+[<Compile(Module)>]
+module RetryQueue =
+  
+  /// Creates a RetryQueue with the specified RetryPolicy.
+  let create p key = { policy = p ; key = key ; items = Map.empty }
+
+  /// Enqueues an item for retry. If the item is already in the queue,
+  /// the next RetryState is used to determine the due time, otherwise,
+  /// the initial RetryState is used.
+  let retry (q:RetryQueue<'k, 'a>) a =
+    let k = q.key a
+    let s =
+      match q.items |> Map.tryFind k with
+      | None -> RetryPolicy.initState
+      | Some (s,_,_) -> RetryPolicy.nextState s
+    match RetryPolicy.delayAt s q.policy with
+    | Some delay -> { q with items = q.items |> Map.add k (s, DateTime.UtcNow.Add delay, a) }
+    | None -> q
+
+  let retryAll q xs = (q,xs) ||> Seq.fold retry
+
+  /// Returns all items in the queue due at the specified time.
+  let dueAt (q:RetryQueue<'k, 'a>) (dt:DateTime) =
+    q.items 
+    |> Seq.choose (fun kvp -> 
+      let (_,due,a) = kvp.Value in
+      if due <= dt then Some a
+      else None)
+
+  /// Returns all items in the queue due at DateTime.UtcNow.
+  let dueNow (q:RetryQueue<'k, 'a>) = dueAt q (DateTime.UtcNow)
+
+  /// Removes an item from the queue, resetting its retry state.
+  let remove (q:RetryQueue<'k, 'a>) k =
+    { q with items = Map.remove k q.items }
+
+  let removeAll q ks = (q,ks) ||> Seq.fold remove
+
+  let retryRemoveAll q retryItems removeItems =
+    let q' = retryAll q retryItems 
+    removeAll q' removeItems
+  
+
+
+
+
   
 
 
 /// Operations on System.Exception.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Exn =
   
   open System
@@ -113,6 +167,8 @@ module Exn =
 
   let inline captureEdi (e:exn) =
     ExceptionDispatchInfo.Capture e
+
+  let inline upCast (e:#exn) : exn = upcast e
     
 
 

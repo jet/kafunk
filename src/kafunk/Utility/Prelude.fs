@@ -17,6 +17,13 @@ module Prelude =
   let tryDispose (d:#System.IDisposable) = 
     try d.Dispose() finally ()
 
+  /// CompilationRepresentationAttribute
+  type Compile = CompilationRepresentationAttribute
+  
+  /// CompilationRepresentationFlags.ModuleSuffix
+  let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
+
+
 
 [<AutoOpen>]
 module TimeSpanEx =
@@ -135,6 +142,23 @@ module Seq =
       else tryItem (index-1) e
     use e = s.GetEnumerator()
     tryItem index e
+
+  let partitionChoices (s:seq<Choice<'a, 'b>>) : 'a[] * 'b[] =
+    let ax,bx = ResizeArray<_>(),ResizeArray<_>()
+    for c in s do
+      match c with
+      | Choice1Of2 a -> ax.Add(a)
+      | Choice2Of2 b -> bx.Add(b)
+    ax.ToArray(),bx.ToArray()
+
+  let partitionChoices3 (s:seq<Choice<'a, 'b, 'c>>) : 'a[] * 'b[] * 'c[] =
+    let ax,bx,cx = ResizeArray<_>(),ResizeArray<_>(),ResizeArray<_>()
+    for c in s do
+      match c with
+      | Choice1Of3 a -> ax.Add(a)
+      | Choice2Of3 b -> bx.Add(b)
+      | Choice3Of3 c -> cx.Add(c)
+    ax.ToArray(),bx.ToArray(),cx.ToArray()
 
 /// Basic operations on dictionaries.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -279,6 +303,9 @@ module Result =
 
   let ofOption (o:'a option) : Result<'a, unit> =
     match o with Some a -> Success a | None -> Failure ()
+
+  let codiagExn (r:Result<'a, Choice<#exn, #exn>>) : Result<'a, exn> =
+    r |> mapError (Choice.fold (fun e -> e :> exn) (fun e -> e :> exn))
 
 // --------------------------------------------------------------------------------------------------
 

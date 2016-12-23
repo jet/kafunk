@@ -35,23 +35,26 @@ type Routes = private {
   static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
     rt.groupToHost |> Map.tryFind gid
   
-  static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
+  static member addBrokersAndTopicNodes (brokers:seq<NodeId * Host * Port>) (topicNodes:seq<TopicName * Partition * NodeId>) (rt:Routes) =
     {
       rt with
         
         nodeToHost = 
           rt.nodeToHost
-          |> Map.addMany (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.parse (b.host, b.port)))
+          |> Map.addMany (brokers |> Seq.map (fun (nodeId,host,port) -> nodeId, EndPoint.parse (host, port)))
         
         topicToNode = 
           rt.topicToNode
-          |> Map.addMany (
-              metadata.topicMetadata
-              |> Seq.collect (fun tmd ->
-                tmd.partitionMetadata
-                |> Seq.map (fun pmd -> (tmd.topicName, pmd.partitionId), pmd.leader)))
+          |> Map.addMany (topicNodes|> Seq.map (fun (tn,p,leaderId) -> (tn, p), leaderId))
     }
 
+  static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
+    Routes.addBrokersAndTopicNodes
+      (metadata.brokers |> Seq.map (fun b -> b.nodeId, b.host, b.port))
+      (metadata.topicMetadata |> Seq.collect (fun tmd -> 
+        tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader)))
+      rt
+    
   static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
     {
       rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
@@ -80,40 +83,54 @@ and MissingRouteResult =
 module Routing =
 
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
-  let partitionFetchReq (req:FetchRequest) =
+  let private partitionFetchReq (routes:Routes) (req:FetchRequest) =
     req.topics
     |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> (tn, p, o, mb)))
-    |> Seq.groupBy (fun (tn, ps, _, _) ->  (tn, ps))
-    |> Seq.map (fun (tp, reqs) ->
+    |> Seq.groupBy (fun (tn, p, _, _) -> Routes.tryFindHostForTopic routes (tn, p) |> Result.ofOptionMap (fun () -> tn))
+    |> Seq.map (fun (ep,reqs) ->
       let topics =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
         |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, mb)) |> Seq.toArray)
         |> Seq.toArray
       let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
-      tp, RequestMessage.Fetch req)
+      ep, RequestMessage.Fetch req)
     |> Seq.toArray
 
-  /// Unwraps a set of responses as fetch responses and joins them into a single response.
-  let concatFetchRes (rs:ResponseMessage[]) =
-    rs
-    |> Array.map ResponseMessage.toFetch
-    |> (fun rs -> new FetchResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse)
-
   /// Partitions a produce request by topic/partition.
-  let partitionProduceReq (req:ProduceRequest) =
+  let private partitionProduceReq (routes:Routes) (req:ProduceRequest) =
     req.topics
     |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, mss, ms) -> (t, p, mss, ms)))
-    |> Seq.groupBy (fun (t, p, _, _) -> (t, p))
-    |> Seq.map (fun (tp, reqs) ->
+    |> Seq.groupBy (fun (t, p, _, _) -> Routes.tryFindHostForTopic routes (t, p) |> Result.ofOptionMap (fun () -> t))
+    |> Seq.map (fun (ep,reqs) ->
       let topics =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
         |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
         |> Seq.toArray
       let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
-      (tp, RequestMessage.Produce req))
+      (ep, RequestMessage.Produce req))
     |> Seq.toArray
+
+  let private partitionOffsetReq (routes:Routes) (req:OffsetRequest) =
+    req.topics
+    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, tm, mo) -> (t, p, tm, mo)))
+    |> Seq.groupBy (fun (t, p, _, _) -> Routes.tryFindHostForTopic routes (t, p) |> Result.ofOptionMap (fun () -> t))
+    |> Seq.map (fun (ep,reqs) ->
+      let topics =
+        reqs
+        |> Seq.groupBy (fun (t, _, _, _) -> t)
+        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
+        |> Seq.toArray
+      let req = new OffsetRequest(req.replicaId, topics)
+      ep, RequestMessage.Offset req)
+    |> Seq.toArray
+
+
+  let concatFetchRes (rs:ResponseMessage[]) =
+    rs
+    |> Array.map ResponseMessage.toFetch
+    |> (fun rs -> new FetchResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse)
 
   let concatProduceResponses (rs:ProduceResponse[]) =
     let topics = rs |> Array.collect (fun r -> r.topics)
@@ -126,25 +143,11 @@ module Routing =
     |> concatProduceResponses
     |> ResponseMessage.ProduceResponse
 
-  /// Partitions an offset request by topic/partition.
-  let partitionOffsetReq (req:OffsetRequest) =
-    req.topics
-    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, tm, mo) -> (t, p, tm, mo)))
-    |> Seq.groupBy (fun (t, p, _, _) -> (t, p))
-    |> Seq.map (fun (tp, reqs) ->
-      let topics =
-        reqs
-        |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
-        |> Seq.toArray
-      let req = new OffsetRequest(req.replicaId, topics)
-      tp, RequestMessage.Offset req)
-    |> Seq.toArray
-
   let concatOffsetResponses (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toOffset
     |> (fun rs -> new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse)
+
 
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
@@ -156,12 +159,12 @@ module Routing =
       Success [| req, routes.bootstrapHost |]
 
     // route to leader of a topic/partition
-    let topicRoute xs =
+    let topicRoute (xs:(Result<EndPoint, TopicName> * RequestMessage)[]) =
       xs
-      |> Result.traverse (fun ((tn,p),req) ->
-        match Routes.tryFindHostForTopic routes (tn,p) with
-        | Some host -> Success (req,host)
-        | None -> Failure (MissingTopicRoute tn))
+      |> Result.traverse (fun (ep,req) ->
+        match ep with
+        | Success ep -> Success (req,ep)
+        | Failure tn -> Failure (MissingTopicRoute tn)) // TODO: collect all!
 
     // route to group
     let groupRoute req gid =
@@ -175,9 +178,9 @@ module Routing =
       | GroupCoordinator _ -> bootstrapRoute req
       | DescribeGroups _ -> bootstrapRoute req
       | ListGroups _req -> bootstrapRoute req
-      | Fetch req -> req |> partitionFetchReq |> topicRoute
-      | Produce req -> req |> partitionProduceReq |> topicRoute
-      | Offset req -> req |> partitionOffsetReq |> topicRoute
+      | Fetch req -> req |> partitionFetchReq routes |> topicRoute
+      | Produce req -> req |> partitionProduceReq routes |> topicRoute
+      | Offset req -> req |> partitionOffsetReq routes |> topicRoute
       | OffsetCommit r -> groupRoute req r.consumerGroup
       | OffsetFetch r -> groupRoute req r.consumerGroup
       | JoinGroup r -> groupRoute req r.groupId
@@ -456,6 +459,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and send (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state.routes req with
     | Success requestRoutes ->
+      //Log.info "routes_count=%i routes=%A" requestRoutes.Length requestRoutes
       let sendHost (req:RequestMessage, ep:EndPoint) = async {
         match state |> ConnState.tryFindChanByEndPoint ep with
         | Some ch -> 
@@ -646,8 +650,8 @@ module Offsets =
 
   /// Gets available offsets for the specified topic, at the specified times.
   /// Returns a map of times to offset responses.
-  /// If [||] is passed in for Partitions, will use partition information from metadata.
-  let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition[]) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
+  /// If empty is passed in for Partitions, will use partition information from metadata.
+  let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition seq) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
     let! metadata = conn.GetMetadata [|topic|]
     let partitions = set partitions
     return!
@@ -671,25 +675,27 @@ module Offsets =
 
 
   type private PeriodicCommitQueueMsg =
-    | Enqueue of TopicName * Partition * Async<unit>
+    | Enqueue of Partition * Offset
     | Commit
 
-  type PeriodicCommitQueue (interval:TimeSpan) =
+  type PeriodicCommitQueue (interval:TimeSpan, commit:(Partition * Offset)[] -> Async<unit>) =
   
     let cts = new CancellationTokenSource()
 
-    let rec enqueueLoop (commits:Map<TopicName * Partition, Async<unit>>) (mb:Mb<_>) = async {
+    let rec enqueueLoop (commits:Map<Partition, Offset>) (mb:Mb<_>) = async {
       let! msg = mb.Receive ()
       match msg with
-      | Enqueue (t,p,c) ->
-        let commits' = commits |> Map.add (t,p) c
+      | Enqueue (p,o) ->
+        let commits' = commits |> Map.add p o
         return! enqueueLoop commits' mb
       | Commit ->
-        let! _ =
+        let offsets =
           commits
           |> Map.toSeq
-          |> Seq.map snd
-          |> Async.Parallel
+          |> Seq.map (fun (p,o) -> p,o)
+          |> Seq.toArray
+        if offsets.Length > 0 then
+          do! commit offsets
         return! enqueueLoop Map.empty mb }
 
     let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
@@ -701,8 +707,8 @@ module Offsets =
 
     do Async.Start (commitLoop, cts.Token)
 
-    member __.Enqueue (t:TopicName, p:Partition, commit:Async<unit>) =
-      mbp.Post (Enqueue (t,p,commit))
+    member __.Enqueue (p:Partition, o:Offset) =
+      mbp.Post (Enqueue (p,o))
 
     interface IDisposable with
       member __.Dispose () =
@@ -715,8 +721,8 @@ module Offsets =
 
   /// Asynchronously enqueues an offset commit, replacing any existing commit for the specified topic-partition.
   /// The commit will be invoked at the next commit interval.
-  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (t:TopicName) (p:Partition) (commit:Async<unit>) =
-    q.Enqueue (t, p, commit)
+  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (p:Partition) (o:Offset) =
+    q.Enqueue (p,o)
     
 
   

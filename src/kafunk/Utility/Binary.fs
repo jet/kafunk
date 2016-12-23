@@ -278,7 +278,7 @@ module Binary =
         (arr, buf |> shiftOffset length)
       with ex ->
         printfn "expected length=%i array length=%i offset=%i" length buf.Array.Length buf.Offset
-        reraise ()      
+        reraise ()
 
   // TODO: Do we need to support non-ascii values here? This currently
   // assumes each character is always encoded in UTF-8 by a single byte.
@@ -316,14 +316,14 @@ module Binary =
       let buf = writeInt32 n buf
       Array.fold (fun buf elem -> write elem buf) buf arr
 
-  let inline readArray (read : Reader<'a>) (buf : Segment) : 'a[] * Segment =
-    let n, buf = buf |> readInt32
+  let readArray (read : Reader<'a>) (buf : Segment) : 'a[] * Segment =
+    let n, buf = readInt32 buf
     let mutable buf = buf
-    let arr = [|
-      for _i = 0 to n - 1 do
-        let elem, buf' = read buf
-        yield elem
-        buf <- buf' |]
+    let arr = Array.zeroCreate n
+    for i = 0 to n - 1 do
+      let elem, buf' = read buf
+      arr.[i] <- elem
+      buf <- buf'
     (arr, buf)
 
   let inline writeArrayNoSize buf arr (write : Writer<'a>) =
@@ -332,16 +332,18 @@ module Binary =
       buf <- write a buf
     buf
 
-  let inline readArrayByteSize (expectedSize:int) (buf:Segment) (read:Segment -> ('a * Segment) option) =    
+  let readArrayByteSize (expectedSize:int) (buf:Segment) (read:int -> int -> Segment -> ('a * Segment) option) =
     let mutable buf = buf
     let mutable consumed = 0
+    let mutable i = 0
     let arr = ResizeArray<_>()
-    while consumed < expectedSize && buf.Count > 0 do        
-      match read buf with
+    while consumed < expectedSize && buf.Count > 0 do
+      match read i consumed buf with
       | Some (elem,buf') ->
         arr.Add elem
         consumed <- consumed + (buf'.Offset - buf.Offset)
         buf <- buf'
+        i <- i + 1
       | None ->
         buf <- Segment()
     (arr.ToArray(), buf)
