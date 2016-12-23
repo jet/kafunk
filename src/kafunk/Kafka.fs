@@ -321,11 +321,14 @@ type RetryAction =
 
 /// Kafka connection configuration.
 /// http://kafka.apache.org/documentation.html#connectconfigs
-type KafkaConnConfig = {
+type KafkaConfig = {
   
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
   
+  /// The retry policy for connecting to bootstrap brokers.
+  bootstrapConnectionRetryPolicy : RetryPolicy
+
   /// The client id.
   clientId : ClientId
   
@@ -337,14 +340,15 @@ type KafkaConnConfig = {
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
-  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig) =
+  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectionRetryPolicy) =
     { bootstrapServers = bootstrapServers
+      bootstrapConnectionRetryPolicy = defaultArg bootstrapConnectionRetryPolicy (RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3)
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
       tcpConfig = defaultArg tcpConfig (ChanConfig.create ()) }
 
 
 /// Connection state.
-type ConnState = {
+type ConnState = private {
   routes : Routes
   channels : Map<EndPoint, Chan>
   version : int
@@ -378,17 +382,18 @@ type ConnState = {
       version = 0
     }
 
+/// An exception used to wrap failures which are to be escalated.
 type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage, msg:string) =
   inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A message=%s" errorCode (RequestMessage.Print req) (ResponseMessage.Print res) msg)
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
 /// It acts as a context for API operations, providing filtering and fault tolerance.
-type KafkaConn internal (cfg:KafkaConnConfig) =
+type KafkaConn internal (cfg:KafkaConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let bootstrapConnectRetry = RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3
+  // TODO: configure with RetryPolicy
   let waitRetrySleepMs = 5000
 
   let stateCell : MVar<ConnState> = MVar.create ()
@@ -404,7 +409,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
 
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  let rec bootstrap (cfg:KafkaConnConfig) =
+  let rec bootstrap (cfg:KafkaConfig) =
     let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -420,7 +425,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> Faults.retryResultThrow
           id 
           Exn.monoid
-          bootstrapConnectRetry
+          cfg.bootstrapConnectionRetryPolicy
     stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
@@ -574,19 +579,23 @@ module Kafka =
 
   let private Log = Log.create "Kafunk"
   
-  let connAsync (cfg:KafkaConnConfig) = async {
+  /// Connects to a Kafka cluster.
+  let connAsync (cfg:KafkaConfig) = async {
     let conn = new KafkaConn(cfg)
     do! conn.Connect ()
     return conn }
 
+  /// Connects to a Kafka cluster.
   let conn cfg =
     connAsync cfg |> Async.RunSynchronously
 
+  /// Connects to a Kafka cluster given a default configuration.
   let connHostAsync (host:string) =
     let uri = KafkaUri.parse host
-    let cfg = KafkaConnConfig.create [uri]
+    let cfg = KafkaConfig.create [uri]
     connAsync cfg
 
+  /// Connects to a Kafka cluster given a default configuration.
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
@@ -630,30 +639,86 @@ module Kafka =
   let describeGroups (c:KafkaConn) (req:DescribeGroupsRequest) : Async<DescribeGroupsResponse> =
     Chan.describeGroups c.Send req
 
-  /// Composite operations.
-  module Composite =
 
-    /// Gets offsets for the specified topic at the specified times.
-    /// Returns a map of times to offset responses.
-    /// If [||] is passed in for Partitions, will use partition information from metadata.
-    let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition[]) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
-      let! metadata = conn.GetMetadata [|topic|]
-      let partitions = set partitions
-      return!
-        times
-        |> Seq.map (fun time -> async {
-          let topics =
-            metadata
-            |> Map.toSeq
-            |> Seq.choose (fun (tn,ps) ->
-              let ps =
-                if partitions.Count = 0 then ps |> Array.map (fun p -> p,time,maxOffsets)
-                else ps |> Array.filter (fun x -> Set.contains x partitions) |> Array.map (fun p -> p,time,maxOffsets)
-              if ps.Length > 0 then Some (tn,ps)
-              else None)
-            |> Seq.toArray
-          let offsetReq = OffsetRequest(-1, topics)
-          let! offsetRes = offset conn offsetReq
-          return time,offsetRes })
-        |> Async.Parallel
-        |> Async.map (Map.ofArray) }
+
+/// Operations on offsets.
+module Offsets =
+
+  /// Gets available offsets for the specified topic, at the specified times.
+  /// Returns a map of times to offset responses.
+  /// If [||] is passed in for Partitions, will use partition information from metadata.
+  let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition[]) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
+    let! metadata = conn.GetMetadata [|topic|]
+    let partitions = set partitions
+    return!
+      times
+      |> Seq.map (fun time -> async {
+        let topics =
+          metadata
+          |> Map.toSeq
+          |> Seq.choose (fun (tn,ps) ->
+            let ps =
+              if partitions.Count = 0 then ps |> Array.map (fun p -> p,time,maxOffsets)
+              else ps |> Array.filter (fun x -> Set.contains x partitions) |> Array.map (fun p -> p,time,maxOffsets)
+            if ps.Length > 0 then Some (tn,ps)
+            else None)
+          |> Seq.toArray
+        let offsetReq = OffsetRequest(-1, topics)
+        let! offsetRes = Kafka.offset conn offsetReq
+        return time,offsetRes })
+      |> Async.Parallel
+      |> Async.map (Map.ofArray) }
+
+
+  type private PeriodicCommitQueueMsg =
+    | Enqueue of TopicName * Partition * Async<unit>
+    | Commit
+
+  type PeriodicCommitQueue (interval:TimeSpan) =
+  
+    let cts = new CancellationTokenSource()
+
+    let rec enqueueLoop (commits:Map<TopicName * Partition, Async<unit>>) (mb:Mb<_>) = async {
+      let! msg = mb.Receive ()
+      match msg with
+      | Enqueue (t,p,c) ->
+        let commits' = commits |> Map.add (t,p) c
+        return! enqueueLoop commits' mb
+      | Commit ->
+        let! _ =
+          commits
+          |> Map.toSeq
+          |> Seq.map snd
+          |> Async.Parallel
+        return! enqueueLoop Map.empty mb }
+
+    let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
+  
+    let rec commitLoop = async {
+      do! Async.Sleep interval
+      mbp.Post Commit
+      return! commitLoop }
+
+    do Async.Start (commitLoop, cts.Token)
+
+    member __.Enqueue (t:TopicName, p:Partition, commit:Async<unit>) =
+      mbp.Post (Enqueue (t,p,commit))
+
+    interface IDisposable with
+      member __.Dispose () =
+        cts.Cancel ()
+        (mbp :> IDisposable).Dispose ()
+
+  /// Creates a periodic offset commit queue which commits enqueued commits at the specified interval.
+  let createPeriodicCommitQueue interval = 
+    new PeriodicCommitQueue (interval)
+
+  /// Asynchronously enqueues an offset commit, replacing any existing commit for the specified topic-partition.
+  /// The commit will be invoked at the next commit interval.
+  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (t:TopicName) (p:Partition) (commit:Async<unit>) =
+    q.Enqueue (t, p, commit)
+    
+
+  
+
+  

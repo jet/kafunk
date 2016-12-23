@@ -74,6 +74,8 @@ type ProducerConfig = {
   bufferCountAndTime : (int * int) option
 
 } with
+
+  /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, ?bufferTimeoutMs:int) =
     {
       topic = topic

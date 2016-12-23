@@ -9,20 +9,47 @@ open Kafunk
 
 /// Kafka consumer configuration.
 type ConsumerConfig = {
+  
+  /// The consumer group id shared by consumers in the group.
   groupId : GroupId
+  
+  /// The topic to consume.
   topics : TopicName[]
+  
+  /// The session timeout period, such that if no heartbeats are received within the
+  /// period, a consumer is ejected from the consumer group.
   sessionTimeout : SessionTimeout
+  
+  /// The number of times to send heartbeats within a session timeout period.
   heartbeatFrequency : int32
+  
+  /// The minimum bytes to buffer server side for a fetch request.
+  /// 0 to return immediately.
   fetchMinBytes : MinBytes
+
+  /// The maximum time to wait for a fetch request to return sufficient data.
   fetchMaxWaitMs : MaxWaitTime
-  fetchBufferBytes : MaxBytes
+  
+  /// The maximum bytes to return as part of a partition for a fetch request.
+  fetchMaxBytes : MaxBytes
+  
+  /// Offset retention time.
   offsetRetentionTime : int64
+
+  /// The time of offsets to fetch if no offsets are stored (usually for a new group).
   initialFetchTime : Time
+  
+  /// The poll policy to employ when the end of the topic is reached.
   endOfTopicPollPolicy : RetryPolicy
+  
+  /// The action to take when a consumer attempts to fetch an out of range offset.
   outOfRangeAction : ConsumerOffsetOutOfRangeAction
+
 } with
+    
+    /// Creates a consumer configuration.
     static member create 
-      (groupId:GroupId, topics:TopicName[], ?initialFetchTime, ?fetchBufferBytes, ?sessionTimeout, 
+      (groupId:GroupId, topics:TopicName[], ?initialFetchTime, ?fetchMaxBytes, ?sessionTimeout, 
           ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?outOfRangeAction) =
       {
         groupId = groupId
@@ -31,7 +58,7 @@ type ConsumerConfig = {
         heartbeatFrequency = defaultArg heartbeatFrequency 10
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
-        fetchBufferBytes = defaultArg fetchBufferBytes 100000
+        fetchMaxBytes = defaultArg fetchMaxBytes 100000
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
@@ -350,7 +377,7 @@ module Consumer =
             (fun _ -> None)
             (state.closed.Task)
             (async {
-              let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchBufferBytes |] |])
+              let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, [| partition, offset, cfg.fetchMaxBytes |] |])
               let! res = fetch req
               match res with
               | Success res ->
@@ -361,7 +388,7 @@ module Consumer =
                   let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
                   match ec with
                   | ErrorCode.OffsetOutOfRange ->
-                    let! offsets = Kafka.Composite.offsets consumer.conn topic [|partition|] [|Time.EarliestOffset;Time.LatestOffset|] 1
+                    let! offsets = Offsets.offsets consumer.conn topic [|partition|] [|Time.EarliestOffset;Time.LatestOffset|] 1
                     let msg =
                       offsets
                       |> Map.toSeq
@@ -407,7 +434,6 @@ module Consumer =
                 do! close state
                 //do! Async.Sleep 1000 // allow logs to flush
                 return raise ex })
-                //return None })
 
         /// Poll on end of topic.
         let tryFetchAndPoll =
@@ -454,9 +480,7 @@ module Consumer =
         let! state = MVar.get consumer.state
         let! topics = consume state
         yield state.generationId,topics
-        //Log.info "waiting_on_group_to_close"
         do! state.closed.Task |> Async.AwaitTask
-        //Log.info "group_closed;rejoining"
         let! _ = join consumer (Some state.memberId)
         () }
 
@@ -477,12 +501,18 @@ module Consumer =
           |> Async.Ignore })
 
   /// Starts consumption using the specified handler.
-  /// Offsets for the corresponding topic/partition/message-set are committed after the handler completes.
-  let consumeCommitAfter 
-    (handler:TopicName -> Partition -> MessageSet -> Async<unit>) =
-    consume (fun tn p ms commit -> async {
-        do! handler tn p ms
-        do! commit })
+  /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
+  /// The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
+  /// the specified interval.
+  let consumePeriodicCommit 
+      (commitInterval:TimeSpan)
+      (handler:TopicName -> Partition -> MessageSet -> Async<unit>)
+      (consumer:Consumer) : Async<unit> = async {
+        use commitQueue = Offsets.createPeriodicCommitQueue commitInterval
+        let handler t p ms c = async {
+          do! handler t p ms
+          Offsets.enqueuePeriodicCommit commitQueue t p c }
+        return! consumer |> consume handler }
 
   /// Explicitly commits offsets to a consumer group.
   let commitOffsets (c:Consumer) (offsets:(TopicName * (Partition * Offset)[])[]) = async {
