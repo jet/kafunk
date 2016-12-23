@@ -340,23 +340,31 @@ type Chan =
 
 /// Configuration for an individual TCP channel.
 type ChanConfig = {
-    
+  
+  /// Specifies whether the socket should use Nagle's algorithm.
   useNagle : bool
-    
+  
+  /// The socket receive buffer size.
   receiveBufferSize : int
     
+  /// The socket send buffer size.
   sendBufferSize : int
         
+  /// The connection timeout.
   connectTimeout : TimeSpan
 
+  /// The connection retry policy for timeouts and failures.
   connectRetryPolicy : RetryPolicy
 
+  /// The request timeout.
   requestTimeout : TimeSpan
     
+  /// The request retry polify for timeouts and failures.
   requestRetryPolicy : RetryPolicy
 
 } with
-    
+  
+  /// Creates a channel configuration.
   static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
       useNagle = defaultArg useNagle false
@@ -448,14 +456,13 @@ module Chan =
       socketAgent
       |> Resource.inject Socket.sendAll
 
-    /// fault tolerant receive operation
     let! receive =
       let receive s buf = async {
         let! received = Socket.receive s buf
         if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
         else return received }
-      socketAgent |> Resource.inject receive
-      //socketAgent |> Resource.inject Socket.receive
+      socketAgent 
+      |> Resource.inject receive
 
     /// An unframed input stream.
     let inputStream =

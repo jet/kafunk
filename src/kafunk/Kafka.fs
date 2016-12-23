@@ -321,11 +321,14 @@ type RetryAction =
 
 /// Kafka connection configuration.
 /// http://kafka.apache.org/documentation.html#connectconfigs
-type KafkaConnConfig = {
+type KafkaConfig = {
   
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
   
+  /// The retry policy for connecting to bootstrap brokers.
+  bootstrapConnectionRetryPolicy : RetryPolicy
+
   /// The client id.
   clientId : ClientId
   
@@ -337,14 +340,15 @@ type KafkaConnConfig = {
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
-  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig) =
+  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectionRetryPolicy) =
     { bootstrapServers = bootstrapServers
+      bootstrapConnectionRetryPolicy = defaultArg bootstrapConnectionRetryPolicy (RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3)
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
       tcpConfig = defaultArg tcpConfig (ChanConfig.create ()) }
 
 
 /// Connection state.
-type ConnState = {
+type ConnState = private {
   routes : Routes
   channels : Map<EndPoint, Chan>
   version : int
@@ -378,17 +382,18 @@ type ConnState = {
       version = 0
     }
 
+/// An exception used to wrap failures which are to be escalated.
 type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage, msg:string) =
   inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A message=%s" errorCode (RequestMessage.Print req) (ResponseMessage.Print res) msg)
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
 /// It acts as a context for API operations, providing filtering and fault tolerance.
-type KafkaConn internal (cfg:KafkaConnConfig) =
+type KafkaConn internal (cfg:KafkaConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
 
-  let bootstrapConnectRetry = RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3
+  // TODO: configure with RetryPolicy
   let waitRetrySleepMs = 5000
 
   let stateCell : MVar<ConnState> = MVar.create ()
@@ -404,7 +409,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
 
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  let rec bootstrap (cfg:KafkaConnConfig) =
+  let rec bootstrap (cfg:KafkaConfig) =
     let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -420,7 +425,7 @@ type KafkaConn internal (cfg:KafkaConnConfig) =
       |> Faults.retryResultThrow
           id 
           Exn.monoid
-          bootstrapConnectRetry
+          cfg.bootstrapConnectionRetryPolicy
     stateCell |> MVar.putOrUpdateAsync update
 
   /// Discovers cluster metadata.
@@ -574,19 +579,23 @@ module Kafka =
 
   let private Log = Log.create "Kafunk"
   
-  let connAsync (cfg:KafkaConnConfig) = async {
+  /// Connects to a Kafka cluster.
+  let connAsync (cfg:KafkaConfig) = async {
     let conn = new KafkaConn(cfg)
     do! conn.Connect ()
     return conn }
 
+  /// Connects to a Kafka cluster.
   let conn cfg =
     connAsync cfg |> Async.RunSynchronously
 
+  /// Connects to a Kafka cluster given a default configuration.
   let connHostAsync (host:string) =
     let uri = KafkaUri.parse host
-    let cfg = KafkaConnConfig.create [uri]
+    let cfg = KafkaConfig.create [uri]
     connAsync cfg
 
+  /// Connects to a Kafka cluster given a default configuration.
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
