@@ -19,10 +19,11 @@ type ConsumerConfig = {
   offsetRetentionTime : int64
   initialFetchTime : Time
   endOfTopicPollPolicy : RetryPolicy
+  outOfRangeAction : ConsumerOffsetOutOfRangeAction
 } with
     static member create 
       (groupId:GroupId, topics:TopicName[], ?initialFetchTime, ?fetchBufferBytes, ?sessionTimeout, 
-          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy) =
+          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?outOfRangeAction) =
       {
         groupId = groupId
         topics = topics
@@ -34,7 +35,23 @@ type ConsumerConfig = {
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
+        outOfRangeAction = defaultArg outOfRangeAction ConsumerOffsetOutOfRangeAction.HaltConsumer
       }
+
+/// The action to take when the consumer attempts to fetch an offset which is out of range.
+/// This typically happens if the consumer is outpaced by the message cleanup process.
+/// The default action is to halt consumption.
+and ConsumerOffsetOutOfRangeAction =
+
+  /// Halt the consumer, raising an exception.
+  | HaltConsumer
+  
+  /// Halt the consumption of only the out of range partition.
+  | HaltPartition
+
+  /// Request a fresh set of offsets and resume consumption from the time
+  /// configured as the initial fetch time for the consumer (earliest, or latest).
+  | ResumeConsumerWithFreshInitialFetchTime
 
 /// State corresponding to a single generation of the consumer group protocol.
 type ConsumerState = {
@@ -343,7 +360,42 @@ module Consumer =
                   let _,partitions = res.topics.[0]
                   let _,ec,highWatermarkOffset,_mss,ms = partitions.[0]
                   match ec with
-                  | ErrorCode.UnknownMemberIdCode | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
+                  | ErrorCode.OffsetOutOfRange ->
+                    let! offsets = Kafka.Composite.offsets consumer.conn topic [|partition|] [|Time.EarliestOffset;Time.LatestOffset|] 1
+                    let msg =
+                      offsets
+                      |> Map.toSeq
+                      |> Seq.map (fun (time,offsetRes) -> 
+                        offsetRes.topics
+                        |> Seq.map (fun (_tn,os) ->
+                          let os =
+                            os
+                            |> Seq.map (fun o -> sprintf "offset=%i" (o.offsets |> Seq.tryItem 0 |> Option.getOr -1L))
+                            |> String.concat " ; "
+                          sprintf "time=%i %s" time os)
+                        |> String.concat " ; ")
+                      |> String.concat " ; "
+                    Log.warn "offset_out_of_range|topic=%s partition=%i offset=%i offset_info=[%s]" topic partition offset msg
+                    match cfg.outOfRangeAction with
+                    | HaltConsumer ->
+                      Log.error "halting_consumer|topic=%s partition=%i last_attempted_offset=%i" topic partition offset
+                      return raise (exn(sprintf "offset_out_of_range|topic=%s partition=%i offset=%i action=%A offset_info=[%s]" topic partition offset cfg.outOfRangeAction msg))
+                    | HaltPartition -> 
+                      Log.warn "halting_partition_fetch|topic=%s partition=%i last_attempted_offset=%i" topic partition offset
+                      return None
+                    | ResumeConsumerWithFreshInitialFetchTime ->
+                      let offsetInfo = offsets |> Map.find cfg.initialFetchTime
+                      let freshOffset = 
+                        offsetInfo.topics
+                        |> Seq.collect (fun (tn,ps) ->
+                          ps
+                          |> Seq.map (fun p -> tn, p.partition, p.offsets.[0]))
+                        |> Seq.pick (fun (tn,p,o) ->
+                          if tn = topic && p = partition then Some o
+                          else None)
+                      Log.info "resuming_fetch_from_fresh_offset|topic=%s partition=%i initial_fetch_time=%i fresh_offset=%i" topic partition cfg.initialFetchTime freshOffset
+                      return! tryFetch freshOffset
+                  | ErrorCode.UnknownMemberIdCode | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition ->
                     Log.warn "consumer_group_fetch_error|error_code=%i" ec
                     do! close state
                     return None

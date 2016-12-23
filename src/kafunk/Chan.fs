@@ -364,7 +364,7 @@ type ChanConfig = {
       sendBufferSize = defaultArg sendBufferSize 8192
       connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
       connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
-      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 10)
+      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30)
       requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
     }
 
