@@ -450,12 +450,12 @@ module Chan =
 
     /// fault tolerant receive operation
     let! receive =
-//      let receive s buf = async {
-//        let! received = Socket.receive s buf
-//        if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
-//        else return received }
-      //socketAgent |> Resource.inject receive
-      socketAgent |> Resource.inject Socket.receive
+      let receive s buf = async {
+        let! received = Socket.receive s buf
+        if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
+        else return received }
+      socketAgent |> Resource.inject receive
+      //socketAgent |> Resource.inject Socket.receive
 
     /// An unframed input stream.
     let inputStream =
