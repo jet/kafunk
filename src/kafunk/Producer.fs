@@ -2,8 +2,8 @@ namespace Kafunk
 
 open FSharp.Control
 open Kafunk
-open Kafunk.Prelude
-open Kafunk.Protocol
+open System
+open System.Text
 
 /// A producer message.
 type ProducerMessage =
@@ -21,15 +21,28 @@ type ProducerMessage =
       static member ofBytes (value:Binary.Segment, ?key) =
         ProducerMessage(value, defaultArg key Binary.empty)
 
+      /// Creates a producer message.
       static member ofBytes (value:byte[], ?key) =
         let keyBuf = defaultArg (key |> Option.map Binary.ofArray) Binary.empty
         ProducerMessage(Binary.ofArray value, keyBuf)
+
+      /// Creates a producer message.
+      static member ofString (value:string, ?key:string) =
+        let keyBuf = defaultArg (key |> Option.map (Encoding.UTF8.GetBytes >> Binary.ofArray)) Binary.empty
+        ProducerMessage(Binary.ofArray (Encoding.UTF8.GetBytes value), keyBuf)
+
+/// A producer response.
+type ProducerResult =
+  struct
+    val offsets : (Partition * Offset)[]
+    new (os) = { offsets = os }
+  end
 
 /// A partition function.
 type Partitioner = TopicName * Partition[] * ProducerMessage -> Partition
 
 /// Partition functions.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Partitioner =
 
   /// Constantly returns the same partition.
@@ -49,7 +62,7 @@ module Partitioner =
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
 type Producer = 
   private
-  | P of send:(ProducerMessage[] -> Async<ProduceResponse>)
+  | P of send:(ProducerMessage[] -> Async<ProducerResult>)
 
 /// Producer configuration.
 type ProducerConfig = {
@@ -90,7 +103,7 @@ type ProducerConfig = {
     }
 
 /// High-level producer API.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Producer =
 
   open System.Threading
@@ -231,7 +244,10 @@ module Producer =
         let! state' = reset state
         return! produce state' ms
       else 
-        return res }
+        let _topic,os = res.topics.[0]
+        //assert (topic = cfg.topic)
+        let res' = ProducerResult(os |> Array.map (fun (p,_,o) -> p,o))
+        return res' }
 
     let! _ = init ()
 

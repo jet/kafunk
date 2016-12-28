@@ -6,7 +6,7 @@ open System.Net
 open NUnit.Framework
 
 [<Test>]
-let ``should group offset requests by broker`` () =
+let ``Routing.route should group offset requests by broker`` () =
   
   let routes = 
     Routes.ofBootstrap (EndPoint.ofIPAddressAndPort (IPAddress.Loopback, 9092))

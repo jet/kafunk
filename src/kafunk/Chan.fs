@@ -45,11 +45,18 @@ module MessageSet =
   let ofMessages ms =
     MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
 
-  /// Returns the latest offset in the message set.
+  /// Returns the frist offset in the message set.
+  let firstOffset (ms:MessageSet) =
+    if ms.messages.Length > 0 then
+      let (o,_,_) = ms.messages.[0] in o
+    else
+      0L
+
+  /// Returns the last offset in the message set.
   let lastOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      let (lastOffset,_,_) = ms.messages.[ms.messages.Length - 1] in
-      lastOffset
+      //ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.max
+      let (o,_,_) = ms.messages.[ms.messages.Length - 1] in o
     else
       0L
 
@@ -59,7 +66,7 @@ module MessageSet =
   let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) : Offset =
     let lastOffset = lastOffset ms
     let nextOffset = lastOffset + 1L
-    if nextOffset <= hwm then 
+    if nextOffset <= hwm then
       nextOffset
     else 
       failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
@@ -142,6 +149,27 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
   // printers
 
+[<AutoOpen>]
+module internal Printers =
+  
+  open System.Text
+
+  let concatMapSbDo (sb:StringBuilder) (s:seq<'a>) (f:StringBuilder -> 'a -> _) (sep:string) =
+    use en = s.GetEnumerator()
+    if en.MoveNext () then
+      f sb en.Current |> ignore
+      while en.MoveNext () do
+        sb.Append sep |> ignore
+        f sb en.Current |> ignore
+
+  let concatMapSb (s:seq<'a>) (f:StringBuilder -> 'a -> _) (sep:string) =
+    let sb = StringBuilder()
+    concatMapSbDo sb s f sep
+    sb.ToString()
+    
+  let partitionOffsetPairs (os:seq<Partition * Offset>) =
+    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} offset={1}]", p, o)) " ; "
+    
   type MetadataResponse with
     static member Print (x:MetadataResponse) =
       let topics =

@@ -85,25 +85,24 @@ let ``FetchResponse.read should decode FetchResponse``() =
   Assert.AreEqual(1940715388, int m.crc)
   Assert.AreEqual("hello world", (m.value |> Binary.toString))
 
-[<Test>]
-let ``FetchResponse.read should decode partial FetchResponse`` () =
-  let data = FetchResponseBinary
-  for trim in [1..35] do
-    let data = Binary.resize (data.Count - trim) data
-    let (res:FetchResponse), _ = FetchResponse.read data
-    let tn,ps = res.topics.[0]
-    let _p, _ec, _hwo, _mss, ms = ps.[0]  
-    Assert.AreEqual(1, res.topics.Length)
-    Assert.AreEqual("test", tn)
-    Assert.AreEqual(0, ms.messages.Length)
+//[<Test>]
+//let ``FetchResponse.read should decode partial FetchResponse`` () =
+//  let data = FetchResponseBinary
+//  for trim in [1..35] do
+//    let data = Binary.resize (data.Count - trim) data
+//    let (res:FetchResponse), _ = FetchResponse.read data
+//    let tn,ps = res.topics.[0]
+//    let _p, _ec, _hwo, _mss, ms = ps.[0]
+//    Assert.AreEqual(1, res.topics.Length)
+//    Assert.AreEqual("test", tn)
+//    Assert.AreEqual(0, ms.messages.Length)
 
-[<Test>]
-let ``FetchResponse.read should read sample FetchResponse`` () =
-  let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\sample_fetch_response.bin"
-  let bytes = System.IO.File.ReadAllBytes file |> Binary.ofArray
-  let res = FetchResponse.read bytes |> fst
-
-  ()
+//[<Test>]
+//let ``FetchResponse.read should read sample FetchResponse`` () =
+//  let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\sample_fetch_response.bin"
+//  let bytes = System.IO.File.ReadAllBytes file |> Binary.ofArray
+//  let res = FetchResponse.read bytes |> fst
+//  ()
   
   
   
@@ -124,7 +123,7 @@ let ``ProduceResponse.read should decode ProduceResponse``() =
   Assert.AreEqual(8L, off)
 
 [<Test>]
-let ``roduceRequest.write should encode ProduceRequest``() =
+let ``ProduceRequest.write should encode ProduceRequest``() =
   let req = ProduceRequest.ofMessageSet "test" 0 (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) None None
   let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> Binary.toArray |> Array.toList
   let expected = [

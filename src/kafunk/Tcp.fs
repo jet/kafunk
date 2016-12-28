@@ -229,7 +229,6 @@ module Framing =
           let readResult = tryReadLength headerBytes length data
           let s' = State(s.enumerator, readResult.remainder) 
           if readResult.headerBytes = 0 then
-            //if readResult.length > 101000 then printfn "message_size=%i" readResult.length
             let buffer = allocBuffer readResult.length
             return! readData readResult.length buffer s'
           else

@@ -273,12 +273,8 @@ module Binary =
     if length = -1 then
       (empty, buf)
     else
-      try
-        let arr = Segment(buf.Array, buf.Offset, length)
-        (arr, buf |> shiftOffset length)
-      with ex ->
-        printfn "expected length=%i array length=%i offset=%i" length buf.Array.Length buf.Offset
-        reraise ()
+      let arr = Segment(buf.Array, buf.Offset, length)
+      (arr, buf |> shiftOffset length)
 
   // TODO: Do we need to support non-ascii values here? This currently
   // assumes each character is always encoded in UTF-8 by a single byte.
@@ -312,9 +308,10 @@ module Binary =
     if isNull arr then
       writeInt32 -1 buf
     else
-      let n = arr.Length
-      let buf = writeInt32 n buf
-      Array.fold (fun buf elem -> write elem buf) buf arr
+      let mutable buf = writeInt32 arr.Length buf
+      for i = 0 to arr.Length - 1 do
+        buf <- write arr.[i] buf
+      buf
 
   let readArray (read : Reader<'a>) (buf : Segment) : 'a[] * Segment =
     let n, buf = readInt32 buf
@@ -332,18 +329,19 @@ module Binary =
       buf <- write a buf
     buf
 
-  let readArrayByteSize (expectedSize:int) (buf:Segment) (read:int -> int -> Segment -> ('a * Segment) option) =
+  let readArrayByteSize (expectedSize:int) (buf:Segment) (read:int -> Segment -> Choice<'a * Segment, Segment>) =
     let mutable buf = buf
     let mutable consumed = 0
     let mutable i = 0
     let arr = ResizeArray<_>()
     while consumed < expectedSize && buf.Count > 0 do
-      match read i consumed buf with
-      | Some (elem,buf') ->
+      match read consumed buf with
+      | Choice1Of2 (elem,buf') ->
         arr.Add elem
         consumed <- consumed + (buf'.Offset - buf.Offset)
         buf <- buf'
         i <- i + 1
-      | None ->
-        buf <- Segment()
+      | Choice2Of2 buf' ->
+        consumed <- consumed + (buf'.Offset - buf.Offset)
+        buf <- buf'
     (arr.ToArray(), buf)

@@ -67,7 +67,7 @@ type ConsumerConfig = {
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
         outOfRangeAction = defaultArg outOfRangeAction ConsumerOffsetOutOfRangeAction.HaltConsumer
-        fetchBufferSize = defaultArg fetchBufferSize 2
+        fetchBufferSize = defaultArg fetchBufferSize 1
       }
 
 /// The action to take when the consumer attempts to fetch an offset which is out of range.
@@ -91,7 +91,7 @@ type ConsumerState = {
   memberId : MemberId
   leaderId : LeaderId
   assignments : TopicPartitionAssignment[]
-  closed : TaskCompletionSource<unit>
+  closed : TaskCompletionSource<bool>
 } 
 
 /// Partition assignment for an individual consumer.
@@ -118,10 +118,32 @@ type ConsumerMessageSet =
     new (t,p,ms,hwmo) = { topic = t ; partition = p ; messageSet = ms ; highWatermarkOffset = hwmo }
   end
   with 
+    
+    /// Returns the first offset in the message set.
+    static member firstOffset (ms:ConsumerMessageSet) =
+      MessageSet.firstOffset ms.messageSet
+    
+    /// Returns the last offset in the message set.
     static member lastOffset (ms:ConsumerMessageSet) =
       MessageSet.lastOffset ms.messageSet
+    
+    /// Returns the offset to commit when this message set has been consumed.
+    static member commitOffset (ms:ConsumerMessageSet) =
+      MessageSet.lastOffset ms.messageSet + 1L
+
+    /// Returns the partition-offset pair to commit when this message set has been consumed.
+    static member commitPartitionOffsets (ms:ConsumerMessageSet) =
+      [| ms.partition, ConsumerMessageSet.commitOffset ms |]
+
+    /// Returns the lag = high watermark offset - last offset
+    static member lag (ms:ConsumerMessageSet) =
+      ms.highWatermarkOffset - ConsumerMessageSet.lastOffset ms
+
+    /// Returns the sum of the sizes of all messages in the message set.
     static member size (ms:ConsumerMessageSet) =
       ms.messageSet.messages |> Seq.sumBy (fun (_,s,_) -> s)
+
+    /// Returns an array of all messages in the message set.
     static member messages (ms:ConsumerMessageSet) =
       ms.messageSet.messages |> Array.map (fun (_,_,m) -> m)
 
@@ -136,21 +158,30 @@ module Consumer =
     if t.IsCompleted then return f t.Result
     else return! a }
 
-  /// Closes a consumer group.
-  /// The current generation stops emitting.
-  let private close (state:ConsumerState) : Async<unit> =
+  /// Closes a consumer group specifying whether a new generation should begin.
+  let private close (state:ConsumerState) (rejoin:bool) : Async<unit> =
     peekTask
-      id
+      ignore
       state.closed.Task
       (async {
-        if state.closed.TrySetResult () then
-          Log.warn "closing_consumer_group|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
+        if rejoin then
+          if state.closed.TrySetResult rejoin then
+            Log.warn "closing_generation|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
         else
-          Log.warn "concurrent_close_request_received|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
+          if state.closed.TrySetResult rejoin then
+            Log.warn "closing_consumer|generation_id=%i member_id=%s leader_id=%s" state.generationId state.memberId state.leaderId
         })
 
+  /// Closes a consumer group and causes a new generation to begin.
+  let private closeGeneration (state:ConsumerState) : Async<unit> =
+    close state true
+
+  /// Closes a consumer group and causes a new generation to begin.
+  let private closeConsumer (state:ConsumerState) : Async<unit> =
+    close state false
+
   /// Commits the specified offsets within the consumer group.
-  let private commitOffsets (conn:KafkaConn) (cfg:ConsumerConfig) (state:ConsumerState) (topic:TopicName) (offsets:(Partition * Offset)[]) : Async<unit> = 
+  let private commit (conn:KafkaConn) (cfg:ConsumerConfig) (state:ConsumerState) (topic:TopicName) (offsets:(Partition * Offset)[]) : Async<unit> = 
     peekTask
       (ignore)
       (state.closed.Task)
@@ -163,29 +194,30 @@ module Consumer =
           if res.topics.Length = 0 then
             Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%A" cfg.groupId state.memberId state.generationId topic offsets
             return failwith "offset commit failed!"
+          let errors =
+            res.topics
+            |> Seq.collect (fun (_,ps) ->
+              ps
+              |> Seq.choose (fun (p,ec) ->
+                match ec with
+                | ErrorCode.NoError -> None
+                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode -> Some (p,ec)
+                | _ -> failwithf "unsupported error_code=%i" ec))
+          if not (Seq.isEmpty errors) then
+            do! closeGeneration state
+            return ()
           else
-//            let errors =
-//              res.topics
-//              |> Seq.collect (fun (_,ps) ->
-//                ps
-//                |> Seq.choose (fun (p,ec) ->
-//                  match ec with
-//                  | ErrorCode.NoError -> None
-//                  | _ -> Some (p,ec)))
-//              |> Seq.toArray
-            let (_tn,ps) = res.topics.[0]
-            let (_p,ec) = ps.[0]
-            match ec with
-            | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode  ->
-              do! close state
-              return ()
-            | _ ->
-              //Log.trace "offset_comitted|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i" tn p cfg.groupId state.memberId state.generationId offset
-              return ()
+            return ()
         | Failure ex ->
           Log.warn "commit_offset_failure|generation_id=%i error=%O" state.generationId ex
-          do! close state
+          do! closeConsumer state
           return () })
+
+  /// Explicitly commits offsets to a consumer group.
+  let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
+    Log.info "comitting_offsets|offsets=%s" (Printers.partitionOffsetPairs offsets)
+    let! state = MVar.get c.state
+    return! commit c.conn c.cfg state c.cfg.topic offsets }
 
   /// Fetches the starting offset for the specified topic * partitions.
   let private fetchOffsets (c:Consumer) (topic:TopicName) (partitions:Partition[]) : Async<(Partition * Offset)[]> = async {
@@ -254,23 +286,23 @@ module Consumer =
 
     match prevMemberId with
     | None -> 
-      Log.info "initializing_consumer|group_id=%s" cfg.groupId
+      Log.info "joining_consumer_group|group_id=%s topic=%s" cfg.groupId cfg.topic
 
     | Some prevMemberId -> 
-      Log.info "rejoining_consumer_group|group_id=%s member_id=%s" cfg.groupId prevMemberId
-      //do! conn.ReconnectChans ()
+      Log.info "rejoining_consumer_group|group_id=%s topic=%s member_id=%s" cfg.groupId cfg.topic prevMemberId
 
-    let! _ = conn.GetGroupCoordinator (cfg.groupId)
+    let! _ = conn.GetGroupCoordinator cfg.groupId
 
     let! joinGroupRes = async {
-      let initMemberId = defaultArg prevMemberId ""
-      let req = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, initMemberId, protocolType, groupProtocols)
+      let req = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, defaultArg prevMemberId "", protocolType, groupProtocols)
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
       | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
         return Failure res.errorCode
+      | ErrorCode.NoError ->
+        return Success res
       | _ ->
-        return Success res }
+        return failwithf "unsupported join_group error_code=%i" res.errorCode }
       
     match joinGroupRes with
     | Failure ec ->
@@ -278,7 +310,6 @@ module Consumer =
       match ec with
       | ErrorCode.UnknownMemberIdCode -> 
         Log.warn "resetting_member_id"
-        //do! Async.Sleep cfg.sessionTimeout
         return! join consumer None
       | _ -> 
         return! join consumer prevMemberId
@@ -294,7 +325,12 @@ module Consumer =
                           
       let! syncGroupRes = async {
         if joinGroupRes.members.members.Length > 0 then
-          Log.info "joined_as_leader"
+          Log.info "joined_as_leader|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+            cfg.groupId 
+            joinGroupRes.memberId 
+            joinGroupRes.generationId 
+            joinGroupRes.leaderId
+            joinGroupRes.groupProtocol
           let members = joinGroupRes.members.members
           let! topicPartitions = conn.GetMetadata [|cfg.topic|]
           let topicPartitions =
@@ -322,7 +358,12 @@ module Consumer =
           | _ ->
             return Some res
         else
-          Log.info "joined_as_follower"
+          Log.info "joined_as_follower|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+            cfg.groupId 
+            joinGroupRes.memberId 
+            joinGroupRes.generationId 
+            joinGroupRes.leaderId
+            joinGroupRes.groupProtocol
           let req = SyncGroupRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment([||]))
           let! res = Kafka.syncGroup conn req
           match res.errorCode with
@@ -370,19 +411,19 @@ module Consumer =
             leaderId = joinGroupRes.leaderId
             generationId = joinGroupRes.generationId
             assignments = assignments
-            closed = Tasks.TaskCompletionSource<unit>()
+            closed = Tasks.TaskCompletionSource<bool>()
           }
           
         conn.CancellationToken.Register (fun () ->
           Log.info "closing_consumer_group_on_connection_close" 
-          state.closed.TrySetResult() |> ignore) |> ignore
+          closeConsumer state |> Async.Start) |> ignore
 
         let heartbeatSleep = cfg.sessionTimeout / cfg.heartbeatFrequency
 
         /// Starts the hearbeat process.
         let rec heartbeat (state:ConsumerState) =
           peekTask
-            id
+            ignore
             state.closed.Task
             (async {
               let req = HeartbeatRequest(cfg.groupId, state.generationId, state.memberId)
@@ -391,14 +432,14 @@ module Consumer =
               | Success res ->
                 match res.errorCode with
                 | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode ->
-                  do! close state
+                  do! closeGeneration state
                   return ()
                 | _ ->
                   do! Async.Sleep heartbeatSleep
                   return! heartbeat state
               | Failure ex ->
                 Log.warn "heartbeat_failure|generation_id=%i error=%O" state.generationId ex
-                do! close state
+                do! closeConsumer state
                 return () })
 
         Log.info "starting_heartbeats|heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleep
@@ -426,13 +467,11 @@ module Consumer =
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:ConsumerState) = async {
       
-      // initialize per-partition message set buffers
+      // initialize per-partition messageset buffers
       let partitionBuffers =
         state.assignments
         |> Seq.map (fun p -> p.partition, BoundedMb.create cfg.fetchBufferSize)
         |> Map.ofSeq
-
-      let initRetryQueue = RetryQueue.create cfg.endOfTopicPollPolicy fst
 
       /// Fetches the specified offsets.
       /// Returns a set of message sets and an end of topic list.
@@ -446,20 +485,20 @@ module Consumer =
             let! res = fetch req
             match res with
             | Success res ->
-
+              
               // TODO: compression
               let oks,ends,outOfRange =
                 res.topics
                 |> Seq.collect (fun (t,ps) ->
                   ps 
-                  |> Seq.map (fun (p,ec,hwmo,_,ms) -> 
+                  |> Seq.map (fun (p,ec,hwmo,mss,ms) -> 
                     match ec with
-                    | ErrorCode.NoError -> 
-                      if ms.messages.Length = 0 then Choice2Of3 (p,hwmo)
+                    | ErrorCode.NoError ->
+                      if mss = 0 then Choice2Of3 (p,hwmo)
                       else Choice1Of3 (ConsumerMessageSet(t, p, ms, hwmo))
                     | ErrorCode.OffsetOutOfRange -> 
                       Choice3Of3 (p,hwmo)
-                    | _ -> failwithf "unhandled fetch error_code=%i" ec))
+                    | _ -> failwithf "unsupported fetch error_code=%i" ec))
                 |> Seq.partitionChoices3
              
               if outOfRange.Length > 0 then
@@ -472,14 +511,12 @@ module Consumer =
                 return 
                   oks' 
                   |> Option.map (fun (oks',ends') -> Array.append oks oks', Array.append ends ends')
-              elif oks.Length = 0 then
-                return failwith "nothing returned in fetch response"
               else
                 return Some (oks,ends)
 
             | Failure ex ->
               Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%A error=%O" state.generationId topic offsets ex
-              do! close state
+              do! closeConsumer state
               return raise ex })
 
       /// Handles out of range offsets.
@@ -523,16 +560,24 @@ module Consumer =
              
       // multiplexed stream of all fetch responses for this consumer
       let fetchStream =
+        let initRetryQueue = 
+          RetryQueue.create cfg.endOfTopicPollPolicy fst
         let initOffsets =
           state.assignments
           |> Array.map (fun a -> a.partition, a.initOffset)
         (initOffsets, initRetryQueue)
         |> AsyncSeq.unfoldAsync
             (fun (offsets:(Partition * Offset)[], retryQueue:RetryQueue<_, _>) -> async {
-              let offsets = 
-                let dueRetries = RetryQueue.dueNow retryQueue |> Seq.toArray
-                if dueRetries.Length > 0 then Array.append offsets dueRetries
-                else offsets
+              let! offsets = async {
+                if offsets.Length = 0 then
+                  let! dueRetries = RetryQueue.dueNowAwait retryQueue
+                  return dueRetries |> Seq.toArray
+                else
+                  let dueRetries = RetryQueue.dueNow retryQueue |> Seq.toArray
+                  if dueRetries.Length > 0 then 
+                    return Array.append offsets dueRetries
+                  else 
+                    return offsets }
               let! res = tryFetch offsets
               match res with
               | None ->
@@ -544,7 +589,7 @@ module Consumer =
                     retryQueue 
                     ends 
                     (mss |> Seq.map (fun ms -> ms.partition))
-                
+                                
                 let nextOffsets = 
                   mss
                   |> Array.map (fun mb -> mb.partition, MessageSet.nextOffset mb.messageSet mb.highWatermarkOffset)
@@ -557,29 +602,34 @@ module Consumer =
                   Log.info "end_of_topic_partition_reached|%s" msg
 
                 return Some (mss, (nextOffsets,retryQueue)) })
-                
+                      
       // consumes fetchStream and dispatches to per-partition buffers
       let fetchProcess = async {
         Log.info "starting_fetch_process|generation_id=%i assignments=%i" state.generationId (state.assignments.Length)
-        do!
-          fetchStream
-          |> AsyncSeq.iterAsync (fun mss -> async {
-            let! _ =
-              mss
-              |> Seq.map (fun ms -> async {
-                let buf = partitionBuffers |> Map.find ms.partition
-                do! buf |> BoundedMb.put (Some ms) })
-              |> Async.Parallel
-            return () })
-        // TODO: try/with?
-        let! _ =
-          partitionBuffers
-          |> Map.toSeq
-          |> Seq.map (fun (_,buf) -> buf |> BoundedMb.put None)
-          |> Async.Parallel
-        return () }
+        return!
+          Async.tryFinnallyAsync
+            (async {
+              do!
+                fetchStream
+                |> AsyncSeq.iterAsync (fun mss -> async {
+                  let! _ =
+                    mss
+                    |> Seq.map (fun ms -> async {
+                      let buf = partitionBuffers |> Map.find ms.partition
+                      do! buf |> BoundedMb.put (Some ms) })
+                    |> Async.Parallel
+                  return () }) })
+              (async {
+                Log.info "fetch_process_stopping|generation_id=%i" state.generationId
+                do! Async.Sleep 1000 // flush logs
+                let! _ =
+                  partitionBuffers
+                  |> Map.toSeq
+                  |> Seq.map (fun (_,buf) -> buf |> BoundedMb.put None)
+                  |> Async.Parallel
+                return () }) }
       
-      Async.Start (fetchProcess) // TODO: cancellation
+      Async.Start (fetchProcess)
         
       let partitionStreams =
         partitionBuffers
@@ -588,16 +638,17 @@ module Consumer =
         |> Seq.toArray
 
       return partitionStreams }
-
-    asyncSeq {
-      // TODO: cancellation
-      while true do
-        let! state = MVar.get consumer.state
-        let! partitionStreams = consume state
-        yield state.generationId,partitionStreams
-        do! state.closed.Task |> Async.AwaitTask
+    
+    let rec loop () = asyncSeq {
+      let! state = MVar.get consumer.state
+      let! partitionStreams = consume state
+      yield state.generationId,partitionStreams
+      let! rejoin = state.closed.Task |> Async.AwaitTask
+      if rejoin then
         let! _ = join consumer (Some state.memberId)
-        () }
+        yield! loop () }
+
+    loop ()
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
@@ -613,11 +664,6 @@ module Consumer =
           |> Async.Parallel
           |> Async.Ignore)
 
-  /// Explicitly commits offsets to a consumer group.
-  let commit (c:Consumer) (offsets:(Partition * Offset)[]) = async {
-    let! state = MVar.get c.state
-    return! commitOffsets c.conn c.cfg state c.cfg.topic offsets }
-
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
@@ -626,8 +672,8 @@ module Consumer =
     (commitInterval:TimeSpan)
     (handler:ConsumerMessageSet -> Async<unit>)
     (consumer:Consumer) : Async<unit> = async {
-      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commit consumer)
+      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets consumer)
       let handler ms = async {
         do! handler ms
-        Offsets.enqueuePeriodicCommit commitQueue ms.partition (MessageSet.lastOffset ms.messageSet) }
+        Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
       return! consumer |> consume handler }

@@ -5,7 +5,7 @@ open Kafunk
 open System
 
 [<Test>]
-let ``should parse various uri formats`` () =
+let ``KafkaUri.parse should parse various uri formats`` () =
   
   let uris =
     [

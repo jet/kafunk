@@ -19,20 +19,22 @@ let go = async {
   let consumerCfg = 
     ConsumerConfig.create (group, topic, 
       initialFetchTime=Time.EarliestOffset, 
-      fetchMaxBytes=10000,
+      fetchMaxBytes=50000,
       fetchBufferSize=1,
       outOfRangeAction=ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime)
   let! consumer = 
     Consumer.createAsync conn consumerCfg
   let handle (ms:ConsumerMessageSet) = async {
-    Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i last_offset=%i high_watermark_offset=%i"
+    Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
       ms.topic
       ms.partition
       (ms.messageSet.messages.Length)
       (ConsumerMessageSet.size ms)
+      (ConsumerMessageSet.firstOffset ms)
       (ConsumerMessageSet.lastOffset ms)
-      (ms.highWatermarkOffset) }
-  do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 30) handle
+      (ms.highWatermarkOffset)
+      (ConsumerMessageSet.lag ms) }
+  do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) handle
 }
 
 Async.RunSynchronously go

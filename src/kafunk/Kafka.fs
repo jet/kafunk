@@ -675,7 +675,7 @@ module Offsets =
 
 
   type private PeriodicCommitQueueMsg =
-    | Enqueue of Partition * Offset
+    | Enqueue of (Partition * Offset) seq
     | Commit
 
   type PeriodicCommitQueue (interval:TimeSpan, commit:(Partition * Offset)[] -> Async<unit>) =
@@ -685,8 +685,10 @@ module Offsets =
     let rec enqueueLoop (commits:Map<Partition, Offset>) (mb:Mb<_>) = async {
       let! msg = mb.Receive ()
       match msg with
-      | Enqueue (p,o) ->
-        let commits' = commits |> Map.add p o
+      | Enqueue os ->
+        let commits' =
+          (commits,os) 
+          ||> Seq.fold (fun m (p,o) -> Map.add p o m) 
         return! enqueueLoop commits' mb
       | Commit ->
         let offsets =
@@ -707,8 +709,8 @@ module Offsets =
 
     do Async.Start (commitLoop, cts.Token)
 
-    member __.Enqueue (p:Partition, o:Offset) =
-      mbp.Post (Enqueue (p,o))
+    member __.Enqueue (os:(Partition * Offset) seq) =
+      mbp.Post (Enqueue os)
 
     interface IDisposable with
       member __.Dispose () =
@@ -719,10 +721,9 @@ module Offsets =
   let createPeriodicCommitQueue interval = 
     new PeriodicCommitQueue (interval)
 
-  /// Asynchronously enqueues an offset commit, replacing any existing commit for the specified topic-partition.
-  /// The commit will be invoked at the next commit interval.
-  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (p:Partition) (o:Offset) =
-    q.Enqueue (p,o)
+  /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.
+  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
+    q.Enqueue os
     
 
   
