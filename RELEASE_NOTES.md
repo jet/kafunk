@@ -1,4 +1,9 @@
-### 0.0.3 - TDB
+### 0.0.4 - TBD
+
+### 0.0.3 - 28.12.2016
+
+* Fix a few reconnection/fault tolerance bugs
+* Adjust consumer api to allow offset strategies to be parameterized
 
 ### 0.0.2 - 29.11.2016
 
