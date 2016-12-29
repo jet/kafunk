@@ -13,7 +13,7 @@ let topic = ""
 let conn = Kafka.connHost host
 
 let offsets = 
-  Kafka.Composite.offsets conn topic [ Time.EarliestOffset ; Time.LatestOffset ] 1
+  Offsets.offsets conn topic [] [ Time.EarliestOffset ; Time.LatestOffset ] 1
   |> Async.RunSynchronously
 
 for kvp in offsets do

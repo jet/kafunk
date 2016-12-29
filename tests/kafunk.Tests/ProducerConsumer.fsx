@@ -53,7 +53,7 @@ let producer () = async {
         |> Seq.toArray
       let! res = Producer.produce producer messages
       return () })
-    |> Async.ParallelIgnore producerThreads
+    |> Async.ParallelThrottledIgnore producerThreads
 
   Log.error "producer_done"
 }
@@ -68,12 +68,12 @@ let consumer () = async {
   let consumerCfg = 
     ConsumerConfig.create (
       consumerGroup, 
-      [|topicName|], 
+      topicName, 
       initialFetchTime=Time.EarliestOffset, 
-      fetchBufferBytes=100000)
+      fetchMaxBytes=100000)
 
-  let handle _tn _p (ms:MessageSet) = async {
-    ms.messages
+  let handle (ms:ConsumerMessageSet) = async {
+    ms.messageSet.messages
     |> Seq.iter (fun (o,ms,m) -> 
       try
         if not (isNull m.value.Array) && m.value.Count > 0 then
@@ -92,7 +92,7 @@ let consumer () = async {
 
   return!
     Async.choose
-      (Consumer.create conn consumerCfg |> Consumer.consumeCommitAfter handle)
+      (Consumer.create conn consumerCfg |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) handle)
       (tcs.Task |> Async.AwaitTask)
 }
 

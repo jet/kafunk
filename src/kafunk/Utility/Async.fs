@@ -129,30 +129,61 @@ module AsyncEx =
     /// when all computations in the sequence complete. Up to parallelism computations will
     /// be in-flight at any given point in time. Error or cancellation of any computation in
     /// the sequence causes the resulting computation to error or cancel, respectively.
+//    static member ParallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
+//      let! ct = Async.CancellationToken
+//      use sm = new SemaphoreSlim(parallelism)
+//      use cde = new CountdownEvent(1)
+//      let tcs = new TaskCompletionSource<unit>()
+//      //ct.Register (fun () -> tcs.TrySetCanceled () |> ignore) |> ignore
+//      let wrap a = async {
+//        cde.AddCount 1
+//        sm.Wait ()
+//        try
+//          let! _a = a
+//          sm.Release () |> ignore
+//          if (cde.Signal ()) then
+//            tcs.TrySetResult () |> ignore
+//          return ()
+//        with ex ->
+//          tcs.TrySetException ex |> ignore }
+//      let wrap = wrap >> Async.tryCancelled (fun _ -> tcs.TrySetCanceled () |> ignore)
+//      use en = xs.GetEnumerator()
+//      while not (tcs.Task.IsCompleted) && en.MoveNext() do
+//        Async.Start (wrap en.Current, ct)
+//      if (cde.Signal ()) then
+//        tcs.TrySetResult () |> ignore
+//      return! tcs.Task |> Async.AwaitTask }
+
     static member ParallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
       let! ct = Async.CancellationToken
-      use sm = new SemaphoreSlim(parallelism)
-      use cde = new CountdownEvent(1)
+      let sm = new SemaphoreSlim(parallelism)
+      let cde = new CountdownEvent(1)
       let tcs = new TaskCompletionSource<unit>()
-      ct.Register (fun () -> tcs.TrySetCanceled () |> ignore) |> ignore
-      let wrap a = async {
-        cde.AddCount 1
-        sm.Wait ()
-        try
-          let! _a = a
-          sm.Release () |> ignore
-          if (cde.Signal ()) then
-            tcs.TrySetResult () |> ignore
-          return ()
-        with ex ->
-          tcs.TrySetException ex |> ignore }
-      let wrap = wrap >> Async.tryCancelled (fun _ -> tcs.TrySetCanceled () |> ignore)
-      use en = xs.GetEnumerator()
-      while not (tcs.Task.IsCompleted) && en.MoveNext() do
-        Async.Start (wrap en.Current, ct)
-      if (cde.Signal ()) then
-        tcs.TrySetResult () |> ignore
-      return! tcs.Task |> Async.AwaitTask }
+      ct.Register(Action(fun () -> tcs.TrySetCanceled() |> ignore)) |> ignore
+      let tryComplete () =
+        if cde.Signal() then
+          tcs.SetResult(())
+      let inline ok _ =
+        if not (tcs.Task.IsCompleted) then
+          sm.Release() |> ignore
+          tryComplete ()
+      let inline err (ex:exn) =
+        sm.Release() |> ignore
+        tcs.TrySetException ex |> ignore
+      let inline cnc (_:OperationCanceledException) =
+        sm.Release() |> ignore
+        tcs.TrySetCanceled () |> ignore
+      try
+        use en = xs.GetEnumerator()
+        while not (tcs.Task.IsCompleted) && en.MoveNext() do
+          sm.Wait()
+          cde.AddCount(1)
+          Async.StartWithContinuations (en.Current, ok, err, cnc, ct)
+        tryComplete ()
+        do! tcs.Task |> Async.AwaitTaskCancellationAsError
+      finally
+        cde.Dispose()
+        sm.Dispose() }
 
     /// Creates an async computation which completes when any of the argument computations completes.
     /// The other computation is cancelled.

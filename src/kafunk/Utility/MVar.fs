@@ -134,11 +134,11 @@ module MVar =
 
   /// Gets the value of the MVar.
   let get (c:MVar<'a>) : Async<'a> =
-    c.Get ()
+    async.Delay (c.Get)
 
   /// Takes an item from the MVar.
   let take (c:MVar<'a>) : Async<'a> =
-    c.Take ()
+    async.Delay (c.Take)
   
   /// Returns the last known value, if any, without serialization.
   /// NB: unsafe because the value may be null, but helpful for supporting overlapping
@@ -149,24 +149,24 @@ module MVar =
   /// Puts an item into the MVar, returning the item that was put.
   /// Returns if the MVar is either empty or full.
   let put (a:'a) (c:MVar<'a>) : Async<'a> =
-    c.Put a
+    async.Delay (fun () -> c.Put a)
 
   /// Puts an item into the MVar, returning the item that was put.
   /// Returns if the MVar is either empty or full.
   let putAsync (a:Async<'a>) (c:MVar<'a>) : Async<'a> =
-    c.PutAsync a
+    async.Delay (fun () -> c.PutAsync a)
 
   /// Puts a new value into an MVar or updates an existing value.
   /// Returns the value that was put or the updated value.
   let putOrUpdateAsync (update:'a option -> Async<'a>) (c:MVar<'a>) : Async<'a> =
-    c.PutOrUpdateAsync update
+    async.Delay (fun () -> c.PutOrUpdateAsync update)
 
   /// Updates an item in the MVar.
   /// Returns when an item is available to update.
   let update (update:'a -> 'a) (c:MVar<'a>) : Async<'a> =
-    c.Update update
+    async.Delay (fun () -> c.Update update)
 
   /// Updates an item in the MVar.
   /// Returns when an item is available to update.
   let updateAsync (update:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
-    c.UpdateAsync update
+    async.Delay (fun () -> c.UpdateAsync update)

@@ -11,8 +11,8 @@ let Log = Log.create __SOURCE_FILE__
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
 let host = argiDefault 1 "localhost"
-let topic = argiDefault 2 "test-topic_1019"
-let group = argiDefault 3 "leo_test16"
+let topic = argiDefault 2 "absurd-topic"
+let group = argiDefault 3 "existential-group"
 
 let go = async {
   let! conn = Kafka.connHostAsync host
