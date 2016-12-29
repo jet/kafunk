@@ -1,4 +1,8 @@
-### 0.0.4 - TBD
+### 0.0.4 - 29.12.2016
+
+* Consumer fetch request batching by broker
+* Fix protocol codec issue for batched fetch responses
+* Periodic offset commit
 
 ### 0.0.3 - 28.12.2016
 
