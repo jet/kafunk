@@ -16,6 +16,7 @@ This example demonstrates a few uses of the Kafka client.
 
 #r "kafunk.dll"
 open Kafunk
+open System
 
 
 let conn = Kafka.connHost "existential-host"
@@ -49,39 +50,48 @@ let prodRes =
   Producer.produce producer [| ProducerMessage.ofBytes ("hello world"B) |]
   |> Async.RunSynchronously
 
-for (tn,offsets) in prodRes.topics do
-  printfn "topic_name=%s" tn
-  for (p,ec,offset) in offsets do
-    printfn "partition=%i error_code=%i offset=%i" p ec offset
+for (p,offset) in prodRes.offsets do
+  printfn "partition=%i offset=%i" p offset
 
 
 // consumer
 
 let consumerCfg = 
-  ConsumerConfig.create ("consumer-group", [|"absurd-topic"|])
+  ConsumerConfig.create ("consumer-group", "absurd-topic")
 
 let consumer =
   Consumer.create conn consumerCfg
 
+// commit on every message set
 consumer
-|> Consumer.consume (fun tn p ms commit -> async {
-  printfn "topic=%s partition=%i" tn p
-  do! commit })
+|> Consumer.consume (fun ms -> async {
+  printfn "topic=%s partition=%i" ms.topic ms.partition
+  do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
+|> Async.RunSynchronously
+
+
+// commit periodically
+consumer
+|> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) (fun ms -> async {
+  printfn "topic=%s partition=%i" ms.topic ms.partition })
 |> Async.RunSynchronously
 
 
 
-// consumer offsets
 
-Consumer.commitOffsets consumer [| "absurd-topic", [| 0, 1L |] |]
+
+
+// consumer commit offsets
+
+Consumer.commitOffsets consumer [| 0, 1L |]
 |> Async.RunSynchronously
 
 
 
-// offsets
+// offset information
 
 let offsets = 
-  Kafka.Composite.offsets conn "absurd-topic" [ Time.EarliestOffset ; Time.LatestOffset ] 1
+  Offsets.offsets conn "absurd-topic" [] [ Time.EarliestOffset ; Time.LatestOffset ] 1
   |> Async.RunSynchronously
 
 for kvp in offsets do

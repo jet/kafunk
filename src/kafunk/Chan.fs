@@ -45,17 +45,49 @@ module MessageSet =
   let ofMessages ms =
     MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
 
-  /// Returns the next offset to fetch, by taking the max offset in the
-  /// message set and adding one.
-  let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) =
+  /// Returns the frist offset in the message set.
+  let firstOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      let (maxOffset,_,_) = ms.messages.[ms.messages.Length - 1]
-      let no = maxOffset + 1L
-      if no <= hwm then no
-      else 
-        failwithf "invalid offset computation maxOffset=%i hwm=%i" maxOffset hwm
+      let (o,_,_) = ms.messages.[0] in o
     else
-      1L
+      0L
+
+  /// Returns the last offset in the message set.
+  let lastOffset (ms:MessageSet) =
+    if ms.messages.Length > 0 then
+      //ms.messages |> Seq.map (fun (o,_,_) -> o) |> Seq.max
+      let (o,_,_) = ms.messages.[ms.messages.Length - 1] in o
+    else
+      0L
+
+  /// Returns the next offset to fetch, by taking the max offset in the
+  /// message set and adding 1.
+  /// Ensures the next offset is bellow high watermark offset.
+  let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) : Offset =
+    let lastOffset = lastOffset ms
+    let nextOffset = lastOffset + 1L
+    if nextOffset <= hwm then
+      nextOffset
+    else 
+      failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
+
+module FetchResponse =
+  
+  /// Returns the next set of offsets to fetch.
+  let nextOffsets (res:FetchResponse) : (TopicName * (Partition * Offset)[])[] =
+    res.topics
+    |> Seq.map (fun (t,ps) ->
+      let os =
+        ps
+        |> Seq.map (fun (p,_,hwmo,_,ms) ->
+          let nextOffset = MessageSet.nextOffset ms hwmo
+          p,nextOffset)
+        |> Seq.toArray
+      t,os)
+    |> Seq.toArray
+      
+
+
 
 module ProduceRequest =
 
@@ -117,6 +149,27 @@ module internal ResponseEx =
   // ------------------------------------------------------------------------------------------------------------------------------
   // printers
 
+[<AutoOpen>]
+module internal Printers =
+  
+  open System.Text
+
+  let concatMapSbDo (sb:StringBuilder) (s:seq<'a>) (f:StringBuilder -> 'a -> _) (sep:string) =
+    use en = s.GetEnumerator()
+    if en.MoveNext () then
+      f sb en.Current |> ignore
+      while en.MoveNext () do
+        sb.Append sep |> ignore
+        f sb en.Current |> ignore
+
+  let concatMapSb (s:seq<'a>) (f:StringBuilder -> 'a -> _) (sep:string) =
+    let sb = StringBuilder()
+    concatMapSbDo sb s f sep
+    sb.ToString()
+    
+  let partitionOffsetPairs (os:seq<Partition * Offset>) =
+    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} offset={1}]", p, o)) " ; "
+    
   type MetadataResponse with
     static member Print (x:MetadataResponse) =
       let topics =
@@ -321,7 +374,10 @@ type EndPoint =
     static member ofIPEndPoint (ep:IPEndPoint) = EndPoint ep
     static member ofIPAddressAndPort (ip:IPAddress, port:int) = EndPoint.ofIPEndPoint (IPEndPoint(ip,port))
     member this.Display = this.ToString()
-    override this.Equals (o:obj) = (EndPoint.endpoint this).Equals(o)
+    override this.Equals (o:obj) = 
+      match o with 
+      | :? EndPoint as ep -> (EndPoint.endpoint this).Equals(EndPoint.endpoint ep)
+      | _ -> false
     override this.GetHashCode () = (EndPoint.endpoint this).GetHashCode()
     override this.ToString () = (EndPoint.endpoint this).ToString()
     interface IEquatable<EndPoint> with
@@ -340,23 +396,31 @@ type Chan =
 
 /// Configuration for an individual TCP channel.
 type ChanConfig = {
-    
+  
+  /// Specifies whether the socket should use Nagle's algorithm.
   useNagle : bool
-    
+  
+  /// The socket receive buffer size.
   receiveBufferSize : int
     
+  /// The socket send buffer size.
   sendBufferSize : int
         
+  /// The connection timeout.
   connectTimeout : TimeSpan
 
+  /// The connection retry policy for timeouts and failures.
   connectRetryPolicy : RetryPolicy
 
+  /// The request timeout.
   requestTimeout : TimeSpan
     
+  /// The request retry polify for timeouts and failures.
   requestRetryPolicy : RetryPolicy
 
 } with
-    
+  
+  /// Creates a channel configuration.
   static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
       useNagle = defaultArg useNagle false
@@ -431,7 +495,7 @@ module Chan =
               Log.error "tcp_connection_timed_out|remote_endpoint=%O timeout=%O" ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
               Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ipep e)
-      |> AsyncFunc.mapOut (snd >> Result.mapError (Choice.fold (fun e -> e :> exn) id))
+      |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
@@ -448,14 +512,13 @@ module Chan =
       socketAgent
       |> Resource.inject Socket.sendAll
 
-    /// fault tolerant receive operation
     let! receive =
       let receive s buf = async {
         let! received = Socket.receive s buf
         if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
         else return received }
-      socketAgent |> Resource.inject receive
-      //socketAgent |> Resource.inject Socket.receive
+      socketAgent 
+      |> Resource.inject receive
 
     /// An unframed input stream.
     let inputStream =

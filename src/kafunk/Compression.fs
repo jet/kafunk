@@ -47,7 +47,7 @@ module Compression =
       outputStream.Position <- 0L
       let output = outputStream.ToArray()
       // size is output array size divided by message set element size
-      Protocol.MessageSet.read output.Length (output |> Binary.ofArray)
+      Protocol.MessageSet.read 0 0s output.Length (output |> Binary.ofArray)
       |> fst
     | Protocol.CompressionCodec.None ->
       // TODO: logging?

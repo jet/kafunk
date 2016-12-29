@@ -68,6 +68,7 @@
     <Compile Include="PreludeTests.fs" />
     <Compile Include="CodecTests.fs" />
     <Compile Include="TcpTests.fs" />
+    <Compile Include="RoutingTests.fs" />
     <Compile Include="CompressionGzipTests.fs" />
     <Compile Include="AsyncTests.fs" />
     <Compile Include="FaultsTests.fs" />

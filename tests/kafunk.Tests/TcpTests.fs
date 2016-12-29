@@ -7,7 +7,14 @@ open System.Text
 open Kafunk
 
 [<Test>]
-let ``framing should work`` () =
+let ``EndPoint should be comparable``() =
+  let ep1 = EndPoint.parse ("127.0.0.1", 9092)
+  let ep2 = EndPoint.parse ("127.0.0.1", 9092)
+  let actual = ep1.Equals (ep2)
+  shouldEqual true actual None
+
+[<Test>]
+let ``Framing should work`` () =
   for msgSize in [1..100] do
   
     let msg : byte[] = Array.zeroCreate msgSize

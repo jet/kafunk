@@ -4,6 +4,7 @@ open System
 open FSharp.Control
 
 /// The state of a retry workflow.
+[<StructuredFormatDisplay("RetryState({attempt})")>]
 type RetryState =
   struct
     val attempt : int
@@ -75,11 +76,86 @@ module RetryPolicy =
   let delayStream (p:RetryPolicy) =
     delayStreamAt p initState
 
+
+/// A retry queue.
+[<StructuredFormatDisplay("RetryQueue({items})")>]
+type RetryQueue<'k, 'a when 'k : comparison> = private {
+  policy : RetryPolicy
+  key : 'a -> 'k
+  items : Map<'k, RetryState * DateTime * 'a> }
+
+/// Operations on RetryQueue.
+[<Compile(Module)>]
+module RetryQueue =
+  
+  /// Creates a RetryQueue with the specified RetryPolicy.
+  let create p key = { policy = p ; key = key ; items = Map.empty }
+
+  /// Gets the set of items and due times in the queue.
+  let items (q:RetryQueue<'k, 'a>) : seq<'a * DateTime> =
+    q.items |> Seq.map (fun kvp -> let (_,due,a) = kvp.Value in a,due)
+    
+  /// Enqueues an item for retry. If the item is already in the queue,
+  /// the next RetryState is used to determine the due time, otherwise,
+  /// the initial RetryState is used.
+  let retryAt (q:RetryQueue<'k, 'a>) (dt:DateTime) (a:'a) =
+    let k = q.key a
+    let s =
+      match q.items |> Map.tryFind k with
+      | None -> RetryPolicy.initState
+      | Some (s,_,_) -> RetryPolicy.nextState s
+    match RetryPolicy.delayAt s q.policy with
+    | Some delay -> { q with items = q.items |> Map.add k (s, dt.Add delay, a) }
+    | None -> q
+
+  /// Enqueues an item for retry. If the item is already in the queue,
+  /// the next RetryState is used to determine the due time, otherwise,
+  /// the initial RetryState is used.
+  let retry (q:RetryQueue<'k, 'a>) a =
+    retryAt q DateTime.UtcNow a
+
+  let retryAll q xs = (q,xs) ||> Seq.fold retry
+
+  /// Returns all items in the queue due at the specified time.
+  let dueAt (q:RetryQueue<'k, 'a>) (dt:DateTime) =
+    q
+    |> items
+    |> Seq.choose (fun (a,due) ->
+      if dt >= due then Some a
+      else None)
+
+  /// Returns all items in the queue due at DateTime.UtcNow.
+  let dueNow (q:RetryQueue<'k, 'a>) = dueAt q (DateTime.UtcNow)
+
+  /// Returns an async computation which completes when all current queued items are due.
+  let dueNowAwait (q:RetryQueue<'k, 'a>) = async {
+    let now = DateTime.UtcNow
+    let latestDue = items q |> Seq.map snd |> Seq.max
+    if now >= latestDue then 
+      return dueAt q now
+    else
+      do! Async.Sleep (latestDue - now)
+      return dueAt q now }
+
+  /// Removes an item from the queue, resetting its retry state.
+  let remove (q:RetryQueue<'k, 'a>) k =
+    { q with items = Map.remove k q.items }
+
+  let removeAll q ks = (q,ks) ||> Seq.fold remove
+
+  let retryRemoveAll q retryItems removeItems =
+    let q' = retryAll q retryItems 
+    removeAll q' removeItems
+  
+
+
+
+
   
 
 
 /// Operations on System.Exception.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Exn =
   
   open System
@@ -113,6 +189,8 @@ module Exn =
 
   let inline captureEdi (e:exn) =
     ExceptionDispatchInfo.Capture e
+
+  let inline upCast (e:#exn) : exn = upcast e
     
 
 

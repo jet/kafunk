@@ -1,7 +1,6 @@
 namespace Kafunk
 
 /// The Kafka RPC protocol.
-/// https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
 [<AutoOpen>]
 module Protocol =
 
@@ -317,18 +316,15 @@ module Protocol =
   /// A byte[] representing member assignment of a particular Kafka group protocol.
   type MemberAssignment = Binary.Segment
 
-  // TODO: Finish moving the static members inline with the type definition.
-  // It's a lot easier to deal with having the definition in one place. It
-  // could be that we auto-generate this code from the type definition alone
-  // so this could remove a bunch of the obvious code below. Some of these
-  // will still need some functions to properly calculate things like crc.
-  // NOTE: I really don't like that we've conflated our wire types with
-  // what we expose in the API. An example is the CRC32 checksum on messages.
-  // These should be properly calculated on serialization or checked on read
-  // yet we opt-for representing it in our type rather than the protocol's
-  // octet stream exclusively. </rant> I don't have easy answers so my
-  // current strategy is to reduce the exposed surface area of certain
-  // modules.
+  /// Raised when the received message CRC32 is different from the computed CRC32.
+  type CorruptCrc32Exception (msg:string, ex:exn) =
+    inherit System.Exception (msg, ex)
+    new (msg) = new CorruptCrc32Exception (msg, null)
+
+  /// Raised when the message is bigger than the message set and therefore can't be received.
+  type MessageTooBigException (msg:string, ex:exn) =
+    inherit System.Exception (msg, ex)
+    new (msg) = new MessageTooBigException (msg, null)
 
   /// A Kafka message type used for producing and fetching.
   type Message =
@@ -367,23 +363,19 @@ module Protocol =
 
   
     /// Reads the message from the buffer, returning the message and new state of buffer.
-    /// If the buffer doesn't have sufficient space for the message, returns None.
-    /// Support for partial messages exists because Kafka can send partial message when
-    /// receive size limit is reached.
-    static member read (expectedSize:int) (buf:Binary.Segment) =
-      if expectedSize <= buf.Count then
-        let crc, buf = Binary.readInt32 buf
-        let offset = buf.Offset
-        let magicByte, buf = Binary.readInt8 buf
-        let attrs, buf = Binary.readInt8 buf      
-        let key, buf = Binary.readBytes buf      
-        let value, buf = Binary.readBytes buf
-        let crc' = int <| Crc.crc32 buf.Array offset (buf.Offset - offset)
-        if crc <> crc' then
-          failwithf "Corrupt message data. Computed CRC32=%i received CRC32=%i" crc' crc
-        Some (Message(crc, magicByte, attrs, key, value), buf)
-      else
-        None
+    static member read (buf:Binary.Segment) =
+      let crc, buf = Binary.readInt32 buf
+      let offsetAfterCrc = buf.Offset
+      let magicByte, buf = Binary.readInt8 buf
+      let attrs, buf = Binary.readInt8 buf
+      let key, buf = Binary.readBytes buf
+      let value, buf = Binary.readBytes buf
+      let offsetAtEnd = buf.Offset
+      let readMessageSize = offsetAtEnd - offsetAfterCrc
+      let crc' = int32 <| Crc.crc32 buf.Array offsetAfterCrc readMessageSize
+      if crc <> crc' then
+        raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
+      (Message(crc,magicByte,attrs,key,value)), buf
 
 
   type MessageSet =
@@ -403,20 +395,42 @@ module Protocol =
 
     /// Reads the messages from the buffer, returning the message and new state of buffer.
     /// If the buffer doesn't have sufficient space for the last message, skips it.
-    static member read messageSetSize (buf:Binary.Segment) =
+    static member read (partition:Partition) (ec:ErrorCode) (messageSetSize:int) (buf:Binary.Segment) =
       let set, buf = 
         Binary.readArrayByteSize 
           messageSetSize 
           buf 
-          (fun buf ->
-            if buf.Count > (8 + 4) then
-              let offset,buf = Binary.readInt64 buf
-              let messageSize,buf = Binary.readInt32 buf
-              match Message.read messageSize buf with
-              | Some (message,buf) -> Some ((offset,messageSize,message),buf)
-              | None -> None
+          (fun consumed buf ->
+            let messageSetRemainder = messageSetSize - consumed
+            if messageSetRemainder >= 12 && buf.Count >= 12 then
+              let (offset:Offset),buf = Binary.readInt64 buf
+              let (messageSize:MessageSize),buf = Binary.readInt32 buf
+              let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
+              if messageSize > messageSetSize then
+                raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
+              try
+                if messageSetRemainder >= messageSize && buf.Count >= messageSize then
+                  let message,buf = Message.read buf
+                  Choice1Of2 ((offset,messageSize,message),buf)
+                else
+                  let rem = min messageSetRemainder buf.Count
+                  let buf = Binary.shiftOffset rem buf
+                  Choice2Of2 buf
+              with :? CorruptCrc32Exception as ex ->
+                let msg =
+                  sprintf "partition=%i offset=%i error_code=%i consumed=%i message_set_size=%i message_set_remainder=%i message_size=%i buffer_offset=%i buffer_size=%i"
+                    partition
+                    offset
+                    ec
+                    consumed 
+                    messageSetSize
+                    messageSetRemainder 
+                    messageSize
+                    buf.Offset
+                    buf.Count
+                raise (CorruptCrc32Exception(msg, ex))
             else
-              None)
+              Choice2Of2 (Binary.shiftOffset messageSetRemainder buf))
       (MessageSet(set), buf)
 
   // Metadata API
@@ -490,10 +504,6 @@ module Protocol =
 
   /// Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
   /// The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
-  /// - UnknownTopic
-  /// - LeaderNotAvailable
-  /// - InvalidTopic
-  /// - TopicAuthorizationFailed
   type MetadataResponse =
     struct
       val brokers : Broker[]
@@ -537,17 +547,6 @@ module Protocol =
       |> Binary.writeArray x.topics writeTopic
 
   /// A reponse to a produce request.
-  /// - UnknownTopicOrPartition
-  /// - InvalidMessageSize
-  /// - LeaderNotAvailable
-  /// - NotLeaderForPartition
-  /// - RequestTimedOut
-  /// - MessageSizeTooLarge
-  /// - RecordListTooLargeCode
-  /// - NotEnoughReplicasCode
-  /// - NotEnoughReplicasAfterAppendCode
-  /// - InvalidRequiredAcksCode
-  /// - TopicAuthorizationFailedCode
   and ProduceResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode * Offset)[])[]
@@ -599,27 +598,26 @@ module Protocol =
       |> Binary.writeInt32 x.minBytes
       |> Binary.writeArray x.topics writeTopic
 
-  type PartitionFetchMetadata = Partition * ErrorCode * HighwaterMarkOffset * MessageSetSize * MessageSet
-
   type FetchResponse =
     struct
-      val topics : (TopicName * PartitionFetchMetadata[])[]
+      val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * MessageSetSize * MessageSet)[])[]
       new (topics) = { topics = topics }
     end
   with
 
-    static member read buf =
+    static member read (buf:Binary.Segment) =
       let readPartition buf =
         let partition, buf = Binary.readInt32 buf
         let errorCode, buf = Binary.readInt16 buf
         let hwo, buf = Binary.readInt64 buf
         let mss, buf = Binary.readInt32 buf
-        let ms, buf = MessageSet.read mss buf
+        let ms, buf = MessageSet.read partition errorCode mss buf
         ((partition, errorCode, hwo, mss, ms), buf)
       let readTopic =
         Binary.read2 Binary.readString (Binary.readArray readPartition)
       let topics, buf = buf |> Binary.readArray readTopic
-      (FetchResponse(topics), buf)
+      let res = FetchResponse(topics)
+      res,buf
 
   // Offset API
 
@@ -966,11 +964,6 @@ module Protocol =
       |> Binary.writeString x.memberId
 
   /// Heartbeat response from the group coordinator.
-  /// - GROUP_COORDINATOR_NOT_AVAILABLE
-  /// - ILLEGAL_GENERATION
-  /// - UNKNOWN_MEMBER_ID
-  /// - REBALANCE_IN_PROGRESS
-  /// - GROUP_AUTHORIZATION_FAILED
   type HeartbeatResponse =
     struct
       val errorCode : ErrorCode

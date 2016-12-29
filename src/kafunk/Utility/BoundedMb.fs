@@ -77,4 +77,4 @@ module BoundedMb =
 
   /// Takes a message from
   let inline take (mb:BoundedMb<'a>) : Async<'a> =
-    mb.Take ()
+    async.Delay mb.Take

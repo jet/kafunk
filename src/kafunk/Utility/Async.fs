@@ -57,6 +57,16 @@ module AsyncEx =
 
     static member inline join (a:Async<Async<'a>>) : Async<'a> = Async.bind id a
    
+    static member tryFinnallyAsync (a:Async<'a>) (comp:Async<unit>) : Async<'a> =
+      async {
+        try
+          let! a = a
+          do! comp
+          return a
+        with ex ->
+          do! comp
+          return raise ex }
+
     static member inline tryFinally (compensation:unit -> unit) (a:Async<'a>) : Async<'a> =
       async.TryFinally(a, compensation)
 

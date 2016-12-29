@@ -16,7 +16,7 @@ let arraySegToFSharp (arr:Binary.Segment) =
   sb.ToString()
 
 [<Test>]
-let ``should encode int32 negative``() =
+let ``Binary.writeInt32 should encode int32 negative``() =
   let x = -1
   let buf = Binary.zeros 4
   Binary.writeInt32 x buf |> ignore
@@ -24,7 +24,7 @@ let ``should encode int32 negative``() =
   Assert.AreEqual(x, x2)
 
 [<Test>]
-let ``crc32 message``() =
+let ``Crc.crc32 message``() =
   let m = Message.ofBytes "hello world"B None
   let bytes = toArraySeg Message.size Message.write m
   let crc32 = Crc.crc32 bytes.Array (bytes.Offset + 4) (bytes.Count - 4)
@@ -32,14 +32,14 @@ let ``crc32 message``() =
   Assert.AreEqual(expected, crc32)
 
 [<Test>]
-let ``crc32 string``() =
+let ``Crc.crc32 string``() =
   let bytes = "hello world"B
   let crc32 = Crc.crc32 bytes 0 bytes.Length
   let expected = 0x0D4A1185u
   Assert.AreEqual(expected, crc32)
 
 [<Test>]
-let ``should encode MessageSet``() =
+let ``MessageSet.write should encode MessageSet``() =
   let expected =
     [
         0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy; 16uy; 45uy;
@@ -71,7 +71,7 @@ let FetchResponseBinary =
     32uy;119uy;111uy;114uy;108uy;100uy; |]
 
 [<Test>]
-let ``should decode FetchResponse``() =
+let ``FetchResponse.read should decode FetchResponse``() =
   let data = FetchResponseBinary
   let (res:FetchResponse), _ = FetchResponse.read data
   let topicName, ps = res.topics.[0]
@@ -85,24 +85,31 @@ let ``should decode FetchResponse``() =
   Assert.AreEqual(1940715388, int m.crc)
   Assert.AreEqual("hello world", (m.value |> Binary.toString))
 
-[<Test>]
-let ``should decode partial FetchResponse`` () =
-  let data = FetchResponseBinary
-  for trim in [1..35] do
-    let data = Binary.resize (data.Count - trim) data
-    let (res:FetchResponse), _ = FetchResponse.read data
-    let tn,ps = res.topics.[0]
-    let _p, _ec, _hwo, _mss, ms = ps.[0]  
-    Assert.AreEqual(1, res.topics.Length)
-    Assert.AreEqual("test", tn)
-    Assert.AreEqual(0, ms.messages.Length)
+//[<Test>]
+//let ``FetchResponse.read should decode partial FetchResponse`` () =
+//  let data = FetchResponseBinary
+//  for trim in [1..35] do
+//    let data = Binary.resize (data.Count - trim) data
+//    let (res:FetchResponse), _ = FetchResponse.read data
+//    let tn,ps = res.topics.[0]
+//    let _p, _ec, _hwo, _mss, ms = ps.[0]
+//    Assert.AreEqual(1, res.topics.Length)
+//    Assert.AreEqual("test", tn)
+//    Assert.AreEqual(0, ms.messages.Length)
+
+//[<Test>]
+//let ``FetchResponse.read should read sample FetchResponse`` () =
+//  let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\sample_fetch_response.bin"
+//  let bytes = System.IO.File.ReadAllBytes file |> Binary.ofArray
+//  let res = FetchResponse.read bytes |> fst
+//  ()
   
   
   
 
 
 //[<Test>]
-let ``should decode ProduceResponse``() =
+let ``ProduceResponse.read should decode ProduceResponse``() =
   let data =
     Binary.ofArray [|
       0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
@@ -116,7 +123,7 @@ let ``should decode ProduceResponse``() =
   Assert.AreEqual(8L, off)
 
 [<Test>]
-let ``should encode ProduceRequest``() =
+let ``ProduceRequest.write should encode ProduceRequest``() =
   let req = ProduceRequest.ofMessageSet "test" 0 (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) None None
   let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> Binary.toArray |> Array.toList
   let expected = [
