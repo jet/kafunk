@@ -610,8 +610,7 @@ module Kafka =
     Chan.fetch c.Send req
 
   let produce (c:KafkaConn) (req:ProduceRequest) : Async<ProduceResponse> =
-    let chan = c.Send
-    Chan.produce chan req
+    Chan.produce c.Send req
 
   let offset (c:KafkaConn) (req:OffsetRequest) : Async<OffsetResponse> =
     Chan.offset c.Send req

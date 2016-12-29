@@ -133,6 +133,35 @@ module List =
   let inline singleton a = [a]
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Array =
+
+  let inline item i a = Array.get a i
+  
+  let inline singleton a = [|a|]
+  
+  let inline take count (array:'a[]) =
+      let sub : 'a[] = Array.zeroCreate count
+      System.Array.Copy(array, sub, count)
+      sub
+
+  /// Partitions the array into the specified number of groups.
+  /// If there are more groups than elements, then the empty groups are returned.
+  /// When the array doesn't divide into the number of groups, the last group will 
+  /// have one fewer element.
+  let groupInto (groups:int) (a:'a[]) : 'a[][] =
+    if groups < 1 then invalidArg "groups" "must be positive"
+    let perGroup = int (ceil (float a.Length / float groups))
+    let groups = Array.zeroCreate groups
+    for i = 0 to groups.Length - 1 do
+      let group = ResizeArray<_>(perGroup)
+      for j = 0 to perGroup - 1 do
+        let idx = i * perGroup + j
+        if idx < a.Length then
+          group.Add (a.[idx])
+      groups.[i] <- group.ToArray()
+    groups
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Seq =
   
   let rec tryItem index (s:seq<_>) =
@@ -160,6 +189,26 @@ module Seq =
       | Choice3Of3 c -> cx.Add(c)
     ax.ToArray(),bx.ToArray(),cx.ToArray()
 
+  let batch (batchSize:int) (s:seq<'a>) : seq<'a[]> =
+      seq {
+          use en = s.GetEnumerator()
+          let more = ref true
+          while !more do
+              let batch : 'a[] = Array.zeroCreate batchSize
+              let rec read i =
+                  if i < batchSize && en.MoveNext() then
+                      batch.[i] <- en.Current
+                      read (i + 1)
+                  else i
+              let i = read 0
+              if i = batchSize then
+                  yield batch
+              else
+                  more := false
+                  if i > 0 then
+                      yield Array.take i batch
+      }
+
 /// Basic operations on dictionaries.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Dict =
@@ -168,31 +217,6 @@ module Dict =
     let mutable v = Unchecked.defaultof<_>
     if d.TryGetValue(k, &v) then Some v
     else None
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Array =
-
-  let inline item i a = Array.get a i
-  
-  let inline singleton a = [|a|]
-  
-  /// Partitions the array into the specified number of groups.
-  /// If there are more groups than elements, then the empty groups are returned.
-  /// When the array doesn't divide into the number of groups, the last group will 
-  /// have one fewer element.
-  let groupInto (groups:int) (a:'a[]) : 'a[][] =
-    if groups < 1 then invalidArg "groups" "must be positive"
-    let perGroup = int (ceil (float a.Length / float groups))
-    let groups = Array.zeroCreate groups
-    for i = 0 to groups.Length - 1 do
-      let group = ResizeArray<_>(perGroup)
-      for j = 0 to perGroup - 1 do
-        let idx = i * perGroup + j
-        if idx < a.Length then
-          group.Add (a.[idx])
-      groups.[i] <- group.ToArray()
-    groups
     
     
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

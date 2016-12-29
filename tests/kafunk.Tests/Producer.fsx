@@ -4,48 +4,47 @@
 
 open FSharp.Control
 open Kafunk
+open System
 
-let conn = Kafka.connHost "127.0.0.1:9092" 
-let topicName = "test-topic_1019"
+let Log = Log.create __SOURCE_FILE__
+
+let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
+
+let host = argiDefault 1 "localhost"
+let topic = argiDefault 2 "absurd-topic"
+let N = argiDefault 3 "1000000" |> Int32.Parse
+let batchSize = argiDefault 4 "500" |> Int32.Parse
+let messageSize = argiDefault 5 "5000" |> Int32.Parse
+let parallelism = argiDefault 6 "100" |> Int32.Parse
+
+let conn = Kafka.connHost host
 
 let producerCfg =
-  ProducerConfig.create (topicName, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
+  ProducerConfig.create (topic, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
 
 let producer =
   Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
 
-
-//let prodRes =
-//  Producer.produceSingle producer (topicName, [| ProducerMessage.ofBytes "world"B |])
-//  |> Async.RunSynchronously
-//
-//for (tn,offsets) in prodRes.topics do
-//  printfn "topic_name=%s" tn
-//  for (p,ec,offset) in offsets do
-//    printfn "partition=%i error_code=%i offset=%i" p ec offset
-
-
-let N = 10000000
+let payload = Array.zeroCreate messageSize
+let batchCount = N / batchSize
 
 Seq.init N id
-|> Seq.map (fun i -> async {
-
-  let payload = Array.zeroCreate 10
-
-  //printfn "sending request=%i" i
-
-  let! prodRes =
-    Producer.produce producer [| ProducerMessage.ofBytes payload |]
-
-  return ()
-
-  //printfn "received produce response=%i" i
-//  for (tn,offsets) in prodRes.topics do
-//    printfn "topic_name=%s" tn
-//    for (p,ec,offset) in offsets do
-//      printfn "partition=%i error_code=%i offset=%i" p ec offset
-
+|> Seq.batch batchSize
+|> Seq.map (fun is -> async {
+  do! Async.SwitchToThreadPool ()
+  try
+    let msgs = is |> Array.map (fun i -> ProducerMessage.ofBytes payload)
+    let! prodRes = Producer.produce producer msgs
+    //Log.info "produced_offsets|batch_size=%i offsets=%A" is.Length prodRes.offsets
+    return ()
+  with ex ->
+    Log.error "%O" ex
+    return ()
 })
-|> Async.ParallelIgnore 10
+|> Async.ParallelThrottledIgnore parallelism
 |> Async.RunSynchronously
+
+Log.info "producer_run_completed|messages=%i batch_size=%i message_size=%i parallelism=%i" N batchSize messageSize parallelism
+
+System.Threading.Thread.Sleep 2000

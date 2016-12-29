@@ -194,7 +194,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,mss,_) -> sprintf "partition=%i message_set_size=%i" p mss)
+            |> Seq.map (fun (p,mss,ms) -> sprintf "partition=%i message_set_size=%i message_count=%i" p mss ms.messages.Length)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
