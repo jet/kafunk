@@ -13,7 +13,7 @@ open Kafunk
 module Message =
 
   let create value key attrs =
-    Message(0, 0y, (defaultArg attrs 0y), (defaultArg key (Binary.empty)), value)
+    Message(0, 0y, (defaultArg attrs 0y), key, value)
 
   let ofBuffer data key =
     Message(0, 0y, 0y, (defaultArg  key (Binary.empty)), data)
@@ -521,7 +521,7 @@ module Chan =
       |> Resource.inject receive
 
     /// An unframed input stream.
-    let inputStream =
+    let receiveStream =
       Socket.receiveStreamFrom config.receiveBufferSize receive
       |> Framing.LengthPrefix.unframe
 
@@ -540,7 +540,7 @@ module Chan =
 
     let session =
       Session.requestReply
-        Session.corrId encode decode RequestMessage.awaitResponse inputStream send
+        Session.corrId encode decode RequestMessage.awaitResponse receiveStream send
 
     let send = 
       Session.send session

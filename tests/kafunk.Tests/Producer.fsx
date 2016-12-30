@@ -5,6 +5,8 @@
 open FSharp.Control
 open Kafunk
 open System
+open System.Diagnostics
+open System.Threading
 
 let Log = Log.create __SOURCE_FILE__
 
@@ -14,8 +16,14 @@ let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
 let N = argiDefault 3 "1000000" |> Int32.Parse
 let batchSize = argiDefault 4 "500" |> Int32.Parse
-let messageSize = argiDefault 5 "5000" |> Int32.Parse
+let messageSize = argiDefault 5 "100" |> Int32.Parse
 let parallelism = argiDefault 6 "100" |> Int32.Parse
+
+let volumeMB = (N * messageSize) / 1000000
+let payload = Array.zeroCreate messageSize
+let batchCount = N / batchSize
+
+Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" host topic N batchSize batchCount messageSize parallelism volumeMB
 
 let conn = Kafka.connHost host
 
@@ -26,25 +34,35 @@ let producer =
   Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
 
-let payload = Array.zeroCreate messageSize
-let batchCount = N / batchSize
+let sw = Stopwatch.StartNew()
 
-Seq.init N id
-|> Seq.batch batchSize
-|> Seq.map (fun is -> async {
-  do! Async.SwitchToThreadPool ()
-  try
+let mutable completed = 0
+
+Async.Start (async {
+  while true do
+    do! Async.Sleep (1000 * 10)
+    let completed = completed
+    let mb = (completed * messageSize) / 1000000
+    Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
+
+try
+  Seq.init N id
+  |> Seq.batch batchSize
+  |> Seq.map (fun is -> async {
     let msgs = is |> Array.map (fun i -> ProducerMessage.ofBytes payload)
     let! prodRes = Producer.produce producer msgs
-    //Log.info "produced_offsets|batch_size=%i offsets=%A" is.Length prodRes.offsets
-    return ()
-  with ex ->
-    Log.error "%O" ex
-    return ()
-})
-|> Async.ParallelThrottledIgnore parallelism
-|> Async.RunSynchronously
+    Interlocked.Add(&completed, is.Length) |> ignore
+    return () })
+  |> Async.ParallelThrottledIgnore parallelism
+  |> Async.RunSynchronously
+with ex ->
+  Log.error "%O" ex
 
-Log.info "producer_run_completed|messages=%i batch_size=%i message_size=%i parallelism=%i" N batchSize messageSize parallelism
+sw.Stop ()
 
-System.Threading.Thread.Sleep 2000
+let missing = N - completed
+let ratePerSec = float completed / sw.Elapsed.TotalSeconds
+
+Log.info "producer_run_completed|messages=%i missing=%i batch_size=%i message_size=%i parallelism=%i elapsed_sec=%f rate_per_sec=%f MB=%i" completed missing batchSize messageSize parallelism sw.Elapsed.TotalSeconds ratePerSec volumeMB
+
+Thread.Sleep 2000

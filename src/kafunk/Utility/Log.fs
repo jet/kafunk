@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Concurrent
+open System.Threading
 
 type LogLevel =
   | Trace = 0
@@ -9,10 +10,6 @@ type LogLevel =
   | Warn  = 2
   | Error = 3
   | Fatal = 4
-//  with
-//    override x.ToString () =
-//      match x with
-//      | Trace -> "TRACE" | Info -> "INFO" | Warn -> "WARN" | Error -> "ERROR" | Fatal -> "FATAL"
 
 type Logger = {
   name : string
@@ -24,19 +21,23 @@ type Logger = {
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Log =
 
+  open System
   open System.Collections.Concurrent
   open FSharp.Control
+  open System.IO
+  open System.Text
 
   let private buffer = new BlockingCollection<string>()
 
-  Async.Start (async {
-    return!
-      buffer.GetConsumingEnumerable()
-      |> AsyncSeq.ofSeq
-      |> AsyncSeq.bufferByCountAndTime 1000 500
-      |> AsyncSeq.iter (fun lines ->
-        for line in lines do
-          System.Console.Out.WriteLine line) })
+  let private consume () =
+    let bufferSize = 4096
+    use stdout = Console.OpenStandardOutput (bufferSize)
+    use sw = new StreamWriter(stdout, Encoding.UTF8, bufferSize)
+    sw.AutoFlush <- true
+    for line in buffer.GetConsumingEnumerable() do
+      sw.WriteLine line
+    
+  (let t = new Thread(ThreadStart(consume)) in t.Start())
 
   let create name = { name = name ; buffer = buffer }
 

@@ -11,8 +11,8 @@ let ``Message Compression with Gzip`` () =
     let messageBytes = [| 1uy; 2uy; 3uy; 4uy; 2uy; 6uy; 8uy |]
     let message2Bytes = [| 1uy; 2uy; 3uy; 2uy |]
 
-    let message = Message.create (Binary.ofArray messageBytes) None None
-    let message2 = Message.create (Binary.ofArray message2Bytes) None None
+    let message = Message.create (Binary.ofArray messageBytes) (Binary.empty) None
+    let message2 = Message.create (Binary.ofArray message2Bytes) (Binary.empty) None
     
     let inputMessage =
         Compression.gzip [message; message2]
