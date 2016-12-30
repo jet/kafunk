@@ -6,20 +6,21 @@ open FSharp.Control
 open Kafunk
 open System
 
-let topic = "test-topic"
 let host = "localhost:9092"
+let topic = "test-topic"
 let conn = Kafka.connHost host
 
-let offsetRes =
-  Kafka.Composite.topicOffsets conn (Time.EarliestOffset, 1) topic
+let offsets =
+  Offsets.offsets conn topic [] [Time.EarliestOffset] 1
   |> Async.RunSynchronously
+
+let offsetRes = Map.find Time.EarliestOffset offsets
 
 printfn "offset response topics=%i" offsetRes.topics.Length
 for (tn,ps) in offsetRes.topics do
   for p in ps do
     for o in p.offsets do
       printfn "topic=%s partition=%i offset=%i" tn p.partition o
-
 
 let (tn,ps) = offsetRes.topics.[0]
 
