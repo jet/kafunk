@@ -1,3 +1,7 @@
+### 0.0.5 - 30.12.2016
+
+* Auto recover producer from error code 2
+
 ### 0.0.4 - 29.12.2016
 
 * Consumer fetch request batching by broker
