@@ -134,24 +134,26 @@ module AsyncEx =
 //      use sm = new SemaphoreSlim(parallelism)
 //      use cde = new CountdownEvent(1)
 //      let tcs = new TaskCompletionSource<unit>()
-//      //ct.Register (fun () -> tcs.TrySetCanceled () |> ignore) |> ignore
+//      ct.Register (fun () -> tcs.TrySetCanceled () |> ignore) |> ignore
+//      let signal () = 
+//        if (cde.Signal ()) then
+//          tcs.TrySetResult () |> ignore
 //      let wrap a = async {
+//        if tcs.Task.IsCompleted then return ()
 //        cde.AddCount 1
 //        sm.Wait ()
 //        try
-//          let! _a = a
+//          let! _ = a
 //          sm.Release () |> ignore
-//          if (cde.Signal ()) then
-//            tcs.TrySetResult () |> ignore
+//          signal ()
 //          return ()
 //        with ex ->
 //          tcs.TrySetException ex |> ignore }
-//      let wrap = wrap >> Async.tryCancelled (fun _ -> tcs.TrySetCanceled () |> ignore)
+//      //let wrap = wrap >> Async.tryCancelled (fun _ -> tcs.TrySetCanceled () |> ignore)
 //      use en = xs.GetEnumerator()
 //      while not (tcs.Task.IsCompleted) && en.MoveNext() do
 //        Async.Start (wrap en.Current, ct)
-//      if (cde.Signal ()) then
-//        tcs.TrySetResult () |> ignore
+//      signal ()
 //      return! tcs.Task |> Async.AwaitTask }
 
     static member ParallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
@@ -159,7 +161,8 @@ module AsyncEx =
       let sm = new SemaphoreSlim(parallelism)
       let cde = new CountdownEvent(1)
       let tcs = new TaskCompletionSource<unit>()
-      ct.Register(Action(fun () -> tcs.TrySetCanceled() |> ignore)) |> ignore
+      if not ct.IsCancellationRequested then
+        ct.Register(Action(fun () -> tcs.TrySetCanceled() |> ignore)) |> ignore
       let tryComplete () =
         if cde.Signal() then
           tcs.SetResult(())
@@ -178,7 +181,7 @@ module AsyncEx =
         while not (tcs.Task.IsCompleted) && en.MoveNext() do
           sm.Wait()
           cde.AddCount(1)
-          Async.StartWithContinuations (en.Current, ok, err, cnc, ct)
+          Async.StartThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
         tryComplete ()
         do! tcs.Task |> Async.AwaitTaskCancellationAsError
       finally

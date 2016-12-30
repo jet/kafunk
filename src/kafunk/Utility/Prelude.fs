@@ -246,7 +246,7 @@ module ResultEx =
 
   let inline Failure e : Result<'a, 'e> = Choice2Of2 e
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Result =
 
   let inline success a : Result<'a, 'e> = Choice1Of2 a
@@ -359,6 +359,93 @@ type ObjectPool<'a>(initial:int, create:unit -> 'a) =
 
 // --------------------------------------------------------------------------------------------------
 
+
+[<Compile(Module)>]
+module Observable =
+
+  open System
+  open System.Threading
+  open System.Collections.Concurrent
+
+  let private disposable dispose = 
+    { new IDisposable with member __.Dispose () = dispose () }
+
+  let create (subscribe:IObserver<_> -> unit -> unit) =
+    { new IObservable<_> with member __.Subscribe(observer) = subscribe observer |> disposable }
+
+  let interval (timeSpan:TimeSpan) : IObservable<unit> =
+    let timeSpanMs = int timeSpan.TotalMilliseconds
+    create (fun obs ->
+      let cts = new CancellationTokenSource()
+      let rec loop() = async {
+        do! Async.Sleep timeSpanMs
+        obs.OnNext()
+        if cts.IsCancellationRequested then return ()
+        else return! loop() }
+      Async.Start (loop(), cts.Token)
+      fun() -> cts.Cancel(false) ; cts.Dispose())
+
+  let bufferByTime (timeSpan:TimeSpan) (source:IObservable<'a>) =
+
+    create (fun (observer:IObserver<'a[]>) ->
+
+      let batchQueue = new BlockingCollection<'a>()
+
+      let batches =
+        interval timeSpan
+        |> Observable.map (fun _ ->
+          let batch = new ResizeArray<_>(batchQueue.Count)
+          let mutable item : 'a = Unchecked.defaultof<'a>
+          while (batchQueue.TryTake(&item)) do batch.Add(item)
+          batch.ToArray())
+
+      let sourceSubs =
+        source.Subscribe <| { new IObserver<_> with
+          member __.OnNext(a) =
+            batchQueue.Add a
+          member __.OnError(e) = 
+            observer.OnError(e)
+          member __.OnCompleted() = 
+            observer.OnCompleted() }
+
+      let batchSubs = batches.Subscribe (observer.OnNext)
+
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+
+  let bufferByTimeAndCount (timeSpan:TimeSpan) (count:int) (source:IObservable<'a>) =
+
+    let takeAny (queue:BlockingCollection<'a>) (count:int) =
+      let batch = new ResizeArray<_>(count)
+      let mutable item : 'a = Unchecked.defaultof<'a>
+      while (batch.Count < count && queue.TryTake(&item)) do batch.Add(item)
+      batch.ToArray()
+
+    create (fun (observer:IObserver<'a[]>) ->
+
+      let batchQueue = new BlockingCollection<'a>(count)
+      let batchEvent = new Event<unit>()
+
+      let batches =
+        Observable.merge (interval timeSpan) batchEvent.Publish
+        |> Observable.choose (fun () ->
+          let batch = takeAny batchQueue count
+          if batch.Length > 0 then Some batch
+          else None)
+
+      let sourceSubs =
+        source.Subscribe <| { new IObserver<_> with
+          member __.OnNext(a) =
+            batchQueue.Add a
+            if batchQueue.Count >= count then
+              batchEvent.Trigger()
+          member __.OnError(e) = 
+            observer.OnError(e)
+          member __.OnCompleted() = 
+            observer.OnCompleted() }
+
+      let batchSubs = batches.Subscribe(observer.OnNext)
+
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
 
 
 module KafkaUri =

@@ -84,23 +84,23 @@ type ProducerConfig = {
   /// which the message should be written to.
   partitioner : Partitioner
 
-  /// When specified, buffers requests by the specified buffer size and buffer timeout to take advantage of batching.
-  bufferCountAndTime : (int * int) option
+//  /// When specified, buffers requests by the specified buffer size and buffer timeout to take advantage of batching.
+//  bufferCountAndTime : (int * int) option
 
 } with
 
   /// Creates a producer configuration.
-  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, ?bufferTimeoutMs:int) =
+  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout (*, ?bufferSize:int , ?bufferTimeoutMs:int)*)) =
     {
       topic = topic
       requiredAcks = defaultArg requiredAcks RequiredAcks.Local
       compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
       partitioner = partition
-      bufferCountAndTime = 
-        match bufferSize, bufferTimeoutMs with
-        | Some x, Some y -> Some (x,y)
-        | _ -> None
+//      bufferCountAndTime = 
+//        match bufferSize, bufferTimeoutMs with
+//        | Some x, Some y -> Some (x,y)
+//        | _ -> None
     }
 
 
@@ -121,21 +121,16 @@ module Producer =
   let private Log = Log.create "Kafunk.Producer"
 
   let private getState (conn:KafkaConn) (t:TopicName) (oldVersion:int) = async {
-    try
-      Log.info "fetching_topic_metadata|topic=%s producer_version=%i" t oldVersion
-      let! topicPartitions = conn.GetMetadata [| t |]
-      // TODO: handle missing topic errors
-      let topicPartitions = topicPartitions |> Map.find t
-      return { partitions = topicPartitions ; version = oldVersion + 1 }
-    with ex ->
-      Log.error "error|%O" ex
-      return raise ex }
+    Log.info "fetching_topic_metadata|topic=%s producer_version=%i" t oldVersion
+    let! topicPartitions = conn.GetMetadata [| t |]
+    let topicPartitions = topicPartitions |> Map.find t
+    return { partitions = topicPartitions ; version = oldVersion + 1 } }
 
   /// Resets producer state if caller state has matching version,
   /// otherwise returns the newer version of producer state.
   let private reset (p:Producer) (callerState:ProducerState) =
     p.state
-    |> MVar.updateAsync (fun (currentState:ProducerState) -> async {
+    |> MVar.updateAsync (fun currentState -> async {
       if callerState.version = currentState.version then
         return! getState p.conn p.config.topic currentState.version 
       else
@@ -145,9 +140,7 @@ module Producer =
   let createAsync (conn:KafkaConn) (cfg:ProducerConfig) : Async<Producer> = async {
     Log.info "initializing_producer|topic=%s" cfg.topic
     let p = { state = MVar.create () ; config = cfg ; conn = conn }
-    let init () =
-      p.state |> MVar.putAsync (getState conn cfg.topic 0)
-    let! state = init ()
+    let! state = p.state |> MVar.putAsync (getState conn cfg.topic 0)
     Log.info "producer_initialized|topic=%s partitions=%A" cfg.topic state.partitions
     return p }
 
@@ -164,33 +157,40 @@ module Producer =
     let cfg = p.config
     let send = Kafka.produce conn
 
-    let sendBatch (partitions:Partition[]) (ms:ProducerMessage[]) =
+    // TODO: rediscover partition set on broker rebalance
+    let produce (state:ProducerState) (ms:ProducerMessage[]) = async {
       let pms =
         ms
-        |> Seq.groupBy (fun pm -> cfg.partitioner (cfg.topic, partitions, pm))
+        |> Seq.groupBy (fun pm -> cfg.partitioner (cfg.topic, state.partitions, pm))
         |> Seq.map (fun (p,pms) ->
-          let messages = pms |> Seq.map (fun pm -> Message.create pm.value (Some pm.key) None) 
+          let ms = 
+            pms 
+            |> Seq.map (fun pm -> Message.create pm.value pm.key None) 
+            |> MessageSet.ofMessages
           //let ms = Compression.compress cfg.compression messages
-          let ms = MessageSet.ofMessages messages
           p,ms)
         |> Seq.toArray
       let req = ProduceRequest.ofMessageSetTopics [| cfg.topic, pms |] cfg.requiredAcks cfg.timeout
-      send req
-
-    let rec produce (state:ProducerState) (ms:ProducerMessage[]) = async {
-      let! res = sendBatch state.partitions ms
-      if res.topics.Length = 0 then
-        // TODO: handle errors here rather than inside of connection
-        let! state' = reset p state
-        return! produce state' ms
-      else 
-        let os = 
+      let! res = send req |> Async.Catch
+      match res with
+      | Success res ->
+        let oks,errors =
           res.topics
           |> Seq.collect (fun (_t,os) ->
-            os |> Seq.map (fun (p,_,o) -> p,o))
-          |> Seq.toArray
-        let res' = ProducerResult(os)
-        return res' }
+            os
+            |> Seq.map (fun (p,ec,o) ->
+              match ec with
+              | ErrorCode.NoError -> Choice1Of2 (p,o)
+              | ErrorCode.InvalidMessage -> Choice2Of2 (p,o)
+              | _ -> Choice2Of2 (p,o)))
+          |> Seq.partitionChoices
+        if errors.Length > 0 then
+          Log.error "produce_errors|%A" errors
+          return failwithf "produce_errors|%A" errors
+        return ProducerResult(oks)
+      | Failure ex ->
+        Log.error "produce_exception|request=%s error=%O" (ProduceRequest.Print req) ex
+        return raise ex }
 
     let! state = MVar.get p.state
     return! produce state ms }

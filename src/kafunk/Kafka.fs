@@ -209,15 +209,21 @@ type RetryAction =
       | ErrorCode.NoError -> None
       
       | ErrorCode.LeaderNotAvailable | ErrorCode.RequestTimedOut | ErrorCode.GroupLoadInProgressCode | ErrorCode.GroupCoordinatorNotAvailableCode
-      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode | ErrorCode.UnknownTopicOrPartition ->
+      | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode (*| ErrorCode.UnknownTopicOrPartition*) ->
         Some (RetryAction.WaitAndRetry)
       
+      | ErrorCode.UnknownTopicOrPartition ->
+        Some (RetryAction.Escalate)
+
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition (*| ErrorCode.OffsetOutOfRange*) ->
         Some (RetryAction.RefreshMetadataAndRetry [||])
 
       | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange -> 
-        Some (RetryAction.PassThru) // escalate to consumer group logic.
+        Some (RetryAction.PassThru)
       
+      | ErrorCode.InvalidMessage ->
+        Some (RetryAction.Escalate)
+
       | _ ->
         Some (RetryAction.Escalate)
 
@@ -250,9 +256,13 @@ type RetryAction =
         r.topics
         |> Seq.tryPick (fun (_tn,ps) ->
           ps
-          |> Seq.tryPick (fun (_p,ec,_os) -> 
-            RetryAction.errorRetryAction ec
-            |> Option.map (fun action -> ec,action,"")))
+          |> Seq.tryPick (fun (_p,ec,_os) ->
+            match ec with
+            | ErrorCode.NoError -> None
+            | ErrorCode.InvalidMessage -> Some (ec, RetryAction.WaitAndRetry, "")
+            | ec ->
+              RetryAction.errorRetryAction ec
+              |> Option.map (fun action -> ec,action,"")))
       
       | ResponseMessage.GroupCoordinatorResponse r ->
         RetryAction.errorRetryAction r.errorCode
@@ -474,7 +484,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 | None -> 
                   return res
                 | Some (errorCode,action,msg) ->
-                  Log.error "response_errored|endpoint=%O error_code=%i retry_action=%A message=%s res=%s" ep errorCode action msg (ResponseMessage.Print res)
+                  Log.error "response_errored|endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
                   match action with
                   | RetryAction.PassThru ->
                     return res

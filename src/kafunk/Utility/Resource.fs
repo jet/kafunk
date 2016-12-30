@@ -50,7 +50,7 @@ module Resource =
       let version = 
         match prevEpoch with
         | Some prev ->
-          Log.warn "closing_previous_resource_epoch|version=%i cancellation_requested=%b" prev.version prev.closed.IsCancellationRequested
+          //Log.warn "closing_previous_resource_epoch|version=%i cancellation_requested=%b" prev.version prev.closed.IsCancellationRequested
           prev.closed.Cancel()
           prev.version + 1
         | None ->
@@ -97,7 +97,7 @@ module Resource =
             do! Async.Sleep 2000
             return raise ex
         else
-          Log.warn "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
+          Log.trace "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
           return currentEpoch }
       cell |> MVar.updateAsync update
     

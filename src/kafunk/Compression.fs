@@ -9,7 +9,7 @@ module Compression =
 
   let private createMessage value compression =
     let attrs = compression |> sbyte |> Some
-    Message.create value None attrs
+    Message.create value Binary.empty attrs
 
   // The only thing that can be compressed is a MessageSet, not a single Message; this results in a message containing the compressed set
   let gzip messages =
