@@ -90,16 +90,9 @@ type ConsumerState = {
   generationId : GenerationId
   memberId : MemberId
   leaderId : LeaderId
-  assignments : TopicPartitionAssignment[]
+  assignments : Partition[]
   closed : TaskCompletionSource<bool>
 } 
-
-/// Partition assignment for an individual consumer.
-and TopicPartitionAssignment = {
-  topic : TopicName
-  partition : Partition
-  initOffset : Offset
-}
 
 /// A consumer.
 type Consumer = private {
@@ -219,11 +212,20 @@ module Consumer =
     let! state = MVar.get c.state
     return! commit c.conn c.cfg state c.cfg.topic offsets }
 
+  /// Explicitly commits offsets to a consumer group, to a specific offset time.
+  let commitOffsetsToTime (c:Consumer) (time:Time) = async {
+    let! offsets = Offsets.offsets c.conn c.cfg.topic [] [time] 1
+    let offsetRes = Map.find time offsets
+    let os =
+      offsetRes.topics
+      |> Seq.collect (fun (_t,ps) -> ps |> Seq.map (fun p -> p.partition, p.offsets.[0]))
+      |> Seq.toArray
+    return! commitOffsets c os }
+
   /// Fetches the starting offset for the specified topic * partitions.
   let private fetchOffsets (c:Consumer) (topic:TopicName) (partitions:Partition[]) : Async<(Partition * Offset)[]> = async {
     let conn = c.conn
     let cfg = c.cfg
-    Log.info "fetching_group_member_offsets|group_id=%s time=%i topic=%s partitions=%A" cfg.groupId cfg.initialFetchTime topic partitions 
     let req = OffsetFetchRequest(cfg.groupId, [| topic, partitions |])
     let! res = Kafka.offsetFetch conn req |> Async.Catch
     match res with
@@ -387,23 +389,10 @@ module Consumer =
         if assignment.partitionAssignment.assignments.Length = 0 then
           return failwith "no partitions assigned!"
 
-        let! initOffsets =
+        let assignments = 
           assignment.partitionAssignment.assignments
-          |> Seq.map (fun (tn,ps) -> async {
-            let! offsets = fetchOffsets consumer tn ps
-            return tn,offsets })
-          |> Async.Parallel
-
-        let assignments =
-          initOffsets
-          |> Array.collect (fun (tn,os) -> os |> Array.map (fun (p,o) -> { topic = tn ; partition = p ; initOffset = o }))
-        
-        let assignmentsStr =
-          assignments
-          |> Seq.map (fun a -> sprintf "[partition=%i init_offset=%i]" a.partition a.initOffset)
-          |> String.concat " ; "
-          
-        Log.info "fetched_initial_offsets|topic=%s offsets=%s" cfg.topic assignmentsStr
+          |> Seq.collect (fun (_,ps) -> ps)
+          |> Seq.toArray
 
         let state =
           {
@@ -463,14 +452,17 @@ module Consumer =
     let cfg = consumer.cfg
     let topic = cfg.topic
     let fetch = Kafka.fetch consumer.conn |> AsyncFunc.catch
-
+    
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:ConsumerState) = async {
       
+      let! initOffsets = fetchOffsets consumer cfg.topic state.assignments
+      Log.info "fetched_initial_offsets|group_id=%s member_id=%s topic=%s offsets=%s" cfg.groupId state.memberId cfg.topic (Printers.partitionOffsetPairs initOffsets)
+
       // initialize per-partition messageset buffers
       let partitionBuffers =
         state.assignments
-        |> Seq.map (fun p -> p.partition, BoundedMb.create cfg.fetchBufferSize)
+        |> Seq.map (fun p -> p, BoundedMb.create cfg.fetchBufferSize)
         |> Map.ofSeq
 
       /// Fetches the specified offsets.
@@ -562,9 +554,6 @@ module Consumer =
       let fetchStream =
         let initRetryQueue = 
           RetryQueue.create cfg.endOfTopicPollPolicy fst
-        let initOffsets =
-          state.assignments
-          |> Array.map (fun a -> a.partition, a.initOffset)
         (initOffsets, initRetryQueue)
         |> AsyncSeq.unfoldAsync
             (fun (offsets:(Partition * Offset)[], retryQueue:RetryQueue<_, _>) -> async {
@@ -657,12 +646,12 @@ module Consumer =
     (handler:ConsumerMessageSet -> Async<unit>) 
     (consumer:Consumer) : Async<unit> =
       consumer
-      |> generations 
+      |> generations
       |> AsyncSeq.iterAsync (fun (_generationId,partitionStreams) ->
-          partitionStreams
-          |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler))
-          |> Async.Parallel
-          |> Async.Ignore)
+        partitionStreams
+        |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler))
+        |> Async.Parallel
+        |> Async.Ignore)
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
