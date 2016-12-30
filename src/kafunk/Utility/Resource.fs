@@ -42,9 +42,6 @@ module Resource =
     let Log = Log.create "Resource"
     
     let cell : MVar<Epoch<'r>> = MVar.create ()
-
-    //let updateCount = ref 0
-    //let st = ref 0
    
     let create (prevEpoch:Epoch<'r> option) = async {
       let version = 
@@ -73,6 +70,9 @@ module Resource =
         let! ep' = create (Some ep)
         return ep' }
 
+    member internal __.Get () =
+      MVar.get cell |> Async.map (fun ep -> ep.resource)
+
     member internal __.Create () = async {
       return! cell |> MVar.putOrUpdateAsync create }
 
@@ -82,15 +82,8 @@ module Resource =
     member private __.Recover (callingEpoch:Epoch<'r>, req:obj, ex:exn) =
       let update currentEpoch = async {
         if currentEpoch.version = callingEpoch.version then
-          //let cnt = Interlocked.Increment updateCount
-          //let st' = Interlocked.CompareExchange (st, 1, 0)
-          //if st' <> 0 then return failwith "overlapping update detected!"
-          //Log.info "started_update_to_resource|current_version=%i calling_version=%i update_count=%i st'=%i" currentEpoch.version callingEpoch.version cnt st'
           try
-            let! ep2 = recover req ex callingEpoch 
-            //let st' = Interlocked.CompareExchange (st, 0, 1)
-            //if st' <> 1 then return failwith "overlapping update detected!"
-            //Log.info "completed_updated_to_resource|current_version=%i calling_vesion=%i new_version=%i update_count=%i st'=%i" currentEpoch.version callingEpoch.version ep2.version cnt st'
+            let! ep2 = recover req ex callingEpoch
             return ep2
           with ex ->
             Log.error "recovery_failed|error=%O" ex

@@ -1,3 +1,9 @@
+### 0.0.6 - 30.12.2016
+
+* Fix bug in Async.choose
+* Consumer.commitOffsetsToTime
+* Consumer doesn't fetch offsets until its starts consuming
+
 ### 0.0.5 - 30.12.2016
 
 * Auto recover producer from error code 2

@@ -32,7 +32,7 @@ module Log =
   let private consume () =
     let bufferSize = 4096
     use stdout = Console.OpenStandardOutput (bufferSize)
-    use sw = new StreamWriter(stdout, Encoding.UTF8, bufferSize)
+    use sw = new StreamWriter(stdout, Encoding.Default, bufferSize)
     sw.AutoFlush <- true
     for line in buffer.GetConsumingEnumerable() do
       sw.WriteLine line
