@@ -19,7 +19,7 @@ let batchSize = argiDefault 4 "500" |> Int32.Parse
 let messageSize = argiDefault 5 "100" |> Int32.Parse
 let parallelism = argiDefault 6 "100" |> Int32.Parse
 
-let volumeMB = (N * messageSize) / 1000000
+let volumeMB = (int64 N * int64 messageSize) / int64 1000000
 let payload = Array.zeroCreate messageSize
 let batchCount = N / batchSize
 
@@ -40,19 +40,23 @@ let mutable completed = 0
 
 Async.Start (async {
   while true do
-    do! Async.Sleep (1000 * 10)
+    do! Async.Sleep (1000 * 5)
     let completed = completed
-    let mb = (completed * messageSize) / 1000000
+    let mb = (int64 completed * int64 messageSize) / int64 1000000
     Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
 
 try
   Seq.init N id
   |> Seq.batch batchSize
   |> Seq.map (fun is -> async {
-    let msgs = is |> Array.map (fun i -> ProducerMessage.ofBytes payload)
-    let! prodRes = Producer.produce producer msgs
-    Interlocked.Add(&completed, is.Length) |> ignore
-    return () })
+    try
+      let msgs = is |> Array.map (fun i -> ProducerMessage.ofBytes payload)
+      let! prodRes = Producer.produce producer msgs
+      Interlocked.Add(&completed, is.Length) |> ignore
+      return ()
+    with ex ->
+      Log.error "%O" ex
+      return () })
   |> Async.ParallelThrottledIgnore parallelism
   |> Async.RunSynchronously
 with ex ->

@@ -328,7 +328,7 @@ type ReqRepSession<'a, 'b, 's> internal
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
         let endTime = DateTime.UtcNow
         let elapsed = endTime - startTime
-        Log.warn "request_timed_out|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
+        Log.warn "request_cancelled|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore
     ct.Register (Action(cancel)) |> ignore
@@ -362,7 +362,7 @@ type ReqRepSession<'a, 'b, 's> internal
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
     let! _sent = send sessionData
     //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
-    return! rep.Task |> Async.AwaitTask }
+    return! rep.Task |> Async.AwaitTaskCancellationAsError }
 
   interface IDisposable with
     member x.Dispose() = cts.Dispose()

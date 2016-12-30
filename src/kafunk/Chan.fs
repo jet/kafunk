@@ -499,7 +499,7 @@ module Chan =
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
-      Log.info "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i error=%O" clientId (EndPoint.endpoint ep) ver ex
+      Log.warn "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i error=%O" clientId (EndPoint.endpoint ep) ver ex
       tryDispose s
       return Resource.Recovery.Recreate }
 
@@ -542,21 +542,31 @@ module Chan =
       Session.requestReply
         Session.corrId encode decode RequestMessage.awaitResponse receiveStream send
 
-    let send = 
+    let send =
       Session.send session
+
+    let send = 
+      send
       |> AsyncFunc.timeoutOption config.requestTimeout
       |> Resource.timeoutIndep socketAgent
-      |> AsyncFunc.mapOut (snd >> Option.bind id >> Result.ofOption)
+      |> AsyncFunc.catch
+      |> AsyncFunc.mapOut (fun (_,res) ->
+        match res with
+        | Success (Some (Some res)) -> Success res
+        | Success _ -> Failure (Choice1Of2 ())
+        | Failure e -> Failure (Choice2Of2 e))
       |> AsyncFunc.doBeforeAfter
           (fun req -> Log.trace "sending_request|request=%A" (RequestMessage.Print req))
           (fun (req,res) -> 
             match res with
             | Success res -> 
               Log.trace "received_response|response=%A" (ResponseMessage.Print res)
-            | Failure _ -> 
-              Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout)
+            | Failure (Choice1Of2 ()) ->
+              Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout
+            | Failure (Choice2Of2 e) ->
+              Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)
       |> Faults.AsyncFunc.retryResultThrowList 
-          (fun timeouts -> TimeoutException(sprintf "Broker request retries terminated after %i timeouts." timeouts.Length)) 
+          (fun errors -> TimeoutException(sprintf "Broker request retries terminated after %i errors." errors.Length)) 
           config.requestRetryPolicy
 
     return Chan (ep, send, Async.empty, Async.empty) }
