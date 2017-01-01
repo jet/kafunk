@@ -14,14 +14,14 @@ let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
-let N = argiDefault 3 "1000000" |> Int32.Parse
+let N = argiDefault 3 "1000000" |> Int64.Parse
 let batchSize = argiDefault 4 "500" |> Int32.Parse
 let messageSize = argiDefault 5 "100" |> Int32.Parse
 let parallelism = argiDefault 6 "100" |> Int32.Parse
 
-let volumeMB = (int64 N * int64 messageSize) / int64 1000000
+let volumeMB = (N * int64 messageSize) / int64 1000000
 let payload = Array.zeroCreate messageSize
-let batchCount = N / batchSize
+let batchCount = int (N / int64 batchSize)
 
 Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" host topic N batchSize batchCount messageSize parallelism volumeMB
 
@@ -36,7 +36,7 @@ let producer =
 
 let sw = Stopwatch.StartNew()
 
-let mutable completed = 0
+let mutable completed = 0L
 
 Async.Start (async {
   while true do
@@ -46,13 +46,12 @@ Async.Start (async {
     Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
 
 try
-  Seq.init N id
-  |> Seq.batch batchSize
+  Seq.init batchCount id
   |> Seq.map (fun is -> async {
     try
-      let msgs = is |> Array.map (fun i -> ProducerMessage.ofBytes payload)
+      let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
       let! prodRes = Producer.produce producer msgs
-      Interlocked.Add(&completed, is.Length) |> ignore
+      Interlocked.Add(&completed, int64 batchSize) |> ignore
       return ()
     with ex ->
       Log.error "%O" ex
