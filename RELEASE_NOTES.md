@@ -1,3 +1,8 @@
+### 0.0.7-alpha001 - 02.01.2017
+
+* Fix overflow bug in Partitioner.roundRobin
+* Error flow monitoring
+
 ### 0.0.6 - 30.12.2016
 
 * Fix bug in Async.choose
