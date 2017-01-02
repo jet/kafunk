@@ -46,6 +46,13 @@ Async.Start (async {
     Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
 
 try
+
+  let errMonitor = 
+    FlowMonitor.escalateOnThreshold
+      100
+      (TimeSpan.FromSeconds 1)
+      (Exn.ofSeq)
+
   Seq.init batchCount id
   |> Seq.map (fun is -> async {
     try
@@ -55,6 +62,7 @@ try
       return ()
     with ex ->
       Log.error "%O" ex
+      errMonitor ex
       return () })
   |> Async.ParallelThrottledIgnore parallelism
   |> Async.RunSynchronously

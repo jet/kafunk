@@ -2,6 +2,51 @@
 
 open System
 open FSharp.Control
+open System.Threading
+open System.Threading.Tasks
+
+/// Operations on System.Exception.
+[<Compile(Module)>]
+module Exn =
+  
+  open System
+  open System.Runtime.ExceptionServices
+
+  /// Expands all inner exceptions, including for AggregateException.
+  let rec toSeq (e:exn) =
+    match e with
+    | :? AggregateException as ae -> 
+      seq {
+        for ie in ae.InnerExceptions do 
+          yield! toSeq ie }
+    | _ -> 
+      if isNull e.InnerException then 
+        Seq.singleton e
+      else
+        seq {
+          yield e
+          yield! toSeq e.InnerException }
+
+  /// Creates an aggregate exception, ensuring to flatten contiguous AggregateException
+  /// instances.
+  let ofSeq (es:#exn seq) =
+    new AggregateException(es |> Seq.collect toSeq) :> exn
+
+  /// For convenience, let exceptions form a monoid.
+  let monoid : Monoid<exn> =
+    Monoid.monoid 
+      (ofSeq Seq.empty) 
+      (fun e1 e2 -> ofSeq [e1;e2])
+
+  let inline throwEdi (edi:ExceptionDispatchInfo) =
+    edi.Throw ()
+    failwith "undefined"
+
+  let inline captureEdi (e:exn) =
+    ExceptionDispatchInfo.Capture e
+
+  let inline upCast (e:#exn) : exn = upcast e
+
 
 /// The state of a retry workflow.
 [<StructuredFormatDisplay("RetryState({attempt})")>]
@@ -18,7 +63,7 @@ type RetryPolicy =
   | RP of (RetryState -> TimeSpan option)
 
 /// Operations on retry policies.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module RetryPolicy = 
   
   let private un (RP f) = f
@@ -127,9 +172,11 @@ module RetryQueue =
   /// Returns all items in the queue due at DateTime.UtcNow.
   let dueNow (q:RetryQueue<'k, 'a>) = dueAt q (DateTime.UtcNow)
 
-  /// Returns an async computation which completes when all current queued items are due.
+  /// Returns an async computation which completes when all current queued items are due
+  /// and returns the due items.
   let dueNowAwait (q:RetryQueue<'k, 'a>) = async {
-    let now = DateTime.UtcNow
+    if q.items.Count = 0 then return Seq.empty else
+    let now = DateTime.UtcNow    
     let latestDue = items q |> Seq.map snd |> Seq.max
     if now >= latestDue then 
       return dueAt q now
@@ -146,58 +193,75 @@ module RetryQueue =
   let retryRemoveAll q retryItems removeItems =
     let q' = retryAll q retryItems 
     removeAll q' removeItems
-  
+      
 
-
-
-
-  
-
-
-/// Operations on System.Exception.
 [<Compile(Module)>]
-module Exn =
+module FlowMonitor =
   
-  open System
-  open System.Runtime.ExceptionServices
+  /// Returns a stream of underflows beyond a threshold of the specified input stream.
+  /// Threshold = less than @count events are observed during @period.
+  let undeflows (count:int) (period:TimeSpan) (stream:AsyncSeq<'a>) =
+    stream
+    |> AsyncSeq.bufferByTime period
+    |> AsyncSeq.choose (fun buf ->
+      if buf.Length < count then Some buf
+      else None)
 
-  let rec toSeq (e:exn) =
-    match e with
-    | :? AggregateException as ae -> 
-      seq {
-        for ie in ae.InnerExceptions do 
-          yield! toSeq ie }
-    | _ -> 
-      Seq.singleton e
+  /// Returns a stream of overflows beyond a threshold of the specified input stream.
+  /// Threshold = more than @count events are observed during @period.
+  let overflows (count:int) (period:TimeSpan) (stream:AsyncSeq<'a>) =
+    stream
+    |> AsyncSeq.map (fun a -> a,DateTime.UtcNow)
+    |> AsyncSeq.windowed count
+    |> AsyncSeq.choose (fun buf ->
+      let _,dt0 = buf.[0]
+      let _,dt1 = buf.[buf.Length - 1]
+      if (dt1 - dt0) <= period then Some (buf |> Seq.map fst |> Seq.toArray)
+      else None)
 
-  let ofSeq (es:#exn seq) =
-    new AggregateException(es |> Seq.collect toSeq) :> exn
+  /// Returns a stream of messages received from the mailbox.
+  let private watchMb mb =
+    AsyncSeq.replicateInfiniteAsync (Mb.take mb)
 
-  let monoid : Monoid<exn> =
-    Monoid.monoid 
-      (ofSeq Seq.empty) 
-      (fun e1 e2 -> ofSeq [e1;e2])
+  /// Creates a sink and the resulting stream.
+  let sinkStream<'a> : ('a -> unit) * AsyncSeq<'a> =
+    let mb = Mb.create ()
+    let stream = watchMb mb
+    mb.Post, stream
+      
+  let escalateOnExnOverflow (count:int) (period:TimeSpan) (e:'a[] -> exn) (f:'a -> _) =
+    let post,stream = sinkStream
+    let ivar = TaskCompletionSource<_>()
+    stream
+    |> overflows count period
+    |> AsyncSeq.tryFirst
+    |> Async.map (Option.iter ivar.SetResult)
+    |> Async.Start
+    let report a =
+      post a
+      if ivar.Task.IsCompleted then 
+        raise (e ivar.Task.Result)
+      f a
+    report
 
-//  let isCritical (e:exn) =
-//    match e with
-//    | :? OutOfMemoryException | :? StackOverflowException -> true
-//    | _ -> false
+  let escalateOnThreshold (count:int) (period:TimeSpan) (e:'a[] -> exn) =
+    let post,stream = sinkStream
+    let ivar = TaskCompletionSource<_>()
+    stream
+    |> overflows count period
+    |> AsyncSeq.tryFirst
+    |> Async.map (Option.iter ivar.SetResult)
+    |> Async.Start
+    let report a =
+      post a
+      if ivar.Task.IsCompleted then 
+        raise (e ivar.Task.Result)
+    report
 
-  let inline throwEdi (edi:ExceptionDispatchInfo) =
-    edi.Throw ()
-    failwith "undefined"
-
-  let inline captureEdi (e:exn) =
-    ExceptionDispatchInfo.Capture e
-
-  let inline upCast (e:#exn) : exn = upcast e
-    
 
 
 /// Fault tolerance.
 module Faults =
-
-  let private Log = Log.create "Kafunk.Faults"
 
   /// Returns a stream of async computations corresponding to invocations of the argument 
   /// computation until the computations succeeds.
@@ -277,9 +341,6 @@ module Faults =
 
     let retryResultThrowList (ex:'e list -> #exn) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex p
-    
-    let doAfterError (g:'a * 'e -> unit) : ('a -> Async<Result<'b, 'e>>) -> ('a -> Async<Result<'b, 'e>>) =
-      AsyncFunc.mapOut (fun (a,b) -> b |> Result.mapError (fun e -> g (a,e) ; e))
       
 
 
