@@ -19,7 +19,7 @@ let ``Async.timeoutResult should timeout`` () =
 [<Test>]
 let ``AsyncFunc.timeoutResult should return timeout result and cancel when past timeout`` () =
   
-  let serviceTime = TimeSpan.FromMilliseconds 50.0
+  let serviceTime = TimeSpan.FromMilliseconds 100.0
 
   for timeout in [true;false] do
 
@@ -30,10 +30,13 @@ let ``AsyncFunc.timeoutResult should return timeout result and cancel when past 
     let cancelled = ref false
 
     let sleepEcho () = async {
-      use! _cnc = Async.OnCancel (fun () -> cancelled := true)
       do! Async.Sleep sleepTime
       return () }
 
+    let sleepEcho = 
+      sleepEcho
+      >> Async.tryCancelled (fun _ -> cancelled := true)
+    
     let sleepEcho =
       sleepEcho
       |> AsyncFunc.timeoutResult serviceTime
@@ -45,8 +48,8 @@ let ``AsyncFunc.timeoutResult should return timeout result and cancel when past 
 
     let actual = sleepEcho () |> Async.RunSynchronously
   
-    shouldEqual expected actual None
-    shouldEqual timeout !cancelled None
+    shouldEqual expected actual (Some (sprintf "timeout=%b result" timeout))
+    shouldEqual timeout !cancelled (Some (sprintf "timeout=%b cancellation" timeout))
 
   
 [<Test>]
