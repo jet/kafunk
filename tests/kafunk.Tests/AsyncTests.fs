@@ -12,7 +12,7 @@ let ``Async.never should regard infinite timeouts as equal`` () =
 
 [<Test>]
 let ``Async.choose should choose first to complete`` () =
-  for fastMs in [1..20] do
+  for fastMs in [20..30] do
     let fast = Async.Sleep fastMs |> Async.map Choice1Of2
     let slow = Async.Sleep (fastMs + 20) |> Async.map Choice2Of2
     let first = Async.choose fast slow
