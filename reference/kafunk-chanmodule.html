@@ -55,15 +55,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '123', 123)" onmouseover="showTip(event, '123', 123)">
+          <code onmouseout="hideTip(event, '131', 131)" onmouseover="showTip(event, '131', 131)">
             connect config clientId ep
           </code>
-          <div class="tip" id="123">
+          <div class="tip" id="131">
             <strong>Signature:</strong> config:ChanConfig -&gt; clientId:ClientId -&gt; ep:EndPoint -&gt; Async&lt;Chan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L401-401" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L468-468" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -77,159 +77,15 @@ Only a single channel per endpoint is needed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '124', 124)" onmouseover="showTip(event, '124', 124)">
-            connectEndPoint config clientId ep
-          </code>
-          <div class="tip" id="124">
-            <strong>Signature:</strong> config:ChanConfig -&gt; clientId:ClientId -&gt; ep:EndPoint -&gt; Async&lt;EndPoint * Chan&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L497-497" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '125', 125)" onmouseover="showTip(event, '125', 125)">
-            connectHost config clientId (host, port)
-          </code>
-          <div class="tip" id="125">
-            <strong>Signature:</strong> config:ChanConfig -&gt; clientId:ClientId -&gt; (host:Host * port:Port) -&gt; Async&lt;EndPoint * Chan&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L501-501" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '126', 126)" onmouseover="showTip(event, '126', 126)">
+          <code onmouseout="hideTip(event, '132', 132)" onmouseover="showTip(event, '132', 132)">
             describeGroups 
           </code>
-          <div class="tip" id="126">
+          <div class="tip" id="132">
             <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; DescribeGroupsRequest -&gt; Async&lt;DescribeGroupsResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L396-396" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '127', 127)" onmouseover="showTip(event, '127', 127)">
-            fetch 
-          </code>
-          <div class="tip" id="127">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; FetchRequest -&gt; Async&lt;FetchResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L385-385" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '128', 128)" onmouseover="showTip(event, '128', 128)">
-            groupCoordinator 
-          </code>
-          <div class="tip" id="128">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; GroupCoordinatorRequest -&gt; Async&lt;GroupCoordinatorResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L388-388" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '129', 129)" onmouseover="showTip(event, '129', 129)">
-            heartbeat 
-          </code>
-          <div class="tip" id="129">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; HeartbeatRequest -&gt; Async&lt;HeartbeatResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L393-393" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '130', 130)" onmouseover="showTip(event, '130', 130)">
-            joinGroup 
-          </code>
-          <div class="tip" id="130">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; Request -&gt; Async&lt;Response&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L391-391" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '131', 131)" onmouseover="showTip(event, '131', 131)">
-            leaveGroup 
-          </code>
-          <div class="tip" id="131">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; LeaveGroupRequest -&gt; Async&lt;LeaveGroupResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L394-394" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '132', 132)" onmouseover="showTip(event, '132', 132)">
-            listGroups 
-          </code>
-          <div class="tip" id="132">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; ListGroupsRequest -&gt; Async&lt;ListGroupsResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L395-395" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L463-463" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -240,50 +96,54 @@ Only a single channel per endpoint is needed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '133', 133)" onmouseover="showTip(event, '133', 133)">
-            metadata 
+            discoverConnect (...)
           </code>
           <div class="tip" id="133">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; Request -&gt; Async&lt;MetadataResponse&gt;<br />
+            <strong>Signature:</strong> config:ChanConfig -&gt; clientId:ClientId -&gt; (host:Host * port:Port) -&gt; Async&lt;Chan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L384-384" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L575-575" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Discovers brokers via DNS and connects to the first IPv4.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '134', 134)" onmouseover="showTip(event, '134', 134)">
-            offset 
+            endpoint arg1
           </code>
           <div class="tip" id="134">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; OffsetRequest -&gt; Async&lt;OffsetResponse&gt;<br />
+            <strong>Signature:</strong> Chan -&gt; EndPoint<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L387-387" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L446-446" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Gets the endpoint.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '135', 135)" onmouseover="showTip(event, '135', 135)">
-            offsetCommit 
+            fetch 
           </code>
           <div class="tip" id="135">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; OffsetCommitRequest -&gt; Async&lt;OffsetCommitResponse&gt;<br />
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; FetchRequest -&gt; Async&lt;FetchResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L389-389" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L452-452" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -294,14 +154,14 @@ Only a single channel per endpoint is needed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '136', 136)" onmouseover="showTip(event, '136', 136)">
-            offsetFetch 
+            groupCoordinator 
           </code>
           <div class="tip" id="136">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; OffsetFetchRequest -&gt; Async&lt;OffsetFetchResponse&gt;<br />
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; GroupCoordinatorRequest -&gt; Async&lt;GroupCoordinatorResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L390-390" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L455-455" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -312,14 +172,14 @@ Only a single channel per endpoint is needed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '137', 137)" onmouseover="showTip(event, '137', 137)">
-            produce 
+            heartbeat 
           </code>
           <div class="tip" id="137">
-            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; ProduceRequest -&gt; Async&lt;ProduceResponse&gt;<br />
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; HeartbeatRequest -&gt; Async&lt;HeartbeatResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L386-386" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L460-460" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -330,34 +190,158 @@ Only a single channel per endpoint is needed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '138', 138)" onmouseover="showTip(event, '138', 138)">
-            reconnect arg1
+            joinGroup 
           </code>
           <div class="tip" id="138">
-            <strong>Signature:</strong> Chan -&gt; Async&lt;unit&gt;<br />
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; Request -&gt; Async&lt;Response&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L382-382" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L458-458" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Re-established the connection to the socket.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '139', 139)" onmouseover="showTip(event, '139', 139)">
-            send arg1 req
+            leaveGroup 
           </code>
           <div class="tip" id="139">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; LeaveGroupRequest -&gt; Async&lt;LeaveGroupResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L461-461" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '140', 140)" onmouseover="showTip(event, '140', 140)">
+            listGroups 
+          </code>
+          <div class="tip" id="140">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; ListGroupsRequest -&gt; Async&lt;ListGroupsResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L462-462" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '141', 141)" onmouseover="showTip(event, '141', 141)">
+            metadata 
+          </code>
+          <div class="tip" id="141">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; Request -&gt; Async&lt;MetadataResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L451-451" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '142', 142)" onmouseover="showTip(event, '142', 142)">
+            offset 
+          </code>
+          <div class="tip" id="142">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; OffsetRequest -&gt; Async&lt;OffsetResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L454-454" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '143', 143)" onmouseover="showTip(event, '143', 143)">
+            offsetCommit 
+          </code>
+          <div class="tip" id="143">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; OffsetCommitRequest -&gt; Async&lt;OffsetCommitResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L456-456" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '144', 144)" onmouseover="showTip(event, '144', 144)">
+            offsetFetch 
+          </code>
+          <div class="tip" id="144">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; OffsetFetchRequest -&gt; Async&lt;OffsetFetchResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L457-457" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '145', 145)" onmouseover="showTip(event, '145', 145)">
+            produce 
+          </code>
+          <div class="tip" id="145">
+            <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; ProduceRequest -&gt; Async&lt;ProduceResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L453-453" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '146', 146)" onmouseover="showTip(event, '146', 146)">
+            send arg1 req
+          </code>
+          <div class="tip" id="146">
             <strong>Signature:</strong> Chan -&gt; req:RequestMessage -&gt; Async&lt;ResponseMessage&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L379-379" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L443-443" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -369,15 +353,15 @@ Only a single channel per endpoint is needed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '140', 140)" onmouseover="showTip(event, '140', 140)">
+          <code onmouseout="hideTip(event, '147', 147)" onmouseover="showTip(event, '147', 147)">
             syncGroup 
           </code>
-          <div class="tip" id="140">
+          <div class="tip" id="147">
             <strong>Signature:</strong> (RequestMessage -&gt; Async&lt;ResponseMessage&gt;) -&gt; SyncGroupRequest -&gt; Async&lt;SyncGroupResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L392-392" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L459-459" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

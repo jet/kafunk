@@ -40,8 +40,7 @@
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>The Kafka RPC protocol.
-<a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol">https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol</a></p>
+<p>The Kafka RPC protocol.</p>
 
 </div>
 
@@ -172,6 +171,14 @@ Each member in the group will receive the assignment from the leader in the sync
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-corruptcrc32exception.html">CorruptCrc32Exception</a>
+          </td>
+          <td class="xmldoc"><p>Raised when the received message CRC32 is different from the computed CRC32.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-crc.html">Crc</a>
           </td>
           <td class="xmldoc"><p>Crc digest of a Kafka message.</p>
@@ -288,12 +295,7 @@ Can be routed to any node in the bootstrap list.</p>
           <td class="type-name">
             <a href="kafunk-protocol-heartbeatresponse.html">HeartbeatResponse</a>
           </td>
-          <td class="xmldoc"><p>Heartbeat response from the group coordinator.
-- GROUP<em>COORDINATOR</em>NOT<em>AVAILABLE
-- ILLEGAL</em>GENERATION
-- UNKNOWN<em>MEMBER</em>ID
-- REBALANCE<em>IN</em>PROGRESS
-- GROUP<em>AUTHORIZATION</em>FAILED</p>
+          <td class="xmldoc"><p>Heartbeat response from the group coordinator.</p>
 
 </td>
         </tr>
@@ -464,6 +466,14 @@ issued.</p>
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-messagetoobigexception.html">MessageTooBigException</a>
+          </td>
+          <td class="xmldoc"><p>Raised when the message is bigger than the message set and therefore can't be received.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-meta.html">Meta</a>
           </td>
           <td class="xmldoc"></td>
@@ -473,11 +483,7 @@ issued.</p>
             <a href="kafunk-protocol-metadataresponse.html">MetadataResponse</a>
           </td>
           <td class="xmldoc"><p>Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
-The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
-- UnknownTopic
-- LeaderNotAvailable
-- InvalidTopic
-- TopicAuthorizationFailed</p>
+The assignment consists of a leader, a set of replicas and a set of in-sync replicas.</p>
 
 </td>
         </tr>
@@ -564,12 +570,6 @@ give a response.</p>
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-protocol-partitionfetchmetadata.html">PartitionFetchMetadata</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
             <a href="kafunk-protocol-partitionmetadata.html">PartitionMetadata</a>
           </td>
           <td class="xmldoc"></td>
@@ -598,18 +598,7 @@ give a response.</p>
           <td class="type-name">
             <a href="kafunk-protocol-produceresponse.html">ProduceResponse</a>
           </td>
-          <td class="xmldoc"><p>A reponse to a produce request.
-- UnknownTopicOrPartition
-- InvalidMessageSize
-- LeaderNotAvailable
-- NotLeaderForPartition
-- RequestTimedOut
-- MessageSizeTooLarge
-- RecordListTooLargeCode
-- NotEnoughReplicasCode
-- NotEnoughReplicasAfterAppendCode
-- InvalidRequiredAcksCode
-- TopicAuthorizationFailedCode</p>
+          <td class="xmldoc"><p>A reponse to a produce request.</p>
 
 </td>
         </tr>
@@ -864,15 +853,15 @@ receipt of the number of acknowledgements in RequiredAcks.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '263', 263)" onmouseover="showTip(event, '263', 263)">
+          <code onmouseout="hideTip(event, '289', 289)" onmouseover="showTip(event, '289', 289)">
             toArraySeg size write x
           </code>
-          <div class="tip" id="263">
+          <div class="tip" id="289">
             <strong>Signature:</strong> size:(&#39;a -&gt; int) -&gt; write:(&#39;a -&gt; Segment -&gt; &#39;b) -&gt; x:&#39;a -&gt; Segment<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1332-1332" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1325-1325" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

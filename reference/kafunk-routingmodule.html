@@ -45,44 +45,6 @@
 </div>
 
 <!-- Render nested types and modules, if there are any -->
-  <h2>Nested types and modules</h2>
-  <div>
-      <table class="table table-bordered type-list">
-    <thead>
-      <tr><td>Type</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-routingmodule-missingrouteresult.html">MissingRouteResult</a>
-          </td>
-          <td class="xmldoc"><p>Indicates a missing route.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-routingmodule-routeresult.html">RouteResult</a>
-          </td>
-          <td class="xmldoc"><p>A route is a result where success is a set of request and host pairs
-and failure is a set of request and missing route pairs.
-A request can target multiple topics and as such, multiple brokers.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-routingmodule-routes.html">Routes</a>
-          </td>
-          <td class="xmldoc"><p>The routing table provides host information for the leader of a topic/partition
-or a group coordinator.</p>
-
-</td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
 
   <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
@@ -93,35 +55,33 @@ or a group coordinator.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '327', 327)" onmouseover="showTip(event, '327', 327)">
+          <code onmouseout="hideTip(event, '387', 387)" onmouseover="showTip(event, '387', 387)">
             concatFetchRes rs
           </code>
-          <div class="tip" id="327">
+          <div class="tip" id="387">
             <strong>Signature:</strong> rs:ResponseMessage [] -&gt; ResponseMessage<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L35-35" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L130-130" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Unwraps a set of responses as fetch responses and joins them into a single response.</p>
-
-
+          
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '328', 328)" onmouseover="showTip(event, '328', 328)">
+          <code onmouseout="hideTip(event, '388', 388)" onmouseover="showTip(event, '388', 388)">
             concatOffsetResponses rs
           </code>
-          <div class="tip" id="328">
+          <div class="tip" id="388">
             <strong>Signature:</strong> rs:ResponseMessage [] -&gt; ResponseMessage<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L81-81" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L146-146" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -131,15 +91,15 @@ or a group coordinator.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '329', 329)" onmouseover="showTip(event, '329', 329)">
+          <code onmouseout="hideTip(event, '389', 389)" onmouseover="showTip(event, '389', 389)">
             concatProduceResponseMessages rs
           </code>
-          <div class="tip" id="329">
+          <div class="tip" id="389">
             <strong>Signature:</strong> rs:ResponseMessage [] -&gt; ResponseMessage<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L60-60" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L140-140" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -149,15 +109,15 @@ or a group coordinator.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '330', 330)" onmouseover="showTip(event, '330', 330)">
+          <code onmouseout="hideTip(event, '390', 390)" onmouseover="showTip(event, '390', 390)">
             concatProduceResponses rs
           </code>
-          <div class="tip" id="330">
+          <div class="tip" id="390">
             <strong>Signature:</strong> rs:ProduceResponse [] -&gt; ProduceResponse<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L55-55" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L135-135" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -167,75 +127,15 @@ or a group coordinator.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '331', 331)" onmouseover="showTip(event, '331', 331)">
-            partitionFetchReq req
-          </code>
-          <div class="tip" id="331">
-            <strong>Signature:</strong> req:FetchRequest -&gt; ((TopicName * Partition) * RequestMessage) []<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L20-20" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Partitions a fetch request by topic/partition and wraps each one in a request.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '332', 332)" onmouseover="showTip(event, '332', 332)">
-            partitionOffsetReq req
-          </code>
-          <div class="tip" id="332">
-            <strong>Signature:</strong> req:OffsetRequest -&gt; ((TopicName * Partition) * RequestMessage) []<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L67-67" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Partitions an offset request by topic/partition.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '333', 333)" onmouseover="showTip(event, '333', 333)">
-            partitionProduceReq req
-          </code>
-          <div class="tip" id="333">
-            <strong>Signature:</strong> req:ProduceRequest -&gt; ((TopicName * Partition) * RequestMessage) []<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L41-41" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Partitions a produce request by topic/partition.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '334', 334)" onmouseover="showTip(event, '334', 334)">
+          <code onmouseout="hideTip(event, '391', 391)" onmouseover="showTip(event, '391', 391)">
             route routes
           </code>
-          <div class="tip" id="334">
+          <div class="tip" id="391">
             <strong>Signature:</strong> routes:Routes -&gt; RequestMessage -&gt; RouteResult<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L154-154" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L155-155" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

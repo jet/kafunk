@@ -42,11 +42,7 @@
 </p>
 <div class="xmldoc">
 <p>Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
-The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
-- UnknownTopic
-- LeaderNotAvailable
-- InvalidTopic
-- TopicAuthorizationFailed</p>
+The assignment consists of a leader, a set of replicas and a set of in-sync replicas.</p>
 
 </div>
   <h3>Record Fields</h3>
@@ -58,15 +54,15 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '512', 512)" onmouseover="showTip(event, '512', 512)">
+          <code onmouseout="hideTip(event, '575', 575)" onmouseover="showTip(event, '575', 575)">
             brokers
           </code>
-          <div class="tip" id="512">
+          <div class="tip" id="575">
             <strong>Signature:</strong> Broker []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L499-499" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L509-509" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -76,15 +72,15 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '513', 513)" onmouseover="showTip(event, '513', 513)">
+          <code onmouseout="hideTip(event, '576', 576)" onmouseover="showTip(event, '576', 576)">
             topicMetadata
           </code>
-          <div class="tip" id="513">
+          <div class="tip" id="576">
             <strong>Signature:</strong> TopicMetadata []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L500-500" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L510-510" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -102,15 +98,15 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '514', 514)" onmouseover="showTip(event, '514', 514)">
+          <code onmouseout="hideTip(event, '577', 577)" onmouseover="showTip(event, '577', 577)">
             new(brokers, topicMetadata)
           </code>
-          <div class="tip" id="514">
+          <div class="tip" id="577">
             <strong>Signature:</strong> (brokers:Broker [] * topicMetadata:TopicMetadata []) -&gt; MetadataResponse<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L501-501" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L511-511" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -129,15 +125,15 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '515', 515)" onmouseover="showTip(event, '515', 515)">
+          <code onmouseout="hideTip(event, '578', 578)" onmouseover="showTip(event, '578', 578)">
             read(buf)
           </code>
-          <div class="tip" id="515">
+          <div class="tip" id="578">
             <strong>Signature:</strong> buf:Segment -&gt; MetadataResponse * Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L505-505" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L515-515" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

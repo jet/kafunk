@@ -41,18 +41,7 @@
   <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
-<p>A reponse to a produce request.
-- UnknownTopicOrPartition
-- InvalidMessageSize
-- LeaderNotAvailable
-- NotLeaderForPartition
-- RequestTimedOut
-- MessageSizeTooLarge
-- RecordListTooLargeCode
-- NotEnoughReplicasCode
-- NotEnoughReplicasAfterAppendCode
-- InvalidRequiredAcksCode
-- TopicAuthorizationFailedCode</p>
+<p>A reponse to a produce request.</p>
 
 </div>
   <h3>Record Fields</h3>
@@ -64,15 +53,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '566', 566)" onmouseover="showTip(event, '566', 566)">
+          <code onmouseout="hideTip(event, '629', 629)" onmouseover="showTip(event, '629', 629)">
             throttleTime
           </code>
-          <div class="tip" id="566">
+          <div class="tip" id="629">
             <strong>Signature:</strong> ThrottleTime<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L554-554" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L553-553" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -82,15 +71,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '567', 567)" onmouseover="showTip(event, '567', 567)">
+          <code onmouseout="hideTip(event, '630', 630)" onmouseover="showTip(event, '630', 630)">
             topics
           </code>
-          <div class="tip" id="567">
+          <div class="tip" id="630">
             <strong>Signature:</strong> (TopicName * (Partition * ErrorCode * Offset) []) []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L553-553" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L552-552" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -108,15 +97,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '568', 568)" onmouseover="showTip(event, '568', 568)">
+          <code onmouseout="hideTip(event, '631', 631)" onmouseover="showTip(event, '631', 631)">
             new(topics, throttleTime)
           </code>
-          <div class="tip" id="568">
+          <div class="tip" id="631">
             <strong>Signature:</strong> (topics:(TopicName * (Partition * ErrorCode * Offset) []) [] * throttleTime:ThrottleTime) -&gt; ProduceResponse<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L555-555" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L554-554" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -135,15 +124,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '569', 569)" onmouseover="showTip(event, '569', 569)">
+          <code onmouseout="hideTip(event, '632', 632)" onmouseover="showTip(event, '632', 632)">
             read(buf)
           </code>
-          <div class="tip" id="569">
+          <div class="tip" id="632">
             <strong>Signature:</strong> buf:Segment -&gt; ProduceResponse * Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L559-559" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L558-558" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

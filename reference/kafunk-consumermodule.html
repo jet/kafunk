@@ -45,31 +45,6 @@
 </div>
 
 <!-- Render nested types and modules, if there are any -->
-  <h2>Nested types and modules</h2>
-  <div>
-      <table class="table table-bordered type-list">
-    <thead>
-      <tr><td>Type</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-consumermodule-generationstate.html">GenerationState</a>
-          </td>
-          <td class="xmldoc"><p>Stats corresponding to a single generation of the consumer group protocol.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-consumermodule-topicpartitionassignment.html">TopicPartitionAssignment</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
 
   <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
@@ -80,15 +55,55 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '151', 151)" onmouseover="showTip(event, '151', 151)">
-            consume handler consumer
+          <code onmouseout="hideTip(event, '158', 158)" onmouseover="showTip(event, '158', 158)">
+            commitOffsets c offsets
           </code>
-          <div class="tip" id="151">
-            <strong>Signature:</strong> handler:(TopicName -&gt; Partition -&gt; MessageSet -&gt; Async&lt;unit&gt; -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
+          <div class="tip" id="158">
+            <strong>Signature:</strong> c:Consumer -&gt; offsets:(Partition * Offset) [] -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L405-405" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L210-210" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Explicitly commits offsets to a consumer group.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '159', 159)" onmouseover="showTip(event, '159', 159)">
+            commitOffsetsToTime c time
+          </code>
+          <div class="tip" id="159">
+            <strong>Signature:</strong> c:Consumer -&gt; time:Time -&gt; Async&lt;unit&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L216-216" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Explicitly commits offsets to a consumer group, to a specific offset time.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '160', 160)" onmouseover="showTip(event, '160', 160)">
+            consume handler consumer
+          </code>
+          <div class="tip" id="160">
+            <strong>Signature:</strong> handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L645-645" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -102,20 +117,22 @@ The handler accepts the topic, partition, message set and an async computation w
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '152', 152)" onmouseover="showTip(event, '152', 152)">
-            consumeCommitAfter handler
+          <code onmouseout="hideTip(event, '161', 161)" onmouseover="showTip(event, '161', 161)">
+            consumePeriodicCommit (...)
           </code>
-          <div class="tip" id="152">
-            <strong>Signature:</strong> handler:(TopicName -&gt; Partition -&gt; MessageSet -&gt; Async&lt;unit&gt;) -&gt; Consumer -&gt; Async&lt;unit&gt;<br />
+          <div class="tip" id="161">
+            <strong>Signature:</strong> commitInterval:TimeSpan -&gt; handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L420-420" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L660-660" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           <p>Starts consumption using the specified handler.
-Offsets for the corresponding topic/partition/message-set are committed after the handler completes.</p>
+The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
+The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
+the specified interval.</p>
 
 
         </td>
@@ -123,23 +140,59 @@ Offsets for the corresponding topic/partition/message-set are committed after th
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '153', 153)" onmouseover="showTip(event, '153', 153)">
+          <code onmouseout="hideTip(event, '162', 162)" onmouseover="showTip(event, '162', 162)">
             create conn cfg
           </code>
-          <div class="tip" id="153">
+          <div class="tip" id="162">
             <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; Consumer<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L75-75" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L446-446" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Creates a participant in the consumer groups protocol.
-A generation changes when the group changes, such as when members join or leave.
-Each generation contains a set of async sequences corresponding to messages in a single topic-partition.
-The message set is accompanied by an async computation which when evaluated, commits the checkpoint
-corresponding to the message set.</p>
+          <p>Creates a consumer.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '163', 163)" onmouseover="showTip(event, '163', 163)">
+            createAsync conn cfg
+          </code>
+          <div class="tip" id="163">
+            <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; Async&lt;Consumer&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L440-440" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Creates a participant in the consumer groups protocol and joins the group.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '164', 164)" onmouseover="showTip(event, '164', 164)">
+            generations consumer
+          </code>
+          <div class="tip" id="164">
+            <strong>Signature:</strong> consumer:Consumer -&gt; AsyncSeq&lt;GenerationId * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L450-450" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns an async sequence corresponding to generations of the consumer group protocol.</p>
 
 
         </td>

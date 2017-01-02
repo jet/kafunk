@@ -72,33 +72,36 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '169', 169)" onmouseover="showTip(event, '169', 169)">
-            retryAsync b a
+          <code onmouseout="hideTip(event, '174', 174)" onmouseover="showTip(event, '174', 174)">
+            retryAsync p shouldRetry a
           </code>
-          <div class="tip" id="169">
-            <strong>Signature:</strong> b:Backoff -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+          <div class="tip" id="174">
+            <strong>Signature:</strong> p:RetryPolicy -&gt; shouldRetry:(&#39;a -&gt; bool) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a option&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L161-161" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L303-303" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
+Returns None when shouldRetry returns false.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '170', 170)" onmouseover="showTip(event, '170', 170)">
-            retryAsyncResult m b a
+          <code onmouseout="hideTip(event, '175', 175)" onmouseover="showTip(event, '175', 175)">
+            retryAsyncResult m p a
           </code>
-          <div class="tip" id="170">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; b:Backoff -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
+          <div class="tip" id="175">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L134-134" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L285-285" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -108,15 +111,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '171', 171)" onmouseover="showTip(event, '171', 171)">
+          <code onmouseout="hideTip(event, '176', 176)" onmouseover="showTip(event, '176', 176)">
             retryAsyncResultList b a
           </code>
-          <div class="tip" id="171">
-            <strong>Signature:</strong> b:Backoff -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e list&gt;&gt;<br />
+          <div class="tip" id="176">
+            <strong>Signature:</strong> b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e list&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'e          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L150-150" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L311-311" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -126,15 +129,54 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '172', 172)" onmouseover="showTip(event, '172', 172)">
-            retryAsyncResultWarn m b a
+          <code onmouseout="hideTip(event, '177', 177)" onmouseover="showTip(event, '177', 177)">
+            retryAsyncResultRef m p a
           </code>
-          <div class="tip" id="172">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; b:Backoff -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e),&#39;e&gt;&gt;<br />
+          <div class="tip" id="177">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L124-124" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L273-273" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '178', 178)" onmouseover="showTip(event, '178', 178)">
+            retryAsyncResultStream p a
+          </code>
+          <div class="tip" id="178">
+            <strong>Signature:</strong> p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'e          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L268-268" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns a stream of async computations corresponding to invocations of the argument
+computation until the computations succeeds.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '179', 179)" onmouseover="showTip(event, '179', 179)">
+            retryAsyncResultWarn m p a
+          </code>
+          <div class="tip" id="179">
+            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e),&#39;e&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'e, 'a          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L279-279" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -148,15 +190,15 @@ accumulated during retries, if any, and otherwise, a Failure of accumulated erro
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '173', 173)" onmouseover="showTip(event, '173', 173)">
-            retryAsyncResultWarnList b a
+          <code onmouseout="hideTip(event, '180', 180)" onmouseover="showTip(event, '180', 180)">
+            retryAsyncResultWarnList policy a
           </code>
-          <div class="tip" id="173">
-            <strong>Signature:</strong> b:Backoff -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e list),&#39;e list&gt;&gt;<br />
+          <div class="tip" id="180">
+            <strong>Signature:</strong> policy:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e list),&#39;e list&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'e          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L131-131" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L282-282" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -166,15 +208,15 @@ accumulated during retries, if any, and otherwise, a Failure of accumulated erro
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '174', 174)" onmouseover="showTip(event, '174', 174)">
+          <code onmouseout="hideTip(event, '181', 181)" onmouseover="showTip(event, '181', 181)">
             retryResultThrow f m b a
           </code>
-          <div class="tip" id="174">
-            <strong>Signature:</strong> f:(&#39;e -&gt; &#39;a) -&gt; m:Monoid&lt;&#39;e&gt; -&gt; b:Backoff -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
+          <div class="tip" id="181">
+            <strong>Signature:</strong> f:(&#39;e -&gt; &#39;a) -&gt; m:Monoid&lt;&#39;e&gt; -&gt; b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L155-155" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L316-316" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -187,15 +229,15 @@ Returns the first successful value or throws an exception based on errors observ
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '175', 175)" onmouseover="showTip(event, '175', 175)">
+          <code onmouseout="hideTip(event, '182', 182)" onmouseover="showTip(event, '182', 182)">
             retryResultThrowList f b a
           </code>
-          <div class="tip" id="175">
-            <strong>Signature:</strong> f:(&#39;e list -&gt; &#39;?8434) -&gt; b:Backoff -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'e, '?8434, 'a          </div>
+          <div class="tip" id="182">
+            <strong>Signature:</strong> f:(&#39;e list -&gt; &#39;?8651) -&gt; b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'e, '?8651, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L158-158" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L319-319" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

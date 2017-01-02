@@ -45,9 +45,9 @@
     <tbody>
         <tr>
           <td class="type-name">
-            <a href="kafunk-backoff.html">Backoff</a>
+            <a href="kafunk-asyncpipe-2.html">AsyncPipe<'a, 'b></a>
           </td>
-          <td class="xmldoc"><p>Backoff represented as a sequence of wait times, in milliseconds, between retries.</p>
+          <td class="xmldoc"><p>An async transducer.</p>
 
 </td>
         </tr>
@@ -99,6 +99,32 @@
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-consumermessageset.html">ConsumerMessageSet</a>
+          </td>
+          <td class="xmldoc"><p>A set of messages for a consumer from an individual topic-partition.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-consumeroffsetoutofrangeaction.html">ConsumerOffsetOutOfRangeAction</a>
+          </td>
+          <td class="xmldoc"><p>The action to take when the consumer attempts to fetch an offset which is out of range.
+This typically happens if the consumer is outpaced by the message cleanup process.
+The default action is to halt consumption.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-consumerstate.html">ConsumerState</a>
+          </td>
+          <td class="xmldoc"><p>State corresponding to a single generation of the consumer group protocol.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-correlationid.html">CorrelationId</a>
           </td>
           <td class="xmldoc"><p>A correlation id.</p>
@@ -117,7 +143,18 @@
           <td class="type-name">
             <a href="kafunk-escalationexception.html">EscalationException</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>An exception used to wrap failures which are to be escalated.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-kafkaconfig.html">KafkaConfig</a>
+          </td>
+          <td class="xmldoc"><p>Kafka connection configuration.
+<a href="http://kafka.apache.org/documentation.html#connectconfigs">http://kafka.apache.org/documentation.html#connectconfigs</a></p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -126,15 +163,6 @@
           <td class="xmldoc"><p>A connection to a Kafka cluster.
 This is a stateful object which maintains request/reply sessions with brokers.
 It acts as a context for API operations, providing filtering and fault tolerance.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-kafkaconnconfig.html">KafkaConnConfig</a>
-          </td>
-          <td class="xmldoc"><p>Kafka connection configuration.
-<a href="http://kafka.apache.org/documentation.html#connectconfigs">http://kafka.apache.org/documentation.html#connectconfigs</a></p>
 
 </td>
         </tr>
@@ -163,6 +191,14 @@ It acts as a context for API operations, providing filtering and fault tolerance
             <a href="kafunk-mb-1.html">Mb<'a></a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-missingrouteresult.html">MissingRouteResult</a>
+          </td>
+          <td class="xmldoc"><p>Indicates a missing route.</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -210,6 +246,14 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-producerresult.html">ProducerResult</a>
+          </td>
+          <td class="xmldoc"><p>A producer response.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-reqrepsession-3.html">ReqRepSession<'a, 'b, 's></a>
           </td>
           <td class="xmldoc"><p>A multiplexed request/reply session.
@@ -241,6 +285,49 @@ Send failures are propagated to the caller who is responsible for recreating the
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-retrypolicy.html">RetryPolicy</a>
+          </td>
+          <td class="xmldoc"><p>Retry policy.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-retryqueue-2.html">RetryQueue<'k, 'a></a>
+          </td>
+          <td class="xmldoc"><p>A retry queue.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-retrystate.html">RetryState</a>
+          </td>
+          <td class="xmldoc"><p>The state of a retry workflow.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-routeresult.html">RouteResult</a>
+          </td>
+          <td class="xmldoc"><p>A route is a result where success is a set of request and host pairs
+and failure is a set of request and missing route pairs.
+A request can target multiple topics and as such, multiple brokers.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-routes.html">Routes</a>
+          </td>
+          <td class="xmldoc"><p>The routing table provides host information for the leader of a topic/partition
+or a group coordinator.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-semigroup-1.html">Semigroup<'a></a>
           </td>
           <td class="xmldoc"></td>
@@ -256,9 +343,9 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-waittimems.html">WaitTimeMs</a>
+            <a href="kafunk-step-2.html">Step<'a, 'b></a>
           </td>
-          <td class="xmldoc"><p>The time to wait between retries.</p>
+          <td class="xmldoc"><p>An individual step of an async transducer.</p>
 
 </td>
         </tr>
@@ -289,17 +376,17 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
+            <a href="kafunk-asyncpipe.html">AsyncPipe</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
             <a href="kafunk-asyncseq.html">AsyncSeq</a>
           </td>
           <td class="xmldoc"><p>Module with helper functions for working with asynchronous sequences</p>
 
 </td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-backoffmodule.html">Backoff</a>
-          </td>
-          <td class="xmldoc"></td>
         </tr>
         <tr>
           <td class="module-name">
@@ -370,6 +457,18 @@ A server receives a session message, and sends a response with the same tx id.</
           <td class="xmldoc"><p>Fault tolerance.</p>
 
 </td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-fetchresponse.html">FetchResponse</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-flowmonitormodule.html">FlowMonitor</a>
+          </td>
+          <td class="xmldoc"></td>
         </tr>
         <tr>
           <td class="module-name">
@@ -453,6 +552,20 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
+            <a href="kafunk-observablemodule.html">Observable</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-offsets.html">Offsets</a>
+          </td>
+          <td class="xmldoc"><p>Operations on offsets.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
             <a href="kafunk-option.html">Option</a>
           </td>
           <td class="xmldoc"></td>
@@ -489,8 +602,7 @@ A server receives a session message, and sends a response with the same tx id.</
           <td class="module-name">
             <a href="kafunk-protocol.html">Protocol</a>
           </td>
-          <td class="xmldoc"><p>The Kafka RPC protocol.
-<a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol">https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol</a></p>
+          <td class="xmldoc"><p>The Kafka RPC protocol.</p>
 
 </td>
         </tr>
@@ -502,7 +614,7 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-result.html">Result</a>
+            <a href="kafunk-resultmodule.html">Result</a>
           </td>
           <td class="xmldoc"></td>
         </tr>
@@ -511,6 +623,22 @@ A server receives a session message, and sends a response with the same tx id.</
             <a href="kafunk-resultex.html">ResultEx</a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-retrypolicymodule.html">RetryPolicy</a>
+          </td>
+          <td class="xmldoc"><p>Operations on retry policies.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-retryqueuemodule.html">RetryQueue</a>
+          </td>
+          <td class="xmldoc"><p>Operations on RetryQueue.</p>
+
+</td>
         </tr>
         <tr>
           <td class="module-name">
@@ -541,6 +669,12 @@ A server receives a session message, and sends a response with the same tx id.</
           <td class="xmldoc"><p>Operations on Berkley sockets.</p>
 
 </td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-timespanex.html">TimeSpanEx</a>
+          </td>
+          <td class="xmldoc"></td>
         </tr>
     </tbody>
   </table>
