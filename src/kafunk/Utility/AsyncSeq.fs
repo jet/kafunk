@@ -5,8 +5,103 @@ open System
 open System.Threading
 open System.Threading.Tasks
 
+/// An async transducer.
+type AsyncPipe<'a, 'b> = Async<Step<'a, 'b>>
+
+/// An individual step of an async transducer.
+and Step<'a, 'b> =
+  | Halt
+  | Emit of 'b * tail:AsyncPipe<'a, 'b>
+  | Await of ('a option -> AsyncPipe<'a, 'b>)
+
+module AsyncPipe =
+    
+  let encased (step:Step<'a, 'b>) : AsyncPipe<'a, 'b> = 
+    async.Return step
+
+  [<GeneralizableValue>]
+  let halt<'a, 'b> : AsyncPipe<'a, 'b> = 
+    encased Halt
+
+  let emit (b:'b) (tail:AsyncPipe<'a, 'b>) : AsyncPipe<'a, 'b> =
+    encased (Emit (b, tail))
+
+  let emitHalt (b:'b) : AsyncPipe<'a, 'b> =
+    emit b halt
+
+  let await (f:'a option -> AsyncPipe<'a, 'b>) : AsyncPipe<'a, 'b> =
+    encased (Await f)
+
+  let awaitHalt (f:'a -> AsyncPipe<'a, 'b>) : AsyncPipe<'a, 'b> =
+    await (function Some a -> f a | None -> halt)
+
+  let drain (pipe:AsyncPipe<_, 'b>) : AsyncSeq<'b> =
+    { new IAsyncEnumerable<_> with
+        member __.GetEnumerator () =
+          let step = ref pipe
+          { new IAsyncEnumerator<_> with
+              member __.MoveNext () = async {
+                let! step' = !step                
+                match step' with
+                | Halt | Await _ -> 
+                  return None
+                | Emit (a,tail) ->
+                  step := tail
+                  return Some a }                    
+              member __.Dispose () = () } }
+            
+  let windowed (windowSize:int) : AsyncPipe<'a, 'a[]> =    
+    let rec loop (win:ResizeArray<_>) =
+      awaitHalt (fun a ->
+        win.Add a          
+        if win.Count > windowSize then
+          win.RemoveAt 0
+        if win.Count = windowSize then
+          emit (win.ToArray()) (loop win)         
+        else 
+          loop win)
+    loop (ResizeArray<_>(windowSize))
+
+  let bufferByTime (timeSpan:TimeSpan) : AsyncPipe<'a, 'a[]> =
+    let rec loop (t:DateTime) (buf:ResizeArray<_>) =
+      awaitHalt (fun a ->
+        buf.Add a
+        let t' = DateTime.UtcNow        
+        if (t' - t) >= timeSpan then
+          emit (buf.ToArray()) (loop t' (ResizeArray<_>()))
+        else
+          loop t buf)
+    loop DateTime.UtcNow (ResizeArray<_>())
+
+  /// Feeds an async sequence into a transducer and emits the resulting async sequence.
+  let transduce (pipe:AsyncPipe<'a, 'b>) (source:AsyncSeq<'a>) : AsyncSeq<'b> = 
+    asyncSeq {      
+      use enum = source.GetEnumerator()
+      let rec go pipe = asyncSeq {
+        let! step = pipe
+        match step with
+        | Halt -> ()
+        | Emit (b,tail) ->
+          yield b
+          yield! go tail
+        | Await recv ->
+          let! next = enum.MoveNext()
+          match next with
+          | None ->
+            yield! drain (recv None)
+          | Some a ->
+            yield! go (recv (Some a)) }
+      yield! go pipe }
+        
+        
 /// Module with helper functions for working with asynchronous sequences
 module AsyncSeq =
+
+  let windowed (windowSize:int) : AsyncSeq<'a> -> AsyncSeq<'a[]> =
+    AsyncPipe.transduce (AsyncPipe.windowed windowSize)
+
+  let bufferByTime (timeSpan:TimeSpan) : AsyncSeq<'a> -> AsyncSeq<'a[]> =
+    AsyncPipe.transduce (AsyncPipe.bufferByTime timeSpan)
 
   let unfoldInfiniteAsync (s:'s) (f:'s -> Async<'a * 's>) : AsyncSeq<'a> =
     AsyncSeq.unfoldAsync (f >> Async.map Some) s 

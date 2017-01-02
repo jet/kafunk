@@ -4,6 +4,7 @@ open Kafunk
 open NUnit.Framework
 open System.Threading
 open System.Threading.Tasks
+open FSharp.Control
 
 [<Test>]
 let ``Async.never should regard infinite timeouts as equal`` () =
@@ -117,3 +118,20 @@ let ``Async.choose should respect ambient cancellation token`` () =
   shouldEqual true !cancelled0 None
   shouldEqual true !cancelled1 None
   shouldEqual true !cancelled2 None
+
+[<Test>]
+let ``AsyncSeq.windowed should work`` () =
+  for windowSize in [1..5] do
+    for inputSize in [0..10] do
+      let input = List.init inputSize id
+      let expected = 
+        input
+        |> Seq.windowed windowSize
+        |> Seq.map List.ofArray 
+        |> Seq.toList
+      let actual = 
+        AsyncSeq.ofSeq input
+        |> AsyncSeq.windowed windowSize 
+        |> AsyncSeq.map List.ofArray
+        |> AsyncSeq.toList
+      shouldEqual expected actual None

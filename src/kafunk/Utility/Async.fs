@@ -302,4 +302,4 @@ module Mb =
   let inline put (a:'a) (mb:Mb<'a>) = mb.Post a
 
   /// Creates an async computation that completes when a message is available in a mailbox.
-  let inline take (mb:Mb<'a>) = mb.Receive()
+  let inline take (mb:Mb<'a>) = async.Delay mb.Receive

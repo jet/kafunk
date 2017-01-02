@@ -45,18 +45,48 @@ type Partitioner = TopicName * Partition[] * ProducerMessage -> Partition
 [<Compile(Module)>]
 module Partitioner =
 
+  open System.Threading
+
+  let private ensurePartitions (ps:Partition[]) =
+    if isNull ps then nullArg "ps"
+    if ps.Length = 0 then invalidArg "ps" "must have partitions"
+    
+  /// Creates a partition function.
+  let create (f:TopicName * Partition[] * ProducerMessage -> Partition) : Partitioner = 
+    f
+
   /// Constantly returns the same partition.
   let konst (p:Partition) : Partitioner =
-    konst p
+    create <| konst p
 
   /// Round-robins across partitions.
   let roundRobin : Partitioner =
-    let i = ref 0
-    fun (_,ps,_) -> ps.[System.Threading.Interlocked.Increment i % ps.Length]
+    let mutable i = 0
+    create <| fun (_,ps,_) -> 
+      ensurePartitions ps
+      let i' = Interlocked.Increment &i
+      if i' < 0 then
+        Interlocked.Exchange (&i, 0) |> ignore
+        ps.[0]
+      else 
+        ps.[i' % ps.Length]
 
   /// Computes the hash-code of the routing key to get the topic partition.
   let hashKey (h:Binary.Segment -> int) : Partitioner =
-    fun (_,ps,pm) -> ps.[(h pm.key) % ps.Length]
+    create <| fun (_,ps,pm) -> 
+      ensurePartitions ps
+      ps.[(h pm.key) % ps.Length]
+
+  /// Random partition assignment.
+  let rand (seed:int option) : Partitioner =
+    let rng = 
+      match seed with 
+      | Some s -> new Random(s)
+      | None -> new Random()
+    create <| fun (_,ps,_) ->
+      ensurePartitions ps
+      let i = lock rng (fun () -> rng.Next (0, ps.Length))
+      ps.[i]
 
 
 /// Producer state.
