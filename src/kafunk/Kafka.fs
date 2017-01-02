@@ -130,7 +130,9 @@ module Routing =
   let concatFetchRes (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toFetch
-    |> (fun rs -> new FetchResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse)
+    |> (fun rs -> 
+      let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
+      new FetchResponse(tt, rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse)
 
   let concatProduceResponses (rs:ProduceResponse[]) =
     let topics = rs |> Array.collect (fun r -> r.topics)
@@ -336,6 +338,9 @@ type RetryAction =
 /// http://kafka.apache.org/documentation.html#connectconfigs
 type KafkaConfig = {
   
+  /// The Kafka server version.
+  version : System.Version
+
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
   
@@ -354,7 +359,8 @@ type KafkaConfig = {
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectionRetryPolicy) =
-    { bootstrapServers = bootstrapServers
+    { version = System.Version.Parse "0.9.0"
+      bootstrapServers = bootstrapServers
       bootstrapConnectionRetryPolicy = defaultArg bootstrapConnectionRetryPolicy (RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3)
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
       tcpConfig = defaultArg tcpConfig (ChanConfig.create ()) }
@@ -417,7 +423,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
     | Some _ -> return state
     | None ->
       Log.info "creating_channel|endpoint=%A" ep
-      let! ch = Chan.connect cfg.tcpConfig cfg.clientId ep
+      let! ch = Chan.connect (cfg.version, cfg.tcpConfig, cfg.clientId) ep
       return state |> ConnState.addChannel ch }
 
   /// Connects to the first available broker in the bootstrap list and returns the 
@@ -429,7 +435,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
           Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
-          let! ch = Chan.discoverConnect cfg.tcpConfig cfg.clientId (uri.Host,uri.Port)
+          let! ch = Chan.discoverConnect (cfg.version, cfg.tcpConfig, cfg.clientId) (uri.Host,uri.Port)
           let state = ConnState.bootstrap ch
           return Success state
         with ex ->

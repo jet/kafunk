@@ -20,6 +20,9 @@ type ConsumerConfig = {
   /// period, a consumer is ejected from the consumer group.
   sessionTimeout : SessionTimeout
   
+
+  rebalanceTimeout : RebalanceTimeout
+
   /// The number of times to send heartbeats within a session timeout period.
   heartbeatFrequency : int32
   
@@ -53,12 +56,13 @@ type ConsumerConfig = {
     
     /// Creates a consumer configuration.
     static member create 
-      (groupId:GroupId, topic:TopicName, ?initialFetchTime, ?fetchMaxBytes, ?sessionTimeout, 
+      (groupId:GroupId, topic:TopicName, ?initialFetchTime, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
           ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?outOfRangeAction, ?fetchBufferSize) =
       {
         groupId = groupId
         topic = topic
         sessionTimeout = defaultArg sessionTimeout 20000
+        rebalanceTimeout = defaultArg rebalanceTimeout 20000
         heartbeatFrequency = defaultArg heartbeatFrequency 10
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
@@ -296,7 +300,7 @@ module Consumer =
     let! _ = conn.GetGroupCoordinator cfg.groupId
 
     let! joinGroupRes = async {
-      let req = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, defaultArg prevMemberId "", protocolType, groupProtocols)
+      let req = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, cfg.rebalanceTimeout, defaultArg prevMemberId "", protocolType, groupProtocols)
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
       | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->

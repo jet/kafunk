@@ -5,21 +5,28 @@ namespace Kafunk
 module Protocol =
 
   type ApiKey =
-    | ProduceRequest = 0s
-    | FetchRequest = 1s
-    | OffsetRequest = 2s
-    | MetadataRequest = 3s
-    | OffsetCommitRequest = 8s
-    | OffsetFetchRequest = 9s
-    | GroupCoordinatorRequest = 10s
-    | JoinGroupRequest = 11s
-    | HeartbeatRequest = 12s
-    | LeaveGroupRequest = 13s
-    | SyncGroupRequest = 14s
-    | DescribeGroupsRequest = 15s
-    | ListGroupsRequest = 16s
+    | Produce = 0s
+    | Fetch = 1s
+    | Offset = 2s
+    | Metadata = 3s
+    | OffsetCommit = 8s
+    | OffsetFetch = 9s
+    | GroupCoordinator = 10s
+    | JoinGroup = 11s
+    | Heartbeat = 12s
+    | LeaveGroup = 13s
+    | SyncGroup = 14s
+    | DescribeGroups = 15s
+    | ListGroups = 16s
 
   type ApiVersion = int16
+
+  /// Versions of Kafka brokers.
+  module Versions =
+    
+    let V_0_9_0 = System.Version (0, 9, 0)    
+    let V_0_10_0 = System.Version (0, 10, 0)
+    let V_0_10_1 = System.Version (0, 10, 1)
 
   /// A correlation id of a Kafka request-response transaction.
   type CorrelationId = int32
@@ -34,6 +41,9 @@ module Protocol =
 
   /// Kafka message attributes.
   type Attributes = int8
+
+  /// The timestamp of a message.
+  type Timestamp = int64
 
   module CompressionCodec =
 
@@ -214,20 +224,6 @@ module Protocol =
     [<Literal>]
     let ClusterAuthorizationFailedCode = 31s
 
-    let isError (ec:ErrorCode) = 
-      ec <> NoError
-
-    /// Determines whether the error should be escalated as an exception (true)
-    /// or retried (false). 
-    /// NoError does not escalate.
-    /// For retriable errors, action must be take before retry (even if only to sleep).
-    let shouldEscalate (ec:ErrorCode) =
-      match ec with
-      | NoError | UnknownTopicOrPartition | LeaderNotAvailable | NotLeaderForPartition
-      | RequestTimedOut | GroupLoadInProgressCode | GroupCoordinatorNotAvailableCode | NotCoordinatorForGroupCode
-      | NotEnoughReplicasCode | NotEnoughReplicasAfterAppendCode -> false
-      | _ -> true
-
   /// Duration in milliseconds for which the request was throttled due to quota violation.
   type ThrottleTime = int32
 
@@ -267,9 +263,6 @@ module Protocol =
     
     /// Beginning of topic.
     let [<Literal>] EarliestOffset = -2L
-
-//    let fromDateTime (dt:System.DateTime) : Time =
-//      (System.TimeZoneInfo.ConvertTimeToUtc(dt) - new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).TotalMilliseconds |> int64
 
   type MaxNumberOfOffsets = int32
 
@@ -332,10 +325,11 @@ module Protocol =
       val crc : Crc
       val magicByte : MagicByte
       val attributes : Attributes
+      val timestamp : Timestamp
       val key : Key
       val value : Value
-      new (crc, magicByte, attributes, key, value) =
-        { crc = crc; magicByte = magicByte; attributes = attributes; key = key; value = value }
+      new (crc, magicByte, attributes, ts, key, value) =
+        { crc = crc ; magicByte = magicByte ; attributes = attributes ; timestamp = ts ; key = key ; value = value }
     end
   with
 
@@ -363,11 +357,14 @@ module Protocol =
 
   
     /// Reads the message from the buffer, returning the message and new state of buffer.
-    static member read (buf:Binary.Segment) =
+    static member read (ver:ApiVersion, buf:Binary.Segment) =
       let crc, buf = Binary.readInt32 buf
       let offsetAfterCrc = buf.Offset
       let magicByte, buf = Binary.readInt8 buf
       let attrs, buf = Binary.readInt8 buf
+      let timestamp,buf = 
+        if ver >= 1s then Binary.readInt64 buf
+        else 0L,buf
       let key, buf = Binary.readBytes buf
       let value, buf = Binary.readBytes buf
       let offsetAtEnd = buf.Offset
@@ -375,7 +372,7 @@ module Protocol =
       let crc' = int32 <| Crc.crc32 buf.Array offsetAfterCrc readMessageSize
       if crc <> crc' then
         raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
-      (Message(crc,magicByte,attrs,key,value)), buf
+      (Message(crc,magicByte,attrs,timestamp,key,value)), buf
 
 
   type MessageSet =
@@ -395,7 +392,7 @@ module Protocol =
 
     /// Reads the messages from the buffer, returning the message and new state of buffer.
     /// If the buffer doesn't have sufficient space for the last message, skips it.
-    static member read (partition:Partition) (ec:ErrorCode) (messageSetSize:int) (buf:Binary.Segment) =
+    static member read (ver:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:Binary.Segment) =
       let set, buf = 
         Binary.readArrayByteSize 
           messageSetSize 
@@ -410,7 +407,7 @@ module Protocol =
                 raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
               try
                 if messageSetRemainder >= messageSize && buf.Count >= messageSize then
-                  let message,buf = Message.read buf
+                  let message,buf = Message.read (ver,buf)
                   Choice1Of2 ((offset,messageSize,message),buf)
                 else
                   let rem = min messageSetRemainder buf.Count
@@ -561,8 +558,8 @@ module Protocol =
       let readTopic =
         Binary.read2 Binary.readString (Binary.readArray readPartition)
       let topics, buf = buf |> Binary.readArray readTopic
-      let tt, buf = buf |> Binary.readInt32 
-      (ProduceResponse(topics,tt), buf)
+      let throttleTime, buf = buf |> Binary.readInt32 
+      (ProduceResponse(topics,throttleTime), buf)
 
   // Fetch API
 
@@ -600,23 +597,29 @@ module Protocol =
 
   type FetchResponse =
     struct
+      val throttleTime : ThrottleTime
       val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * MessageSetSize * MessageSet)[])[]
-      new (topics) = { topics = topics }
+      new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
 
-    static member read (buf:Binary.Segment) =
+    static member read (ver:ApiVersion, buf:Binary.Segment) =
+      let msgVer = if ver >= 2s then 1s else 0s
       let readPartition buf =
         let partition, buf = Binary.readInt32 buf
         let errorCode, buf = Binary.readInt16 buf
         let hwo, buf = Binary.readInt64 buf
         let mss, buf = Binary.readInt32 buf
-        let ms, buf = MessageSet.read partition errorCode mss buf
+        let ms, buf = MessageSet.read (msgVer,partition,errorCode,mss,buf)
         ((partition, errorCode, hwo, mss, ms), buf)
       let readTopic =
         Binary.read2 Binary.readString (Binary.readArray readPartition)
+      let throttleTime,buf =
+        match ver with
+        | v when v >= 1s -> Binary.readInt32 buf
+        | _ -> 0,buf
       let topics, buf = buf |> Binary.readArray readTopic
-      let res = FetchResponse(topics)
+      let res = FetchResponse(throttleTime, topics)
       res,buf
 
   // Offset API
@@ -808,6 +811,8 @@ module Protocol =
 
   type SessionTimeout = int32
 
+  type RebalanceTimeout = int32
+
   type ProtocolType = string
 
   type GroupProtocols =
@@ -844,11 +849,12 @@ module Protocol =
     type Request =
       val groupId : GroupId
       val sessionTimeout : SessionTimeout
+      val rebalanceTimeout : SessionTimeout
       val memberId : MemberId
       val protocolType : ProtocolType
       val groupProtocols : GroupProtocols
-      new (groupId, sessionTimeout, memberId, protocolType, groupProtocols) =
-        { groupId = groupId; sessionTimeout = sessionTimeout; memberId = memberId;
+      new (groupId, sessionTimeout, rebalanceTimeout, memberId, protocolType, groupProtocols) =
+        { groupId = groupId; sessionTimeout = sessionTimeout; rebalanceTimeout = rebalanceTimeout ; memberId = memberId;
           protocolType = protocolType; groupProtocols = groupProtocols }
 
     [<Struct>]
@@ -870,12 +876,16 @@ module Protocol =
       Binary.sizeString req.protocolType +
       GroupProtocols.size req.groupProtocols
 
-    let writeRequest (req:Request) =
-      Binary.writeString req.groupId
-      >> Binary.writeInt32 req.sessionTimeout
-      >> Binary.writeString req.memberId
-      >> Binary.writeString req.protocolType
-      >> GroupProtocols.write req.groupProtocols
+    let writeRequest (ver:ApiVersion, req:Request) buf =
+      let buf = Binary.writeString req.groupId buf
+      let buf = Binary.writeInt32 req.sessionTimeout buf
+      let buf = 
+        if ver >= 1s then Binary.writeInt32 req.rebalanceTimeout buf
+        else buf
+      let buf = Binary.writeString req.memberId buf
+      let buf = Binary.writeString req.protocolType buf
+      let buf = GroupProtocols.write req.groupProtocols buf
+      buf
 
     let readResponse buf =
       let (errorCode, gid, gp, lid, mid, ms), buf =
@@ -1196,7 +1206,7 @@ module Protocol =
       | ListGroups x -> ListGroupsRequest.size x
       | DescribeGroups x -> DescribeGroupsRequest.size x
 
-    static member write (x:RequestMessage) buf =
+    static member write (ver:ApiVersion, x:RequestMessage) buf =
       match x with
       | Heartbeat x -> HeartbeatRequest.write x buf
       | Metadata x -> Metadata.writeRequest x buf
@@ -1206,7 +1216,7 @@ module Protocol =
       | GroupCoordinator x -> GroupCoordinatorRequest.write x buf
       | OffsetCommit x -> OffsetCommitRequest.write x buf
       | OffsetFetch x -> OffsetFetchRequest.write x buf
-      | JoinGroup x -> JoinGroup.writeRequest x buf
+      | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf
       | SyncGroup x -> SyncGroupRequest.write x buf
       | LeaveGroup x -> LeaveGroupRequest.write x buf
       | ListGroups x -> ListGroupsRequest.write x buf
@@ -1214,26 +1224,19 @@ module Protocol =
 
     member x.ApiKey =
       match x with
-      | Metadata _ -> ApiKey.MetadataRequest
-      | Fetch _ -> ApiKey.FetchRequest
-      | Produce _ -> ApiKey.ProduceRequest
-      | Offset _ -> ApiKey.OffsetRequest
-      | GroupCoordinator _ -> ApiKey.GroupCoordinatorRequest
-      | OffsetCommit _ -> ApiKey.OffsetCommitRequest
-      | OffsetFetch _ -> ApiKey.OffsetFetchRequest
-      | JoinGroup _ -> ApiKey.JoinGroupRequest
-      | SyncGroup _ -> ApiKey.SyncGroupRequest
-      | Heartbeat _ -> ApiKey.HeartbeatRequest
-      | LeaveGroup _ -> ApiKey.LeaveGroupRequest
-      | ListGroups _ -> ApiKey.ListGroupsRequest
-      | DescribeGroups _ -> ApiKey.DescribeGroupsRequest
-
-    member x.ApiVersion : ApiVersion =
-      match x with
-      | RequestMessage.OffsetFetch  _ -> 1s
-      | RequestMessage.OffsetCommit _ -> 2s
-      | RequestMessage.Produce _ -> 1s
-      | _ -> 0s
+      | Metadata _ -> ApiKey.Metadata
+      | Fetch _ -> ApiKey.Fetch
+      | Produce _ -> ApiKey.Produce
+      | Offset _ -> ApiKey.Offset
+      | GroupCoordinator _ -> ApiKey.GroupCoordinator
+      | OffsetCommit _ -> ApiKey.OffsetCommit
+      | OffsetFetch _ -> ApiKey.OffsetFetch
+      | JoinGroup _ -> ApiKey.JoinGroup
+      | SyncGroup _ -> ApiKey.SyncGroup
+      | Heartbeat _ -> ApiKey.Heartbeat
+      | LeaveGroup _ -> ApiKey.LeaveGroup
+      | ListGroups _ -> ApiKey.ListGroups
+      | DescribeGroups _ -> ApiKey.DescribeGroups
 
   /// A Kafka request envelope.
   type Request =
@@ -1256,14 +1259,14 @@ module Protocol =
       Binary.sizeString x.clientId +
       RequestMessage.size x.message
 
-    static member inline write (x:Request) buf =
+    static member inline write (ver:ApiVersion, x:Request) buf =
       let buf =
         buf
         |> Binary.writeInt16 (int16 x.apiKey)
         |> Binary.writeInt16 x.apiVersion
         |> Binary.writeInt32 x.correlationId
         |> Binary.writeString x.clientId
-      RequestMessage.write x.message buf
+      RequestMessage.write (ver, x.message) buf
 
   /// A Kafka response message.
   type ResponseMessage =
@@ -1283,33 +1286,33 @@ module Protocol =
   with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
-    static member inline readApiKey apiKey buf : ResponseMessage =
+    static member inline readApiKey (apiKey:ApiKey, apiVer:ApiVersion, buf:Binary.Segment) : ResponseMessage =
       match apiKey with
-      | ApiKey.HeartbeatRequest ->
+      | ApiKey.Heartbeat ->
         let x, _ = HeartbeatResponse.read buf in (ResponseMessage.HeartbeatResponse x)
-      | ApiKey.MetadataRequest ->
+      | ApiKey.Metadata ->
         let x, _ = MetadataResponse.read buf in (ResponseMessage.MetadataResponse x)
-      | ApiKey.FetchRequest ->
-        let x, _ = FetchResponse.read buf in (ResponseMessage.FetchResponse x)
-      | ApiKey.ProduceRequest ->
+      | ApiKey.Fetch ->
+        let x, _ = FetchResponse.read (apiVer,buf) in (ResponseMessage.FetchResponse x)
+      | ApiKey.Produce ->
         let x, _ = ProduceResponse.read buf in (ResponseMessage.ProduceResponse x)
-      | ApiKey.OffsetRequest ->
+      | ApiKey.Offset ->
         let x, _ = OffsetResponse.read buf in (ResponseMessage.OffsetResponse x)
-      | ApiKey.GroupCoordinatorRequest ->
+      | ApiKey.GroupCoordinator ->
         let x, _ = GroupCoordinatorResponse.read buf in (ResponseMessage.GroupCoordinatorResponse x)
-      | ApiKey.OffsetCommitRequest ->
+      | ApiKey.OffsetCommit ->
         let x, _ = OffsetCommitResponse.read buf in (ResponseMessage.OffsetCommitResponse x)
-      | ApiKey.OffsetFetchRequest ->
+      | ApiKey.OffsetFetch ->
         let x, _ = OffsetFetchResponse.read buf in (ResponseMessage.OffsetFetchResponse x)
-      | ApiKey.JoinGroupRequest ->
+      | ApiKey.JoinGroup ->
         let x, _ = JoinGroup.readResponse buf in (ResponseMessage.JoinGroupResponse x)
-      | ApiKey.SyncGroupRequest ->
+      | ApiKey.SyncGroup ->
         let x, _ = SyncGroupResponse.read buf in (ResponseMessage.SyncGroupResponse x)
-      | ApiKey.LeaveGroupRequest ->
+      | ApiKey.LeaveGroup ->
         let x, _ = LeaveGroupResponse.read buf in (ResponseMessage.LeaveGroupResponse x)
-      | ApiKey.ListGroupsRequest ->
+      | ApiKey.ListGroups ->
         let x, _ = ListGroupsResponse.read buf in (ResponseMessage.ListGroupsResponse x)
-      | ApiKey.DescribeGroupsRequest ->
+      | ApiKey.DescribeGroups ->
         let x, _ = DescribeGroupsResponse.read buf in (ResponseMessage.DescribeGroupsResponse x)
       | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
 
@@ -1327,3 +1330,4 @@ module Protocol =
     let buf = Binary.zeros size
     buf |> write x |> ignore
     buf
+
