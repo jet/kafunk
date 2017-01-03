@@ -159,6 +159,11 @@ module Socket =
   let receiveStream (socket:Socket) : AsyncSeq<Binary.Segment> =
     receiveStreamFrom socket.ReceiveBufferSize (receive socket)
 
+
+type FramingException (msg) =
+  inherit Exception (msg)
+  new () = FramingException(null)
+
 /// Stream framing
 module Framing =
 
@@ -190,20 +195,15 @@ module Framing =
       yield! data |]
 
     let private tryReadLength (headerBytes:int) (length:int) (data:Binary.Segment) : ReadResult =
-//      if data.Count >= (HeaderLength - headerBytes) then
-//        let length = Binary.peekInt32 data
-//        let remainder = Binary.offset (data.Offset + HeaderLength) data
-//        ReadResult(remainder, length)
-//      else
-        let rec loop (headerBytes:int) (length:int) (i:int) =
-          if i = data.Offset + data.Count then
-            new ReadResult(Binary.empty, length, headerBytes)
-          else
-            let length = ((int data.Array.[i]) <<< ((HeaderLength - headerBytes - 1) * 8)) ||| length // big endian
-            let headerBytes = headerBytes + 1
-            if headerBytes = HeaderLength then ReadResult(Binary.offset (i + 1) data, length)
-            else loop headerBytes length (i + 1)
-        loop headerBytes length data.Offset
+      let rec loop (headerBytes:int) (length:int) (i:int) =
+        if i = data.Offset + data.Count then
+          new ReadResult(Binary.empty, length, headerBytes)
+        else
+          let length = ((int data.Array.[i]) <<< ((HeaderLength - headerBytes - 1) * 8)) ||| length // big endian
+          let headerBytes = headerBytes + 1
+          if headerBytes = HeaderLength then ReadResult(Binary.offset (i + 1) data, length)
+          else loop headerBytes length (i + 1)
+      loop headerBytes length data.Offset
 
     type State =
       struct
@@ -270,8 +270,14 @@ type CorrelationId = int32
 type SessionMessage =
   val public tx_id : CorrelationId
   val public payload : Binary.Segment
-  new (data:Binary.Segment) = { tx_id = Binary.peekInt32 data; payload = Binary.shiftOffset 4 data }
   new (txId, payload) = { tx_id = txId ; payload = payload }
+with
+  static member decode (buf:Binary.Segment) = 
+    if buf.Count < 4 then raise (FramingException("Insufficient data to decode SessionMessage."))
+    let txId = Binary.peekInt32 buf
+    let payload = Binary.shiftOffset 4 buf
+    SessionMessage (txId,payload)
+    
 
 /// A multiplexed request/reply session.
 /// Note a session is stateful in that it maintains state between requests and responses
@@ -291,10 +297,10 @@ type ReqRepSession<'a, 'b, 's> internal
     /// If a request 'a does not expect a response, return Some with the default response.
     awaitResponse:'a -> 'b option,
 
-    /// A stream of bytes corresponding to the stream received from the remote host.
+    /// A stream of messages corresponding to the stream received from the remote host.
     receive:AsyncSeq<Binary.Segment>,
 
-    /// Sends a byte array to the remote host.
+    /// Sends a message to the remote host.
     send:Binary.Segment -> Async<int>) =
 
   static let Log = Log.create "Kafunk.TcpSession"
@@ -303,7 +309,7 @@ type ReqRepSession<'a, 'b, 's> internal
   let cts = new CancellationTokenSource()
 
   let demux (data:Binary.Segment) =
-    let sessionData = SessionMessage(data)
+    let sessionData = SessionMessage.decode (data)
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
@@ -344,12 +350,12 @@ type ReqRepSession<'a, 'b, 's> internal
   let rec receiveLoop = async {
     try
       do! receive |> AsyncSeq.iter demux
-      Log.warn "restarting_receive_loop" 
+      Log.warn "restarting_receive_loop"
       return! receiveLoop
     with ex ->
       Log.error "receive_loop_faiure|error=%O" ex
-      do! Async.Sleep 1000
       cts.Cancel ()
+      do! Async.Sleep 1000
       return raise ex }
 
   do Async.Start (receiveLoop, cts.Token)

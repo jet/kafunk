@@ -131,8 +131,13 @@ module Routing =
     rs
     |> Array.map ResponseMessage.toFetch
     |> (fun rs -> 
-      let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
-      new FetchResponse(tt, rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.FetchResponse)
+      let res =
+        if rs.Length = 0 then 
+          new FetchResponse (0, [||])
+        else
+          let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
+          new FetchResponse(tt, rs |> Array.collect (fun r -> r.topics))
+      ResponseMessage.FetchResponse res)
 
   let concatProduceResponses (rs:ProduceResponse[]) =
     let topics = rs |> Array.collect (fun r -> r.topics)

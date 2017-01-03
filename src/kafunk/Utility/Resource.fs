@@ -5,6 +5,18 @@ open System.Threading
 open System.Threading.Tasks
 open Kafunk
 
+/// A result of a resource-dependent operation.
+type ResourceResult<'a, 'e> = Result<'a, ResourceErrorAction<'a, 'e>>
+
+/// The action to take when a resource-dependent operation fails.
+and ResourceErrorAction<'a, 'e> =
+  
+  /// Recover the resource and return the specified result.
+  | RecoverResume of 'e * 'a
+    
+  /// Recover the resource and retry the operation.
+  | RecoverRetry of 'e
+
 // operations on resource monitors.
 module Resource =
 
@@ -99,11 +111,32 @@ module Resource =
         let! ep = MVar.get cell
         return! op ep.resource a |> Async.cancelWithToken ep.closed.Token }
         
+    member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) : Async<'a -> Async<'b>> = async {
+      let rec go a = async {
+        let! ep = MVar.get cell
+        let! res = op ep.resource a
+        match res with
+        | Success b -> 
+          return b
+        | Failure (RecoverResume (ex,b)) ->
+          let! _ = __.Recover (ep, a, ex)
+          return b
+        | Failure (RecoverRetry ex) ->
+          let! _ = __.Recover (ep, a, ex)
+          return! go a }
+      return go }
+
     member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
       let rec go a = async {
         let! ep = MVar.get cell
         try
           return! op ep.resource a
+//          let! res = op ep.resource a |> Async.cancelWithToken ep.closed.Token
+//          match res with
+//          | Some res ->
+//            return res
+//          | None ->
+//            return! go a
         with ex ->
           let! _ = __.Recover (ep, box a, ex)
           return! go a }
@@ -123,6 +156,9 @@ module Resource =
   /// with the resource.
   let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.Inject op
+
+  let injectResult (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
+    r.InjectResult op
 
   let timeout (r:Resource<'r>) : ('r -> ('a -> Async<'b>)) -> ('a -> Async<'b option>) =
     r.Timeout

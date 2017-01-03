@@ -4,10 +4,10 @@ open System.Reflection
 [<assembly: AssemblyTitleAttribute("kafunk")>]
 [<assembly: AssemblyProductAttribute("kafunk")>]
 [<assembly: AssemblyDescriptionAttribute("F# client for Kafka")>]
-[<assembly: AssemblyVersionAttribute("0.0.7")>]
-[<assembly: AssemblyFileVersionAttribute("0.0.7")>]
+[<assembly: AssemblyVersionAttribute("0.0.8")>]
+[<assembly: AssemblyFileVersionAttribute("0.0.8")>]
 do ()
 
 module internal AssemblyVersionInformation =
-    let [<Literal>] Version = "0.0.7"
-    let [<Literal>] InformationalVersion = "0.0.7"
+    let [<Literal>] Version = "0.0.8"
+    let [<Literal>] InformationalVersion = "0.0.8"

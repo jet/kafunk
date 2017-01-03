@@ -1,3 +1,7 @@
+### 0.0.9-alpha001 - 03.01.2017
+
+* Refine TCP error recovery
+
 ### 0.0.8-alpha001 - 03.01.2017
 
 * v0.10.1 support
