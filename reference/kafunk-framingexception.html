@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>SessionMessage - Kafunk</title>
+    <title>FramingException - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,59 +35,12 @@
 
 
 
-<h1>SessionMessage</h1>
+<h1>FramingException</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>A client creates a session message, assigns a unique tx id and waits for a response from the server.
-A server receives a session message, and sends a response with the same tx id.</p>
-
 </div>
-  <h3>Record Fields</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Record Field</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '868', 868)" onmouseover="showTip(event, '868', 868)">
-            payload
-          </code>
-          <div class="tip" id="868">
-            <strong>Signature:</strong> Segment<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L272-272" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '869', 869)" onmouseover="showTip(event, '869', 869)">
-            tx_id
-          </code>
-          <div class="tip" id="869">
-            <strong>Signature:</strong> CorrelationId<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L271-271" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-    </tbody>
-  </table>
   <h3>Constructors</h3>
   <table class="table table-bordered member-list">
     <thead>
@@ -97,15 +50,15 @@ A server receives a session message, and sends a response with the same tx id.</
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '870', 870)" onmouseover="showTip(event, '870', 870)">
-            new(txId, payload)
+          <code onmouseout="hideTip(event, '791', 791)" onmouseover="showTip(event, '791', 791)">
+            new()
           </code>
-          <div class="tip" id="870">
-            <strong>Signature:</strong> (txId:CorrelationId * payload:Segment) -&gt; SessionMessage<br />
+          <div class="tip" id="791">
+            <strong>Signature:</strong> unit -&gt; FramingException<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L273-273" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L165-165" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -113,30 +66,23 @@ A server receives a session message, and sends a response with the same tx id.</
               <p>CompiledName: <code>.ctor</code></p>
         </td>
       </tr>
-    </tbody>
-  </table>
-  <h3>Static members</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Static member</td><td>Description</td></tr>
-    </thead>
-    <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '871', 871)" onmouseover="showTip(event, '871', 871)">
-            decode(buf)
+          <code onmouseout="hideTip(event, '792', 792)" onmouseover="showTip(event, '792', 792)">
+            new(msg)
           </code>
-          <div class="tip" id="871">
-            <strong>Signature:</strong> buf:Segment -&gt; SessionMessage<br />
+          <div class="tip" id="792">
+            <strong>Signature:</strong> msg:string -&gt; FramingException<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L275-275" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L163-163" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           
+              <p>CompiledName: <code>.ctor</code></p>
         </td>
       </tr>
     </tbody>

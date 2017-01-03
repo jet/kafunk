@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>SessionMessage - Kafunk</title>
+    <title>ResourceErrorAction<'a, 'e> - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,108 +35,58 @@
 
 
 
-<h1>SessionMessage</h1>
+<h1>ResourceErrorAction<'a, 'e></h1>
 <p>
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>A client creates a session message, assigns a unique tx id and waits for a response from the server.
-A server receives a session message, and sends a response with the same tx id.</p>
+<p>The action to take when a resource-dependent operation fails.</p>
 
 </div>
-  <h3>Record Fields</h3>
+  <h3>Union Cases</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Record Field</td><td>Description</td></tr>
+      <tr><td>Union Case</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '868', 868)" onmouseover="showTip(event, '868', 868)">
-            payload
+          <code onmouseout="hideTip(event, '842', 842)" onmouseover="showTip(event, '842', 842)">
+            RecoverResume(&#39;e,&#39;a)
           </code>
-          <div class="tip" id="868">
-            <strong>Signature:</strong> Segment<br />
+          <div class="tip" id="842">
+            <strong>Signature:</strong> &#39;e * &#39;a<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L272-272" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Resource.fs#L15-15" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Recover the resource and return the specified result.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '869', 869)" onmouseover="showTip(event, '869', 869)">
-            tx_id
+          <code onmouseout="hideTip(event, '843', 843)" onmouseover="showTip(event, '843', 843)">
+            RecoverRetry(&#39;e)
           </code>
-          <div class="tip" id="869">
-            <strong>Signature:</strong> CorrelationId<br />
+          <div class="tip" id="843">
+            <strong>Signature:</strong> &#39;e<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L271-271" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Resource.fs#L18-18" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
-        </td>
-      </tr>
-    </tbody>
-  </table>
-  <h3>Constructors</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Constructor</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
+          <p>Recover the resource and retry the operation.</p>
 
-          <code onmouseout="hideTip(event, '870', 870)" onmouseover="showTip(event, '870', 870)">
-            new(txId, payload)
-          </code>
-          <div class="tip" id="870">
-            <strong>Signature:</strong> (txId:CorrelationId * payload:Segment) -&gt; SessionMessage<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L273-273" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-              <p>CompiledName: <code>.ctor</code></p>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-  <h3>Static members</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Static member</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
 
-          <code onmouseout="hideTip(event, '871', 871)" onmouseover="showTip(event, '871', 871)">
-            decode(buf)
-          </code>
-          <div class="tip" id="871">
-            <strong>Signature:</strong> buf:Segment -&gt; SessionMessage<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Tcp.fs#L275-275" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
         </td>
       </tr>
     </tbody>
