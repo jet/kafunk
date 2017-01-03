@@ -229,21 +229,6 @@ module FlowMonitor =
     let stream = watchMb mb
     mb.Post, stream
       
-  let escalateOnExnOverflow (count:int) (period:TimeSpan) (e:'a[] -> exn) (f:'a -> _) =
-    let post,stream = sinkStream
-    let ivar = TaskCompletionSource<_>()
-    stream
-    |> overflows count period
-    |> AsyncSeq.tryFirst
-    |> Async.map (Option.iter ivar.SetResult)
-    |> Async.Start
-    let report a =
-      post a
-      if ivar.Task.IsCompleted then 
-        raise (e ivar.Task.Result)
-      f a
-    report
-
   let escalateOnThreshold (count:int) (period:TimeSpan) (e:'a[] -> exn) =
     let post,stream = sinkStream
     let ivar = TaskCompletionSource<_>()

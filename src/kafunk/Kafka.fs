@@ -335,11 +335,10 @@ type RetryAction =
 
 
 /// Kafka connection configuration.
-/// http://kafka.apache.org/documentation.html#connectconfigs
 type KafkaConfig = {
   
   /// The Kafka server version.
-  version : System.Version
+  version : Version
 
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
@@ -359,7 +358,7 @@ type KafkaConfig = {
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectionRetryPolicy) =
-    { version = System.Version.Parse "0.9.0"
+    { version = Version.Parse "0.9.0"
       bootstrapServers = bootstrapServers
       bootstrapConnectionRetryPolicy = defaultArg bootstrapConnectionRetryPolicy (RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3)
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
@@ -547,6 +546,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
     
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
+
+  member internal __.Config = cfg
 
   member private __.GetState () =
     let state = MVar.getFastUnsafe stateCell

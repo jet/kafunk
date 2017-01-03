@@ -21,12 +21,39 @@ module Protocol =
 
   type ApiVersion = int16
 
-  /// Versions of Kafka brokers.
+  [<Compile(Module)>]
   module Versions =
     
-    let V_0_9_0 = System.Version (0, 9, 0)    
-    let V_0_10_0 = System.Version (0, 10, 0)
-    let V_0_10_1 = System.Version (0, 10, 1)
+    let private V_0_9_0 = System.Version (0, 9, 0)
+    let private V_0_10_0 = System.Version (0, 10, 0)
+    let private V_0_10_1 = System.Version (0, 10, 1)
+
+    /// Returns an ApiVersion given a system version and an ApiKey.
+    let byKey (version:System.Version) (apiKey:ApiKey) : ApiVersion = 
+      match apiKey with
+      | ApiKey.OffsetFetch -> 1s
+      | ApiKey.OffsetCommit -> 2s
+      | ApiKey.Produce -> 
+        if version >= V_0_10_0 then 2s
+        else 1s
+      | ApiKey.Fetch ->
+        if version >= V_0_10_0 then 2s
+        else 1s
+      | ApiKey.JoinGroup -> 
+        if version >= V_0_10_1 then 1s
+        else 0s
+      | _ -> 
+        0s
+
+    /// Gets the version of Message for a ProduceRequest of the specified API version.
+    let produceReqMessage (apiVer:ApiVersion) =
+      if apiVer >= 2s then 1s
+      else 0s
+
+    /// Gets the version of Message for a FetchResponse of the specified API version.
+    let fetchResMessage (apiVer:ApiVersion) =
+      if apiVer >= 2s then 1s
+      else 0s
 
   /// A correlation id of a Kafka request-response transaction.
   type CorrelationId = int32
@@ -340,16 +367,17 @@ module Protocol =
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-    static member write (m:Message) buf =
+    static member write (ver:ApiVersion) (m:Message) buf =
       let crcBuf = buf
       let buf = crcBuf |> Binary.shiftOffset 4
       let offset = buf.Offset
+      let buf = Binary.writeInt8 m.magicByte buf
+      let buf = Binary.writeInt8 m.attributes buf
       let buf =
-        buf
-        |> Binary.writeInt8 m.magicByte
-        |> Binary.writeInt8 m.attributes
-        |> Binary.writeBytes m.key
-        |> Binary.writeBytes m.value
+        if ver >= 1s then Binary.writeInt64 m.timestamp buf
+        else buf
+      let buf = Binary.writeBytes m.key buf
+      let buf = Binary.writeBytes m.value buf
       let crc = Crc.crc32 buf.Array offset (buf.Offset - offset)
       // We're sharing the array backing both buffers here.
       crcBuf |> Binary.writeInt32 (int crc) |> ignore
@@ -386,13 +414,13 @@ module Protocol =
       x.messages |> Array.sumBy (fun (offset, messageSize, message) ->
         Binary.sizeInt64 offset + Binary.sizeInt32 messageSize + Message.size message)
 
-    static member write (ms:MessageSet) buf =
+    static member write (messageVer:ApiVersion) (ms:MessageSet) buf =
       Binary.writeArrayNoSize buf ms.messages (
-        Binary.write3 Binary.writeInt64 Binary.writeInt32 Message.write)
+        Binary.write3 Binary.writeInt64 Binary.writeInt32 (Message.write messageVer))
 
     /// Reads the messages from the buffer, returning the message and new state of buffer.
     /// If the buffer doesn't have sufficient space for the last message, skips it.
-    static member read (ver:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:Binary.Segment) =
+    static member read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:Binary.Segment) =
       let set, buf = 
         Binary.readArrayByteSize 
           messageSetSize 
@@ -407,7 +435,7 @@ module Protocol =
                 raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
               try
                 if messageSetRemainder >= messageSize && buf.Count >= messageSize then
-                  let message,buf = Message.read (ver,buf)
+                  let message,buf = Message.read (messageVer,buf)
                   Choice1Of2 ((offset,messageSize,message),buf)
                 else
                   let rem = min messageSetRemainder buf.Count
@@ -533,9 +561,9 @@ module Protocol =
         Binary.sizeString tn + Binary.sizeArray ps sizePartition
       Binary.sizeInt16 x.requiredAcks + Binary.sizeInt32 x.timeout + Binary.sizeArray x.topics sizeTopic
 
-    static member write (x:ProduceRequest) buf =
+    static member write (ver:ApiVersion, x:ProduceRequest) buf =
       let writePartition =
-        Binary.write3 Binary.writeInt32 Binary.writeInt32 MessageSet.write
+        Binary.write3 Binary.writeInt32 Binary.writeInt32 (MessageSet.write (Versions.produceReqMessage ver))
       let writeTopic =
         Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
       buf
@@ -604,13 +632,12 @@ module Protocol =
   with
 
     static member read (ver:ApiVersion, buf:Binary.Segment) =
-      let msgVer = if ver >= 2s then 1s else 0s
       let readPartition buf =
         let partition, buf = Binary.readInt32 buf
         let errorCode, buf = Binary.readInt16 buf
         let hwo, buf = Binary.readInt64 buf
         let mss, buf = Binary.readInt32 buf
-        let ms, buf = MessageSet.read (msgVer,partition,errorCode,mss,buf)
+        let ms, buf = MessageSet.read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
         ((partition, errorCode, hwo, mss, ms), buf)
       let readTopic =
         Binary.read2 Binary.readString (Binary.readArray readPartition)
@@ -1021,17 +1048,14 @@ module Protocol =
 
     let consumer = "consumer"
 
-  type Version = int16
-
-  /// User data sent as part of protocol metadata.
-  type UserData = Binary.Segment
+  type ConsumerGroupProtocolMetadataVersion = int16
 
   /// ProtocolMetadata for the consumer group protocol.
   type ConsumerGroupProtocolMetadata =
     struct
-      val version : Version
+      val version : ConsumerGroupProtocolMetadataVersion
       val subscription : TopicName[]
-      val userData : UserData
+      val userData : Binary.Segment
       new (version, subscription, userData) =
         { version = version; subscription = subscription; userData = userData }
     end
@@ -1077,7 +1101,7 @@ module Protocol =
   /// Each member in the group will receive the assignment from the leader in the sync group response.
   type ConsumerGroupMemberAssignment =
     struct
-      val version : Version
+      val version : ConsumerGroupProtocolMetadataVersion
       val partitionAssignment : PartitionAssignment
       new (version, partitionAssignment) = { version = version; partitionAssignment = partitionAssignment }
     end
@@ -1211,7 +1235,7 @@ module Protocol =
       | Heartbeat x -> HeartbeatRequest.write x buf
       | Metadata x -> Metadata.writeRequest x buf
       | Fetch x -> FetchRequest.write x buf
-      | Produce x -> ProduceRequest.write x buf
+      | Produce x -> ProduceRequest.write (ver,x) buf
       | Offset x -> OffsetRequest.write x buf
       | GroupCoordinator x -> GroupCoordinatorRequest.write x buf
       | OffsetCommit x -> OffsetCommitRequest.write x buf

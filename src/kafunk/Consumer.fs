@@ -256,8 +256,6 @@ module Consumer =
         Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=%A" cfg.groupId topic (missing |> Array.map fst)
         let offsetReq = OffsetRequest(-1, [| topic, missing |> Array.map (fun (p,_) -> p, cfg.initialFetchTime, 1) |])
         let! offsetRes = Kafka.offset conn offsetReq
-        //let offsetResStr = OffsetResponse.Print offsetRes
-        //Log.info "offset_response|%s" offsetResStr
         // TODO: error check
         let oks' = 
           offsetRes.topics
@@ -456,6 +454,7 @@ module Consumer =
     let cfg = consumer.cfg
     let topic = cfg.topic
     let fetch = Kafka.fetch consumer.conn |> AsyncFunc.catch
+    let messageVer = Versions.fetchResMessage (Versions.byKey consumer.conn.Config.version ApiKey.Fetch)
     
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:ConsumerState) = async {
@@ -491,7 +490,9 @@ module Consumer =
                     match ec with
                     | ErrorCode.NoError ->
                       if mss = 0 then Choice2Of3 (p,hwmo)
-                      else Choice1Of3 (ConsumerMessageSet(t, p, ms, hwmo))
+                      else 
+                        let ms = Compression.decompress messageVer ms
+                        Choice1Of3 (ConsumerMessageSet(t, p, ms, hwmo))
                     | ErrorCode.OffsetOutOfRange -> 
                       Choice3Of3 (p,hwmo)
                     | _ -> failwithf "unsupported fetch error_code=%i" ec))

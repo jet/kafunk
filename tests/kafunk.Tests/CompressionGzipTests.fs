@@ -7,7 +7,8 @@ open System.Text
 
 [<Test>]
 [<Category("Compression")>]
-let ``Message Compression with Gzip`` () =
+let ``Compression.GZip should work`` () =
+
     let messageBytes = [| 1uy; 2uy; 3uy; 4uy; 2uy; 6uy; 8uy |]
     let message2Bytes = [| 1uy; 2uy; 3uy; 2uy |]
 
@@ -15,10 +16,10 @@ let ``Message Compression with Gzip`` () =
     let message2 = Message.create (Binary.ofArray message2Bytes) (Binary.empty) None
     
     let inputMessage =
-        Compression.gzip [message; message2]
+        Compression.GZip.compress 0s (MessageSet.ofMessages [message; message2])
 
     let outputMessageSet =
-        Compression.decompressMessage inputMessage
+        Compression.GZip.decompress 0s inputMessage
 
     let messages = outputMessageSet.messages
     Assert.IsTrue (messages.Length = 2)

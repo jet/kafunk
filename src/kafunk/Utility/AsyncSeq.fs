@@ -41,23 +41,23 @@ module AsyncPipe =
           let step = ref pipe
           { new IAsyncEnumerator<_> with
               member __.MoveNext () = async {
-                let! step' = !step                
+                let! step' = !step
                 match step' with
                 | Halt | Await _ -> 
                   return None
                 | Emit (a,tail) ->
                   step := tail
-                  return Some a }                    
+                  return Some a }
               member __.Dispose () = () } }
             
-  let windowed (windowSize:int) : AsyncPipe<'a, 'a[]> =    
+  let windowed (windowSize:int) : AsyncPipe<'a, 'a[]> =
     let rec loop (win:ResizeArray<_>) =
       awaitHalt (fun a ->
-        win.Add a          
+        win.Add a
         if win.Count > windowSize then
           win.RemoveAt 0
         if win.Count = windowSize then
-          emit (win.ToArray()) (loop win)         
+          emit (win.ToArray()) (loop win)
         else 
           loop win)
     loop (ResizeArray<_>(windowSize))
@@ -66,7 +66,7 @@ module AsyncPipe =
     let rec loop (t:DateTime) (buf:ResizeArray<_>) =
       awaitHalt (fun a ->
         buf.Add a
-        let t' = DateTime.UtcNow        
+        let t' = DateTime.UtcNow
         if (t' - t) >= timeSpan then
           emit (buf.ToArray()) (loop t' (ResizeArray<_>()))
         else
@@ -75,7 +75,7 @@ module AsyncPipe =
 
   /// Feeds an async sequence into a transducer and emits the resulting async sequence.
   let transduce (pipe:AsyncPipe<'a, 'b>) (source:AsyncSeq<'a>) : AsyncSeq<'b> = 
-    asyncSeq {      
+    asyncSeq {
       use enum = source.GetEnumerator()
       let rec go pipe = asyncSeq {
         let! step = pipe

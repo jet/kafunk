@@ -138,6 +138,7 @@ type ProducerConfig = {
 type Producer = private {
   conn : KafkaConn
   config : ProducerConfig
+  messageVersion : ApiVersion
   state : MVar<ProducerState>
 }
 
@@ -169,7 +170,8 @@ module Producer =
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (cfg:ProducerConfig) : Async<Producer> = async {
     Log.info "initializing_producer|topic=%s" cfg.topic
-    let p = { state = MVar.create () ; config = cfg ; conn = conn }
+    let messageVersion = Versions.produceReqMessage (Versions.byKey conn.Config.version ApiKey.Produce)
+    let p = { state = MVar.create () ; config = cfg ; conn = conn ; messageVersion = messageVersion }
     let! state = p.state |> MVar.putAsync (getState conn cfg.topic 0)
     Log.info "producer_initialized|topic=%s partitions=%A" cfg.topic state.partitions
     return p }
@@ -185,6 +187,7 @@ module Producer =
 
     let conn = p.conn
     let cfg = p.config
+    let messageVer = p.messageVersion
     let send = Kafka.produce conn
 
     // TODO: rediscover partition set on broker rebalance
@@ -197,7 +200,7 @@ module Producer =
             pms 
             |> Seq.map (fun pm -> Message.create pm.value pm.key None) 
             |> MessageSet.ofMessages
-          //let ms = Compression.compress cfg.compression messages
+            |> Compression.compress messageVer cfg.compression
           p,ms)
         |> Seq.toArray
       let req = ProduceRequest.ofMessageSetTopics [| cfg.topic, pms |] cfg.requiredAcks cfg.timeout

@@ -528,30 +528,13 @@ module Chan =
     /// A framing sender.
     let send = Framing.LengthPrefix.frame >> send
 
-    /// Gets the ApiVersion for a request.
-    let apiVersion req : ApiVersion = 
-      match req with
-      | RequestMessage.OffsetFetch  _ -> 1s
-      | RequestMessage.OffsetCommit _ -> 2s
-      | RequestMessage.Produce _ -> 
-        if version >= Versions.V_0_10_0 then 2s
-        else 1s
-      | RequestMessage.Fetch _ ->
-        if version >= Versions.V_0_10_0 then 2s
-        else 1s
-      | RequestMessage.JoinGroup _ -> 
-        if version >= Versions.V_0_10_1 then 1s
-        else 0s
-      | _ -> 
-        0s
-
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
       let apiKey = req.ApiKey
-      let apiVer = apiVersion req
+      let apiVer = Versions.byKey version apiKey
       let req = Request(apiVer, correlationId, clientId, req)
       let sessionData = toArraySeg Request.size (fun a -> Request.write (apiVer,a)) req
-      sessionData, (apiKey,apiVer)
+      sessionData,(apiKey,apiVer)
 
     /// Decodes the session layer input and session state into a response.
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
