@@ -514,11 +514,18 @@ module Chan =
 
     let! receive =
       let receive s buf = async {
-        let! received = Socket.receive s buf
-        if received = 0 then return raise(SocketException(int SocketError.ConnectionAborted)) 
-        else return received }
+        try
+          let! received = Socket.receive s buf
+          if received = 0 then 
+            Log.warn "received_empty_buffer"
+            return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
+          else 
+            return Success received
+        with ex ->
+          Log.error "receive_failure|error=%O" ex
+          return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
-      |> Resource.inject receive
+      |> Resource.injectResult receive
 
     /// An unframed input stream.
     let receiveStream =
