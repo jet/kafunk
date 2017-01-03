@@ -52,15 +52,33 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '741', 741)" onmouseover="showTip(event, '741', 741)">
+          <code onmouseout="hideTip(event, '740', 740)" onmouseover="showTip(event, '740', 740)">
             channels
           </code>
-          <div class="tip" id="741">
+          <div class="tip" id="740">
             <strong>Signature:</strong> Map&lt;EndPoint,Chan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L366-366" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L371-371" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '741', 741)" onmouseover="showTip(event, '741', 741)">
+            routes
+          </code>
+          <div class="tip" id="741">
+            <strong>Signature:</strong> Routes<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L370-370" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -71,32 +89,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '742', 742)" onmouseover="showTip(event, '742', 742)">
-            routes
-          </code>
-          <div class="tip" id="742">
-            <strong>Signature:</strong> Routes<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L365-365" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '743', 743)" onmouseover="showTip(event, '743', 743)">
             version
           </code>
-          <div class="tip" id="743">
+          <div class="tip" id="742">
             <strong>Signature:</strong> int<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L367-367" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L372-372" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -114,15 +114,33 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '744', 744)" onmouseover="showTip(event, '744', 744)">
+          <code onmouseout="hideTip(event, '743', 743)" onmouseover="showTip(event, '743', 743)">
             addChannel(ch s)
           </code>
-          <div class="tip" id="744">
+          <div class="tip" id="743">
             <strong>Signature:</strong> ch:Chan -&gt; s:ConnState -&gt; ConnState<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L380-380" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L385-385" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '744', 744)" onmouseover="showTip(event, '744', 744)">
+            bootstrap(bootstrapCh)
+          </code>
+          <div class="tip" id="744">
+            <strong>Signature:</strong> bootstrapCh:Chan -&gt; ConnState<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L395-395" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -133,14 +151,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '745', 745)" onmouseover="showTip(event, '745', 745)">
-            bootstrap(bootstrapCh)
+            tryFindChanByEndPoint(ep s)
           </code>
           <div class="tip" id="745">
-            <strong>Signature:</strong> bootstrapCh:Chan -&gt; ConnState<br />
+            <strong>Signature:</strong> ep:EndPoint -&gt; s:ConnState -&gt; Chan option<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L390-390" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L375-375" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -151,32 +169,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '746', 746)" onmouseover="showTip(event, '746', 746)">
-            tryFindChanByEndPoint(ep s)
-          </code>
-          <div class="tip" id="746">
-            <strong>Signature:</strong> ep:EndPoint -&gt; s:ConnState -&gt; Chan option<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L370-370" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '747', 747)" onmouseover="showTip(event, '747', 747)">
             updateRoutes(f s)
           </code>
-          <div class="tip" id="747">
+          <div class="tip" id="746">
             <strong>Signature:</strong> (f:(Routes -&gt; Routes)) -&gt; s:ConnState -&gt; ConnState<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L383-383" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L388-388" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

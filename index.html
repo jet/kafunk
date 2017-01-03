@@ -242,7 +242,7 @@ also want to read the <a href="https://github.com/jet/kafunk/project/README.md">
 <div class="tip" id="fs24">static member ProducerMessage.ofBytes : value:byte [] * ?key:byte [] -&gt; ProducerMessage<br />static member ProducerMessage.ofBytes : value:Binary.Segment * ?key:Binary.Segment -&gt; ProducerMessage</div>
 <div class="tip" id="fs25">val p : Partition</div>
 <div class="tip" id="fs26">ProducerResult.offsets: (Partition * Offset) []</div>
-<div class="tip" id="fs27">static member ConsumerConfig.create : groupId:GroupId * topic:TopicName * ?initialFetchTime:Time * ?fetchMaxBytes:MaxBytes * ?sessionTimeout:SessionTimeout * ?heartbeatFrequency:int32 * ?offsetRetentionTime:int64 * ?fetchMinBytes:MinBytes * ?fetchMaxWaitMs:MaxWaitTime * ?endOfTopicPollPolicy:RetryPolicy * ?outOfRangeAction:ConsumerOffsetOutOfRangeAction * ?fetchBufferSize:int -&gt; ConsumerConfig</div>
+<div class="tip" id="fs27">static member ConsumerConfig.create : groupId:GroupId * topic:TopicName * ?initialFetchTime:Time * ?fetchMaxBytes:MaxBytes * ?sessionTimeout:SessionTimeout * ?rebalanceTimeout:RebalanceTimeout * ?heartbeatFrequency:int32 * ?offsetRetentionTime:int64 * ?fetchMinBytes:MinBytes * ?fetchMaxWaitMs:MaxWaitTime * ?endOfTopicPollPolicy:RetryPolicy * ?outOfRangeAction:ConsumerOffsetOutOfRangeAction * ?fetchBufferSize:int -&gt; ConsumerConfig</div>
 <div class="tip" id="fs28">val create : conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; Consumer<br /><br />Full name: Kafunk.Consumer.create</div>
 <div class="tip" id="fs29">val consume : handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br /><br />Full name: Kafunk.Consumer.consume</div>
 <div class="tip" id="fs30">ConsumerMessageSet.topic: TopicName</div>

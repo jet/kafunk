@@ -56,10 +56,10 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '131', 131)" onmouseover="showTip(event, '131', 131)">
-            connect config clientId ep
+            connect (version, config, clientId) ep
           </code>
           <div class="tip" id="131">
-            <strong>Signature:</strong> config:ChanConfig -&gt; clientId:ClientId -&gt; ep:EndPoint -&gt; Async&lt;Chan&gt;<br />
+            <strong>Signature:</strong> (version:Version * config:ChanConfig * clientId:ClientId) -&gt; ep:EndPoint -&gt; Async&lt;Chan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -99,11 +99,11 @@ Only a single channel per endpoint is needed.</p>
             discoverConnect (...)
           </code>
           <div class="tip" id="133">
-            <strong>Signature:</strong> config:ChanConfig -&gt; clientId:ClientId -&gt; (host:Host * port:Port) -&gt; Async&lt;Chan&gt;<br />
+            <strong>Signature:</strong> (version:Version * config:ChanConfig * clientId:ClientId) -&gt; (host:Host * port:Port) -&gt; Async&lt;Chan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L575-575" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Chan.fs#L577-577" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

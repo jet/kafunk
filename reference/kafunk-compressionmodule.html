@@ -43,6 +43,23 @@
 </div>
 
 <!-- Render nested types and modules, if there are any -->
+  <h2>Nested types and modules</h2>
+  <div>
+      <table class="table table-bordered module-list">
+    <thead>
+      <tr><td>Module</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-compressionmodule-gzipmodule.html">GZip</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+    </tbody>
+  </table>
+
+  </div>
 
   <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
@@ -54,14 +71,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '154', 154)" onmouseover="showTip(event, '154', 154)">
-            compress compression messages
+            compress messageVer compression ms
           </code>
           <div class="tip" id="154">
-            <strong>Signature:</strong> compression:byte -&gt; messages:seq&lt;Message&gt; -&gt; MessageSet<br />
+            <strong>Signature:</strong> messageVer:int16 -&gt; compression:byte -&gt; ms:MessageSet -&gt; MessageSet<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Compression.fs#L62-62" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Compression.fs#L56-56" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -72,50 +89,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '155', 155)" onmouseover="showTip(event, '155', 155)">
-            decompress messageSet
+            decompress messageVer ms
           </code>
           <div class="tip" id="155">
-            <strong>Signature:</strong> messageSet:MessageSet -&gt; MessageSet<br />
+            <strong>Signature:</strong> messageVer:int16 -&gt; ms:MessageSet -&gt; MessageSet<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Compression.fs#L69-69" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '156', 156)" onmouseover="showTip(event, '156', 156)">
-            decompressMessage message
-          </code>
-          <div class="tip" id="156">
-            <strong>Signature:</strong> message:Message -&gt; MessageSet<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Compression.fs#L32-32" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '157', 157)" onmouseover="showTip(event, '157', 157)">
-            gzip messages
-          </code>
-          <div class="tip" id="157">
-            <strong>Signature:</strong> messages:seq&lt;Message&gt; -&gt; Message<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Compression.fs#L15-15" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Compression.fs#L63-63" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
