@@ -1,25 +1,10 @@
-# Kafunk - F# Kafka client
+# Kafunk [![NuGet Status](http://img.shields.io/nuget/v/kafunk.svg?style=flat)](https://www.nuget.org/packages/kafunk/)
 
-**Kafunk** is a Kafka client written in F#.
+**Kafunk** is a [Kafka](https://kafka.apache.org/) client written in F#.
 
 See [the home page](http://jet.github.io/kafunk) for details.
 
 Please also join the [F# Open Source Group](http://fsharp.github.com)
-
-# Status
-
-This is a work in progress and not yet published as a packge. See the issue list for the remaining items. At the point, the public API and internals may undergo several changes before stabilizing. Still, contributions are welcome!
-
-| Feature         | Status   |
-| ----------------|----------|
-| Wire Protocol   | Complete |
-| Base API        | Complete |
-| Compression     | GZip     |
-| Routing         | Complete |
-| Consumer Groups | Complete |
-| Producers       | Complete |
-| v0.9            | Complete |
-| v0.10           | Partial  |
 
 # Hello World
 
@@ -27,9 +12,7 @@ This is a work in progress and not yet published as a packge. See the issue list
 open Kafunk
 open System
 
-
 let conn = Kafka.connHost "existential-host"
-
 
 // metadata
 
@@ -72,6 +55,7 @@ let consumer =
   Consumer.create conn consumerCfg
 
 // commit on every message set
+
 consumer
 |> Consumer.consume (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition
@@ -80,13 +64,11 @@ consumer
 
 
 // commit periodically
+
 consumer
 |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition })
 |> Async.RunSynchronously
-
-
-
 
 
 

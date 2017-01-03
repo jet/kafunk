@@ -1,3 +1,7 @@
+### 0.0.8-alpha001 - 03.01.2017
+
+* v0.10.1 support
+
 ### 0.0.7-alpha001 - 02.01.2017
 
 * Fix overflow bug in Partitioner.roundRobin
