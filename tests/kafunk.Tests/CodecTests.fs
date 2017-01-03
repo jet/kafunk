@@ -26,7 +26,7 @@ let ``Binary.writeInt32 should encode int32 negative``() =
 [<Test>]
 let ``Crc.crc32 message``() =
   let m = Message.ofBytes "hello world"B None
-  let bytes = toArraySeg Message.size Message.write m
+  let bytes = toArraySeg Message.size (Message.write 0s) m
   let crc32 = Crc.crc32 bytes.Array (bytes.Offset + 4) (bytes.Count - 4)
   let expected = 1940715388u
   Assert.AreEqual(expected, crc32)
@@ -57,7 +57,7 @@ let ``MessageSet.write should encode MessageSet``() =
       Message.ofString "2" "1"
     ]
     |> MessageSet.ofMessages
-  let data = toArraySeg MessageSet.size MessageSet.write ms
+  let data = toArraySeg MessageSet.size (MessageSet.write 0s) ms
   let encoded = data |> Binary.toArray |> Array.toList
   Assert.True ((expected = encoded))
 
@@ -73,7 +73,7 @@ let FetchResponseBinary =
 [<Test>]
 let ``FetchResponse.read should decode FetchResponse``() =
   let data = FetchResponseBinary
-  let (res:FetchResponse), _ = FetchResponse.read data
+  let (res:FetchResponse), _ = FetchResponse.read (0s, data)
   let topicName, ps = res.topics.[0]
   let p, ec, _hwo, mss, ms = ps.[0]
   let o, _ms, m = ms.messages.[0]
@@ -125,7 +125,7 @@ let ``ProduceResponse.read should decode ProduceResponse``() =
 [<Test>]
 let ``ProduceRequest.write should encode ProduceRequest``() =
   let req = ProduceRequest.ofMessageSet "test" 0 (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) None None
-  let data = toArraySeg ProduceRequest.size ProduceRequest.write req |> Binary.toArray |> Array.toList
+  let data = toArraySeg ProduceRequest.size (fun x -> ProduceRequest.write (0s,x)) req |> Binary.toArray |> Array.toList
   let expected = [
     0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;
     0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;

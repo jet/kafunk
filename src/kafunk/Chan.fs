@@ -13,22 +13,22 @@ open Kafunk
 module Message =
 
   let create value key attrs =
-    Message(0, 0y, (defaultArg attrs 0y), key, value)
+    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
 
   let ofBuffer data key =
-    Message(0, 0y, 0y, (defaultArg  key (Binary.empty)), data)
+    Message(0, 0y, 0y, 0L, (defaultArg  key (Binary.empty)), data)
 
   let ofBytes value key =
     let key =
       match key with
       | Some key -> Binary.ofArray key
       | None -> Binary.empty
-    Message(0, 0y, 0y, key, Binary.ofArray value)
+    Message(0, 0y, 0y, 0L, key, Binary.ofArray value)
 
   let ofString (value:string) (key:string) =
     let value = Encoding.UTF8.GetBytes value |> Binary.ofArray
     let key = Encoding.UTF8.GetBytes key |> Binary.ofArray
-    Message(0, 0y, 0y, key, value)
+    Message(0, 0y, 0y, 0L, key, value)
 
   let valueString (m:Message) =
     m.value |> Binary.toString
@@ -465,8 +465,8 @@ module Chan =
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (config:ChanConfig) (clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
-
+  let connect (version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
+    
     let conn (ep:EndPoint) = async {
       let ipep = EndPoint.endpoint ep
       let connSocket =
@@ -530,13 +530,15 @@ module Chan =
 
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
-      let req = Request(req.ApiVersion, correlationId, clientId, req)
-      let sessionData = toArraySeg Request.size Request.write req
-      sessionData, req.apiKey
+      let apiKey = req.ApiKey
+      let apiVer = Versions.byKey version apiKey
+      let req = Request(apiVer, correlationId, clientId, req)
+      let sessionData = toArraySeg Request.size (fun a -> Request.write (apiVer,a)) req
+      sessionData,(apiKey,apiVer)
 
     /// Decodes the session layer input and session state into a response.
-    let decode (_, apiKey:ApiKey, buf:Binary.Segment) =
-      ResponseMessage.readApiKey apiKey buf
+    let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
+      ResponseMessage.readApiKey (apiKey,apiVer,buf)
 
     let session =
       Session.requestReply
@@ -572,7 +574,7 @@ module Chan =
     return Chan (ep, send, Async.empty, Async.empty) }
 
   /// Discovers brokers via DNS and connects to the first IPv4.
-  let discoverConnect (config:ChanConfig) (clientId:ClientId) (host:Host, port:Port) = async {
+  let discoverConnect (version:System.Version, config:ChanConfig, clientId:ClientId) (host:Host, port:Port) = async {
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->
@@ -584,4 +586,4 @@ module Chan =
       | Some ip ->
         return ip }
     let ep = EndPoint.ofIPAddressAndPort (ip, port)
-    return! connect config clientId ep }
+    return! connect (version, config, clientId) ep }
