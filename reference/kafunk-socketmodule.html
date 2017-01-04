@@ -55,10 +55,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '404', 404)" onmouseover="showTip(event, '404', 404)">
+          <code onmouseout="hideTip(event, '405', 405)" onmouseover="showTip(event, '405', 405)">
             accept socket
           </code>
-          <div class="tip" id="404">
+          <div class="tip" id="405">
             <strong>Signature:</strong> socket:Socket -&gt; Async&lt;Socket&gt;<br />
                       </div>
         </td>
@@ -75,10 +75,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '405', 405)" onmouseover="showTip(event, '405', 405)">
+          <code onmouseout="hideTip(event, '406', 406)" onmouseover="showTip(event, '406', 406)">
             acceptStream socket
           </code>
-          <div class="tip" id="405">
+          <div class="tip" id="406">
             <strong>Signature:</strong> socket:Socket -&gt; AsyncSeq&lt;Socket&gt;<br />
                       </div>
         </td>
@@ -95,10 +95,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '406', 406)" onmouseover="showTip(event, '406', 406)">
+          <code onmouseout="hideTip(event, '407', 407)" onmouseover="showTip(event, '407', 407)">
             argsAlloc 
           </code>
-          <div class="tip" id="406">
+          <div class="tip" id="407">
             <strong>Signature:</strong> (unit -&gt; SocketAsyncEventArgs) * (SocketAsyncEventArgs -&gt; unit)<br />
                       </div>
         </td>
@@ -113,10 +113,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '407', 407)" onmouseover="showTip(event, '407', 407)">
+          <code onmouseout="hideTip(event, '408', 408)" onmouseover="showTip(event, '408', 408)">
             connect socket ep
           </code>
-          <div class="tip" id="407">
+          <div class="tip" id="408">
             <strong>Signature:</strong> socket:Socket -&gt; ep:IPEndPoint -&gt; Async&lt;Socket&gt;<br />
                       </div>
         </td>
@@ -133,10 +133,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '408', 408)" onmouseover="showTip(event, '408', 408)">
+          <code onmouseout="hideTip(event, '409', 409)" onmouseover="showTip(event, '409', 409)">
             disconnect socket reuse
           </code>
-          <div class="tip" id="408">
+          <div class="tip" id="409">
             <strong>Signature:</strong> socket:Socket -&gt; reuse:bool -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
@@ -151,10 +151,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '409', 409)" onmouseover="showTip(event, '409', 409)">
+          <code onmouseout="hideTip(event, '410', 410)" onmouseover="showTip(event, '410', 410)">
             exec (alloc, free) config op map
           </code>
-          <div class="tip" id="409">
+          <div class="tip" id="410">
             <strong>Signature:</strong> (alloc:(unit -&gt; SocketAsyncEventArgs) * free:(SocketAsyncEventArgs -&gt; unit)) -&gt; config:(SocketAsyncEventArgs -&gt; unit) -&gt; op:(SocketAsyncEventArgs -&gt; bool) -&gt; map:(SocketAsyncEventArgs -&gt; &#39;a) -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
@@ -171,10 +171,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '410', 410)" onmouseover="showTip(event, '410', 410)">
+          <code onmouseout="hideTip(event, '411', 411)" onmouseover="showTip(event, '411', 411)">
             receive socket buf
           </code>
-          <div class="tip" id="410">
+          <div class="tip" id="411">
             <strong>Signature:</strong> socket:Socket -&gt; buf:Segment -&gt; Async&lt;int&gt;<br />
                       </div>
         </td>
@@ -192,10 +192,10 @@ number of bytes transferred.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '411', 411)" onmouseover="showTip(event, '411', 411)">
+          <code onmouseout="hideTip(event, '412', 412)" onmouseover="showTip(event, '412', 412)">
             receiveFrom socket remoteEp buf
           </code>
-          <div class="tip" id="411">
+          <div class="tip" id="412">
             <strong>Signature:</strong> socket:Socket -&gt; remoteEp:IPEndPoint -&gt; buf:Segment -&gt; Async&lt;int&gt;<br />
                       </div>
         </td>
@@ -210,10 +210,10 @@ number of bytes transferred.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '412', 412)" onmouseover="showTip(event, '412', 412)">
+          <code onmouseout="hideTip(event, '413', 413)" onmouseover="showTip(event, '413', 413)">
             receiveStream socket
           </code>
-          <div class="tip" id="412">
+          <div class="tip" id="413">
             <strong>Signature:</strong> socket:Socket -&gt; AsyncSeq&lt;Segment&gt;<br />
                       </div>
         </td>
@@ -233,10 +233,10 @@ exceptions.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '413', 413)" onmouseover="showTip(event, '413', 413)">
+          <code onmouseout="hideTip(event, '414', 414)" onmouseover="showTip(event, '414', 414)">
             receiveStreamFrom bufferSize receive
           </code>
-          <div class="tip" id="413">
+          <div class="tip" id="414">
             <strong>Signature:</strong> bufferSize:int -&gt; receive:(Segment -&gt; Async&lt;int&gt;) -&gt; AsyncSeq&lt;Segment&gt;<br />
                       </div>
         </td>
@@ -255,10 +255,10 @@ transferring 0 bytes. Socket errors are propagated as exceptions.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '414', 414)" onmouseover="showTip(event, '414', 414)">
+          <code onmouseout="hideTip(event, '415', 415)" onmouseover="showTip(event, '415', 415)">
             send socket buf
           </code>
-          <div class="tip" id="414">
+          <div class="tip" id="415">
             <strong>Signature:</strong> socket:Socket -&gt; buf:Segment -&gt; Async&lt;int&gt;<br />
                       </div>
         </td>
@@ -276,10 +276,10 @@ sent.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '415', 415)" onmouseover="showTip(event, '415', 415)">
+          <code onmouseout="hideTip(event, '416', 416)" onmouseover="showTip(event, '416', 416)">
             sendAll socket bufs
           </code>
-          <div class="tip" id="415">
+          <div class="tip" id="416">
             <strong>Signature:</strong> socket:Socket -&gt; bufs:Segment [] -&gt; Async&lt;int&gt;<br />
                       </div>
         </td>
@@ -297,10 +297,10 @@ bytes sent.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '416', 416)" onmouseover="showTip(event, '416', 416)">
+          <code onmouseout="hideTip(event, '417', 417)" onmouseover="showTip(event, '417', 417)">
             sendAllTo socket remoteEp bufs
           </code>
-          <div class="tip" id="416">
+          <div class="tip" id="417">
             <strong>Signature:</strong> socket:Socket -&gt; remoteEp:IPEndPoint -&gt; bufs:Segment [] -&gt; Async&lt;int&gt;<br />
                       </div>
         </td>
@@ -315,10 +315,10 @@ bytes sent.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '417', 417)" onmouseover="showTip(event, '417', 417)">
+          <code onmouseout="hideTip(event, '418', 418)" onmouseover="showTip(event, '418', 418)">
             setBuffer buf args
           </code>
-          <div class="tip" id="417">
+          <div class="tip" id="418">
             <strong>Signature:</strong> buf:Segment -&gt; args:SocketAsyncEventArgs -&gt; unit<br />
                       </div>
         </td>
@@ -333,10 +333,10 @@ bytes sent.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '418', 418)" onmouseover="showTip(event, '418', 418)">
+          <code onmouseout="hideTip(event, '419', 419)" onmouseover="showTip(event, '419', 419)">
             setBuffers bufs args
           </code>
-          <div class="tip" id="418">
+          <div class="tip" id="419">
             <strong>Signature:</strong> bufs:Segment [] -&gt; args:SocketAsyncEventArgs -&gt; unit<br />
                       </div>
         </td>
