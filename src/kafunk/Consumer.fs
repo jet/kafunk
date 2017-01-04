@@ -198,7 +198,7 @@ module Consumer =
               |> Seq.choose (fun (p,ec) ->
                 match ec with
                 | ErrorCode.NoError -> None
-                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode -> Some (p,ec)
+                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
                 | _ -> failwithf "unsupported error_code=%i" ec))
           if not (Seq.isEmpty errors) then
             do! closeGeneration state
@@ -301,7 +301,7 @@ module Consumer =
       let req = JoinGroup.Request(cfg.groupId, cfg.sessionTimeout, cfg.rebalanceTimeout, defaultArg prevMemberId "", protocolType, groupProtocols)
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
-      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
         return Failure res.errorCode
       | ErrorCode.NoError ->
         return Success res
@@ -340,12 +340,30 @@ module Consumer =
           let topicPartitions =
             topicPartitions
             |> Map.toSeq
-            |> Seq.collect (fun (t,ps) -> ps |> Seq.map (fun p -> t,p))
+            |> Seq.collect (fun (t,ps) -> 
+              if t = cfg.topic then ps |> Seq.map (fun p -> t,p)
+              else Seq.empty)
             |> Seq.toArray
             |> Array.groupInto members.Length
+
           let memberAssignments =
             (members,topicPartitions)
             ||> Array.zip 
+
+          let memberAssignmentsStr =
+            memberAssignments
+            |> Seq.map (fun ((memberId,_),topicPartitions) -> 
+              let str = 
+                topicPartitions 
+                |> Seq.groupBy fst
+                |> Seq.map (fun (t,ps) -> sprintf "[topic=%s partitions=%s]" t (String.concat "," (ps |> Seq.map (snd >> string))))
+                |> String.concat " ; "
+              sprintf "[member_id=%s assignments=%s]" memberId str)
+            |> String.concat " ; "
+          Log.info "leader_determined_member_assignments|%s" memberAssignmentsStr
+
+          let memberAssignments =
+            memberAssignments
             |> Array.map (fun ((memberId,_),ps) ->
               let assignment = 
                 ps 
@@ -354,6 +372,7 @@ module Consumer =
                 |> Seq.toArray
               let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment(assignment))
               memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))
+                        
           let req = SyncGroupRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
           let! res = Kafka.syncGroup conn req
           match res.errorCode with
@@ -371,7 +390,7 @@ module Consumer =
           let req = SyncGroupRequest(cfg.groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment([||]))
           let! res = Kafka.syncGroup conn req
           match res.errorCode with
-          | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+          | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
             return None
           | _ ->
             return Some res }
@@ -422,7 +441,7 @@ module Consumer =
               match res with
               | Success res ->
                 match res.errorCode with
-                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode ->
+                | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
                   do! closeGeneration state
                   return ()
                 | _ ->
@@ -671,3 +690,13 @@ module Consumer =
         do! handler ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
       return! consumer |> consume handler }
+
+  /// Returns a stream of message sets across all partitions assigned to the consumer.
+  /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
+  /// backpressure on the underlying consumer.
+  let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
+    use cts = new CancellationTokenSource()
+    let mb = BoundedMb.create bufferSize
+    let handle ms = BoundedMb.put ms mb
+    Async.Start (consume handle consumer, cts.Token)
+    yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
