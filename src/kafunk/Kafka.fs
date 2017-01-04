@@ -14,7 +14,7 @@ open Kafunk
 
 /// The routing table provides host information for the leader of a topic/partition
 /// or a group coordinator.
-type Routes = private {
+type internal Routes = {
   bootstrapHost : EndPoint
   nodeToHost : Map<NodeId, EndPoint>
   topicToNode : Map<TopicName * Partition, NodeId>
@@ -71,16 +71,16 @@ type Routes = private {
 /// A route is a result where success is a set of request and host pairs
 /// and failure is a set of request and missing route pairs.
 /// A request can target multiple topics and as such, multiple brokers.
-type RouteResult = Result<(RequestMessage * EndPoint)[], MissingRouteResult>
+type internal RouteResult = Result<(RequestMessage * EndPoint)[], MissingRouteResult>
         
 /// Indicates a missing route.
-and MissingRouteResult =
+and internal MissingRouteResult =
   | MissingTopicRoute of topic:TopicName
   | MissingGroupRoute of group:GroupId
 
 /// Routing topic/partition and groups to channels.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Routing =
+[<Compile(Module)>]
+module internal Routing =
 
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
   let private partitionFetchReq (routes:Routes) (req:FetchRequest) =
@@ -158,7 +158,7 @@ module Routing =
 
   /// Performs request routing based on cluster metadata.
   /// Fetch, produce and offset requests are routed to the broker which is the leader for that topic, partition.
-  /// Group related requests are routed to the respective broker.
+  /// Group related requests are routed to the groop coordinator.
   let route (routes:Routes) : RequestMessage -> RouteResult =
 
     // route to bootstrap broker
@@ -199,7 +199,7 @@ module Routing =
 
 
 /// Indicates an action to take in response to a request error.
-type RetryAction =
+type private RetryAction =
   
   // TODO: generalize these 3
   | RefreshMetadataAndRetry of topics:TopicName[]
@@ -338,7 +338,6 @@ type RetryAction =
         |> Option.map (fun action -> r.errorCode,action,"")
 
 
-
 /// Kafka connection configuration.
 type KafkaConfig = {
   
@@ -371,7 +370,7 @@ type KafkaConfig = {
 
 
 /// Connection state.
-type ConnState = private {
+type internal ConnState = {
   routes : Routes
   channels : Map<EndPoint, Chan>
   version : int
@@ -699,7 +698,8 @@ module Offsets =
     | Enqueue of (Partition * Offset) seq
     | Commit
 
-  type PeriodicCommitQueue (interval:TimeSpan, commit:(Partition * Offset)[] -> Async<unit>) =
+  /// A queue for offsets to be periodically committed.
+  type PeriodicCommitQueue internal (interval:TimeSpan, commit:(Partition * Offset)[] -> Async<unit>) =
   
     let cts = new CancellationTokenSource()
 
@@ -730,7 +730,7 @@ module Offsets =
 
     do Async.Start (commitLoop, cts.Token)
 
-    member __.Enqueue (os:(Partition * Offset) seq) =
+    member internal __.Enqueue (os:(Partition * Offset) seq) =
       mbp.Post (Enqueue os)
 
     interface IDisposable with

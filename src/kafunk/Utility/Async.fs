@@ -8,9 +8,7 @@ open System.Threading
 open System.Threading.Tasks
 open System.Collections.Generic
 open System.Collections.Concurrent
-
 open Kafunk
-
 
 [<AutoOpen>]
 module AsyncEx =
@@ -227,7 +225,7 @@ module AsyncEx =
       Async.timeoutResultWith (fun () -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)) timeout c
 
 
-
+/// Operations on functions of the form 'a -> Async<'b>.
 module AsyncFunc =
   
   let catch (f:'a -> Async<'b>) : 'a -> Async<Result<'b, exn>> =
@@ -288,7 +286,7 @@ module AsyncFunc =
 
 
 
-
+/// A mailbox processor.
 type Mb<'a> = MailboxProcessor<'a>
 
 /// Operations on unbounded FIFO mailboxes.

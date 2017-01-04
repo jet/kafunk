@@ -90,7 +90,7 @@ and ConsumerOffsetOutOfRangeAction =
   | ResumeConsumerWithFreshInitialFetchTime
 
 /// State corresponding to a single generation of the consumer group protocol.
-type ConsumerState = {
+type ConsumerState = private {
   generationId : GenerationId
   memberId : MemberId
   leaderId : LeaderId
@@ -108,11 +108,21 @@ type Consumer = private {
 /// A set of messages for a consumer from an individual topic-partition.
 type ConsumerMessageSet =
   struct
+    
+    /// The topic.
     val topic : TopicName
+    
+    /// The partition.
     val partition : Partition
+    
+    /// The message set.
     val messageSet : MessageSet
+    
+    /// The last offset in the topic-partition.
     val highWatermarkOffset : HighwaterMarkOffset
+    
     new (t,p,ms,hwmo) = { topic = t ; partition = p ; messageSet = ms ; highWatermarkOffset = hwmo }
+
   end
   with 
     
