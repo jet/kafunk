@@ -6,7 +6,15 @@ See [the home page](http://jet.github.io/kafunk) for details.
 
 Please also join the [F# Open Source Group](http://fsharp.github.com)
 
-# Hello World
+## Version Support
+
+| Version   | Status   |
+| ----------|----------|
+| 0.9.0     | Complete |
+| 0.10.0    | Complete |
+| 0.10.1    | Complete |
+
+## Hello World
 
 ```fsharp
 open Kafunk
@@ -91,7 +99,7 @@ for kvp in offsets do
       printfn "time=%i topic=%s partition=%i offsets=%A" kvp.Key tn p.partition p.offsets
 ```
 
-# Maintainer(s)
+## Maintainers
 
 - [@strmpnk](https://github.com/strmpnk)
 - [@eulerfx](https://github.com/eulerfx)

@@ -1,3 +1,8 @@
+### 0.0.10-alpha001 - 04.01.2017
+
+* Log leader-size member assignments
+* Fix consumer NotCoordinatorForGroup error recovery
+
 ### 0.0.9-alpha001 - 03.01.2017
 
 * Refine TCP error recovery
