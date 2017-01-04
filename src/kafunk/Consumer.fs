@@ -671,3 +671,13 @@ module Consumer =
         do! handler ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
       return! consumer |> consume handler }
+
+  /// Returns a stream of message sets across all partitions assigned to the consumer.
+  /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
+  /// backpressure on the underlying consumer.
+  let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
+    use cts = new CancellationTokenSource()
+    let mb = BoundedMb.create bufferSize
+    let handle ms = BoundedMb.put ms mb
+    Async.Start (consume handle consumer, cts.Token)
+    yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
