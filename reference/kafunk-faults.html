@@ -72,10 +72,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '175', 175)" onmouseover="showTip(event, '175', 175)">
+          <code onmouseout="hideTip(event, '171', 171)" onmouseover="showTip(event, '171', 171)">
             retryAsync p shouldRetry a
           </code>
-          <div class="tip" id="175">
+          <div class="tip" id="171">
             <strong>Signature:</strong> p:RetryPolicy -&gt; shouldRetry:(&#39;a -&gt; bool) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a option&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
@@ -93,10 +93,10 @@ Returns None when shouldRetry returns false.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '176', 176)" onmouseover="showTip(event, '176', 176)">
+          <code onmouseout="hideTip(event, '172', 172)" onmouseover="showTip(event, '172', 172)">
             retryAsyncResult m p a
           </code>
-          <div class="tip" id="176">
+          <div class="tip" id="172">
             <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
@@ -111,10 +111,10 @@ Returns None when shouldRetry returns false.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '177', 177)" onmouseover="showTip(event, '177', 177)">
+          <code onmouseout="hideTip(event, '173', 173)" onmouseover="showTip(event, '173', 173)">
             retryAsyncResultList b a
           </code>
-          <div class="tip" id="177">
+          <div class="tip" id="173">
             <strong>Signature:</strong> b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e list&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'e          </div>
         </td>
@@ -129,10 +129,10 @@ Returns None when shouldRetry returns false.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '178', 178)" onmouseover="showTip(event, '178', 178)">
+          <code onmouseout="hideTip(event, '174', 174)" onmouseover="showTip(event, '174', 174)">
             retryAsyncResultRef m p a
           </code>
-          <div class="tip" id="178">
+          <div class="tip" id="174">
             <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
@@ -147,10 +147,10 @@ Returns None when shouldRetry returns false.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '179', 179)" onmouseover="showTip(event, '179', 179)">
+          <code onmouseout="hideTip(event, '175', 175)" onmouseover="showTip(event, '175', 175)">
             retryAsyncResultStream p a
           </code>
-          <div class="tip" id="179">
+          <div class="tip" id="175">
             <strong>Signature:</strong> p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'e          </div>
         </td>
@@ -168,10 +168,10 @@ computation until the computations succeeds.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '180', 180)" onmouseover="showTip(event, '180', 180)">
+          <code onmouseout="hideTip(event, '176', 176)" onmouseover="showTip(event, '176', 176)">
             retryAsyncResultWarn m p a
           </code>
-          <div class="tip" id="180">
+          <div class="tip" id="176">
             <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; p:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e),&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
@@ -190,10 +190,10 @@ accumulated during retries, if any, and otherwise, a Failure of accumulated erro
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '181', 181)" onmouseover="showTip(event, '181', 181)">
+          <code onmouseout="hideTip(event, '177', 177)" onmouseover="showTip(event, '177', 177)">
             retryAsyncResultWarnList policy a
           </code>
-          <div class="tip" id="181">
+          <div class="tip" id="177">
             <strong>Signature:</strong> policy:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e list),&#39;e list&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'e          </div>
         </td>
@@ -208,10 +208,10 @@ accumulated during retries, if any, and otherwise, a Failure of accumulated erro
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '182', 182)" onmouseover="showTip(event, '182', 182)">
+          <code onmouseout="hideTip(event, '178', 178)" onmouseover="showTip(event, '178', 178)">
             retryResultThrow f m b a
           </code>
-          <div class="tip" id="182">
+          <div class="tip" id="178">
             <strong>Signature:</strong> f:(&#39;e -&gt; &#39;a) -&gt; m:Monoid&lt;&#39;e&gt; -&gt; b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a, 'a          </div>
         </td>
@@ -229,12 +229,12 @@ Returns the first successful value or throws an exception based on errors observ
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '183', 183)" onmouseover="showTip(event, '183', 183)">
+          <code onmouseout="hideTip(event, '179', 179)" onmouseover="showTip(event, '179', 179)">
             retryResultThrowList f b a
           </code>
-          <div class="tip" id="183">
-            <strong>Signature:</strong> f:(&#39;e list -&gt; &#39;?8716) -&gt; b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'e, '?8716, 'a          </div>
+          <div class="tip" id="179">
+            <strong>Signature:</strong> f:(&#39;e list -&gt; &#39;?8717) -&gt; b:RetryPolicy -&gt; a:Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'e, '?8717, 'a          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L304-304" class="github-link">

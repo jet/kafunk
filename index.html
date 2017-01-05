@@ -125,9 +125,7 @@
 <span class="k">open</span> <span onmouseout="hideTip(event, 'fs1', 1)" onmouseover="showTip(event, 'fs1', 1)" class="i">Kafunk</span>
 <span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 2)" onmouseover="showTip(event, 'fs2', 2)" class="i">System</span>
 
-
 <span class="k">let</span> <span onmouseout="hideTip(event, 'fs2', 3)" onmouseover="showTip(event, 'fs2', 3)" class="i">conn</span> <span class="o">=</span> <span onmouseout="hideTip(event, 'fs2', 4)" onmouseover="showTip(event, 'fs2', 4)" class="t">Kafka</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs3', 5)" onmouseover="showTip(event, 'fs3', 5)" class="f">connHost</span> <span class="s">&quot;existential-host&quot;</span>
-
 
 <span class="c">// metadata</span>
 
@@ -179,32 +177,34 @@
 
 <span class="c">// commit periodically</span>
 <span onmouseout="hideTip(event, 'fs2', 96)" onmouseover="showTip(event, 'fs2', 96)" class="i">consumer</span>
-<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 97)" onmouseover="showTip(event, 'fs2', 97)" class="t">Consumer</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs34', 98)" onmouseover="showTip(event, 'fs34', 98)" class="f">consumePeriodicCommit</span> (<span onmouseout="hideTip(event, 'fs2', 99)" onmouseover="showTip(event, 'fs2', 99)" class="t">TimeSpan</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs35', 100)" onmouseover="showTip(event, 'fs35', 100)" class="f">FromSeconds</span> <span class="n">10</span>) (<span class="k">fun</span> <span onmouseout="hideTip(event, 'fs2', 101)" onmouseover="showTip(event, 'fs2', 101)" class="i">ms</span> <span class="k">-&gt;</span> <span onmouseout="hideTip(event, 'fs2', 102)" onmouseover="showTip(event, 'fs2', 102)" class="i">async</span> {
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 97)" onmouseover="showTip(event, 'fs2', 97)" class="t">Consumer</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs34', 98)" onmouseover="showTip(event, 'fs34', 98)" class="f">consumePeriodicCommit</span> (<span onmouseout="hideTip(event, 'fs2', 99)" onmouseover="showTip(event, 'fs2', 99)" class="t">TimeSpan</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs35', 100)" onmouseover="showTip(event, 'fs35', 100)" class="f">FromSeconds</span> <span class="n">10.0</span>) (<span class="k">fun</span> <span onmouseout="hideTip(event, 'fs2', 101)" onmouseover="showTip(event, 'fs2', 101)" class="i">ms</span> <span class="k">-&gt;</span> <span onmouseout="hideTip(event, 'fs2', 102)" onmouseover="showTip(event, 'fs2', 102)" class="i">async</span> {
   <span onmouseout="hideTip(event, 'fs2', 103)" onmouseover="showTip(event, 'fs2', 103)" class="f">printfn</span> <span class="s">&quot;topic=</span><span class="pf">%s</span><span class="s"> partition=</span><span class="pf">%i</span><span class="s">&quot;</span> <span onmouseout="hideTip(event, 'fs2', 104)" onmouseover="showTip(event, 'fs2', 104)" class="i">ms</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs30', 105)" onmouseover="showTip(event, 'fs30', 105)" class="i">topic</span> <span onmouseout="hideTip(event, 'fs2', 106)" onmouseover="showTip(event, 'fs2', 106)" class="i">ms</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs31', 107)" onmouseover="showTip(event, 'fs31', 107)" class="i">partition</span> })
 <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 108)" onmouseover="showTip(event, 'fs2', 108)" class="t">Async</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs6', 109)" onmouseover="showTip(event, 'fs6', 109)" class="f">RunSynchronously</span>
 
 
 
-
-
-
-<span class="c">// consumer commit offsets</span>
+<span class="c">// commit consumer offsets</span>
 
 <span onmouseout="hideTip(event, 'fs2', 110)" onmouseover="showTip(event, 'fs2', 110)" class="t">Consumer</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs32', 111)" onmouseover="showTip(event, 'fs32', 111)" class="f">commitOffsets</span> <span onmouseout="hideTip(event, 'fs2', 112)" onmouseover="showTip(event, 'fs2', 112)" class="i">consumer</span> [| <span class="n">0</span>, <span class="n">1L</span> |]
 <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 113)" onmouseover="showTip(event, 'fs2', 113)" class="t">Async</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs6', 114)" onmouseover="showTip(event, 'fs6', 114)" class="f">RunSynchronously</span>
+
+<span class="c">// commit consumer offsets to a relative time</span>
+
+<span onmouseout="hideTip(event, 'fs2', 115)" onmouseover="showTip(event, 'fs2', 115)" class="t">Consumer</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs36', 116)" onmouseover="showTip(event, 'fs36', 116)" class="f">commitOffsetsToTime</span> <span onmouseout="hideTip(event, 'fs2', 117)" onmouseover="showTip(event, 'fs2', 117)" class="i">consumer</span> <span onmouseout="hideTip(event, 'fs2', 118)" onmouseover="showTip(event, 'fs2', 118)" class="t">Time</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs37', 119)" onmouseover="showTip(event, 'fs37', 119)" class="i">EarliestOffset</span>
+<span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 120)" onmouseover="showTip(event, 'fs2', 120)" class="t">Async</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs6', 121)" onmouseover="showTip(event, 'fs6', 121)" class="f">RunSynchronously</span>
 
 
 
 <span class="c">// offset information</span>
 
-<span class="k">let</span> <span onmouseout="hideTip(event, 'fs2', 115)" onmouseover="showTip(event, 'fs2', 115)" class="i">offsets</span> <span class="o">=</span> 
-  <span onmouseout="hideTip(event, 'fs2', 116)" onmouseover="showTip(event, 'fs2', 116)" class="t">Offsets</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs36', 117)" onmouseover="showTip(event, 'fs36', 117)" class="f">offsets</span> <span onmouseout="hideTip(event, 'fs2', 118)" onmouseover="showTip(event, 'fs2', 118)" class="i">conn</span> <span class="s">&quot;absurd-topic&quot;</span> [] [ <span onmouseout="hideTip(event, 'fs2', 119)" onmouseover="showTip(event, 'fs2', 119)" class="t">Time</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs37', 120)" onmouseover="showTip(event, 'fs37', 120)" class="i">EarliestOffset</span> ; <span onmouseout="hideTip(event, 'fs2', 121)" onmouseover="showTip(event, 'fs2', 121)" class="t">Time</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs38', 122)" onmouseover="showTip(event, 'fs38', 122)" class="i">LatestOffset</span> ] <span class="n">1</span>
-  <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 123)" onmouseover="showTip(event, 'fs2', 123)" class="t">Async</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs6', 124)" onmouseover="showTip(event, 'fs6', 124)" class="f">RunSynchronously</span>
+<span class="k">let</span> <span onmouseout="hideTip(event, 'fs2', 122)" onmouseover="showTip(event, 'fs2', 122)" class="i">offsets</span> <span class="o">=</span> 
+  <span onmouseout="hideTip(event, 'fs2', 123)" onmouseover="showTip(event, 'fs2', 123)" class="t">Offsets</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs38', 124)" onmouseover="showTip(event, 'fs38', 124)" class="f">offsets</span> <span onmouseout="hideTip(event, 'fs2', 125)" onmouseover="showTip(event, 'fs2', 125)" class="i">conn</span> <span class="s">&quot;absurd-topic&quot;</span> [] [ <span onmouseout="hideTip(event, 'fs2', 126)" onmouseover="showTip(event, 'fs2', 126)" class="t">Time</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs37', 127)" onmouseover="showTip(event, 'fs37', 127)" class="i">EarliestOffset</span> ; <span onmouseout="hideTip(event, 'fs2', 128)" onmouseover="showTip(event, 'fs2', 128)" class="t">Time</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs39', 129)" onmouseover="showTip(event, 'fs39', 129)" class="i">LatestOffset</span> ] <span class="n">1</span>
+  <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs2', 130)" onmouseover="showTip(event, 'fs2', 130)" class="t">Async</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs6', 131)" onmouseover="showTip(event, 'fs6', 131)" class="f">RunSynchronously</span>
 
-<span class="k">for</span> <span onmouseout="hideTip(event, 'fs2', 125)" onmouseover="showTip(event, 'fs2', 125)" class="i">kvp</span> <span class="k">in</span> <span onmouseout="hideTip(event, 'fs2', 126)" onmouseover="showTip(event, 'fs2', 126)" class="i">offsets</span> <span class="k">do</span>
-  <span class="k">for</span> (<span onmouseout="hideTip(event, 'fs2', 127)" onmouseover="showTip(event, 'fs2', 127)" class="i">tn</span>,<span onmouseout="hideTip(event, 'fs2', 128)" onmouseover="showTip(event, 'fs2', 128)" class="i">offsets</span>) <span class="k">in</span> <span onmouseout="hideTip(event, 'fs2', 129)" onmouseover="showTip(event, 'fs2', 129)" class="i">kvp</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs39', 130)" onmouseover="showTip(event, 'fs39', 130)" class="i">Value</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs40', 131)" onmouseover="showTip(event, 'fs40', 131)" class="i">topics</span> <span class="k">do</span>
-    <span class="k">for</span> <span onmouseout="hideTip(event, 'fs41', 132)" onmouseover="showTip(event, 'fs41', 132)" class="i">p</span> <span class="k">in</span> <span onmouseout="hideTip(event, 'fs2', 133)" onmouseover="showTip(event, 'fs2', 133)" class="i">offsets</span> <span class="k">do</span>
-      <span onmouseout="hideTip(event, 'fs2', 134)" onmouseover="showTip(event, 'fs2', 134)" class="f">printfn</span> <span class="s">&quot;time=</span><span class="pf">%i</span><span class="s"> topic=</span><span class="pf">%s</span><span class="s"> partition=</span><span class="pf">%i</span><span class="s"> offsets=</span><span class="pf">%A</span><span class="s">&quot;</span> <span onmouseout="hideTip(event, 'fs2', 135)" onmouseover="showTip(event, 'fs2', 135)" class="i">kvp</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs42', 136)" onmouseover="showTip(event, 'fs42', 136)" class="i">Key</span> <span onmouseout="hideTip(event, 'fs2', 137)" onmouseover="showTip(event, 'fs2', 137)" class="i">tn</span> <span onmouseout="hideTip(event, 'fs41', 138)" onmouseover="showTip(event, 'fs41', 138)" class="i">p</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs43', 139)" onmouseover="showTip(event, 'fs43', 139)" class="i">partition</span> <span onmouseout="hideTip(event, 'fs41', 140)" onmouseover="showTip(event, 'fs41', 140)" class="i">p</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs44', 141)" onmouseover="showTip(event, 'fs44', 141)" class="i">offsets</span>
+<span class="k">for</span> <span onmouseout="hideTip(event, 'fs2', 132)" onmouseover="showTip(event, 'fs2', 132)" class="i">kvp</span> <span class="k">in</span> <span onmouseout="hideTip(event, 'fs2', 133)" onmouseover="showTip(event, 'fs2', 133)" class="i">offsets</span> <span class="k">do</span>
+  <span class="k">for</span> (<span onmouseout="hideTip(event, 'fs2', 134)" onmouseover="showTip(event, 'fs2', 134)" class="i">tn</span>,<span onmouseout="hideTip(event, 'fs2', 135)" onmouseover="showTip(event, 'fs2', 135)" class="i">offsets</span>) <span class="k">in</span> <span onmouseout="hideTip(event, 'fs2', 136)" onmouseover="showTip(event, 'fs2', 136)" class="i">kvp</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs40', 137)" onmouseover="showTip(event, 'fs40', 137)" class="i">Value</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs41', 138)" onmouseover="showTip(event, 'fs41', 138)" class="i">topics</span> <span class="k">do</span>
+    <span class="k">for</span> <span onmouseout="hideTip(event, 'fs42', 139)" onmouseover="showTip(event, 'fs42', 139)" class="i">p</span> <span class="k">in</span> <span onmouseout="hideTip(event, 'fs2', 140)" onmouseover="showTip(event, 'fs2', 140)" class="i">offsets</span> <span class="k">do</span>
+      <span onmouseout="hideTip(event, 'fs2', 141)" onmouseover="showTip(event, 'fs2', 141)" class="f">printfn</span> <span class="s">&quot;time=</span><span class="pf">%i</span><span class="s"> topic=</span><span class="pf">%s</span><span class="s"> partition=</span><span class="pf">%i</span><span class="s"> offsets=</span><span class="pf">%A</span><span class="s">&quot;</span> <span onmouseout="hideTip(event, 'fs2', 142)" onmouseover="showTip(event, 'fs2', 142)" class="i">kvp</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs43', 143)" onmouseover="showTip(event, 'fs43', 143)" class="i">Key</span> <span onmouseout="hideTip(event, 'fs2', 144)" onmouseover="showTip(event, 'fs2', 144)" class="i">tn</span> <span onmouseout="hideTip(event, 'fs42', 145)" onmouseover="showTip(event, 'fs42', 145)" class="i">p</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs44', 146)" onmouseover="showTip(event, 'fs44', 146)" class="i">partition</span> <span onmouseout="hideTip(event, 'fs42', 147)" onmouseover="showTip(event, 'fs42', 147)" class="i">p</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs45', 148)" onmouseover="showTip(event, 'fs45', 148)" class="i">offsets</span>
 </code></pre></td>
 </tr>
 </table>
@@ -242,7 +242,7 @@ also want to read the <a href="https://github.com/jet/kafunk/project/README.md">
 <div class="tip" id="fs24">static member ProducerMessage.ofBytes : value:byte [] * ?key:byte [] -&gt; ProducerMessage<br />static member ProducerMessage.ofBytes : value:Binary.Segment * ?key:Binary.Segment -&gt; ProducerMessage</div>
 <div class="tip" id="fs25">val p : Partition</div>
 <div class="tip" id="fs26">ProducerResult.offsets: (Partition * Offset) []</div>
-<div class="tip" id="fs27">static member ConsumerConfig.create : groupId:GroupId * topic:TopicName * ?initialFetchTime:Time * ?fetchMaxBytes:MaxBytes * ?sessionTimeout:SessionTimeout * ?rebalanceTimeout:RebalanceTimeout * ?heartbeatFrequency:int32 * ?offsetRetentionTime:int64 * ?fetchMinBytes:MinBytes * ?fetchMaxWaitMs:MaxWaitTime * ?endOfTopicPollPolicy:RetryPolicy * ?outOfRangeAction:ConsumerOffsetOutOfRangeAction * ?fetchBufferSize:int -&gt; ConsumerConfig</div>
+<div class="tip" id="fs27">static member ConsumerConfig.create : groupId:GroupId * topic:TopicName * ?initialFetchTime:Time * ?fetchMaxBytes:MaxBytes * ?sessionTimeout:SessionTimeout * ?rebalanceTimeout:RebalanceTimeout * ?heartbeatFrequency:int32 * ?offsetRetentionTime:RetentionTime * ?fetchMinBytes:MinBytes * ?fetchMaxWaitMs:MaxWaitTime * ?endOfTopicPollPolicy:RetryPolicy * ?outOfRangeAction:ConsumerOffsetOutOfRangeAction * ?fetchBufferSize:int -&gt; ConsumerConfig</div>
 <div class="tip" id="fs28">val create : conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; Consumer<br /><br />Full name: Kafunk.Consumer.create</div>
 <div class="tip" id="fs29">val consume : handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br /><br />Full name: Kafunk.Consumer.consume</div>
 <div class="tip" id="fs30">ConsumerMessageSet.topic: TopicName</div>
@@ -250,16 +250,17 @@ also want to read the <a href="https://github.com/jet/kafunk/project/README.md">
 <div class="tip" id="fs32">val commitOffsets : c:Consumer -&gt; offsets:(Partition * Offset) [] -&gt; Async&lt;unit&gt;<br /><br />Full name: Kafunk.Consumer.commitOffsets</div>
 <div class="tip" id="fs33">static member ConsumerMessageSet.commitPartitionOffsets : ms:ConsumerMessageSet -&gt; (Partition * Offset) []</div>
 <div class="tip" id="fs34">val consumePeriodicCommit : commitInterval:TimeSpan -&gt; handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br /><br />Full name: Kafunk.Consumer.consumePeriodicCommit</div>
-<div class="tip" id="fs35">static member TimeSpan.FromSeconds : sec:int -&gt; TimeSpan<br />TimeSpan.FromSeconds(value: float) : TimeSpan</div>
-<div class="tip" id="fs36">val offsets : conn:KafkaConn -&gt; topic:TopicName -&gt; partitions:seq&lt;Partition&gt; -&gt; times:seq&lt;Time&gt; -&gt; maxOffsets:MaxNumberOfOffsets -&gt; Async&lt;Map&lt;Time,OffsetResponse&gt;&gt;<br /><br />Full name: Kafunk.Offsets.offsets</div>
+<div class="tip" id="fs35">TimeSpan.FromSeconds(value: float) : TimeSpan</div>
+<div class="tip" id="fs36">val commitOffsetsToTime : c:Consumer -&gt; time:Time -&gt; Async&lt;unit&gt;<br /><br />Full name: Kafunk.Consumer.commitOffsetsToTime</div>
 <div class="tip" id="fs37">val EarliestOffset : int64<br /><br />Full name: Kafunk.Protocol.Time.EarliestOffset</div>
-<div class="tip" id="fs38">val LatestOffset : int64<br /><br />Full name: Kafunk.Protocol.Time.LatestOffset</div>
-<div class="tip" id="fs39">property Collections.Generic.KeyValuePair.Value: OffsetResponse</div>
-<div class="tip" id="fs40">OffsetResponse.topics: (TopicName * PartitionOffsets []) []</div>
-<div class="tip" id="fs41">val p : PartitionOffsets</div>
-<div class="tip" id="fs42">property Collections.Generic.KeyValuePair.Key: Time</div>
-<div class="tip" id="fs43">PartitionOffsets.partition: Partition</div>
-<div class="tip" id="fs44">PartitionOffsets.offsets: Offset []</div>
+<div class="tip" id="fs38">val offsets : conn:KafkaConn -&gt; topic:TopicName -&gt; partitions:seq&lt;Partition&gt; -&gt; times:seq&lt;Time&gt; -&gt; maxOffsets:MaxNumberOfOffsets -&gt; Async&lt;Map&lt;Time,OffsetResponse&gt;&gt;<br /><br />Full name: Kafunk.Offsets.offsets</div>
+<div class="tip" id="fs39">val LatestOffset : int64<br /><br />Full name: Kafunk.Protocol.Time.LatestOffset</div>
+<div class="tip" id="fs40">property Collections.Generic.KeyValuePair.Value: OffsetResponse</div>
+<div class="tip" id="fs41">OffsetResponse.topics: (TopicName * PartitionOffsets []) []</div>
+<div class="tip" id="fs42">val p : PartitionOffsets</div>
+<div class="tip" id="fs43">property Collections.Generic.KeyValuePair.Key: Time</div>
+<div class="tip" id="fs44">PartitionOffsets.partition: Partition</div>
+<div class="tip" id="fs45">PartitionOffsets.offsets: Offset []</div>
 
         </div>
         <div class="span3">

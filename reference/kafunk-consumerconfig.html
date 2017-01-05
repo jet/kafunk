@@ -52,19 +52,20 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '752', 752)" onmouseover="showTip(event, '752', 752)">
+          <code onmouseout="hideTip(event, '713', 713)" onmouseover="showTip(event, '713', 713)">
             endOfTopicPollPolicy
           </code>
-          <div class="tip" id="752">
+          <div class="tip" id="713">
             <strong>Signature:</strong> RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L46-46" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L57-57" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The poll policy to employ when the end of the topic is reached.</p>
+          <p>The poll policy to employ when the end of the topic is reached.
+Default: RetryPolicy.constantMs 10000</p>
 
 
         </td>
@@ -72,20 +73,21 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '753', 753)" onmouseover="showTip(event, '753', 753)">
+          <code onmouseout="hideTip(event, '714', 714)" onmouseover="showTip(event, '714', 714)">
             fetchBufferSize
           </code>
-          <div class="tip" id="753">
+          <div class="tip" id="714">
             <strong>Signature:</strong> int<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L53-53" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L66-66" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           <p>The size of the per-partition fetch buffer in terms of message set count.
-When at capacity, fetching stops until the buffer is drained.</p>
+When at capacity, fetching stops until the buffer is drained.
+Default: 1</p>
 
 
         </td>
@@ -93,11 +95,53 @@ When at capacity, fetching stops until the buffer is drained.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '754', 754)" onmouseover="showTip(event, '754', 754)">
+          <code onmouseout="hideTip(event, '715', 715)" onmouseover="showTip(event, '715', 715)">
             fetchMaxBytes
           </code>
-          <div class="tip" id="754">
+          <div class="tip" id="715">
             <strong>Signature:</strong> MaxBytes<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L45-45" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The maximum bytes to return as part of a partition for a fetch request.
+Default: 100000</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '716', 716)" onmouseover="showTip(event, '716', 716)">
+            fetchMaxWaitMs
+          </code>
+          <div class="tip" id="716">
+            <strong>Signature:</strong> MaxWaitTime<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L41-41" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The maximum time to wait for a fetch request to return sufficient data.
+Default: 0</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '717', 717)" onmouseover="showTip(event, '717', 717)">
+            fetchMinBytes
+          </code>
+          <div class="tip" id="717">
+            <strong>Signature:</strong> MinBytes<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -105,48 +149,9 @@ When at capacity, fetching stops until the buffer is drained.</p>
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The maximum bytes to return as part of a partition for a fetch request.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '755', 755)" onmouseover="showTip(event, '755', 755)">
-            fetchMaxWaitMs
-          </code>
-          <div class="tip" id="755">
-            <strong>Signature:</strong> MaxWaitTime<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L34-34" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>The maximum time to wait for a fetch request to return sufficient data.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '756', 756)" onmouseover="showTip(event, '756', 756)">
-            fetchMinBytes
-          </code>
-          <div class="tip" id="756">
-            <strong>Signature:</strong> MinBytes<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L31-31" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
           <p>The minimum bytes to buffer server side for a fetch request.
-0 to return immediately.</p>
+0 to return immediately.
+Default: 0</p>
 
 
         </td>
@@ -154,10 +159,10 @@ When at capacity, fetching stops until the buffer is drained.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '757', 757)" onmouseover="showTip(event, '757', 757)">
+          <code onmouseout="hideTip(event, '718', 718)" onmouseover="showTip(event, '718', 718)">
             groupId
           </code>
-          <div class="tip" id="757">
+          <div class="tip" id="718">
             <strong>Signature:</strong> GroupId<br />
                       </div>
         </td>
@@ -174,19 +179,20 @@ When at capacity, fetching stops until the buffer is drained.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '758', 758)" onmouseover="showTip(event, '758', 758)">
+          <code onmouseout="hideTip(event, '719', 719)" onmouseover="showTip(event, '719', 719)">
             heartbeatFrequency
           </code>
-          <div class="tip" id="758">
+          <div class="tip" id="719">
             <strong>Signature:</strong> int32<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L27-27" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L32-32" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The number of times to send heartbeats within a session timeout period.</p>
+          <p>The number of times to send heartbeats within a session timeout period.
+Default: 10</p>
 
 
         </td>
@@ -194,19 +200,20 @@ When at capacity, fetching stops until the buffer is drained.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '759', 759)" onmouseover="showTip(event, '759', 759)">
+          <code onmouseout="hideTip(event, '720', 720)" onmouseover="showTip(event, '720', 720)">
             initialFetchTime
           </code>
-          <div class="tip" id="759">
+          <div class="tip" id="720">
             <strong>Signature:</strong> Time<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L43-43" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L53-53" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The time of offsets to fetch if no offsets are stored (usually for a new group).</p>
+          <p>The time of offsets to fetch if no offsets are stored (usually for a new group).
+Default: Time.EarliestOffset</p>
 
 
         </td>
@@ -214,31 +221,11 @@ When at capacity, fetching stops until the buffer is drained.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '760', 760)" onmouseover="showTip(event, '760', 760)">
+          <code onmouseout="hideTip(event, '721', 721)" onmouseover="showTip(event, '721', 721)">
             offsetRetentionTime
           </code>
-          <div class="tip" id="760">
-            <strong>Signature:</strong> int64<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L40-40" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Offset retention time.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '761', 761)" onmouseover="showTip(event, '761', 761)">
-            outOfRangeAction
-          </code>
-          <div class="tip" id="761">
-            <strong>Signature:</strong> ConsumerOffsetOutOfRangeAction<br />
+          <div class="tip" id="721">
+            <strong>Signature:</strong> RetentionTime<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -246,7 +233,8 @@ When at capacity, fetching stops until the buffer is drained.</p>
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The action to take when a consumer attempts to fetch an out of range offset.</p>
+          <p>Offset retention time.
+Default: -1L</p>
 
 
         </td>
@@ -254,38 +242,65 @@ When at capacity, fetching stops until the buffer is drained.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '762', 762)" onmouseover="showTip(event, '762', 762)">
+          <code onmouseout="hideTip(event, '722', 722)" onmouseover="showTip(event, '722', 722)">
+            outOfRangeAction
+          </code>
+          <div class="tip" id="722">
+            <strong>Signature:</strong> ConsumerOffsetOutOfRangeAction<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L61-61" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The action to take when a consumer attempts to fetch an out of range offset.
+Default: HaltConsumer</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '723', 723)" onmouseover="showTip(event, '723', 723)">
             rebalanceTimeout
           </code>
-          <div class="tip" id="762">
+          <div class="tip" id="723">
             <strong>Signature:</strong> RebalanceTimeout<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L24-24" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L28-28" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>The time during which a consumer must rejoin a group after a rebalance.
+If the consumer doesn't rejoin within this time, it will be ejected.
+Supported in v0.10.1.
+Default: 20000</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '763', 763)" onmouseover="showTip(event, '763', 763)">
+          <code onmouseout="hideTip(event, '724', 724)" onmouseover="showTip(event, '724', 724)">
             sessionTimeout
           </code>
-          <div class="tip" id="763">
+          <div class="tip" id="724">
             <strong>Signature:</strong> SessionTimeout<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L21-21" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L22-22" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The session timeout period, such that if no heartbeats are received within the
-period, a consumer is ejected from the consumer group.</p>
+          <p>The session timeout period, in milliseconds, such that if no heartbeats are received within the
+period, a consumer is ejected from the consumer group.
+Default: 20000</p>
 
 
         </td>
@@ -293,10 +308,10 @@ period, a consumer is ejected from the consumer group.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '764', 764)" onmouseover="showTip(event, '764', 764)">
+          <code onmouseout="hideTip(event, '725', 725)" onmouseover="showTip(event, '725', 725)">
             topic
           </code>
-          <div class="tip" id="764">
+          <div class="tip" id="725">
             <strong>Signature:</strong> TopicName<br />
                       </div>
         </td>
@@ -321,15 +336,15 @@ period, a consumer is ejected from the consumer group.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '765', 765)" onmouseover="showTip(event, '765', 765)">
+          <code onmouseout="hideTip(event, '726', 726)" onmouseover="showTip(event, '726', 726)">
             create(...)
           </code>
-          <div class="tip" id="765">
-            <strong>Signature:</strong> (groupId:GroupId * topic:TopicName * initialFetchTime:Time option * fetchMaxBytes:MaxBytes option * sessionTimeout:SessionTimeout option * rebalanceTimeout:RebalanceTimeout option * heartbeatFrequency:int32 option * offsetRetentionTime:int64 option * fetchMinBytes:MinBytes option * fetchMaxWaitMs:MaxWaitTime option * endOfTopicPollPolicy:RetryPolicy option * outOfRangeAction:ConsumerOffsetOutOfRangeAction option * fetchBufferSize:int option) -&gt; ConsumerConfig<br />
+          <div class="tip" id="726">
+            <strong>Signature:</strong> (groupId:GroupId * topic:TopicName * initialFetchTime:Time option * fetchMaxBytes:MaxBytes option * sessionTimeout:SessionTimeout option * rebalanceTimeout:RebalanceTimeout option * heartbeatFrequency:int32 option * offsetRetentionTime:RetentionTime option * fetchMinBytes:MinBytes option * fetchMaxWaitMs:MaxWaitTime option * endOfTopicPollPolicy:RetryPolicy option * outOfRangeAction:ConsumerOffsetOutOfRangeAction option * fetchBufferSize:int option) -&gt; ConsumerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L58-58" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L71-71" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

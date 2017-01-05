@@ -52,19 +52,20 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '829', 829)" onmouseover="showTip(event, '829', 829)">
+          <code onmouseout="hideTip(event, '788', 788)" onmouseover="showTip(event, '788', 788)">
             compression
           </code>
-          <div class="tip" id="829">
+          <div class="tip" id="788">
             <strong>Signature:</strong> byte<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L108-108" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L115-115" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The compression method to use.</p>
+          <p>The compression method to use.
+Default: None</p>
 
 
         </td>
@@ -72,15 +73,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '830', 830)" onmouseover="showTip(event, '830', 830)">
+          <code onmouseout="hideTip(event, '789', 789)" onmouseover="showTip(event, '789', 789)">
             partitioner
           </code>
-          <div class="tip" id="830">
+          <div class="tip" id="789">
             <strong>Signature:</strong> Partitioner<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L115-115" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L107-107" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -93,31 +94,11 @@ which the message should be written to.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '831', 831)" onmouseover="showTip(event, '831', 831)">
+          <code onmouseout="hideTip(event, '790', 790)" onmouseover="showTip(event, '790', 790)">
             requiredAcks
           </code>
-          <div class="tip" id="831">
+          <div class="tip" id="790">
             <strong>Signature:</strong> RequiredAcks<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L105-105" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>The acks required.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '832', 832)" onmouseover="showTip(event, '832', 832)">
-            timeout
-          </code>
-          <div class="tip" id="832">
-            <strong>Signature:</strong> Timeout<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -125,7 +106,8 @@ which the message should be written to.</p>
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The maximum time to wait for acknowledgement.</p>
+          <p>The acks required.
+Default: Local</p>
 
 
         </td>
@@ -133,15 +115,36 @@ which the message should be written to.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '833', 833)" onmouseover="showTip(event, '833', 833)">
+          <code onmouseout="hideTip(event, '791', 791)" onmouseover="showTip(event, '791', 791)">
+            timeout
+          </code>
+          <div class="tip" id="791">
+            <strong>Signature:</strong> Timeout<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L119-119" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The maximum time to wait for acknowledgement.
+Default: 0</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '792', 792)" onmouseover="showTip(event, '792', 792)">
             topic
           </code>
-          <div class="tip" id="833">
+          <div class="tip" id="792">
             <strong>Signature:</strong> TopicName<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L102-102" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L103-103" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -161,15 +164,15 @@ which the message should be written to.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '834', 834)" onmouseover="showTip(event, '834', 834)">
+          <code onmouseout="hideTip(event, '793', 793)" onmouseover="showTip(event, '793', 793)">
             create(...)
           </code>
-          <div class="tip" id="834">
+          <div class="tip" id="793">
             <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:byte option * timeout:Timeout option) -&gt; ProducerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L123-123" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L124-124" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
