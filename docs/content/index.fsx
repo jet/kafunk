@@ -81,11 +81,15 @@ consumer
 
 
 
-// consumer commit offsets
+// commit consumer offsets
 
 Consumer.commitOffsets consumer [| 0, 1L |]
 |> Async.RunSynchronously
 
+// commit consumer offsets to a relative time
+
+Consumer.commitOffsetsToTime consumer Time.EarliestOffset
+|> Async.RunSynchronously
 
 
 // offset information

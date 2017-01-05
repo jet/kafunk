@@ -16,40 +16,53 @@ type ConsumerConfig = {
   /// The topic to consume.
   topic : TopicName
   
-  /// The session timeout period, such that if no heartbeats are received within the
+  /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
   /// period, a consumer is ejected from the consumer group.
+  /// Default: 20000
   sessionTimeout : SessionTimeout
   
-
+  /// The time during which a consumer must rejoin a group after a rebalance.
+  /// If the consumer doesn't rejoin within this time, it will be ejected.
+  /// Supported in v0.10.1.
+  /// Default: 20000
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
+  /// Default: 10
   heartbeatFrequency : int32
   
   /// The minimum bytes to buffer server side for a fetch request.
   /// 0 to return immediately.
+  /// Default: 0
   fetchMinBytes : MinBytes
 
   /// The maximum time to wait for a fetch request to return sufficient data.
+  /// Default: 0
   fetchMaxWaitMs : MaxWaitTime
   
   /// The maximum bytes to return as part of a partition for a fetch request.
+  /// Default: 100000
   fetchMaxBytes : MaxBytes
   
   /// Offset retention time.
-  offsetRetentionTime : int64
+  /// Default: -1L
+  offsetRetentionTime : RetentionTime
 
   /// The time of offsets to fetch if no offsets are stored (usually for a new group).
+  /// Default: Time.EarliestOffset
   initialFetchTime : Time
   
   /// The poll policy to employ when the end of the topic is reached.
+  /// Default: RetryPolicy.constantMs 10000
   endOfTopicPollPolicy : RetryPolicy
   
   /// The action to take when a consumer attempts to fetch an out of range offset.
+  /// Default: HaltConsumer
   outOfRangeAction : ConsumerOffsetOutOfRangeAction
 
   /// The size of the per-partition fetch buffer in terms of message set count.
   /// When at capacity, fetching stops until the buffer is drained.
+  /// Default: 1
   fetchBufferSize : int
 
 } with
@@ -221,12 +234,14 @@ module Consumer =
           return () })
 
   /// Explicitly commits offsets to a consumer group.
+  /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
     Log.info "comitting_offsets|offsets=%s" (Printers.partitionOffsetPairs offsets)
     let! state = MVar.get c.state
     return! commit c.conn c.cfg state c.cfg.topic offsets }
 
   /// Explicitly commits offsets to a consumer group, to a specific offset time.
+  /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsetsToTime (c:Consumer) (time:Time) = async {
     let! offsets = Offsets.offsets c.conn c.cfg.topic [] [time] 1
     let offsetRes = Map.find time offsets

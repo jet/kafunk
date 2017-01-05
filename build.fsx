@@ -37,13 +37,13 @@ let summary = "F# client for Kafka"
 
 // Longer description of the project
 // (used as a description for NuGet package; line breaks are automatically cleaned up)
-let description = "Project has no description; update build.fsx"
+let description = "F# client for Kafka"
 
 // List of author names (for NuGet package)
 let authors = [ "Jet.com" ]
 
 // Tags for your project (for NuGet package)
-let tags = "kafka"
+let tags = "kafka F# apache"
 
 // File system information
 let solutionFile  = "kafunk.sln"
