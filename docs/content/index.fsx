@@ -18,9 +18,7 @@ This example demonstrates a few uses of the Kafka client.
 open Kafunk
 open System
 
-
 let conn = Kafka.connHost "existential-host"
-
 
 // metadata
 
@@ -72,12 +70,9 @@ consumer
 
 // commit periodically
 consumer
-|> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) (fun ms -> async {
+|> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition })
 |> Async.RunSynchronously
-
-
-
 
 
 
@@ -92,6 +87,7 @@ Consumer.commitOffsetsToTime consumer Time.EarliestOffset
 |> Async.RunSynchronously
 
 
+
 // offset information
 
 let offsets = 
@@ -102,7 +98,6 @@ for kvp in offsets do
   for (tn,offsets) in kvp.Value.topics do
     for p in offsets do
       printfn "time=%i topic=%s partition=%i offsets=%A" kvp.Key tn p.partition p.offsets
-
 
 
 (**
