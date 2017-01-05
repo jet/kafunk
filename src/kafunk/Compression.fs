@@ -3,7 +3,7 @@ namespace Kafunk
 open Kafunk
 
 [<Compile(Module)>]
-module Compression =
+module internal Compression =
 
   let private createMessage (value:Value) (compression:byte) =
     let attrs = compression |> int8

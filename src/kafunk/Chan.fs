@@ -10,7 +10,7 @@ open System.Threading.Tasks
 
 open Kafunk
 
-module Message =
+module internal Message =
 
   let create value key attrs =
     Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
@@ -37,7 +37,7 @@ module Message =
     if isNull m.value.Array then null
     else m.value |> Binary.toString
 
-module MessageSet =
+module internal MessageSet =
 
   let ofMessage (m:Message) =
     MessageSet([| 0L, Message.size m, m |])
@@ -71,7 +71,7 @@ module MessageSet =
     else 
       failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
 
-module FetchResponse =
+module internal FetchResponse =
   
   /// Returns the next set of offsets to fetch.
   let nextOffsets (res:FetchResponse) : (TopicName * (Partition * Offset)[])[] =
@@ -88,8 +88,7 @@ module FetchResponse =
       
 
 
-
-module ProduceRequest =
+module internal ProduceRequest =
 
   let ofMessageSet topic partition ms requiredAcks timeout =
     ProduceRequest(
@@ -387,12 +386,6 @@ type EndPoint =
       member this.CompareTo (other) =
         this.ToString().CompareTo(other.ToString())
       
-  
-/// A request/reply channel to a Kafka broker.
-type Chan = 
-  private 
-  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
-
 
 /// Configuration for an individual TCP channel.
 type ChanConfig = {
@@ -433,8 +426,14 @@ type ChanConfig = {
     }
 
 
+/// A request/reply channel to a Kafka broker.
+type Chan = 
+  private 
+  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
+
+
 /// API operations on a generic request/reply channel.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Chan =
 
   let private Log = Log.create "Kafunk.Chan"

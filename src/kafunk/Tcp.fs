@@ -25,7 +25,7 @@ module internal NetEx =
       IPEndPoint.tryParse (ipString, port) |> Option.get
 
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module internal Dns =
 
   module IPv4 =
@@ -50,7 +50,7 @@ module internal Dns =
 
 
 /// Operations on Berkley sockets.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Socket =
 
   /// Executes an async socket operation.
@@ -160,6 +160,7 @@ module Socket =
     receiveStreamFrom socket.ReceiveBufferSize (receive socket)
 
 
+/// An exception thrown when an error occurs during framing.
 type FramingException (msg) =
   inherit Exception (msg)
   new () = FramingException(null)
@@ -259,6 +260,7 @@ module Framing =
       AsyncSeq.unfoldAsync (readLength 0 0) (State(lazy (s.GetEnumerator()), Binary.Segment()))
 
 
+// ----------------------------------------------------------------------------------------------
 // session layer (layer 5)
 
 /// A correlation id.
@@ -280,8 +282,7 @@ with
     
 
 /// A multiplexed request/reply session.
-/// Note a session is stateful in that it maintains state between requests and responses
-/// and in that starts a process to read the input stream.
+/// Maintains state between requests and responses and contains a process reading the input stream.
 /// Send failures are propagated to the caller who is responsible for recreating the session.
 type ReqRepSession<'a, 'b, 's> internal
   (
@@ -375,21 +376,10 @@ type ReqRepSession<'a, 'b, 's> internal
 
 
 /// Operations on network sessions (layer 5).
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Session =
 
   let [<Literal>] HeaderSize = 4
-
-  let inline reply (sm:SessionMessage) (payload) =
-    SessionMessage(sm.tx_id, payload)
-
-  let builder () =
-    let tx_id = ref 0
-    fun m -> SessionMessage(Interlocked.Increment tx_id, m)
-
-  let encodeSession (m:SessionMessage) : Binary.Segment[] = [|
-    yield BitConverter.GetBytes m.tx_id |> Binary.ofArray
-    yield m.payload |]
 
   /// A correlation id factory.
   let corrId : unit -> CorrelationId =
@@ -399,7 +389,7 @@ module Session =
   /// Creates a request/reply session listening to the specified input stream and
   /// sending to the specified output.
   let requestReply
-    (correlationId:unit -> int)
+    (correlationId:unit -> CorrelationId)
     (encode:'a * CorrelationId -> Binary.Segment * 's)
     (decode:CorrelationId * 's * Binary.Segment -> 'b)
     (awaitResponse:'a -> 'b option)

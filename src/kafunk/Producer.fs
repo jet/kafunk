@@ -34,6 +34,7 @@ type ProducerMessage =
 /// A producer response.
 type ProducerResult =
   struct
+    /// The offsets produced.
     val offsets : (Partition * Offset)[]
     new (os) = { offsets = os }
   end
@@ -59,7 +60,7 @@ module Partitioner =
   let konst (p:Partition) : Partitioner =
     create <| konst p
 
-  /// Round-robins across partitions.
+  /// Round-robin partition assignment.
   let roundRobin : Partitioner =
     let mutable i = 0
     create <| fun (_,ps,_) -> 
@@ -75,7 +76,7 @@ module Partitioner =
   let hashKey (h:Binary.Segment -> int) : Partitioner =
     create <| fun (_,ps,pm) -> 
       ensurePartitions ps
-      ps.[(h pm.key) % ps.Length]
+      ps.[abs (h pm.key) % ps.Length]
 
   /// Random partition assignment.
   let rand (seed:int option) : Partitioner =
@@ -101,36 +102,32 @@ type ProducerConfig = {
   /// The topic to produce to.
   topic : TopicName
 
-  /// The acks required.
-  requiredAcks : RequiredAcks
-
-  /// The compression method to use.
-  compression : byte
-
-  /// The maximum time to wait for acknowledgement.
-  timeout : Timeout
-
   /// A partition function which given a topic name, cluster topic metadata and the message payload, returns the partition
   /// which the message should be written to.
   partitioner : Partitioner
 
-//  /// When specified, buffers requests by the specified buffer size and buffer timeout to take advantage of batching.
-//  bufferCountAndTime : (int * int) option
+  /// The acks required.
+  /// Default: Local
+  requiredAcks : RequiredAcks
+
+  /// The compression method to use.
+  /// Default: None
+  compression : byte
+
+  /// The maximum time to wait for acknowledgement.
+  /// Default: 0
+  timeout : Timeout
 
 } with
 
   /// Creates a producer configuration.
-  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout (*, ?bufferSize:int , ?bufferTimeoutMs:int)*)) =
+  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout) =
     {
       topic = topic
       requiredAcks = defaultArg requiredAcks RequiredAcks.Local
       compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout 0
       partitioner = partition
-//      bufferCountAndTime = 
-//        match bufferSize, bufferTimeoutMs with
-//        | Some x, Some y -> Some (x,y)
-//        | _ -> None
     }
 
 

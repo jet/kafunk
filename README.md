@@ -63,7 +63,6 @@ let consumer =
   Consumer.create conn consumerCfg
 
 // commit on every message set
-
 consumer
 |> Consumer.consume (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition
@@ -72,17 +71,21 @@ consumer
 
 
 // commit periodically
-
 consumer
-|> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) (fun ms -> async {
+|> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition })
 |> Async.RunSynchronously
 
 
 
-// consumer commit offsets
+// commit consumer offsets
 
 Consumer.commitOffsets consumer [| 0, 1L |]
+|> Async.RunSynchronously
+
+// commit consumer offsets to a relative time
+
+Consumer.commitOffsetsToTime consumer Time.EarliestOffset
 |> Async.RunSynchronously
 
 

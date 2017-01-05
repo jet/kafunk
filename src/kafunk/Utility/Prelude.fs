@@ -26,7 +26,7 @@ module Prelude =
 
 
 [<AutoOpen>]
-module TimeSpanEx =
+module internal TimeSpanEx =
   
   open System
 
@@ -447,7 +447,7 @@ module Observable =
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
 
-
+/// Operations for parsing Kafka URIs.
 module KafkaUri =
 
   open System
