@@ -62,6 +62,7 @@
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="AssemblyInfo2.fs" />
     <Compile Include="Utility\Prelude.fs" />
     <Compile Include="Utility\Log.fs" />
     <Compile Include="Utility\Binary.fs" />

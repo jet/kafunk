@@ -6,7 +6,6 @@ open System.Reflection
 [<assembly: AssemblyDescriptionAttribute("F# client for Kafka")>]
 [<assembly: AssemblyVersionAttribute("0.0.11")>]
 [<assembly: AssemblyFileVersionAttribute("0.0.11")>]
-[<assembly: System.Runtime.CompilerServices.InternalsVisibleToAttribute("Kafunk.Tests")>]
 do ()
 
 module internal AssemblyVersionInformation =
