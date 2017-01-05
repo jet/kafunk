@@ -1,3 +1,8 @@
+### 0.0.11-alpha001 - 05.01.2017
+
+* Hide internal members
+* Documentation
+
 ### 0.0.10-alpha001 - 04.01.2017
 
 * Log leader-size member assignments
