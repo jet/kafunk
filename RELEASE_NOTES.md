@@ -1,3 +1,7 @@
+### 0.0.13-alpha001 - 06.01.2017
+
+* Refine Fetch consumer offsets API
+
 ### 0.0.12-alpha001 - 06.01.2017
 
 * Current consumer state API

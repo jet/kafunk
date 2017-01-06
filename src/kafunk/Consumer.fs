@@ -271,8 +271,10 @@ module Consumer =
     return! commitOffsets c os }
 
   /// Returns the committed partition-offset pairs for the specified topic partitions in a consumer group.
-  let fetchOffsets (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) (partitions:Partition[]) : Async<(Partition * Offset)[]> = async {
-    let req = OffsetFetchRequest(groupId, [| topic, partitions |])
+  /// Passing an empty array returns offset information for all topics and partitions.
+  /// Passing a topic and an empty array of partitions returns all partitions for that topic.
+  let fetchOffsets (conn:KafkaConn) (groupId:GroupId) (topics:(TopicName * Partition[])[]) : Async<(TopicName * (Partition * Offset)[])[]> = async {
+    let req = OffsetFetchRequest(groupId, topics)
     let! res = Kafka.offsetFetch conn req
     let oks,errors =
       res.topics
@@ -281,22 +283,20 @@ module Consumer =
         |> Seq.map (fun (p,o,_md,ec) ->
           match ec with
           | ErrorCode.NoError ->
-            if o = -1L then Choice1Of2 (p,o)
-            else Choice1Of2 (p,o)
+            if o = -1L then Choice1Of2 (t,p,o)
+            else Choice1Of2 (t,p,o)
           | _ ->
             Choice2Of2 (t,p,o,ec)))
         |> Seq.partitionChoices
     if errors.Length > 0 then
       Log.error "fetch_offset_errors|errors=%A" errors
       return failwithf "fetch_offset_errors|errors=%A" errors
+    let oks = 
+      oks 
+      |> Seq.groupBy (fun (t,_,_) -> t)
+      |> Seq.map (fun (t,xs) -> t, xs |> Seq.map (fun (_,p,o) -> p,o) |> Seq.toArray)
+      |> Seq.toArray
     return oks }
-
-  /// Returns the committed partition-offset pairs for the specified topic in a consumer group.
-  /// First fetches the partitions for a topic, then calls fetchConsumerOffsets.
-  let fetchOffsetsByTopic (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) : Async<(Partition * Offset)[]> = async {
-    let! metadata = conn.GetMetadata [|topic|]
-    let partitions = metadata |> Map.find topic
-    return! fetchOffsets conn groupId topic partitions }
 
   /// Fetches the starting offset for the specified topic * partitions.
   /// If consumer managed offsets are not available, returns topic-wide offsets.

@@ -102,14 +102,15 @@ printfn "generation_id=%i member_id=%s leader_id=%s partitions=%A"
 
 
 
-// fetch offsets of a consumer group for a topic
+// fetch offsets of a consumer group for all topics
 
 let consumerOffsets =
-  Consumer.fetchOffsetsByTopic conn "consumer-group" "absurd-topic"
+  Consumer.fetchOffsets conn "consumer-group" [||]
   |> Async.RunSynchronously
 
-for (p,o) in consumerOffsets do
-  printfn "partition=%i offset=%i" p o
+for (t,os) in consumerOffsets do
+  for (p,o) in os do
+    printfn "topic=%s partition=%i offset=%i" t p o
 
 
 
