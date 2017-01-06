@@ -183,18 +183,20 @@ the specified interval.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '160', 160)" onmouseover="showTip(event, '160', 160)">
-            fetchOffsets (...)
+            fetchOffsets conn groupId topics
           </code>
           <div class="tip" id="160">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topic:TopicName -&gt; partitions:Partition [] -&gt; Async&lt;(Partition * Offset) []&gt;<br />
+            <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topics:(TopicName * Partition []) [] -&gt; Async&lt;(TopicName * (Partition * Offset) []) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L274-274" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L276-276" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns the committed partition-offset pairs for the specified topic partitions in a consumer group.</p>
+          <p>Returns the committed partition-offset pairs for the specified topic partitions in a consumer group.
+Passing an empty array returns offset information for all topics and partitions.
+Passing a topic and an empty array of partitions returns all partitions for that topic.</p>
 
 
         </td>
@@ -203,30 +205,9 @@ the specified interval.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '161', 161)" onmouseover="showTip(event, '161', 161)">
-            fetchOffsetsByTopic conn groupId topic
-          </code>
-          <div class="tip" id="161">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topic:TopicName -&gt; Async&lt;(Partition * Offset) []&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L296-296" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Returns the committed partition-offset pairs for the specified topic in a consumer group.
-First fetches the partitions for a topic, then calls fetchConsumerOffsets.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '162', 162)" onmouseover="showTip(event, '162', 162)">
             generations consumer
           </code>
-          <div class="tip" id="162">
+          <div class="tip" id="161">
             <strong>Signature:</strong> consumer:Consumer -&gt; AsyncSeq&lt;GenerationId * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
                       </div>
         </td>
@@ -243,10 +224,10 @@ First fetches the partitions for a topic, then calls fetchConsumerOffsets.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '163', 163)" onmouseover="showTip(event, '163', 163)">
+          <code onmouseout="hideTip(event, '162', 162)" onmouseover="showTip(event, '162', 162)">
             state c
           </code>
-          <div class="tip" id="163">
+          <div class="tip" id="162">
             <strong>Signature:</strong> c:Consumer -&gt; Async&lt;ConsumerState&gt;<br />
                       </div>
         </td>
@@ -263,10 +244,10 @@ First fetches the partitions for a topic, then calls fetchConsumerOffsets.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '164', 164)" onmouseover="showTip(event, '164', 164)">
+          <code onmouseout="hideTip(event, '163', 163)" onmouseover="showTip(event, '163', 163)">
             stream bufferSize consumer
           </code>
-          <div class="tip" id="164">
+          <div class="tip" id="163">
             <strong>Signature:</strong> bufferSize:int -&gt; consumer:Consumer -&gt; AsyncSeq&lt;ConsumerMessageSet&gt;<br />
                       </div>
         </td>
