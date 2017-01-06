@@ -54,6 +54,7 @@ for (p,offset) in prodRes.offsets do
   printfn "partition=%i offset=%i" p offset
 
 
+
 // consumer
 
 let consumerCfg = 
@@ -63,6 +64,7 @@ let consumer =
   Consumer.create conn consumerCfg
 
 // commit on every message set
+
 consumer
 |> Consumer.consume (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition
@@ -71,26 +73,47 @@ consumer
 
 
 // commit periodically
+
 consumer
 |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) (fun ms -> async {
   printfn "topic=%s partition=%i" ms.topic ms.partition })
 |> Async.RunSynchronously
 
 
-
-// commit consumer offsets
+// commit consumer offsets explicitly
 
 Consumer.commitOffsets consumer [| 0, 1L |]
 |> Async.RunSynchronously
 
-// commit consumer offsets to a relative time
+// commit consumer offsets explicitly to a relative time
 
 Consumer.commitOffsetsToTime consumer Time.EarliestOffset
 |> Async.RunSynchronously
 
 
+// get current consumer state
 
-// offset information
+let consumerState = 
+  Consumer.state consumer
+  |> Async.RunSynchronously
+
+printfn "generation_id=%i member_id=%s leader_id=%s partitions=%A" 
+  consumerState.generationId consumerState.memberId consumerState.leaderId consumerState.assignments
+
+
+
+// fetch offsets of a consumer group for a topic
+
+let consumerOffsets =
+  Consumer.fetchOffsetsByTopic conn "consumer-group" "absurd-topic"
+  |> Async.RunSynchronously
+
+for (p,o) in consumerOffsets do
+  printfn "partition=%i offset=%i" p o
+
+
+
+// fetch topic offset information
 
 let offsets = 
   Offsets.offsets conn "absurd-topic" [] [ Time.EarliestOffset ; Time.LatestOffset ] 1

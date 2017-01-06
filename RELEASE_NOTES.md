@@ -1,3 +1,8 @@
+### 0.0.12-alpha001 - 06.01.2017
+
+* Current consumer state API
+* Fetch consumer offsets API
+
 ### 0.0.11-alpha001 - 05.01.2017
 
 * Hide internal members

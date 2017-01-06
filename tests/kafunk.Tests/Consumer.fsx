@@ -34,7 +34,7 @@ let go = async {
       (ConsumerMessageSet.lastOffset ms)
       (ms.highWatermarkOffset)
       (ConsumerMessageSet.lag ms) }
-  do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10) handle
+  do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) handle
 }
 
 Async.RunSynchronously go
