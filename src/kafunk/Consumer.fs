@@ -102,8 +102,8 @@ and ConsumerOffsetOutOfRangeAction =
   /// configured as the initial fetch time for the consumer (earliest, or latest).
   | ResumeConsumerWithFreshInitialFetchTime
 
-/// State corresponding to a single generation of the consumer group protocol.
-type ConsumerState = private {
+/// Internal state corresponding to a single generation of the consumer group protocol.
+type internal ConsumerStateInternal = {
   generationId : GenerationId
   memberId : MemberId
   leaderId : LeaderId
@@ -111,11 +111,30 @@ type ConsumerState = private {
   closed : TaskCompletionSource<bool>
 } 
 
+/// State corresponding to a single generation of the consumer group protocol.
+type ConsumerState = {
+  
+  /// The consumer group generation.
+  generationId : GenerationId
+
+  /// The consumer's member id.
+  memberId : MemberId
+
+  /// The leader of the generation.
+  leaderId : LeaderId
+
+  /// The partitions assigned to this consumer.
+  assignments : Partition[]
+
+} with
+  static member internal ofInternalState (state:ConsumerStateInternal) =
+    { generationId = state.generationId ; memberId = state.memberId ; leaderId = state.memberId ; assignments = state.assignments }
+
 /// A consumer.
 type Consumer = private {
   conn : KafkaConn
   cfg : ConsumerConfig
-  state : MVar<ConsumerState>
+  state : MVar<ConsumerStateInternal>
 }
 
 /// A set of messages for a consumer from an individual topic-partition.
@@ -179,7 +198,7 @@ module Consumer =
     else return! a }
 
   /// Closes a consumer group specifying whether a new generation should begin.
-  let private close (state:ConsumerState) (rejoin:bool) : Async<unit> =
+  let private close (state:ConsumerStateInternal) (rejoin:bool) : Async<unit> =
     peekTask
       ignore
       state.closed.Task
@@ -193,15 +212,15 @@ module Consumer =
         })
 
   /// Closes a consumer group and causes a new generation to begin.
-  let private closeGeneration (state:ConsumerState) : Async<unit> =
+  let private closeGeneration (state:ConsumerStateInternal) : Async<unit> =
     close state true
 
   /// Closes a consumer group and causes a new generation to begin.
-  let private closeConsumer (state:ConsumerState) : Async<unit> =
+  let private closeConsumer (state:ConsumerStateInternal) : Async<unit> =
     close state false
 
   /// Commits the specified offsets within the consumer group.
-  let private commit (conn:KafkaConn) (cfg:ConsumerConfig) (state:ConsumerState) (topic:TopicName) (offsets:(Partition * Offset)[]) : Async<unit> = 
+  let private commit (conn:KafkaConn) (cfg:ConsumerConfig) (state:ConsumerStateInternal) (topic:TopicName) (offsets:(Partition * Offset)[]) : Async<unit> = 
     peekTask
       (ignore)
       (state.closed.Task)
@@ -251,8 +270,37 @@ module Consumer =
       |> Seq.toArray
     return! commitOffsets c os }
 
+  /// Returns the committed partition-offset pairs for the specified topic partitions in a consumer group.
+  let fetchOffsets (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) (partitions:Partition[]) : Async<(Partition * Offset)[]> = async {
+    let req = OffsetFetchRequest(groupId, [| topic, partitions |])
+    let! res = Kafka.offsetFetch conn req
+    let oks,errors =
+      res.topics
+      |> Seq.collect (fun (t,ps) ->
+        ps
+        |> Seq.map (fun (p,o,_md,ec) ->
+          match ec with
+          | ErrorCode.NoError ->
+            if o = -1L then Choice1Of2 (p,o)
+            else Choice1Of2 (p,o)
+          | _ ->
+            Choice2Of2 (t,p,o,ec)))
+        |> Seq.partitionChoices
+    if errors.Length > 0 then
+      Log.error "fetch_offset_errors|errors=%A" errors
+      return failwithf "fetch_offset_errors|errors=%A" errors
+    return oks }
+
+  /// Returns the committed partition-offset pairs for the specified topic in a consumer group.
+  /// First fetches the partitions for a topic, then calls fetchConsumerOffsets.
+  let fetchOffsetsByTopic (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) : Async<(Partition * Offset)[]> = async {
+    let! metadata = conn.GetMetadata [|topic|]
+    let partitions = metadata |> Map.find topic
+    return! fetchOffsets conn groupId topic partitions }
+
   /// Fetches the starting offset for the specified topic * partitions.
-  let private fetchOffsets (c:Consumer) (topic:TopicName) (partitions:Partition[]) : Async<(Partition * Offset)[]> = async {
+  /// If consumer managed offsets are not available, returns topic-wide offsets.
+  let private fetchOffsetsFallback (c:Consumer) (topic:TopicName) (partitions:Partition[]) : Async<(Partition * Offset)[]> = async {
     let conn = c.conn
     let cfg = c.cfg
     let req = OffsetFetchRequest(cfg.groupId, [| topic, partitions |])
@@ -351,7 +399,7 @@ module Consumer =
         joinGroupRes.generationId 
         joinGroupRes.leaderId
         joinGroupRes.groupProtocol
-                          
+
       let! syncGroupRes = async {
         if joinGroupRes.members.members.Length > 0 then
           Log.info "joined_as_leader|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
@@ -446,7 +494,7 @@ module Consumer =
             leaderId = joinGroupRes.leaderId
             generationId = joinGroupRes.generationId
             assignments = assignments
-            closed = Tasks.TaskCompletionSource<bool>()
+            closed = TaskCompletionSource<bool>()
           }
           
         conn.CancellationToken.Register (fun () ->
@@ -456,7 +504,7 @@ module Consumer =
         let heartbeatSleep = cfg.sessionTimeout / cfg.heartbeatFrequency
 
         /// Starts the hearbeat process.
-        let rec heartbeat (state:ConsumerState) =
+        let rec heartbeat (state:ConsumerStateInternal) =
           peekTask
             ignore
             state.closed.Task
@@ -501,9 +549,9 @@ module Consumer =
     let messageVer = Versions.fetchResMessage (Versions.byKey consumer.conn.Config.version ApiKey.Fetch)
     
     /// Initiates consumption of a single generation of the consumer group protocol.
-    let consume (state:ConsumerState) = async {
+    let consume (state:ConsumerStateInternal) = async {
       
-      let! initOffsets = fetchOffsets consumer cfg.topic state.assignments
+      let! initOffsets = fetchOffsetsFallback consumer cfg.topic state.assignments
       Log.info "fetched_initial_offsets|group_id=%s member_id=%s topic=%s offsets=%s" cfg.groupId state.memberId cfg.topic (Printers.partitionOffsetPairs initOffsets)
 
       // initialize per-partition messageset buffers
@@ -725,3 +773,8 @@ module Consumer =
     let handle ms = BoundedMb.put ms mb
     Async.Start (consume handle consumer, cts.Token)
     yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
+
+  /// Returns the current consumer state.
+  let state (c:Consumer) : Async<ConsumerState> = async {
+    let! state = MVar.get c.state
+    return ConsumerState.ofInternalState state }
