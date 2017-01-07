@@ -1,4 +1,5 @@
-﻿namespace Kafunk
+﻿[<AutoOpen>]
+module internal Kafunk.Resource
 
 open System
 open System.Threading

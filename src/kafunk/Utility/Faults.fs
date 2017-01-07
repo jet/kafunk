@@ -244,9 +244,8 @@ module FlowMonitor =
     report
 
 
-
 /// Fault tolerance.
-module Faults =
+module internal Faults =
 
   /// Returns a stream of async computations corresponding to invocations of the argument 
   /// computation until the computations succeeds.

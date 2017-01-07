@@ -53,7 +53,7 @@ module LoggerEx =
     member inline ts.log (format, level:LogLevel) =
       let inline trace (m:string) =
         if level >= Log.MinLevel then
-          ts.buffer.Add (String.Format("{0:yyyy-MM-dd hh:mm:ss:ffff}|{1}|{2}|{3}", DateTime.UtcNow, (level.ToString().ToUpperInvariant()), ts.name, m))
+          ts.buffer.Add (String.Format("{0:yyyy-MM-dd HH:mm:ss:ffff}|{1}|{2}|{3}", DateTime.UtcNow, (level.ToString().ToUpperInvariant()), ts.name, m))
       Printf.kprintf trace format
 
     member inline ts.fatal format = ts.log (format, LogLevel.Fatal)

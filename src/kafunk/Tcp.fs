@@ -1,5 +1,7 @@
+[<AutoOpen>]
+module internal Kafunk.Tcp
+
 #nowarn "40"
-namespace Kafunk
 
 open FSharp.Control
 open System
@@ -8,25 +10,22 @@ open System.Net.Sockets
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
-
-[<AutoOpen>]
-module internal NetEx =
   
-  type IPAddress with
-    static member tryParse (ipString:string) =
-      let mutable ip = Unchecked.defaultof<_>
-      if IPAddress.TryParse (ipString, &ip) then Some ip
-      else None
+type IPAddress with
+  static member tryParse (ipString:string) =
+    let mutable ip = Unchecked.defaultof<_>
+    if IPAddress.TryParse (ipString, &ip) then Some ip
+    else None
 
-  type IPEndPoint with
-    static member tryParse (ipString:string, port:int) =
-      IPAddress.tryParse ipString |> Option.map (fun ip -> IPEndPoint(ip, port))
-    static member parse (ipString:string, port:int) =
-      IPEndPoint.tryParse (ipString, port) |> Option.get
+type IPEndPoint with
+  static member tryParse (ipString:string, port:int) =
+    IPAddress.tryParse ipString |> Option.map (fun ip -> IPEndPoint(ip, port))
+  static member parse (ipString:string, port:int) =
+    IPEndPoint.tryParse (ipString, port) |> Option.get
 
 
 [<Compile(Module)>]
-module internal Dns =
+module Dns =
 
   module IPv4 =
 

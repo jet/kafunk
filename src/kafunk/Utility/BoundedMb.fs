@@ -1,4 +1,5 @@
-﻿namespace Kafunk
+﻿[<AutoOpen>]
+module Kafunk.BoundedMb
 
 // TODO: https://github.com/fsprojects/FSharpx.Async
 

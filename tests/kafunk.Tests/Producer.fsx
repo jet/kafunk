@@ -50,7 +50,7 @@ try
   let errMonitor = 
     FlowMonitor.escalateOnThreshold
       100
-      (TimeSpan.FromSeconds 1)
+      (TimeSpan.FromSeconds 1.0)
       (Exn.ofSeq)
 
   Seq.init batchCount id
