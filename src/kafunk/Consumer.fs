@@ -7,7 +7,7 @@ open System.Threading.Tasks
 open Kafunk
 
 /// The consumer group protocol.
-module ConsumerGroupProtocol =
+module ConsumerGroup =
 
   let private Log = Log.create "Kafunk.ConsumerGroup"
 
@@ -202,7 +202,7 @@ type ConsumerConfig = {
   /// The group coordinator ensures that all members support the same strategy.
   /// When multiple stratgies are supported by all members, the first one in the list is selected.
   /// Default: [ "range", ConsumerGroupProtocol.AssignmentStratgies.Range ]
-  assignmentStrategies : (AssignmentStrategyName * ConsumerGroupProtocol.AssignmentStrategy)[]
+  assignmentStrategies : (AssignmentStrategyName * ConsumerGroup.AssignmentStrategy)[]
 
 } with
     
@@ -227,7 +227,7 @@ type ConsumerConfig = {
         fetchBufferSize = defaultArg fetchBufferSize 1
         assignmentStrategies =
           match assignmentStrategies with
-          | None -> [| "range", ConsumerGroupProtocol.AssignmentStratgies.Range |]
+          | None -> [| "range", ConsumerGroup.AssignmentStratgies.Range |]
           | Some xs -> xs
       }
 
@@ -461,7 +461,7 @@ module Consumer =
   
   /// Creates a participant in the consumer groups protocol and joins the group.
   let createAsync (conn:KafkaConn) (cfg:ConsumerConfig) = async {
-    let groupProtocol = ConsumerGroupProtocol.create cfg.assignmentStrategies cfg.topic
+    let groupProtocol = ConsumerGroup.create cfg.assignmentStrategies cfg.topic
     let config = 
       { GroupConfig.groupId = cfg.groupId
         heartbeatFrequency = cfg.heartbeatFrequency
@@ -488,7 +488,7 @@ module Consumer =
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:GroupMemberStateWrapper) = async {
       
-      let assignments = state.state.memberAssignment |> ConsumerGroupProtocol.decodeMemberAssignment
+      let assignments = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
 
       // initialize per-partition messageset buffers
       let partitionBuffers =
@@ -710,7 +710,7 @@ module Consumer =
   /// Returns the current consumer state.
   let state (c:Consumer) : Async<ConsumerState> = async {
     let! state = Group.stateInternal c.groupMember
-    let assignments = ConsumerGroupProtocol.decodeMemberAssignment state.state.memberAssignment
+    let assignments = ConsumerGroup.decodeMemberAssignment state.state.memberAssignment
     return 
       { ConsumerState.assignments = assignments
         memberId = state.state.memberId
