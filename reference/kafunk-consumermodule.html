@@ -101,7 +101,7 @@ Note that consumers only fetch these offsets when first joining a group or when 
             consume handler consumer
           </code>
           <div class="tip" id="109">
-            <strong>Signature:</strong> handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
+            <strong>Signature:</strong> handler:(GroupMemberState -&gt; ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -123,7 +123,7 @@ The handler accepts the topic, partition, message set and an async computation w
             consumePeriodicCommit (...)
           </code>
           <div class="tip" id="110">
-            <strong>Signature:</strong> commitInterval:TimeSpan -&gt; handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
+            <strong>Signature:</strong> commitInterval:TimeSpan -&gt; handler:(GroupMemberState -&gt; ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -208,7 +208,7 @@ Passing a topic and an empty array of partitions returns all partitions for that
             generations consumer
           </code>
           <div class="tip" id="114">
-            <strong>Signature:</strong> consumer:Consumer -&gt; AsyncSeq&lt;GenerationId * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
+            <strong>Signature:</strong> consumer:Consumer -&gt; AsyncSeq&lt;GroupMemberState * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -249,7 +249,7 @@ is paired with the set of assigned fetch streams.</p>
             stream bufferSize consumer
           </code>
           <div class="tip" id="116">
-            <strong>Signature:</strong> bufferSize:int -&gt; consumer:Consumer -&gt; AsyncSeq&lt;ConsumerMessageSet&gt;<br />
+            <strong>Signature:</strong> bufferSize:int -&gt; consumer:Consumer -&gt; AsyncSeq&lt;GroupMemberState * ConsumerMessageSet&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
