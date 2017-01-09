@@ -55,15 +55,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '154', 154)" onmouseover="showTip(event, '154', 154)">
+          <code onmouseout="hideTip(event, '107', 107)" onmouseover="showTip(event, '107', 107)">
             commitOffsets c offsets
           </code>
-          <div class="tip" id="154">
+          <div class="tip" id="107">
             <strong>Signature:</strong> c:Consumer -&gt; offsets:(Partition * Offset) [] -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L257-257" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L372-372" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -76,15 +76,15 @@ Note that consumers only fetch these offsets when first joining a group or when 
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '155', 155)" onmouseover="showTip(event, '155', 155)">
+          <code onmouseout="hideTip(event, '108', 108)" onmouseover="showTip(event, '108', 108)">
             commitOffsetsToTime c time
           </code>
-          <div class="tip" id="155">
+          <div class="tip" id="108">
             <strong>Signature:</strong> c:Consumer -&gt; time:Time -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L264-264" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L379-379" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -97,15 +97,15 @@ Note that consumers only fetch these offsets when first joining a group or when 
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '156', 156)" onmouseover="showTip(event, '156', 156)">
+          <code onmouseout="hideTip(event, '109', 109)" onmouseover="showTip(event, '109', 109)">
             consume handler consumer
           </code>
-          <div class="tip" id="156">
+          <div class="tip" id="109">
             <strong>Signature:</strong> handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L742-742" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L675-675" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -119,15 +119,15 @@ The handler accepts the topic, partition, message set and an async computation w
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '157', 157)" onmouseover="showTip(event, '157', 157)">
+          <code onmouseout="hideTip(event, '110', 110)" onmouseover="showTip(event, '110', 110)">
             consumePeriodicCommit (...)
           </code>
-          <div class="tip" id="157">
+          <div class="tip" id="110">
             <strong>Signature:</strong> commitInterval:TimeSpan -&gt; handler:(ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; consumer:Consumer -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L757-757" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L690-690" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -142,15 +142,15 @@ the specified interval.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '158', 158)" onmouseover="showTip(event, '158', 158)">
+          <code onmouseout="hideTip(event, '111', 111)" onmouseover="showTip(event, '111', 111)">
             create conn cfg
           </code>
-          <div class="tip" id="158">
+          <div class="tip" id="111">
             <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; Consumer<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L540-540" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L476-476" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -162,15 +162,15 @@ the specified interval.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '159', 159)" onmouseover="showTip(event, '159', 159)">
+          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
             createAsync conn cfg
           </code>
-          <div class="tip" id="159">
+          <div class="tip" id="112">
             <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ConsumerConfig -&gt; Async&lt;Consumer&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L534-534" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L463-463" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -182,15 +182,15 @@ the specified interval.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '160', 160)" onmouseover="showTip(event, '160', 160)">
+          <code onmouseout="hideTip(event, '113', 113)" onmouseover="showTip(event, '113', 113)">
             fetchOffsets conn groupId topics
           </code>
-          <div class="tip" id="160">
+          <div class="tip" id="113">
             <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topics:(TopicName * Partition []) [] -&gt; Async&lt;(TopicName * (Partition * Offset) []) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L276-276" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L391-391" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -204,19 +204,20 @@ Passing a topic and an empty array of partitions returns all partitions for that
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '161', 161)" onmouseover="showTip(event, '161', 161)">
+          <code onmouseout="hideTip(event, '114', 114)" onmouseover="showTip(event, '114', 114)">
             generations consumer
           </code>
-          <div class="tip" id="161">
+          <div class="tip" id="114">
             <strong>Signature:</strong> consumer:Consumer -&gt; AsyncSeq&lt;GenerationId * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L544-544" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L481-481" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns an async sequence corresponding to generations of the consumer group protocol.</p>
+          <p>Returns an async sequence corresponding to generations, where each generation
+is paired with the set of assigned fetch streams.</p>
 
 
         </td>
@@ -224,15 +225,15 @@ Passing a topic and an empty array of partitions returns all partitions for that
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '162', 162)" onmouseover="showTip(event, '162', 162)">
+          <code onmouseout="hideTip(event, '115', 115)" onmouseover="showTip(event, '115', 115)">
             state c
           </code>
-          <div class="tip" id="162">
+          <div class="tip" id="115">
             <strong>Signature:</strong> c:Consumer -&gt; Async&lt;ConsumerState&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L778-778" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L711-711" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -244,15 +245,15 @@ Passing a topic and an empty array of partitions returns all partitions for that
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '163', 163)" onmouseover="showTip(event, '163', 163)">
+          <code onmouseout="hideTip(event, '116', 116)" onmouseover="showTip(event, '116', 116)">
             stream bufferSize consumer
           </code>
-          <div class="tip" id="163">
+          <div class="tip" id="116">
             <strong>Signature:</strong> bufferSize:int -&gt; consumer:Consumer -&gt; AsyncSeq&lt;ConsumerMessageSet&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L770-770" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L703-703" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

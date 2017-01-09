@@ -52,15 +52,38 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '715', 715)" onmouseover="showTip(event, '715', 715)">
+          <code onmouseout="hideTip(event, '616', 616)" onmouseover="showTip(event, '616', 616)">
+            assignmentStrategies
+          </code>
+          <div class="tip" id="616">
+            <strong>Signature:</strong> (AssignmentStrategyName * AssignmentStrategy) []<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L205-205" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The consumer group assignment strategies to use.
+The group coordinator ensures that all members support the same strategy.
+When multiple stratgies are supported by all members, the first one in the list is selected.
+Default: [ "range", ConsumerGroupProtocol.AssignmentStratgies.Range ]</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '617', 617)" onmouseover="showTip(event, '617', 617)">
             endOfTopicPollPolicy
           </code>
-          <div class="tip" id="715">
+          <div class="tip" id="617">
             <strong>Signature:</strong> RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L57-57" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L190-190" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -73,15 +96,15 @@ Default: RetryPolicy.constantMs 10000</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '716', 716)" onmouseover="showTip(event, '716', 716)">
+          <code onmouseout="hideTip(event, '618', 618)" onmouseover="showTip(event, '618', 618)">
             fetchBufferSize
           </code>
-          <div class="tip" id="716">
+          <div class="tip" id="618">
             <strong>Signature:</strong> int<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L66-66" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L199-199" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -95,15 +118,15 @@ Default: 1</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '717', 717)" onmouseover="showTip(event, '717', 717)">
+          <code onmouseout="hideTip(event, '619', 619)" onmouseover="showTip(event, '619', 619)">
             fetchMaxBytes
           </code>
-          <div class="tip" id="717">
+          <div class="tip" id="619">
             <strong>Signature:</strong> MaxBytes<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L45-45" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L178-178" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -116,15 +139,15 @@ Default: 100000</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '718', 718)" onmouseover="showTip(event, '718', 718)">
+          <code onmouseout="hideTip(event, '620', 620)" onmouseover="showTip(event, '620', 620)">
             fetchMaxWaitMs
           </code>
-          <div class="tip" id="718">
+          <div class="tip" id="620">
             <strong>Signature:</strong> MaxWaitTime<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L41-41" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L174-174" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -137,15 +160,15 @@ Default: 0</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '719', 719)" onmouseover="showTip(event, '719', 719)">
+          <code onmouseout="hideTip(event, '621', 621)" onmouseover="showTip(event, '621', 621)">
             fetchMinBytes
           </code>
-          <div class="tip" id="719">
+          <div class="tip" id="621">
             <strong>Signature:</strong> MinBytes<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L37-37" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L170-170" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -159,15 +182,15 @@ Default: 0</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '720', 720)" onmouseover="showTip(event, '720', 720)">
+          <code onmouseout="hideTip(event, '622', 622)" onmouseover="showTip(event, '622', 622)">
             groupId
           </code>
-          <div class="tip" id="720">
+          <div class="tip" id="622">
             <strong>Signature:</strong> GroupId<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L14-14" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L147-147" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -179,15 +202,15 @@ Default: 0</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '721', 721)" onmouseover="showTip(event, '721', 721)">
+          <code onmouseout="hideTip(event, '623', 623)" onmouseover="showTip(event, '623', 623)">
             heartbeatFrequency
           </code>
-          <div class="tip" id="721">
+          <div class="tip" id="623">
             <strong>Signature:</strong> int32<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L32-32" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L165-165" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -200,15 +223,15 @@ Default: 10</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '722', 722)" onmouseover="showTip(event, '722', 722)">
+          <code onmouseout="hideTip(event, '624', 624)" onmouseover="showTip(event, '624', 624)">
             initialFetchTime
           </code>
-          <div class="tip" id="722">
+          <div class="tip" id="624">
             <strong>Signature:</strong> Time<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L53-53" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L186-186" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -221,15 +244,15 @@ Default: Time.EarliestOffset</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '723', 723)" onmouseover="showTip(event, '723', 723)">
+          <code onmouseout="hideTip(event, '625', 625)" onmouseover="showTip(event, '625', 625)">
             offsetRetentionTime
           </code>
-          <div class="tip" id="723">
+          <div class="tip" id="625">
             <strong>Signature:</strong> RetentionTime<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L49-49" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L182-182" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -242,15 +265,15 @@ Default: -1L</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '724', 724)" onmouseover="showTip(event, '724', 724)">
+          <code onmouseout="hideTip(event, '626', 626)" onmouseover="showTip(event, '626', 626)">
             outOfRangeAction
           </code>
-          <div class="tip" id="724">
+          <div class="tip" id="626">
             <strong>Signature:</strong> ConsumerOffsetOutOfRangeAction<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L61-61" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L194-194" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -263,15 +286,15 @@ Default: HaltConsumer</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '725', 725)" onmouseover="showTip(event, '725', 725)">
+          <code onmouseout="hideTip(event, '627', 627)" onmouseover="showTip(event, '627', 627)">
             rebalanceTimeout
           </code>
-          <div class="tip" id="725">
+          <div class="tip" id="627">
             <strong>Signature:</strong> RebalanceTimeout<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L28-28" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L161-161" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -286,15 +309,15 @@ Default: 20000</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '726', 726)" onmouseover="showTip(event, '726', 726)">
+          <code onmouseout="hideTip(event, '628', 628)" onmouseover="showTip(event, '628', 628)">
             sessionTimeout
           </code>
-          <div class="tip" id="726">
+          <div class="tip" id="628">
             <strong>Signature:</strong> SessionTimeout<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L22-22" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L155-155" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -308,15 +331,15 @@ Default: 20000</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '727', 727)" onmouseover="showTip(event, '727', 727)">
+          <code onmouseout="hideTip(event, '629', 629)" onmouseover="showTip(event, '629', 629)">
             topic
           </code>
-          <div class="tip" id="727">
+          <div class="tip" id="629">
             <strong>Signature:</strong> TopicName<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L17-17" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L150-150" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -336,15 +359,15 @@ Default: 20000</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '728', 728)" onmouseover="showTip(event, '728', 728)">
+          <code onmouseout="hideTip(event, '630', 630)" onmouseover="showTip(event, '630', 630)">
             create(...)
           </code>
-          <div class="tip" id="728">
-            <strong>Signature:</strong> (groupId:GroupId * topic:TopicName * initialFetchTime:Time option * fetchMaxBytes:MaxBytes option * sessionTimeout:SessionTimeout option * rebalanceTimeout:RebalanceTimeout option * heartbeatFrequency:int32 option * offsetRetentionTime:RetentionTime option * fetchMinBytes:MinBytes option * fetchMaxWaitMs:MaxWaitTime option * endOfTopicPollPolicy:RetryPolicy option * outOfRangeAction:ConsumerOffsetOutOfRangeAction option * fetchBufferSize:int option) -&gt; ConsumerConfig<br />
+          <div class="tip" id="630">
+            <strong>Signature:</strong> (groupId:GroupId * topic:TopicName * initialFetchTime:Time option * fetchMaxBytes:MaxBytes option * sessionTimeout:SessionTimeout option * rebalanceTimeout:RebalanceTimeout option * heartbeatFrequency:int32 option * offsetRetentionTime:RetentionTime option * fetchMinBytes:MinBytes option * fetchMaxWaitMs:MaxWaitTime option * endOfTopicPollPolicy:RetryPolicy option * outOfRangeAction:ConsumerOffsetOutOfRangeAction option * fetchBufferSize:int option * assignmentStrategies:(AssignmentStrategyName * AssignmentStrategy) [] option) -&gt; ConsumerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L71-71" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L210-210" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

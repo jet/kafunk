@@ -43,75 +43,37 @@
 </div>
 
 <!-- Render nested types and modules, if there are any -->
-
-  <h3>Functions and values</h3>
-  <table class="table table-bordered member-list">
+  <h2>Nested types and modules</h2>
+  <div>
+      <table class="table table-bordered type-list">
     <thead>
-      <tr><td>Function or value</td><td>Description</td></tr>
+      <tr><td>Type</td><td>Description</td></tr>
     </thead>
     <tbody>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '128', 128)" onmouseover="showTip(event, '128', 128)">
-            create capacity
-          </code>
-          <div class="tip" id="128">
-            <strong>Signature:</strong> capacity:int -&gt; BoundedMb&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L68-68" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '129', 129)" onmouseover="showTip(event, '129', 129)">
-            put a mb
-          </code>
-          <div class="tip" id="129">
-            <strong>Signature:</strong> a:&#39;a -&gt; mb:BoundedMb&lt;&#39;a&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L75-75" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Puts a message into the mailbox.
-If the mailbox is full, wait until it has room available.
-If the mailbox has vacancy, add the message to the buffer and return immediately.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '130', 130)" onmouseover="showTip(event, '130', 130)">
-            take mb
-          </code>
-          <div class="tip" id="130">
-            <strong>Signature:</strong> mb:BoundedMb&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L79-79" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Takes a message from</p>
-
-
-        </td>
-      </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-boundedmb-boundedmb-1.html">BoundedMb<'a></a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
     </tbody>
   </table>
+  <table class="table table-bordered module-list">
+    <thead>
+      <tr><td>Module</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-boundedmb-boundedmb.html">BoundedMb</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+    </tbody>
+  </table>
+
+  </div>
+
 
         </div>
         <div class="span3">

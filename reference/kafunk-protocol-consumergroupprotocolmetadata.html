@@ -53,10 +53,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '434', 434)" onmouseover="showTip(event, '434', 434)">
+          <code onmouseout="hideTip(event, '342', 342)" onmouseover="showTip(event, '342', 342)">
             subscription
           </code>
-          <div class="tip" id="434">
+          <div class="tip" id="342">
             <strong>Signature:</strong> TopicName []<br />
                       </div>
         </td>
@@ -71,10 +71,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '435', 435)" onmouseover="showTip(event, '435', 435)">
+          <code onmouseout="hideTip(event, '343', 343)" onmouseover="showTip(event, '343', 343)">
             userData
           </code>
-          <div class="tip" id="435">
+          <div class="tip" id="343">
             <strong>Signature:</strong> Segment<br />
                       </div>
         </td>
@@ -89,10 +89,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '436', 436)" onmouseover="showTip(event, '436', 436)">
+          <code onmouseout="hideTip(event, '344', 344)" onmouseover="showTip(event, '344', 344)">
             version
           </code>
-          <div class="tip" id="436">
+          <div class="tip" id="344">
             <strong>Signature:</strong> ConsumerGroupProtocolMetadataVersion<br />
                       </div>
         </td>
@@ -115,10 +115,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '437', 437)" onmouseover="showTip(event, '437', 437)">
+          <code onmouseout="hideTip(event, '345', 345)" onmouseover="showTip(event, '345', 345)">
             new(version, subscription, userData)
           </code>
-          <div class="tip" id="437">
+          <div class="tip" id="345">
             <strong>Signature:</strong> (version:ConsumerGroupProtocolMetadataVersion * subscription:TopicName [] * userData:Segment) -&gt; ConsumerGroupProtocolMetadata<br />
                       </div>
         </td>
@@ -142,10 +142,28 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '438', 438)" onmouseover="showTip(event, '438', 438)">
+          <code onmouseout="hideTip(event, '346', 346)" onmouseover="showTip(event, '346', 346)">
+            read(buf)
+          </code>
+          <div class="tip" id="346">
+            <strong>Signature:</strong> buf:Segment -&gt; ConsumerGroupProtocolMetadata * Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1075-1075" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '347', 347)" onmouseover="showTip(event, '347', 347)">
             size(x)
           </code>
-          <div class="tip" id="438">
+          <div class="tip" id="347">
             <strong>Signature:</strong> x:ConsumerGroupProtocolMetadata -&gt; int<br />
                       </div>
         </td>
@@ -160,10 +178,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '439', 439)" onmouseover="showTip(event, '439', 439)">
+          <code onmouseout="hideTip(event, '348', 348)" onmouseover="showTip(event, '348', 348)">
             write(x buf)
           </code>
-          <div class="tip" id="439">
+          <div class="tip" id="348">
             <strong>Signature:</strong> x:ConsumerGroupProtocolMetadata -&gt; buf:Segment -&gt; Segment<br />
                       </div>
         </td>

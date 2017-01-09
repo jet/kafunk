@@ -45,28 +45,6 @@
     <tbody>
         <tr>
           <td class="type-name">
-            <a href="kafunk-asyncpipe-2.html">AsyncPipe<'a, 'b></a>
-          </td>
-          <td class="xmldoc"><p>An async transducer.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-boundedmb-1.html">BoundedMb<'a></a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-chan.html">Chan</a>
-          </td>
-          <td class="xmldoc"><p>A request/reply channel to a Kafka broker.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
             <a href="kafunk-chanconfig.html">ChanConfig</a>
           </td>
           <td class="xmldoc"><p>Configuration for an individual TCP channel.</p>
@@ -117,22 +95,6 @@ The default action is to halt consumption.</p>
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-correlationid.html">CorrelationId</a>
-          </td>
-          <td class="xmldoc"><p>A correlation id.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-endpoint.html">EndPoint</a>
-          </td>
-          <td class="xmldoc"><p>A broker endpoint.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
             <a href="kafunk-escalationexception.html">EscalationException</a>
           </td>
           <td class="xmldoc"><p>An exception used to wrap failures which are to be escalated.</p>
@@ -141,9 +103,33 @@ The default action is to halt consumption.</p>
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-framingexception.html">FramingException</a>
+            <a href="kafunk-groupconfig.html">GroupConfig</a>
           </td>
-          <td class="xmldoc"><p>An exception thrown when an error occurs during framing.</p>
+          <td class="xmldoc"><p>Group member configuration.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-groupmember.html">GroupMember</a>
+          </td>
+          <td class="xmldoc"><p>A member of a group.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-groupmemberstate.html">GroupMemberState</a>
+          </td>
+          <td class="xmldoc"><p>Internal state corresponding to a single generation of the consumer group protocol.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-groupprotocol.html">GroupProtocol</a>
+          </td>
+          <td class="xmldoc"><p>The group protocol.</p>
 
 </td>
         </tr>
@@ -176,22 +162,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
             <a href="kafunk-logger.html">Logger</a>
           </td>
           <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-mvar-1.html">MVar<'a></a>
-          </td>
-          <td class="xmldoc"><p>A serialized variable.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-mb-1.html">Mb<'a></a>
-          </td>
-          <td class="xmldoc"><p>A mailbox processor.</p>
-
-</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -247,32 +217,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-reqrepsession-3.html">ReqRepSession<'a, 'b, 's></a>
-          </td>
-          <td class="xmldoc"><p>A multiplexed request/reply session.
-Maintains state between requests and responses and contains a process reading the input stream.
-Send failures are propagated to the caller who is responsible for recreating the session.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-resourceerroraction-2.html">ResourceErrorAction<'a, 'e></a>
-          </td>
-          <td class="xmldoc"><p>The action to take when a resource-dependent operation fails.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-resourceresult-2.html">ResourceResult<'a, 'e></a>
-          </td>
-          <td class="xmldoc"><p>A result of a resource-dependent operation.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
             <a href="kafunk-result-2.html">Result<'a, 'e></a>
           </td>
           <td class="xmldoc"></td>
@@ -313,23 +257,6 @@ Send failures are propagated to the caller who is responsible for recreating the
           </td>
           <td class="xmldoc"></td>
         </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-sessionmessage.html">SessionMessage</a>
-          </td>
-          <td class="xmldoc"><p>A client creates a session message, assigns a unique tx id and waits for a response from the server.
-A server receives a session message, and sends a response with the same tx id.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-step-2.html">Step<'a, 'b></a>
-          </td>
-          <td class="xmldoc"><p>An individual step of an async transducer.</p>
-
-</td>
-        </tr>
     </tbody>
   </table>
   <table class="table table-bordered module-list">
@@ -345,31 +272,9 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-asyncex.html">AsyncEx</a>
+            <a href="kafunk-async.html">Async</a>
           </td>
           <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-asyncfunc.html">AsyncFunc</a>
-          </td>
-          <td class="xmldoc"><p>Operations on functions of the form 'a -&gt; Async<'b>.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-asyncpipe.html">AsyncPipe</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-asyncseq.html">AsyncSeq</a>
-          </td>
-          <td class="xmldoc"><p>Module with helper functions for working with asynchronous sequences</p>
-
-</td>
         </tr>
         <tr>
           <td class="module-name">
@@ -382,14 +287,6 @@ A server receives a session message, and sends a response with the same tx id.</
             <a href="kafunk-boundedmb.html">BoundedMb</a>
           </td>
           <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-chanmodule.html">Chan</a>
-          </td>
-          <td class="xmldoc"><p>API operations on a generic request/reply channel.</p>
-
-</td>
         </tr>
         <tr>
           <td class="module-name">
@@ -407,9 +304,11 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-crc.html">Crc</a>
+            <a href="kafunk-consumergroup.html">ConsumerGroup</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>The consumer group protocol.</p>
+
+</td>
         </tr>
         <tr>
           <td class="module-name">
@@ -429,23 +328,15 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-faults.html">Faults</a>
-          </td>
-          <td class="xmldoc"><p>Fault tolerance.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-flowmonitormodule.html">FlowMonitor</a>
           </td>
           <td class="xmldoc"></td>
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-framing.html">Framing</a>
+            <a href="kafunk-groupmodule.html">Group</a>
           </td>
-          <td class="xmldoc"><p>Stream framing</p>
+          <td class="xmldoc"><p>Operations on Kafka groups.</p>
 
 </td>
         </tr>
@@ -485,25 +376,9 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-mvar.html">MVar</a>
-          </td>
-          <td class="xmldoc"><p>Operations on serialized variables.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-mapmodule.html">Map</a>
           </td>
           <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-mb.html">Mb</a>
-          </td>
-          <td class="xmldoc"><p>Operations on unbounded FIFO mailboxes.</p>
-
-</td>
         </tr>
         <tr>
           <td class="module-name">
@@ -563,12 +438,6 @@ A server receives a session message, and sends a response with the same tx id.</
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-resource.html">Resource</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-resultmodule.html">Result</a>
           </td>
           <td class="xmldoc"></td>
@@ -600,22 +469,6 @@ A server receives a session message, and sends a response with the same tx id.</
             <a href="kafunk-seqmodule.html">Seq</a>
           </td>
           <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-sessionmodule.html">Session</a>
-          </td>
-          <td class="xmldoc"><p>Operations on network sessions (layer 5).</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-socketmodule.html">Socket</a>
-          </td>
-          <td class="xmldoc"><p>Operations on Berkley sockets.</p>
-
-</td>
         </tr>
     </tbody>
   </table>
