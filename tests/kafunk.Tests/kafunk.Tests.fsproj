@@ -73,9 +73,9 @@
     <Compile Include="AsyncTests.fs" />
     <Compile Include="FaultsTests.fs" />
     <Compile Include="Metadata.fsx" />
-    <Compile Include="Producer.fsx" />
+    <None Include="Producer.fsx" />
     <Compile Include="Fetch.fsx" />
-    <Compile Include="Consumer.fsx" />
+    <None Include="Consumer.fsx" />
     <Compile Include="ProducerConsumer.fsx" />
     <Compile Include="Offsets.fsx" />
     <None Include="Async.fsx" />
