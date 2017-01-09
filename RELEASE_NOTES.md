@@ -1,3 +1,7 @@
+### 0.0.15-alpha001 - 09.01.2017
+
+* Pass consumer state to consume callback (BREAKING)
+
 ### 0.0.14-alpha001 - 09.01.2017
 
 * Consumer group assignment strategies configurable

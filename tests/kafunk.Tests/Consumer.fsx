@@ -8,7 +8,7 @@ open System
 
 let Log = Log.create __SOURCE_FILE__
 
-let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
+let argiDefault i def = Environment.GetCommandLineArgs() |> Seq.tryItem i |> Option.getOr def
 
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
@@ -26,7 +26,7 @@ let go = async {
       outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
-  let handle (ms:ConsumerMessageSet) = async {
+  let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
     Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
       ms.topic
       ms.partition

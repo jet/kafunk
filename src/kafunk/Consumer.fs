@@ -667,19 +667,19 @@ module Consumer =
     Group.generationInternal consumer.groupMember
     |> AsyncSeq.mapAsync (fun state -> async {
       let! partitionStreams = consume state
-      return state.state.generationId,partitionStreams })
+      return state.state,partitionStreams })
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The handler accepts the topic, partition, message set and an async computation which commits offsets corresponding to the message set.
   let consume 
-    (handler:ConsumerMessageSet -> Async<unit>) 
+    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) 
     (consumer:Consumer) : Async<unit> =
       consumer
       |> generations
-      |> AsyncSeq.iterAsync (fun (_generationId,partitionStreams) ->
+      |> AsyncSeq.iterAsync (fun (groupMemberState,partitionStreams) ->
         partitionStreams
-        |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler))
+        |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
         |> Async.Parallel
         |> Async.Ignore)
 
@@ -689,11 +689,11 @@ module Consumer =
   /// the specified interval.
   let consumePeriodicCommit 
     (commitInterval:TimeSpan)
-    (handler:ConsumerMessageSet -> Async<unit>)
+    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>)
     (consumer:Consumer) : Async<unit> = async {
       use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets consumer)
-      let handler ms = async {
-        do! handler ms
+      let handler s ms = async {
+        do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
       return! consumer |> consume handler }
 
@@ -703,7 +703,7 @@ module Consumer =
   let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
     use cts = new CancellationTokenSource()
     let mb = BoundedMb.create bufferSize
-    let handle ms = BoundedMb.put ms mb
+    let handle s ms = BoundedMb.put (s,ms) mb
     Async.Start (consume handle consumer, cts.Token)
     yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
 

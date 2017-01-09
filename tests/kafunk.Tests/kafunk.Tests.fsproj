@@ -72,12 +72,12 @@
     <Compile Include="CompressionGzipTests.fs" />
     <Compile Include="AsyncTests.fs" />
     <Compile Include="FaultsTests.fs" />
-    <None Include="Metadata.fsx" />
-    <None Include="Producer.fsx" />
-    <None Include="Fetch.fsx" />
-    <None Include="Consumer.fsx" />
-    <None Include="ProducerConsumer.fsx" />
-    <None Include="Offsets.fsx" />
+    <Compile Include="Metadata.fsx" />
+    <Compile Include="Producer.fsx" />
+    <Compile Include="Fetch.fsx" />
+    <Compile Include="Consumer.fsx" />
+    <Compile Include="ProducerConsumer.fsx" />
+    <Compile Include="Offsets.fsx" />
     <None Include="Async.fsx" />
     <Content Include="App.config" />
   </ItemGroup>

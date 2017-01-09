@@ -72,7 +72,7 @@ let consumer () = async {
       initialFetchTime=Time.EarliestOffset, 
       fetchMaxBytes=100000)
 
-  let handle (ms:ConsumerMessageSet) = async {
+  let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
     ms.messageSet.messages
     |> Seq.iter (fun (o,ms,m) -> 
       try
