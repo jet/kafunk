@@ -84,9 +84,10 @@ module Partitioner =
       match seed with 
       | Some s -> new Random(s)
       | None -> new Random()
+    let inline next ps = lock rng (fun () -> rng.Next (0, ps))
     create <| fun (_,ps,_) ->
       ensurePartitions ps
-      let i = lock rng (fun () -> rng.Next (0, ps.Length))
+      let i = next ps.Length
       ps.[i]
   
   /// CRC32 of the message key.

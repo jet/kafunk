@@ -10,7 +10,7 @@ open System.Threading
 
 let Log = Log.create __SOURCE_FILE__
 
-let argiDefault i def = Environment.GetCommandLineArgs() |> Seq.tryItem i |> Option.getOr def
+let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"

@@ -40,7 +40,10 @@ for t in metadata.topicMetadata do
 // producer
 
 let producerCfg =
-  ProducerConfig.create ("absurd-topic", Partitioner.roundRobin, requiredAcks = RequiredAcks.Local)
+  ProducerConfig.create (
+    topic = "absurd-topic", 
+    partition = Partitioner.roundRobin, 
+    requiredAcks = RequiredAcks.Local)
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -100,7 +103,8 @@ let consumerState =
   |> Async.RunSynchronously
 
 printfn "generation_id=%i member_id=%s leader_id=%s assignment_stratgey=%s partitions=%A" 
-  consumerState.generationId consumerState.memberId consumerState.leaderId consumerState.assignmentStrategy consumerState.assignments 
+  consumerState.generationId consumerState.memberId consumerState.leaderId 
+  consumerState.assignmentStrategy consumerState.assignments 
 
 
 
