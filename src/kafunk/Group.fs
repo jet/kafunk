@@ -47,7 +47,7 @@ type GroupConfig = {
 }
 
 /// Internal state corresponding to a single generation of the consumer group protocol.
-type GroupMemberState = {  
+type GroupMemberState = {
   
   /// The group generation.
   generationId : GenerationId
@@ -56,14 +56,17 @@ type GroupMemberState = {
   memberId : MemberId
   
   /// The member id of the group leader.
-  leaderId : LeaderId  
+  leaderId : LeaderId
   
   /// Leader assigned member state
-  state : MemberAssignment
+  memberAssignment : MemberAssignment
+
+  /// The selected protocol.
+  protocolName : ProtocolName
 
 } 
 
-type internal GroupMemberStateWrapper = {  
+type internal GroupMemberStateWrapper = {
   state : GroupMemberState
   closed : TaskCompletionSource<bool>
 } 
@@ -92,7 +95,7 @@ module Group =
   let internal close (state:GroupMemberStateWrapper) (rejoin:bool) : Async<unit> =
     tryAsync
       state
-      ignore      
+      ignore
       (async {
         if rejoin then
           if state.closed.TrySetResult rejoin then
@@ -110,7 +113,12 @@ module Group =
   let internal closeConsumer (state:GroupMemberStateWrapper) : Async<unit> =
     close state false
 
-  let internal state (gm:GroupMember) = 
+  /// Returns the group member state.
+  let state (gm:GroupMember) = async {
+    let! state = gm.state |> MVar.get
+    return state.state }
+
+  let internal stateInternal (gm:GroupMember) = 
     gm.state |> MVar.get
 
   /// Joins a group.
@@ -132,9 +140,9 @@ module Group =
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
       | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
-        return Failure res.errorCode                               
+        return Failure res.errorCode
       | ErrorCode.NoError ->
-        return Success res      
+        return Success res
       | _ -> 
         return failwithf "unknown_join_group_error=%i" res.errorCode  }
   
@@ -175,12 +183,13 @@ module Group =
 
       let state =
         {
-          state =  
+          state =
             {
               memberId = joinGroupRes.memberId
               leaderId = joinGroupRes.leaderId
               generationId = joinGroupRes.generationId
-              state = syncGroupRes.memberAssignment 
+              memberAssignment = syncGroupRes.memberAssignment 
+              protocolName = joinGroupRes.groupProtocol
             }
           closed = TaskCompletionSource<bool>()
         }
@@ -193,7 +202,7 @@ module Group =
       let rec heartbeat (state:GroupMemberStateWrapper) =
         tryAsync
           state
-          ignore            
+          ignore
           (async {
             let req = HeartbeatRequest(cfg.groupId, state.state.generationId, state.state.memberId)
             let! res = Kafka.heartbeat conn req |> Async.Catch
@@ -227,7 +236,7 @@ module Group =
 
       let! joinGroupRes = join prevMemberId
       match joinGroupRes with
-      | Success joinGroupRes ->        
+      | Success joinGroupRes ->
                 
         if joinGroupRes.members.members.Length > 0 then
           Log.info "joined_group_as_leader|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
@@ -251,7 +260,7 @@ module Group =
             joinGroupRes.memberId 
             joinGroupRes.generationId 
             joinGroupRes.leaderId
-            joinGroupRes.groupProtocol          
+            joinGroupRes.groupProtocol
           let! syncGroupRes = syncGroupFollower joinGroupRes
           match syncGroupRes with
           | Success syncGroupRes ->
@@ -272,9 +281,9 @@ module Group =
 
     return! joinSyncHeartbeat (prevState |> Option.map (fun s -> s.memberId)) }
 
-  let internal generations (gm:GroupMember) =    
+  let internal generations (gm:GroupMember) =
     let rec loop () = asyncSeq {
-      let! state = state gm
+      let! state = stateInternal gm
       yield state
       let! rejoin = state.closed.Task |> Async.AwaitTask
       if rejoin then
