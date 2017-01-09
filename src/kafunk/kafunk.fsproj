@@ -62,7 +62,6 @@
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="AssemblyInfo2.fs" />
     <Compile Include="Utility\Prelude.fs" />
     <Compile Include="Utility\Log.fs" />
     <Compile Include="Utility\Binary.fs" />
@@ -75,10 +74,12 @@
     <Compile Include="Utility\Faults.fs" />
     <Compile Include="Tcp.fs" />
     <Compile Include="Protocol.fs" />
+    <Compile Include="Helpers.fs" />
     <Compile Include="Chan.fs" />
     <Compile Include="Kafka.fs" />
     <Compile Include="Compression.fs" />
     <Compile Include="Producer.fs" />
+    <Compile Include="Group.fs" />
     <Compile Include="Consumer.fs" />
   </ItemGroup>
   <ItemGroup>

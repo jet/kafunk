@@ -1072,7 +1072,13 @@ module Protocol =
       |> Binary.writeArray x.subscription Binary.writeString
       |> Binary.writeBytes x.userData
 
-  type AssignmentStrategy = string
+    static member read buf =
+      let version,buf = Binary.readInt16 buf
+      let subs,buf = Binary.readArray (Binary.readString) buf
+      let userData,buf = Binary.readBytes buf
+      ConsumerGroupProtocolMetadata(version,subs,userData),buf
+
+  type AssignmentStrategyName = string
 
   type PartitionAssignment =
     struct
@@ -1103,21 +1109,26 @@ module Protocol =
     struct
       val version : ConsumerGroupProtocolMetadataVersion
       val partitionAssignment : PartitionAssignment
-      new (version, partitionAssignment) = { version = version; partitionAssignment = partitionAssignment }
+      val userData : Binary.Segment
+      new (version, partitionAssignment, userData) = 
+        { version = version; partitionAssignment = partitionAssignment ; userData = userData }
     end
   with
 
     static member size (x:ConsumerGroupMemberAssignment) =
-      Binary.sizeInt16 x.version + PartitionAssignment.size x.partitionAssignment
+      Binary.sizeInt16 x.version + PartitionAssignment.size x.partitionAssignment + Binary.sizeBytes x.userData
 
     static member write (x:ConsumerGroupMemberAssignment) buf =
       let buf = Binary.writeInt16 x.version buf
-      PartitionAssignment.write x.partitionAssignment buf
+      let buf = PartitionAssignment.write x.partitionAssignment buf
+      let buf = Binary.writeBytes x.userData buf
+      buf
 
     static member read buf =
       let version, buf = Binary.readInt16 buf
       let assignments, buf = PartitionAssignment.read buf
-      (ConsumerGroupMemberAssignment(version, assignments), buf)
+      let userData, buf = Binary.readBytes buf
+      (ConsumerGroupMemberAssignment(version, assignments, userData), buf)
 
   // Administrative API
 

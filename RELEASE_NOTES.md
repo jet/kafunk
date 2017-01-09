@@ -1,3 +1,7 @@
+### 0.0.14-alpha001 - 09.01.2017
+
+* Consumer group assignment strategies configurable
+
 ### 0.0.13-alpha001 - 06.01.2017
 
 * Refine Fetch consumer offsets API

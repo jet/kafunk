@@ -97,8 +97,8 @@ let consumerState =
   Consumer.state consumer
   |> Async.RunSynchronously
 
-printfn "generation_id=%i member_id=%s leader_id=%s partitions=%A" 
-  consumerState.generationId consumerState.memberId consumerState.leaderId consumerState.assignments
+printfn "generation_id=%i member_id=%s leader_id=%s assignment_stratgey=%s partitions=%A" 
+  consumerState.generationId consumerState.memberId consumerState.leaderId consumerState.assignmentStrategy consumerState.assignments 
 
 
 
@@ -111,6 +111,7 @@ let consumerOffsets =
 for (t,os) in consumerOffsets do
   for (p,o) in os do
     printfn "topic=%s partition=%i offset=%i" t p o
+
 
 
 

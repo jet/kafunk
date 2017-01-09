@@ -88,6 +88,10 @@ module Partitioner =
       ensurePartitions ps
       let i = lock rng (fun () -> rng.Next (0, ps.Length))
       ps.[i]
+  
+  /// CRC32 of the message key.
+  let crc32Key : Partitioner =
+    hashKey (fun key -> int (Crc.crc32 key.Array key.Offset key.Count))
 
 
 /// Producer state.

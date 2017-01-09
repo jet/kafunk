@@ -16,14 +16,16 @@ let group = argiDefault 3 "existential-group"
 
 let go = async {
   let! conn = Kafka.connHostAsync host
-  let consumerCfg = 
-    ConsumerConfig.create (group, topic, 
-      initialFetchTime=Time.EarliestOffset, 
-      fetchMaxBytes=50000,
-      fetchBufferSize=1,
-      outOfRangeAction=ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime)
+  let consumerConfig = 
+    ConsumerConfig.create (
+      groupId = group, 
+      topic = topic, 
+      initialFetchTime = Time.EarliestOffset, 
+      fetchMaxBytes = 50000,
+      fetchBufferSize= 1,
+      outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime)
   let! consumer = 
-    Consumer.createAsync conn consumerCfg
+    Consumer.createAsync conn consumerConfig
   let handle (ms:ConsumerMessageSet) = async {
     Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
       ms.topic

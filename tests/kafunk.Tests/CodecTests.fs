@@ -124,7 +124,9 @@ let ``ProduceResponse.read should decode ProduceResponse``() =
 
 [<Test>]
 let ``ProduceRequest.write should encode ProduceRequest``() =
-  let req = ProduceRequest.ofMessageSet "test" 0 (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) None None
+  let req = 
+    ProduceRequest.ofMessageSetTopics 
+      [| "test", [| 0, (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) |] |] RequiredAcks.Local 0
   let data = toArraySeg ProduceRequest.size (fun x -> ProduceRequest.write (0s,x)) req |> Binary.toArray |> Array.toList
   let expected = [
     0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;

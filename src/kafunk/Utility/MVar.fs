@@ -1,4 +1,6 @@
-﻿namespace Kafunk
+﻿[<AutoOpen>]
+[<AutoOpen>]
+module internal Kafunk.MVar
 
 // TODO: https://github.com/fsprojects/FSharpx.Async
 

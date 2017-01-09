@@ -1,5 +1,8 @@
 namespace Kafunk
 
+[<assembly: System.Runtime.CompilerServices.InternalsVisibleToAttribute("Kafunk.Tests")>]
+do ()
+
 [<AutoOpen>]
 module Prelude =
 
@@ -446,25 +449,3 @@ module Observable =
       let batchSubs = batches.Subscribe(observer.OnNext)
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
-
-/// Operations for parsing Kafka URIs.
-module KafkaUri =
-
-  open System
-  open System.Text.RegularExpressions
-
-  let [<Literal>] DefaultPortKafka = 9092
-  let [<Literal>] UriSchemeKafka = "kafka"
-  let private KafkaBrokerUriRegex = Regex("^(?<scheme>(kafka|tcp)://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
-
-  let parse (host:string) =
-    let m = KafkaBrokerUriRegex.Match host
-    if not m.Success then invalidArg "host" (sprintf "invalid host string '%s'" host)
-    else
-      let host = m.Groups.["host"].Value
-      let port = 
-        let g = m.Groups.["port"]
-        if g.Success then Int32.Parse g.Value
-        else DefaultPortKafka
-      let ub = UriBuilder(UriSchemeKafka, host, port)
-      ub.Uri

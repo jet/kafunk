@@ -338,6 +338,31 @@ type private RetryAction =
         |> Option.map (fun action -> r.errorCode,action,"")
 
 
+
+
+/// Operations for parsing Kafka URIs.
+module KafkaUri =
+
+  open System
+  open System.Text.RegularExpressions
+
+  let [<Literal>] DefaultPortKafka = 9092
+  let [<Literal>] UriSchemeKafka = "kafka"
+  let private KafkaBrokerUriRegex = Regex("^(?<scheme>(kafka|tcp)://)?(?<host>[-._\w]+)(:(?<port>[\d]+))?", RegexOptions.Compiled)
+
+  /// Parses a string into a Kafka Uri.
+  let parse (host:string) =
+    let m = KafkaBrokerUriRegex.Match host
+    if not m.Success then invalidArg "host" (sprintf "invalid host string '%s'" host)
+    else
+      let host = m.Groups.["host"].Value
+      let port = 
+        let g = m.Groups.["port"]
+        if g.Success then Int32.Parse g.Value
+        else DefaultPortKafka
+      let ub = UriBuilder(UriSchemeKafka, host, port)
+      ub.Uri
+
 /// Kafka connection configuration.
 type KafkaConfig = {
   
@@ -361,8 +386,8 @@ type KafkaConfig = {
   /// Creates a Kafka configuration object given the specified list of broker hosts to bootstrap with.
   /// The first host to which a successful connection is established is used for a subsequent metadata request
   /// to build a routing table mapping topics and partitions to brokers.
-  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectionRetryPolicy) =
-    { version = Version.Parse "0.9.0"
+  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectionRetryPolicy, ?version) =
+    { version = defaultArg version (Version.Parse "0.9.0")
       bootstrapServers = bootstrapServers
       bootstrapConnectionRetryPolicy = defaultArg bootstrapConnectionRetryPolicy (RetryPolicy.constantMs 5000 |> RetryPolicy.maxAttempts 3)
       clientId = match clientId with Some clientId -> clientId | None -> Guid.NewGuid().ToString("N")
@@ -425,7 +450,6 @@ type KafkaConn internal (cfg:KafkaConfig) =
     match state |> ConnState.tryFindChanByEndPoint ep with
     | Some _ -> return state
     | None ->
-      Log.info "creating_channel|endpoint=%A" ep
       let! ch = Chan.connect (cfg.version, cfg.tcpConfig, cfg.clientId) ep
       return state |> ConnState.addChannel ch }
 
