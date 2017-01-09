@@ -450,7 +450,6 @@ type KafkaConn internal (cfg:KafkaConfig) =
     match state |> ConnState.tryFindChanByEndPoint ep with
     | Some _ -> return state
     | None ->
-      Log.info "creating_channel|endpoint=%A" ep
       let! ch = Chan.connect (cfg.version, cfg.tcpConfig, cfg.clientId) ep
       return state |> ConnState.addChannel ch }
 

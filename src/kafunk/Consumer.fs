@@ -102,8 +102,6 @@ and ConsumerOffsetOutOfRangeAction =
   | ResumeConsumerWithFreshInitialFetchTime
 
 
-type ConsumerStateInternal = GroupMemberStateInternal//<Partition[]>
-
 /// State corresponding to a single generation of the consumer group protocol.
 type ConsumerState = {
   
@@ -177,22 +175,164 @@ type ConsumerMessageSet =
     static member messages (ms:ConsumerMessageSet) =
       ms.messageSet.messages |> Array.map (fun (_,_,m) -> m)
 
+
+/// The consumer group protocol.
+module ConsumerGroupProtocol =
+
+  let private Log = Log.create "Kafunk.ConsumerGroup"
+
+  /// A consumer groups assignment stratgey.
+  type ConsumerGroupAssignmentStrategy = {
+      
+    /// The name of the assignment strategy.
+    /// When multiple assignment stratgeies are configured, the coordinator will choose one supported by all members.
+    /// When members support multiple stratgies, the first one in the list will be selected.
+    name : AssignmentStrategyName
+      
+    /// Given the configured topic name, returns metadata for the consumer group protocol.
+    /// The UserData field is passed as member metadata to the assign operation invoked on the leader.
+    metadata : TopicName -> Async<ConsumerGroupProtocolMetadata>
+      
+    /// Assigns members to partitions given a set of available topic partitions and members.
+    /// The members are associated with metadata specified in the UserData field when joining the group.
+    assign : (TopicName * Partition[])[] -> (MemberId * ConsumerGroupProtocolMetadata)[] -> Async<(MemberId * ConsumerGroupMemberAssignment)[]>
+
+  }
+
+  /// Decodes member state from the MemberAssignment field in SyncGroupResponse.
+  let decodeMemberAssignment (memberAssignment:MemberAssignment) =
+      
+    let assignment,_ = ConsumerGroupMemberAssignment.read memberAssignment
+    
+    Log.info "decoded_sync_group_response|version=%i member_assignment=[%s]"
+      assignment.version
+      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%A" tn ps))) 
+      
+    if assignment.partitionAssignment.assignments.Length = 0 then
+      failwith "no partitions assigned!"
+
+    let assignments = 
+      assignment.partitionAssignment.assignments
+      |> Seq.collect (fun (_,ps) -> ps)
+      |> Seq.toArray
+
+    assignments
+
+  /// Creates an instances of the consumer groups protocol given the specified assignment strategies.
+  let create (topic:TopicName) (strategies:ConsumerGroupAssignmentStrategy[]) =
+      
+    let strategies : Map<AssignmentStrategyName, ConsumerGroupAssignmentStrategy> =
+      strategies
+      |> Seq.map (fun x -> x.name, x)
+      |> Map.ofSeq
+
+    let assign (conn:KafkaConn) (startegyName:AssignmentStrategyName) (members:(MemberId * MemberMetadata)[]) : Async<(MemberId * ProtocolMetadata)[]> = async {
+        
+      let! topicPartitions = conn.GetMetadata [|topic|]
+        
+      let topicPartitions = 
+        topicPartitions
+        |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
+        |> Seq.toArray
+
+      let assignmentStrategy = Map.find startegyName strategies
+
+      let members = 
+        members
+        |> Array.map (fun (memberId,meta) ->
+          let meta,_ = ConsumerGroupProtocolMetadata.read meta
+          memberId,meta)
+
+      let! memberAssignments = assignmentStrategy.assign topicPartitions members
+
+      let memberAssignments =
+        memberAssignments
+        |> Array.map (fun (memberId,assignment) ->
+          memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))
+        
+      return memberAssignments }
+
+    let protocols = async {
+      return!
+        strategies
+        |> Seq.map (fun kvp -> async {
+          let strategy = kvp.Value
+          let! metadata = strategy.metadata topic
+          return strategy.name, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write metadata })
+        |> Async.Parallel }
+        
+    { protocolType = ProtocolType.consumer ; protocols = protocols ; assign = assign }
+
+  /// Built-in assignment stratgies.
+  module AssignmentStratgies =
+
+    /// The range consumer group assignment startegy.
+    let Range =
+      
+      let metadata topic = async {
+        let version = 0s
+        let userData = Binary.empty
+        let userData = "hello world"B |> Binary.ofArray
+        return ConsumerGroupProtocolMetadata(version, [|topic|], userData) }
+
+      let assign (topicPartitions:(TopicName * Partition[])[]) (members:(MemberId * ConsumerGroupProtocolMetadata)[]) = 
+      
+        let memberAssignments =
+          
+          let topicPartitions =
+            topicPartitions
+            |> Seq.collect (fun (t,ps) -> 
+              ps |> Seq.map (fun p -> t,p))
+            |> Seq.toArray
+            |> Array.groupInto members.Length
+
+          (members,topicPartitions)
+          ||> Array.zip 
+          |> Array.map (fun ((memberId,meta),ps) ->
+            //Log.info "creating_member_assignment|member_id=%s user_data=%s" memberId (Binary.toString meta.userData)
+            let assignment = 
+              ps 
+              |> Seq.groupBy fst 
+              |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
+              |> Seq.toArray
+            memberId, meta, assignment)
+
+        let memberAssignmentsStr =
+          memberAssignments
+          |> Seq.map (fun (memberId,meta,topicPartitions) -> 
+            let str = 
+              topicPartitions 
+              |> Seq.map (fun (t,ps) -> sprintf "[topic=%s partitions=%s]" t (String.concat "," (ps |> Seq.map (string))))
+              |> String.concat " ; "
+            sprintf "[member_id=%s user_data=%s assignments=%s]" memberId (Binary.toString meta.userData) str)
+          |> String.concat " ; "
+        Log.info "leader_determined_member_assignments|%s" memberAssignmentsStr
+
+        let memberAssignments =
+          memberAssignments
+          |> Array.map (fun (memberId,meta,ps) ->
+            let userData = Binary.empty
+            let version = 0s
+            let assignment = ConsumerGroupMemberAssignment(version, PartitionAssignment(ps), userData)
+            memberId, assignment)
+
+        async.Return memberAssignments
+
+      { name = "range" ; assign = assign ; metadata = metadata }
+
+
+
 /// High-level consumer API.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Consumer =
 
   let private Log = Log.create "Kafunk.Consumer"
-    
-  // TODO: refactor
-  let private peekTask (f:'a -> 'b) (t:Task<'a>) (a:Async<'b>) = async {
-    if t.IsCompleted then return f t.Result
-    else return! a }
 
   /// Commits the specified offsets within the consumer group.
   let private commit (conn:KafkaConn) (cfg:ConsumerConfig) (state:GroupMemberStateWrapper) (topic:TopicName) (offsets:(Partition * Offset)[]) : Async<unit> = 
-    peekTask
-      (ignore)
-      (state.closed.Task)
+    Group.tryAsync
+      (state)
+      (ignore)      
       (async {
         //Log.trace "committing_offset|topic=%s partition=%i group_id=%s member_id=%s generation_id=%i offset=%i retention=%i" topic partition cfg.groupId state.memberId state.generationId offset cfg.offsetRetentionTime
         let req = OffsetCommitRequest(cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
@@ -313,100 +453,18 @@ module Consumer =
       Log.error "fetch_offset_exception|error=%O" ex
       return raise ex }
   
-  let private decodeMemberState memberAssignment =
-      
-    let assignment,_ = ConsumerGroupMemberAssignment.read memberAssignment
-
-    Log.info "received_sync_group_response|member_assignment=[%s]"
-      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%A" tn ps))) 
-      
-    if assignment.partitionAssignment.assignments.Length = 0 then
-      failwith "no partitions assigned!"
-
-    let assignments = 
-      assignment.partitionAssignment.assignments
-      |> Seq.collect (fun (_,ps) -> ps)
-      |> Seq.toArray
-
-    assignments
-
   /// Creates a participant in the consumer groups protocol and joins the group.
-  let createAsync (conn:KafkaConn) (cfg:ConsumerConfig) = async {    
-
-    // consumer group protocol
-
-    let groupProtocol : ProtocolType * (ProtocolName * ProtocolMetadata)[] =
-      let protocolType = ProtocolType.consumer
-      let groupProtocols =
-        let consumerProtocolMeta = ConsumerGroupProtocolMetadata(0s, [|cfg.topic|], Binary.empty)
-        let consumerProtocolMetaBytes = 
-          toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write consumerProtocolMeta
-        let assignmentStrategy : AssignmentStrategy = "range"
-        [| assignmentStrategy, consumerProtocolMetaBytes |]
-      protocolType,groupProtocols
-
-    let assign (topicPartitions:(TopicName * Partition[])[]) (_groupProtocol:GroupProtocol) (members:(MemberId * MemberMetadata)[]) = 
-      
-      let topicPartitions =
-        topicPartitions
-        |> Seq.collect (fun (t,ps) -> 
-          ps |> Seq.map (fun p -> t,p))
-        |> Seq.toArray
-        |> Array.groupInto members.Length
-
-      let memberAssignments =
-        (members,topicPartitions)
-        ||> Array.zip 
-
-      let memberAssignmentsStr =
-        memberAssignments
-        |> Seq.map (fun ((memberId,_),topicPartitions) -> 
-          let str = 
-            topicPartitions 
-            |> Seq.groupBy fst
-            |> Seq.map (fun (t,ps) -> sprintf "[topic=%s partitions=%s]" t (String.concat "," (ps |> Seq.map (snd >> string))))
-            |> String.concat " ; "
-          sprintf "[member_id=%s assignments=%s]" memberId str)
-        |> String.concat " ; "
-      Log.info "leader_determined_member_assignments|%s" memberAssignmentsStr
-
-      let memberAssignments =
-        memberAssignments
-        |> Array.map (fun ((memberId,_md),ps) ->
-          let assignment = 
-            ps 
-            |> Seq.groupBy fst 
-            |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
-            |> Seq.toArray
-          let assignment = ConsumerGroupMemberAssignment(0s, PartitionAssignment(assignment))
-          memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))
-
-      memberAssignments
-
-    let assign protocol members = async {
-      let! topicPartitions = conn.GetMetadata [|cfg.topic|]
-      let memberAssignments = 
-        let topicPartitions = 
-          topicPartitions
-          |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
-          |> Seq.toArray
-        assign topicPartitions protocol members
-      return memberAssignments }
-    
-    // --------------------------------------------------------------------------------------------------------------------------------
-                        
+  let createAsync (conn:KafkaConn) (cfg:ConsumerConfig) = async {
+    let strategies = [| ConsumerGroupProtocol.AssignmentStratgies.Range |]
+    let consumerGroupProtocol = ConsumerGroupProtocol.create cfg.topic strategies
     let config = 
       { GroupConfig.groupId = cfg.groupId
         heartbeatFrequency = cfg.heartbeatFrequency
         sessionTimeout = cfg.sessionTimeout
         rebalanceTimeout = cfg.rebalanceTimeout
-        assign = assign
-        groupProtocol = groupProtocol }
-
+        protocol = consumerGroupProtocol }
     let! gm = Group.createJoin conn config
-
     let consumer = { conn = conn ; cfg = cfg ; groupMember = gm }
-
     return consumer }
 
   /// Creates a consumer.
@@ -414,7 +472,7 @@ module Consumer =
     createAsync conn cfg |> Async.RunSynchronously
 
   /// Returns an async sequence corresponding to generations, where each generation
-  /// is paired with the set of assigned partitions.
+  /// is paired with the set of assigned fetch streams.
   let generations (consumer:Consumer) =
 
     let cfg = consumer.cfg
@@ -425,7 +483,7 @@ module Consumer =
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:GroupMemberStateWrapper) = async {
       
-      let assignments = state.state.state |> decodeMemberState
+      let assignments = state.state.state |> ConsumerGroupProtocol.decodeMemberAssignment
 
       // initialize per-partition messageset buffers
       let partitionBuffers =
@@ -440,9 +498,9 @@ module Consumer =
       /// Returns a set of message sets and an end of topic list.
       /// Returns None if the generation closed.
       let rec tryFetch (offsets:(Partition * Offset)[]) : Async<(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option> = 
-        peekTask
+        Group.tryAsync          
+          (state)
           (fun _ -> None)
-          (state.closed.Task)
           (async {
             let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| cfg.topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |])
             let! res = fetch req
@@ -647,7 +705,7 @@ module Consumer =
   /// Returns the current consumer state.
   let state (c:Consumer) : Async<ConsumerState> = async {
     let! state = Group.state c.groupMember
-    let assignments = decodeMemberState state.state.state
+    let assignments = ConsumerGroupProtocol.decodeMemberAssignment state.state.state
     return 
       { ConsumerState.assignments = assignments
         memberId = state.state.memberId
