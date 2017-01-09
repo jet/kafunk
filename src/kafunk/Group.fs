@@ -28,13 +28,11 @@ type GroupConfig = {
     
   /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
   /// period, a group members is ejected from the group.
-  /// Default: 20000
   sessionTimeout : SessionTimeout
   
   /// The time during which a member must rejoin a group after a rebalance.
   /// If the member doesn't rejoin within this time, it will be ejected.
   /// Supported in v0.10.1.
-  /// Default: 20000
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
@@ -58,6 +56,10 @@ type GroupMemberState = {
   /// The member id of the group leader.
   leaderId : LeaderId
   
+  /// The members of the group.
+  /// Available only to the leader.
+  members : (MemberId * ProtocolMetadata)[]
+
   /// Leader assigned member state
   memberAssignment : MemberAssignment
 
@@ -190,6 +192,7 @@ module Group =
               generationId = joinGroupRes.generationId
               memberAssignment = syncGroupRes.memberAssignment 
               protocolName = joinGroupRes.groupProtocol
+              members = joinGroupRes.members.members
             }
           closed = TaskCompletionSource<bool>()
         }
@@ -281,7 +284,7 @@ module Group =
 
     return! joinSyncHeartbeat (prevState |> Option.map (fun s -> s.memberId)) }
 
-  let internal generations (gm:GroupMember) =
+  let internal generationInternal (gm:GroupMember) =
     let rec loop () = asyncSeq {
       let! state = stateInternal gm
       yield state
@@ -291,6 +294,13 @@ module Group =
         yield! loop () }
     loop ()
 
+  /// Returns generations of the group protocol.
+  let generations (gm:GroupMember) =
+    gm
+    |> generationInternal
+    |> AsyncSeq.map (fun state -> state.state)
+
+  /// Creates a group member and joins it to the group.
   let createJoin (conn:KafkaConn) (config:GroupConfig) = async {
     let gm = 
       { GroupMember.conn = conn
@@ -299,11 +309,12 @@ module Group =
     let! _ = join gm None
     return gm }
 
+  /// Leaves a group.
   let leave (gm:GroupMember) = async {
     let! state = MVar.get gm.state
     let req = LeaveGroupRequest(gm.config.groupId, state.state.memberId)
     let! res = Kafka.leaveGroup gm.conn req
     match res.errorCode with
     | ErrorCode.NoError -> return ()
-    | _ ->  return () }
+    | ec -> return failwithf "group_leave error_code=%i" ec }
 

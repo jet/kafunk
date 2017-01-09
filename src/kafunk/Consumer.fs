@@ -259,6 +259,10 @@ type ConsumerState = {
   /// The leader of the generation.
   leaderId : LeaderId
 
+  /// The members of the consumer group.
+  /// Available only to the leader.
+  members : (MemberId * ProtocolMetadata)[]
+
   /// The assignment strategy selected by the group coordinator.
   assignmentStrategy : AssignmentStrategyName
 
@@ -660,7 +664,7 @@ module Consumer =
 
       return partitionStreams }
     
-    Group.generations consumer.groupMember
+    Group.generationInternal consumer.groupMember
     |> AsyncSeq.mapAsync (fun state -> async {
       let! partitionStreams = consume state
       return state.state.generationId,partitionStreams })
@@ -711,5 +715,6 @@ module Consumer =
       { ConsumerState.assignments = assignments
         memberId = state.state.memberId
         leaderId = state.state.leaderId
+        members = state.state.members
         generationId = state.state.generationId
         assignmentStrategy = state.state.protocolName } }
