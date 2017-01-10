@@ -6,45 +6,7 @@ open System.Threading
 open System.Threading.Tasks
 open Kafunk
 
-/// The group protocol.
-type GroupProtocol = {
-
-  /// The group protocol type.
-  protocolType : ProtocolType
-
-  /// The protocols (e.g. versions).
-  protocols : Async<(ProtocolName * ProtocolMetadata)[]>
-
-  /// Called by the leader to assign member specific states given a selected protocol name.
-  assign : KafkaConn -> ProtocolName -> (MemberId * ProtocolMetadata)[] -> Async<(MemberId * MemberAssignment)[]>
-
-}
-
-/// Group member configuration.
-type GroupConfig = {
-  
-  /// The group id shared by members in the group.
-  groupId : GroupId
-    
-  /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
-  /// period, a group members is ejected from the group.
-  sessionTimeout : SessionTimeout
-  
-  /// The time during which a member must rejoin a group after a rebalance.
-  /// If the member doesn't rejoin within this time, it will be ejected.
-  /// Supported in v0.10.1.
-  rebalanceTimeout : RebalanceTimeout
-
-  /// The number of times to send heartbeats within a session timeout period.
-  /// Default: 10
-  heartbeatFrequency : int32
-
-  /// The group protocol.
-  protocol : GroupProtocol
-
-}
-
-/// Internal state corresponding to a single generation of the consumer group protocol.
+/// Internal state corresponding to a single generation of the group protocol.
 type GroupMemberState = {
   
   /// The group generation.
@@ -67,6 +29,44 @@ type GroupMemberState = {
   protocolName : ProtocolName
 
 } 
+
+/// A group protocol.
+type GroupProtocol = {
+
+  /// The group protocol type.
+  protocolType : ProtocolType
+
+  /// The protocols (e.g. versions).
+  protocols : Async<(ProtocolName * ProtocolMetadata)[]>
+
+  /// Called by the leader to assign member specific states given a the previous state, if any, and the selected protocol name.
+  assign : KafkaConn -> GroupMemberState option -> ProtocolName -> (MemberId * ProtocolMetadata)[] -> Async<(MemberId * MemberAssignment)[]>
+
+}
+
+/// Group member configuration.
+type GroupConfig = {
+  
+  /// The group id shared by members in the group.
+  groupId : GroupId
+    
+  /// The group protocol.
+  protocol : GroupProtocol
+
+  /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
+  /// period, a group members is ejected from the group.
+  sessionTimeout : SessionTimeout
+  
+  /// The time during which a member must rejoin a group after a rebalance.
+  /// If the member doesn't rejoin within this time, it will be ejected.
+  /// Supported in v0.10.1.
+  rebalanceTimeout : RebalanceTimeout
+
+  /// The number of times to send heartbeats within a session timeout period.
+  /// Default: 10
+  heartbeatFrequency : int32
+
+}
 
 type internal GroupMemberStateWrapper = {
   state : GroupMemberState
@@ -93,35 +93,52 @@ module Group =
     if t.IsCompleted then return f t.Result
     else return! a }
     
-  /// Closes a consumer group specifying whether a new generation should begin.
-  let internal close (state:GroupMemberStateWrapper) (rejoin:bool) : Async<unit> =
+  /// Closes a group specifying whether a new generation should begin.
+  let internal close (state:GroupMemberStateWrapper) (rejoin:bool) : Async<bool> =
     tryAsync
       state
-      ignore
+      (fun _ -> false)
       (async {
         if rejoin then
           if state.closed.TrySetResult rejoin then
-            Log.warn "closing_generation|generation_id=%i member_id=%s leader_id=%s" state.state.generationId state.state.memberId state.state.leaderId
+            Log.warn "closing_group_generation|generation_id=%i member_id=%s leader_id=%s" state.state.generationId state.state.memberId state.state.leaderId
+            return true
+          else
+            return false
         else
           if state.closed.TrySetResult rejoin then
-            Log.warn "closing_consumer|generation_id=%i member_id=%s leader_id=%s" state.state.generationId state.state.memberId state.state.leaderId
+            Log.warn "closing_group|generation_id=%i member_id=%s leader_id=%s" state.state.generationId state.state.memberId state.state.leaderId
+            return true
+          else
+            return false
         })
 
-  /// Closes a consumer group and causes a new generation to begin.
+  /// Closes a generation and causes a new generation to begin.
   let internal closeGeneration (state:GroupMemberStateWrapper) : Async<unit> =
-    close state true
+    close state true |> Async.Ignore
 
-  /// Closes a consumer group and causes a new generation to begin.
-  let internal closeConsumer (state:GroupMemberStateWrapper) : Async<unit> =
-    close state false
+  /// Closes a group and sends a leave group request to Kafka.
+  let internal leaveInternal (gm:GroupMember) (state:GroupMemberStateWrapper) : Async<unit> = async {
+    let! _ = close state false
+    let req = LeaveGroupRequest(gm.config.groupId, state.state.memberId)
+    let! res = Kafka.leaveGroup gm.conn req
+    match res.errorCode with
+    | ErrorCode.NoError | ErrorCode.UnknownMemberIdCode | ErrorCode.GroupLoadInProgressCode -> return ()
+    | ec -> 
+      return failwithf "group_leave error_code=%i" ec }
 
-  /// Returns the group member state.
-  let state (gm:GroupMember) = async {
-    let! state = gm.state |> MVar.get
-    return state.state }
+  /// Leaves a group, sending a leave group request to Kafka.
+  let leave (gm:GroupMember) = async {
+    let! state = MVar.get gm.state
+    return! leaveInternal gm state }
 
   let internal stateInternal (gm:GroupMember) = 
     gm.state |> MVar.get
+
+  /// Returns the group member state.
+  let state (gm:GroupMember) = async {
+    let! state = stateInternal gm
+    return state.state }
 
   /// Joins a group.
   let join (gm:GroupMember) (prevState:GroupMemberState option) = async {
@@ -152,7 +169,7 @@ module Group =
     let syncGroupLeader (joinGroupRes:JoinGroup.Response) = async {
                    
       let! memberAssignments = 
-        cfg.protocol.assign conn joinGroupRes.groupProtocol joinGroupRes.members.members
+        cfg.protocol.assign conn prevState joinGroupRes.groupProtocol joinGroupRes.members.members
 
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
       let! res = Kafka.syncGroup conn req
@@ -198,8 +215,8 @@ module Group =
         }
           
       conn.CancellationToken.Register (fun () ->
-        Log.info "closing_consumer_group_on_connection_close" 
-        closeConsumer state |> Async.Start) |> ignore
+        Log.info "closing_group_on_connection_close" 
+        leave gm |> Async.Start) |> ignore
       
       /// The hearbeat process.
       let rec heartbeat (state:GroupMemberStateWrapper) =
@@ -220,7 +237,7 @@ module Group =
                 return! heartbeat state
             | Failure ex ->
               Log.warn "heartbeat_failure|generation_id=%i error=%O" state.state.generationId ex
-              do! closeConsumer state
+              do! leaveInternal gm state
               return () })
 
       Async.Start (heartbeat state)
@@ -288,8 +305,8 @@ module Group =
     let rec loop () = asyncSeq {
       let! state = stateInternal gm
       yield state
-      let! rejoin = state.closed.Task |> Async.AwaitTask
-      if rejoin then
+      let! shouldRejoin = state.closed.Task |> Async.AwaitTask
+      if shouldRejoin then
         let! _ = join gm (Some state.state)
         yield! loop () }
     loop ()
@@ -308,13 +325,4 @@ module Group =
         config = config }
     let! _ = join gm None
     return gm }
-
-  /// Leaves a group.
-  let leave (gm:GroupMember) = async {
-    let! state = MVar.get gm.state
-    let req = LeaveGroupRequest(gm.config.groupId, state.state.memberId)
-    let! res = Kafka.leaveGroup gm.conn req
-    match res.errorCode with
-    | ErrorCode.NoError -> return ()
-    | ec -> return failwithf "group_leave error_code=%i" ec }
 

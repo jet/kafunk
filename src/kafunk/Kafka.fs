@@ -720,7 +720,7 @@ module Offsets =
 
   type private PeriodicCommitQueueMsg =
     | Enqueue of (Partition * Offset) seq
-    | Commit
+    | Commit of AsyncReplyChannel<unit> option
 
   /// A queue for offsets to be periodically committed.
   type PeriodicCommitQueue internal (interval:TimeSpan, commit:(Partition * Offset)[] -> Async<unit>) =
@@ -735,7 +735,7 @@ module Offsets =
           (commits,os) 
           ||> Seq.fold (fun m (p,o) -> Map.add p o m) 
         return! enqueueLoop commits' mb
-      | Commit ->
+      | Commit rep ->
         let offsets =
           commits
           |> Map.toSeq
@@ -743,19 +743,23 @@ module Offsets =
           |> Seq.toArray
         if offsets.Length > 0 then
           do! commit offsets
+        rep |> Option.iter (fun r -> r.Reply())
         return! enqueueLoop Map.empty mb }
 
     let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
   
     let rec commitLoop = async {
       do! Async.Sleep interval
-      mbp.Post Commit
+      mbp.Post (Commit None)
       return! commitLoop }
 
     do Async.Start (commitLoop, cts.Token)
 
     member internal __.Enqueue (os:(Partition * Offset) seq) =
       mbp.Post (Enqueue os)
+
+    member internal __.Flush () =
+      mbp.PostAndAsyncReply (fun ch -> Commit (Some ch))
 
     interface IDisposable with
       member __.Dispose () =
@@ -770,6 +774,9 @@ module Offsets =
   let enqueuePeriodicCommit (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
     q.Enqueue os
     
+  /// Commits whatever remains in the queue.
+  let flushPeriodicCommit (q:PeriodicCommitQueue) =
+    q.Flush ()
 
   
 

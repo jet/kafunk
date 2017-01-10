@@ -1,3 +1,7 @@
+### 0.0.16-alpha001 - 09.01.2017
+
+* Fix bug in assignment strategy where all available metadate were used rather than that of subscribed topic
+
 ### 0.0.15-alpha001 - 09.01.2017
 
 * Pass consumer state to consume callback (BREAKING)
