@@ -40,7 +40,7 @@
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>The group protocol.</p>
+<p>A group protocol.</p>
 
 </div>
   <h3>Record Fields</h3>
@@ -52,19 +52,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '667', 667)" onmouseover="showTip(event, '667', 667)">
+          <code onmouseout="hideTip(event, '668', 668)" onmouseover="showTip(event, '668', 668)">
             assign
           </code>
-          <div class="tip" id="667">
-            <strong>Signature:</strong> KafkaConn -&gt; ProtocolName -&gt; (MemberId * ProtocolMetadata) [] -&gt; Async&lt;(MemberId * MemberAssignment) []&gt;<br />
+          <div class="tip" id="668">
+            <strong>Signature:</strong> KafkaConn -&gt; GroupMemberState option -&gt; ProtocolName -&gt; (MemberId * ProtocolMetadata) [] -&gt; Async&lt;(MemberId * MemberAssignment) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L19-19" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L43-43" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Called by the leader to assign member specific states given a selected protocol name.</p>
+          <p>Called by the leader to assign member specific states given a the previous state, if any, and the selected protocol name.</p>
 
 
         </td>
@@ -72,15 +72,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '668', 668)" onmouseover="showTip(event, '668', 668)">
+          <code onmouseout="hideTip(event, '669', 669)" onmouseover="showTip(event, '669', 669)">
             protocols
           </code>
-          <div class="tip" id="668">
+          <div class="tip" id="669">
             <strong>Signature:</strong> Async&lt;(ProtocolName * ProtocolMetadata) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L16-16" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L40-40" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -92,15 +92,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '669', 669)" onmouseover="showTip(event, '669', 669)">
+          <code onmouseout="hideTip(event, '670', 670)" onmouseover="showTip(event, '670', 670)">
             protocolType
           </code>
-          <div class="tip" id="669">
+          <div class="tip" id="670">
             <strong>Signature:</strong> ProtocolType<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L13-13" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L37-37" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
