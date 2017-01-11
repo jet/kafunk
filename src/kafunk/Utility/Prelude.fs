@@ -238,6 +238,12 @@ module Map =
   let addMany (kvps:('a * 'b) seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
     kvps |> Seq.fold (fun m (k,v) -> Map.add k v m) m
 
+  let onlyKeys (ks:'a seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
+    ks 
+    |> Seq.choose (fun k -> Map.tryFind k m |> Option.map (fun v -> k,v))
+    |> Map.ofSeq
+    
+
 // --------------------------------------------------------------------------------------------------
 
 

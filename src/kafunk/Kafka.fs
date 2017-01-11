@@ -662,7 +662,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let state = __.GetState ()
     let! state' = getMetadata state topics
-    return state'.routes |> Routes.topicPartitions }
+    let topicPartitions = state'.routes |> Routes.topicPartitions
+    return topicPartitions |> Map.onlyKeys topics }
 
   member __.Close () =
     Log.info "closing_connection|client_id=%s" cfg.clientId
