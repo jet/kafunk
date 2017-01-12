@@ -38,13 +38,13 @@ type internal Routes = private {
   static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
     rt.groupToHost |> Map.tryFind gid
   
-  static member internal addBrokersAndTopicNodes (brokers:seq<NodeId * Host * Port>) (topicNodes:seq<TopicName * Partition * NodeId>) (rt:Routes) =
+  static member internal addBrokersAndTopicNodes (brokers:seq<NodeId * EndPoint>) (topicNodes:seq<TopicName * Partition * NodeId>) (rt:Routes) =
     {
       rt with
         
         nodeToHost = 
           rt.nodeToHost
-          |> Map.addMany (brokers |> Seq.map (fun (nodeId,host,port) -> nodeId, EndPoint.parse (host, port)))
+          |> Map.addMany (brokers |> Seq.map (fun (nodeId,ep) -> nodeId, ep))
         
         topicToNode = 
           rt.topicToNode
@@ -53,14 +53,14 @@ type internal Routes = private {
 
   static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
     Routes.addBrokersAndTopicNodes
-      (metadata.brokers |> Seq.map (fun b -> b.nodeId, b.host, b.port))
+      (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.ofIPAddressAndPort (IPAddress.Parse b.host, b.port)))
       (metadata.topicMetadata |> Seq.collect (fun tmd -> 
         tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader)))
       rt
     
-  static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
+  static member addGroupCoordinator (gid:GroupId, ep:EndPoint) (rt:Routes) =
     {
-      rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
+      rt with groupToHost = rt.groupToHost |> Map.add gid ep
     }
 
   static member topicPartitions (x:Routes) =
@@ -487,7 +487,21 @@ type KafkaConn internal (cfg:KafkaConfig) =
       if currentState.version = callerState.version then
         let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
-        return currentState |> ConnState.updateRoutes (Routes.addMetadata metadata)
+        let! brokers = 
+          metadata.brokers 
+          |> Seq.map (fun b -> async {
+            match IPAddress.tryParse b.host with
+            | Some ip ->
+              return b.nodeId, EndPoint.ofIPAddressAndPort (ip, b.port)
+            | None ->
+              Log.info "discovering_broker_dns|host=%s node_id=%i" b.host b.nodeId
+              let! ep = Dns.IPv4.getEndpointAsync (b.host, b.port)
+              return b.nodeId, EndPoint.ofIPEndPoint ep })
+          |> Async.Parallel
+        let topicNodes =
+          metadata.topicMetadata |> Seq.collect (fun tmd -> 
+            tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader))
+        return currentState |> ConnState.updateRoutes (Routes.addBrokersAndTopicNodes brokers topicNodes)
       else
         return currentState }
     stateCell |> MVar.updateAsync update
@@ -503,11 +517,19 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and getGroupCoordinator (callerState:ConnState) (groupId:GroupId) =
     let update currentState = async {
       if currentState.version = callerState.version then
-        let! group = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
-        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print group)
+        let! res = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
+        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print res)
+        let! ep = async {
+          match IPAddress.tryParse res.coordinatorHost with
+          | Some ip ->
+            return EndPoint.ofIPAddressAndPort (ip, res.coordinatorPort)
+          | None ->
+            Log.info "discovering_group_coordinator_dns|host=%s node_id=%i" res.coordinatorHost res.coordinatorId
+            let! ip = Dns.IPv4.getAsync res.coordinatorHost
+            return EndPoint.ofIPAddressAndPort (ip, res.coordinatorPort) }
         return 
           currentState 
-          |> ConnState.updateRoutes (Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
+          |> ConnState.updateRoutes (Routes.addGroupCoordinator (groupId,ep))
       else
         return currentState }
     stateCell |> MVar.updateAsync update
