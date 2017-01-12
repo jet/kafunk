@@ -12,6 +12,51 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open Kafunk
 
+
+/// A write-once concurrent variable.
+type IVar<'a> = TaskCompletionSource<'a>
+
+/// Operations on write-once variables.
+module IVar =
+
+  /// Creates an empty IVar structure.
+  let inline create () = new IVar<'a>()
+
+  /// Creates a IVar structure and initializes it with a value.
+  let inline createFull a =
+    let ivar = create()
+    ivar.SetResult(a)
+    ivar
+
+  /// Writes a value to an IVar.
+  /// A value can only be written once, after which the behavior is undefined and may throw.
+  let inline put a (i:IVar<'a>) = 
+    i.SetResult(a)
+
+  let inline tryPut a (i:IVar<'a>) = 
+    i.TrySetResult (a)
+
+  /// Writes an error to an IVar to be propagated to readers.
+  let inline error (ex:exn) (i:IVar<'a>) = 
+    i.SetException(ex)
+
+  let inline tryError (ex:exn) (i:IVar<'a>) = 
+    i.TrySetException(ex)
+
+  /// Writes a cancellation to an IVar to be propagated to readers.
+  let inline cancel (i:IVar<'a>) = 
+    i.SetCanceled()
+
+  let inline tryCancel (i:IVar<'a>) = 
+    i.TrySetCanceled()
+
+  /// Creates an async computation which returns the value contained in an IVar.
+  let inline get (i:IVar<'a>) : Async<'a> = 
+    i.Task |> Async.AwaitTask
+
+
+
+
 let private empty : Async<unit> = async.Return()
 
 let private never : Async<unit> = Async.Sleep Timeout.Infinite

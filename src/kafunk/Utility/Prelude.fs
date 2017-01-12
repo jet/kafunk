@@ -192,6 +192,16 @@ module Seq =
       | Choice3Of3 c -> cx.Add(c)
     ax.ToArray(),bx.ToArray(),cx.ToArray()
 
+  let partitionChoices4 (s:seq<Choice<'a, 'b, 'c, 'd>>) : 'a[] * 'b[] * 'c[] * 'd[] =
+    let ax,bx,cx,dx = ResizeArray<_>(),ResizeArray<_>(),ResizeArray<_>(),ResizeArray<_>()
+    for c in s do
+      match c with
+      | Choice1Of4 a -> ax.Add(a)
+      | Choice2Of4 b -> bx.Add(b)
+      | Choice3Of4 c -> cx.Add(c)
+      | Choice4Of4 c -> dx.Add(c)
+    ax.ToArray(),bx.ToArray(),cx.ToArray(),dx.ToArray()
+
   let batch (batchSize:int) (s:seq<'a>) : seq<'a[]> =
       seq {
           use en = s.GetEnumerator()
@@ -259,8 +269,11 @@ module Result =
   let inline map f (r:Result<'a, 'e>) : Result<'b, 'e> = 
     Choice.mapLeft f r
 
-  let inline mapError f (r:Result<'a, 'e>) : Result<'a, 'e2> =
+  let inline mapError (f:'e -> 'e2) (r:Result<'a, 'e>) : Result<'a, 'e2> =
      Choice.mapRight f r
+
+  let inline tapError (f:'e -> unit) (r:Result<'a, 'e>) : Result<'a, 'e> =
+    mapError (fun e -> f e |> ignore ; e) r
 
   let map2 (g:'e -> 'e -> 'e) (f:'a -> 'b -> 'c) (r1:Result<'a, 'e>) (r2:Result<'b, 'e>) : Result<'c, 'e> =
     match r1, r2 with
@@ -449,3 +462,6 @@ module Observable =
       let batchSubs = batches.Subscribe(observer.OnNext)
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+  
+
+  
