@@ -14,7 +14,7 @@ open Kafunk
 
 /// The routing table provides host information for the leader of a topic/partition
 /// or a group coordinator.
-type internal Routes = {
+type internal Routes = private {
   bootstrapHost : EndPoint
   nodeToHost : Map<NodeId, EndPoint>
   topicToNode : Map<TopicName * Partition, NodeId>
@@ -29,19 +29,22 @@ type internal Routes = {
       groupToHost = Map.empty
     }
 
+  static member getBootstrapHost (r:Routes) =
+    r.bootstrapHost
+
   static member tryFindHostForTopic (rt:Routes) (tn:TopicName, p:Partition) =
     rt.topicToNode |> Map.tryFind (tn,p) |> Option.bind (fun nid -> rt.nodeToHost |> Map.tryFind nid)
   
   static member tryFindHostForGroup (rt:Routes) (gid:GroupId) =
     rt.groupToHost |> Map.tryFind gid
   
-  static member addBrokersAndTopicNodes (brokers:seq<NodeId * Host * Port>) (topicNodes:seq<TopicName * Partition * NodeId>) (rt:Routes) =
+  static member internal addBrokersAndTopicNodes (brokers:seq<NodeId * EndPoint>) (topicNodes:seq<TopicName * Partition * NodeId>) (rt:Routes) =
     {
       rt with
         
         nodeToHost = 
           rt.nodeToHost
-          |> Map.addMany (brokers |> Seq.map (fun (nodeId,host,port) -> nodeId, EndPoint.parse (host, port)))
+          |> Map.addMany (brokers |> Seq.map (fun (nodeId,ep) -> nodeId, ep))
         
         topicToNode = 
           rt.topicToNode
@@ -50,14 +53,14 @@ type internal Routes = {
 
   static member addMetadata (metadata:MetadataResponse) (rt:Routes) =
     Routes.addBrokersAndTopicNodes
-      (metadata.brokers |> Seq.map (fun b -> b.nodeId, b.host, b.port))
+      (metadata.brokers |> Seq.map (fun b -> b.nodeId, EndPoint.ofIPAddressAndPort (IPAddress.Parse b.host, b.port)))
       (metadata.topicMetadata |> Seq.collect (fun tmd -> 
         tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader)))
       rt
     
-  static member addGroupCoordinator (gid:GroupId, host:Host, port:Port) (rt:Routes) =
+  static member addGroupCoordinator (gid:GroupId, ep:EndPoint) (rt:Routes) =
     {
-      rt with groupToHost = rt.groupToHost |> Map.add gid (EndPoint.parse (host,port))
+      rt with groupToHost = rt.groupToHost |> Map.add gid ep
     }
 
   static member topicPartitions (x:Routes) =
@@ -163,7 +166,7 @@ module internal Routing =
 
     // route to bootstrap broker
     let bootstrapRoute (req:RequestMessage) : RouteResult = 
-      Success [| req, routes.bootstrapHost |]
+      Success [| req, Routes.getBootstrapHost routes |]
 
     // route to leader of a topic/partition
     let topicRoute (xs:(Result<EndPoint, TopicName> * RequestMessage)[]) =
@@ -253,11 +256,15 @@ type private RetryAction =
 
       | ResponseMessage.FetchResponse r ->
         r.topics 
-        |> Seq.tryPick (fun (_tn,pmd) -> 
+        |> Seq.tryPick (fun (tn,pmd) -> 
           pmd 
           |> Seq.tryPick (fun (p,ec,_,_,_) -> 
-            RetryAction.errorRetryAction ec
-            |> Option.map (fun action -> ec, action, sprintf "error_code=%i partition=%i" ec p)))
+            match ec with
+            | ErrorCode.NoError -> None
+            | ErrorCode.NotLeaderForPartition -> Some (ec, RetryAction.RefreshMetadataAndRetry ([| tn |]), "")
+            | ec ->
+              RetryAction.errorRetryAction ec
+              |> Option.map (fun action -> ec, action, sprintf "error_code=%i partition=%i" ec p)))
 
       | ResponseMessage.ProduceResponse r ->
         r.topics
@@ -455,7 +462,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  let rec bootstrap (cfg:KafkaConfig) =
+  let rec bootstrap =
     let update (_:ConnState option) = 
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
@@ -480,44 +487,72 @@ type KafkaConn internal (cfg:KafkaConfig) =
       if currentState.version = callerState.version then
         let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
-        return currentState |> ConnState.updateRoutes (Routes.addMetadata metadata)
+        let! brokers = 
+          metadata.brokers 
+          |> Seq.map (fun b -> async {
+            match IPAddress.tryParse b.host with
+            | Some ip ->
+              return b.nodeId, EndPoint.ofIPAddressAndPort (ip, b.port)
+            | None ->
+              Log.info "discovering_broker_dns|host=%s node_id=%i" b.host b.nodeId
+              let! ep = Dns.IPv4.getEndpointAsync (b.host, b.port)
+              return b.nodeId, EndPoint.ofIPEndPoint ep })
+          |> Async.Parallel
+        let topicNodes =
+          metadata.topicMetadata |> Seq.collect (fun tmd -> 
+            tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader))
+        return currentState |> ConnState.updateRoutes (Routes.addBrokersAndTopicNodes brokers topicNodes)
       else
         return currentState }
     stateCell |> MVar.updateAsync update
+
+  and refreshMetadata (callerState:ConnState) =
+    let topics = 
+      Routes.topicPartitions callerState.routes
+      |> Seq.map (fun kvp -> kvp.Key)
+      |> Seq.toArray
+    getMetadata callerState topics
 
   /// Discovers a coordinator for the group.
   and getGroupCoordinator (callerState:ConnState) (groupId:GroupId) =
     let update currentState = async {
       if currentState.version = callerState.version then
-        let! group = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
-        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print group)
+        let! res = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
+        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print res)
+        let! ep = async {
+          match IPAddress.tryParse res.coordinatorHost with
+          | Some ip ->
+            return EndPoint.ofIPAddressAndPort (ip, res.coordinatorPort)
+          | None ->
+            Log.info "discovering_group_coordinator_dns|host=%s node_id=%i" res.coordinatorHost res.coordinatorId
+            let! ip = Dns.IPv4.getAsync res.coordinatorHost
+            return EndPoint.ofIPAddressAndPort (ip, res.coordinatorPort) }
         return 
           currentState 
-          |> ConnState.updateRoutes (Routes.addGroupCoordinator (groupId,group.coordinatorHost,group.coordinatorPort))
+          |> ConnState.updateRoutes (Routes.addGroupCoordinator (groupId,ep))
       else
         return currentState }
     stateCell |> MVar.updateAsync update
 
   /// Sends the request based on discovered routes.
+  /// State -> (Req -> Async<Res>)
   and send (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state.routes req with
     | Success requestRoutes ->
-      //Log.info "routes_count=%i routes=%A" requestRoutes.Length requestRoutes
       let sendHost (req:RequestMessage, ep:EndPoint) = async {
         match state |> ConnState.tryFindChanByEndPoint ep with
         | Some ch -> 
           return!
             req
             |> Chan.send ch
-            |> Async.Catch
-            |> Async.bind (fun res -> async {
-              match res with
+            |> Async.bind (fun chanRes -> async {
+              match chanRes with
               | Success res ->
                 match RetryAction.tryFindError res with
                 | None -> 
                   return res
                 | Some (errorCode,action,msg) ->
-                  Log.error "response_errored|endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
+                  Log.error "channel_response_errored|endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
                   match action with
                   | RetryAction.PassThru ->
                     return res
@@ -532,10 +567,13 @@ type KafkaConn internal (cfg:KafkaConfig) =
                   | RetryAction.WaitAndRetry ->
                     do! Async.Sleep waitRetrySleepMs
                     return! send state req
-              | Failure ex ->
-                Log.error "channel_failure_escalated|endpoint=%O request=%s error=%O" ep (RequestMessage.Print req) ex
-                // TODO: retry?
-                return raise ex })
+              | Failure chanErr ->
+                let! state' = handleRequestFailure (state, req, ep, chanErr)
+                return! send state' req })
+            |> Async.tryWith (fun ex -> async {
+              Log.error "channel_exception_escalated|endpoint=%O request=%s error=%O" ep (RequestMessage.Print req) ex
+              return raise ex })
+
         | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' ep)
           return! send state' req }
@@ -571,6 +609,20 @@ type KafkaConn internal (cfg:KafkaConfig) =
       Log.warn "missing_group_goordinator_route|group=%s" group
       let! state' = getGroupCoordinator state group
       return! send state' req }
+
+  and handleRequestFailure (state:ConnState, req:RequestMessage, ep:EndPoint, chanErrs:ChanError list) = async {
+    Log.error "recovering_channel_error|endpoint=%O request=%s error=%A" ep (RequestMessage.Print req) chanErrs
+    let isBootstrapRequest =
+      match req with
+      | RequestMessage.Metadata _ | RequestMessage.Offset _ 
+      | RequestMessage.GroupCoordinator _ | RequestMessage.DescribeGroups _ -> true
+      | _ -> false
+    let! state' = refreshMetadata state
+    if isBootstrapRequest then
+      let! state' = bootstrap
+      return state'
+    else
+      return state' }
     
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
@@ -590,7 +642,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
-    let! _ = bootstrap cfg
+    let! _ = bootstrap
     return () }
 
 //  // TODO: reconsider this design!
@@ -610,7 +662,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let state = __.GetState ()
     let! state' = getMetadata state topics
-    return state'.routes |> Routes.topicPartitions }
+    let topicPartitions = state'.routes |> Routes.topicPartitions
+    return topicPartitions |> Map.onlyKeys topics }
 
   member __.Close () =
     Log.info "closing_connection|client_id=%s" cfg.clientId

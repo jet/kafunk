@@ -11,7 +11,7 @@ let ``Routing.route should group offset requests by broker`` () =
   let routes = 
     Routes.ofBootstrap (EndPoint.ofIPAddressAndPort (IPAddress.Loopback, 9092))
     |> Routes.addBrokersAndTopicNodes 
-        [ (1,"127.0.0.1",9092) ] 
+        [ (1, EndPoint.parse ("127.0.0.1",9092)) ] 
         [ ("A",0,1) ; ("A",1,1) ]
 
   let offsetReq = OffsetRequest(-1, [| ("A", [| 0, Time.EarliestOffset, 1 |]) ; ("A", [| 1, Time.EarliestOffset, 1 |]) |])

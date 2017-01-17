@@ -497,6 +497,13 @@ module Consumer =
       let! initOffsets = fetchOffsetsFallback consumer cfg.topic assignedPartitions
       Log.info "fetched_initial_offsets|group_id=%s member_id=%s topic=%s offsets=%s" cfg.groupId state.state.memberId cfg.topic (Printers.partitionOffsetPairs initOffsets)
 
+      let combineFetchResponses (r1:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) (r2:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) =
+        match r1,r2 with
+        | Some (oks1,ends1), Some (oks2,ends2) -> Some (Array.append oks1 oks2, Array.append ends1 ends2)
+        | Some _, _ -> r1
+        | _, Some _ -> r2
+        | _ -> None
+
       /// Fetches the specified offsets.
       /// Returns a set of message sets and an end of topic list.
       /// Returns None if the generation closed.
@@ -510,35 +517,49 @@ module Consumer =
             match res with
             | Success res ->
               
-              // TODO: compression
-              let oks,ends,outOfRange =
+              let oks,ends,outOfRange,staleMetadata =
                 res.topics
                 |> Seq.collect (fun (t,ps) ->
                   ps 
                   |> Seq.map (fun (p,ec,hwmo,mss,ms) -> 
                     match ec with
                     | ErrorCode.NoError ->
-                      if mss = 0 then Choice2Of3 (p,hwmo)
+                      if mss = 0 then Choice2Of4 (p,hwmo)
                       else 
                         let ms = Compression.decompress messageVer ms
-                        Choice1Of3 (ConsumerMessageSet(t, p, ms, hwmo))
+                        Choice1Of4 (ConsumerMessageSet(t, p, ms, hwmo))
                     | ErrorCode.OffsetOutOfRange -> 
-                      Choice3Of3 (p,hwmo)
-                    | _ -> failwithf "unsupported fetch error_code=%i" ec))
-                |> Seq.partitionChoices3
-             
+                      Choice3Of4 (p,hwmo)
+                    | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition | ErrorCode.ReplicaNotAvailable ->
+                      
+                      Choice4Of4 (p)
+                    | _ -> 
+                      failwithf "unsupported fetch error_code=%i" ec))
+                |> Seq.partitionChoices4
+
+              let oksAndEnds = Some (oks,ends)
+
+              if staleMetadata.Length > 0 then
+                let staleOffsets = 
+                  let offsets = Map.ofArray offsets
+                  staleMetadata
+                  |> Seq.map (fun p -> p, Map.find p offsets)
+                  |> Seq.toArray
+                Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%A" staleOffsets
+                let! _ = consumer.conn.GetMetadata ([|cfg.topic|])
+                // TODO: only fetch stale and combine
+                return! tryFetch offsets else
+              
               if outOfRange.Length > 0 then
                 let outOfRange = 
                   outOfRange 
                   |> Array.map (fun (p,_hwm) -> 
                     let o = offsets |> Array.pick (fun (p',o) -> if p = p' then Some o else None)
                     p,o)
-                let! oks' = offsetsOutOfRange outOfRange
-                return 
-                  oks' 
-                  |> Option.map (fun (oks',ends') -> Array.append oks oks', Array.append ends ends')
+                let! oksAndEnds' = offsetsOutOfRange outOfRange
+                return combineFetchResponses oksAndEnds oksAndEnds'
               else
-                return Some (oks,ends)
+                return oksAndEnds
 
             | Failure ex ->
               Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%A error=%O" state.state.generationId topic offsets ex
@@ -622,7 +643,7 @@ module Consumer =
                     ends
                     |> Seq.map (fun (p,hwmo) -> sprintf "[partition=%i high_watermark_offset=%i]" p hwmo)
                     |> String.concat " ; "
-                  Log.info "end_of_topic_partition_reached|%s" msg
+                  Log.info "end_of_topic_partition_reached|topic=%s %s" topic msg
 
                 return Some (mss, (nextOffsets,retryQueue)) })
                       

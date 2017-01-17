@@ -72,10 +72,17 @@ type internal EndPoint =
       member this.CompareTo (other) =
         this.ToString().CompareTo(other.ToString())
 
+/// The result of a request on a channel.
+type ChanResult = Result<ResponseMessage, ChanError list>
+
+/// A channel error result.
+and ChanError =
+  | ChanTimeout
+  | ChanFailure of exn
 
 /// A request/reply TCP channel to a Kafka broker.
 type internal Chan =
-  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ResponseMessage>) * reconnect:Async<unit> * close:Async<unit>
+  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ChanResult>) * reconnect:Async<unit> * close:Async<unit>
 
 /// API operations on a generic request/reply channel.
 [<Compile(Module)>]
@@ -111,7 +118,7 @@ module internal Chan =
   /// Only a single channel per endpoint is needed.
   let connect (version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
     
-    let conn (ep:EndPoint) = async {      
+    let conn (ep:EndPoint) = async {
       let ipep = EndPoint.endpoint ep
       let connSocket =
         new Socket(
@@ -161,12 +168,12 @@ module internal Chan =
         try
           let! received = Socket.receive s buf
           if received = 0 then 
-            Log.warn "received_empty_buffer"
+            Log.warn "received_empty_buffer|remote_endpoint=%O" ep
             return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|error=%O" ex
+          Log.error "receive_failure|remote_endpoint=%O error=%O" ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive
@@ -218,9 +225,8 @@ module internal Chan =
               Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
               Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)
-      |> Faults.AsyncFunc.retryResultThrowList 
-          (fun errors -> TimeoutException(sprintf "Broker request retries terminated after %i errors." errors.Length)) 
-          config.requestRetryPolicy
+      |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy
+      |> AsyncFunc.mapOut (snd >> Result.mapError (List.map (Choice.fold (konst ChanTimeout) (ChanFailure))))
 
     return Chan (ep, send, Async.empty, Async.empty) }
 

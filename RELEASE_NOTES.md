@@ -1,3 +1,9 @@
+### 0.0.17-alpha001 - 17.01.2017
+
+* Discovery brokers by DNS when appropriate
+* Explicit channel failure and recovery contract
+
+
 ### 0.0.16-alpha001 - 09.01.2017
 
 * Fix bug in assignment strategy where all available metadate were used rather than that of subscribed topic

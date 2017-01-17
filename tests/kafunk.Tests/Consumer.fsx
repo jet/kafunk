@@ -15,7 +15,11 @@ let topic = argiDefault 2 "absurd-topic"
 let group = argiDefault 3 "existential-group"
 
 let go = async {
-  let! conn = Kafka.connHostAsync host
+  let! conn = 
+    let connConfig = 
+      let chanConfig = ChanConfig.create (requestTimeout = TimeSpan.FromSeconds 60.0)
+      KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
+    Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
       groupId = group, 
@@ -23,7 +27,8 @@ let go = async {
       initialFetchTime = Time.EarliestOffset, 
       fetchMaxBytes = 50000,
       fetchBufferSize= 1,
-      outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime)
+      outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime,
+      sessionTimeout = 30000)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
