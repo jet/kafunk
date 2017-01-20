@@ -314,9 +314,9 @@ type ConsumerMessageSet =
     static member commitPartitionOffsets (ms:ConsumerMessageSet) =
       [| ms.partition, ConsumerMessageSet.commitOffset ms |]
 
-    /// Returns the lag = high watermark offset - last offset
+    /// Returns the lag = high watermark offset - last offset - 1
     static member lag (ms:ConsumerMessageSet) =
-      ms.highWatermarkOffset - ConsumerMessageSet.lastOffset ms
+      ms.highWatermarkOffset - (ConsumerMessageSet.lastOffset ms) - 1L
 
     /// Returns the sum of the sizes of all messages in the message set.
     static member size (ms:ConsumerMessageSet) =
@@ -673,7 +673,7 @@ module Consumer =
                   |> Async.Parallel
                 return () }) }
       
-      Async.Start (fetchProcess)
+      let! _ = Async.StartChild fetchProcess
         
       let partitionStreams =
         partitionBuffers
@@ -721,10 +721,9 @@ module Consumer =
   /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
   /// backpressure on the underlying consumer.
   let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
-    use cts = new CancellationTokenSource()
     let mb = BoundedMb.create bufferSize
     let handle s ms = BoundedMb.put (s,ms) mb
-    Async.Start (consume handle consumer, cts.Token)
+    let! _ = Async.StartChild (consume handle consumer)
     yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
 
   /// Returns the current consumer state.

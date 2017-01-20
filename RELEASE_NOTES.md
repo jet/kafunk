@@ -1,3 +1,8 @@
+### 0.0.18-alpha001 - 20.01.2017
+
+* Fix ConsumerMessageSet.lag measure
+* Propagate cancellation to consumer fetch process
+
 ### 0.0.17-alpha001 - 17.01.2017
 
 * Discovery brokers by DNS when appropriate
