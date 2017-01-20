@@ -240,7 +240,8 @@ module Group =
               do! leaveInternal gm state
               return () })
 
-      Async.Start (heartbeat state)
+      let! _ = Async.StartChild (heartbeat state)
+
       let! _ = gm.state |> MVar.put state
       return () }
 
