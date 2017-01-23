@@ -128,7 +128,7 @@ module internal Chan =
           NoDelay=not(config.useNagle),
           ExclusiveAddressUse=true,
           ReceiveBufferSize=config.receiveBufferSize,
-          SendBufferSize=config.receiveBufferSize)
+          SendBufferSize=config.sendBufferSize)
       return! Socket.connect connSocket ipep }
     
     let conn =

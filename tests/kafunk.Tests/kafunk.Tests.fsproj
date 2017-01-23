@@ -65,6 +65,7 @@
   <ItemGroup>
     <None Include="paket.references" />
     <Compile Include="Shared.fs" />
+    <Compile Include="Metrics.fs" />
     <Compile Include="PreludeTests.fs" />
     <Compile Include="CodecTests.fs" />
     <Compile Include="TcpTests.fs" />
