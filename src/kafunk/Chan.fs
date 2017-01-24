@@ -151,12 +151,11 @@ module internal Chan =
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
       Log.warn "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i error=%O" clientId (EndPoint.endpoint ep) ver ex
-      tryDispose s
-      return Resource.Recovery.Recreate }
+      tryDispose s }
 
     let! socketAgent = 
       Resource.recoverableRecreate 
-        (conn ep)
+        (fun _ -> conn ep)
         recovery
 
     let! send =

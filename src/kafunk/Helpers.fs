@@ -127,6 +127,9 @@ module internal Printers =
     let sb = StringBuilder()
     concatMapSbDo sb s f sep
     sb.ToString()
+
+  let partitions (os:seq<Partition>) =
+    concatMapSb os (fun sb (p) -> sb.AppendFormat("[partition={0}]", p)) " ; "
     
   let partitionOffsetPairs (os:seq<Partition * Offset>) =
     concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} offset={1}]", p, o)) " ; "

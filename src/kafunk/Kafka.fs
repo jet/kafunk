@@ -659,6 +659,11 @@ type KafkaConn internal (cfg:KafkaConfig) =
     let state = __.GetState ()
     return! getGroupCoordinator state groupId }
 
+  member internal __.GetMetadataState (topics:TopicName[]) = async {
+    let state = __.GetState ()
+    let! state' = getMetadata state topics
+    return state' }
+
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let state = __.GetState ()
     let! state' = getMetadata state topics
