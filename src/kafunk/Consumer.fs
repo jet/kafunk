@@ -29,7 +29,7 @@ module ConsumerGroup =
     
     Log.info "decoded_sync_group_response|version=%i member_assignment=[%s]"
       assignment.version
-      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%A" tn ps))) 
+      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%s" tn (Printers.partitions ps)))) 
       
     if assignment.partitionAssignment.assignments.Length = 0 then
       failwith "no partitions assigned!"
@@ -336,7 +336,7 @@ module Consumer =
   /// Explicitly commits offsets to a consumer group.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
-    Log.info "comitting_offsets|topic=%s offsets=%s" c.config.topic (Printers.partitionOffsetPairs offsets)
+    Log.info "committing_offsets|topic=%s offsets=%s" c.config.topic (Printers.partitionOffsetPairs offsets)
     let! state = Group.stateInternal c.groupMember
     let conn = c.conn
     let cfg = c.config
@@ -351,7 +351,7 @@ module Consumer =
             match res with
             | Success res ->
               if res.topics.Length = 0 then
-                Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%A" cfg.groupId state.state.memberId state.state.generationId topic offsets
+                Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
                 return failwith "offset commit failed!"
               let errors =
                 res.topics
@@ -439,7 +439,7 @@ module Consumer =
         return failwithf "fetch_offset_errors|errors=%A" errors
       
       if missing.Length > 0 then
-        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=%A" cfg.groupId topic (missing |> Array.map fst)
+        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=%s" cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
         let offsetReq = OffsetRequest(-1, [| topic, missing |> Array.map (fun (p,_) -> p, cfg.initialFetchTime, 1) |])
         let! offsetRes = Kafka.offset conn offsetReq
         // TODO: error check
@@ -545,7 +545,7 @@ module Consumer =
                   staleMetadata
                   |> Seq.map (fun p -> p, Map.find p offsets)
                   |> Seq.toArray
-                Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%A" staleOffsets
+                Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%s" (Printers.partitionOffsetPairs staleOffsets)
                 let! _ = consumer.conn.GetMetadata ([|cfg.topic|])
                 // TODO: only fetch stale and combine
                 return! tryFetch offsets else
@@ -562,7 +562,7 @@ module Consumer =
                 return oksAndEnds
 
             | Failure ex ->
-              Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%A error=%O" state.state.generationId topic offsets ex
+              Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
               do! Group.leaveInternal consumer.groupMember state
               return raise ex })
 
@@ -583,13 +583,13 @@ module Consumer =
               sprintf "time=%i %s" time os)
             |> String.concat " ; ")
           |> String.concat " ; "
-        Log.warn "offset_out_of_range|topic=%s attempted_offsets=%A offset_info=[%s]" topic attemptedOffsets msg
+        Log.warn "offset_out_of_range|topic=%s attempted_offsets=%s offset_info=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) msg
         match cfg.outOfRangeAction with
         | HaltConsumer ->
-          Log.error "halting_consumer|topic=%s attempted_offsets=%A" topic attemptedOffsets
-          return raise (exn(sprintf "offset_out_of_range|topic=%s offset=%A latest_offset_info=[%s]" topic attemptedOffsets msg))
+          Log.error "halting_consumer|topic=%s attempted_offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
+          return raise (exn(sprintf "offset_out_of_range|topic=%s offset=%s latest_offset_info=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) msg))
         | HaltPartition -> 
-          Log.warn "halting_partition_fetch|topic=%s last_attempted_offsets=%A" topic attemptedOffsets
+          Log.warn "halting_partition_fetch|topic=%s last_attempted_offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
           return None
         | ResumeConsumerWithFreshInitialFetchTime ->
           let offsetInfo = timeOffsets |> Map.find cfg.initialFetchTime
@@ -602,7 +602,7 @@ module Consumer =
               if tn = topic && Set.contains p partitions then Some (p,o)
               else None)
             |> Seq.toArray
-          Log.info "resuming_fetch_from_fresh_offset|topic=%s initial_fetch_time=%i fresh_offsets=%A" topic cfg.initialFetchTime freshOffsets
+          Log.info "resuming_fetch_from_fresh_offset|topic=%s initial_fetch_time=%i fresh_offsets=%s" topic cfg.initialFetchTime (Printers.partitionOffsetPairs freshOffsets)
           return! tryFetch freshOffsets }
              
       // multiplexed stream of all fetch responses for this consumer

@@ -438,7 +438,7 @@ type internal ConnState = {
 
 /// An exception used to wrap failures which are to be escalated.
 type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseMessage, msg:string) =
-  inherit Exception (sprintf "Kafka exception|error_code=%i request=%A response=%A message=%s" errorCode (RequestMessage.Print req) (ResponseMessage.Print res) msg)
+  inherit Exception (sprintf "Kafka exception|error_code=%i request=%s response=%s message=%s" errorCode (RequestMessage.Print req) (ResponseMessage.Print res) msg)
 
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
@@ -601,7 +601,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! sendHost requestRoutes.[0]
 
     | Failure (MissingTopicRoute topic) ->
-      Log.warn "missing_topic_partition_route|topic=%s request=%A" topic req
+      Log.warn "missing_topic_partition_route|topic=%s request=%s" topic (RequestMessage.Print req)
       let! state' = getMetadata state [|topic|]
       return! send state' req
 

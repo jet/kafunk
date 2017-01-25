@@ -215,11 +215,11 @@ module internal Chan =
         | Success _ -> Failure (Choice1Of2 ())
         | Failure e -> Failure (Choice2Of2 e))
       |> AsyncFunc.doBeforeAfter
-          (fun req -> Log.trace "sending_request|request=%A" (RequestMessage.Print req))
+          (fun req -> Log.trace "sending_request|request=%s" (RequestMessage.Print req))
           (fun (req,res) -> 
             match res with
             | Success res -> 
-              Log.trace "received_response|response=%A" (ResponseMessage.Print res)
+              Log.trace "received_response|response=%s" (ResponseMessage.Print res)
             | Failure (Choice1Of2 ()) ->
               Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
