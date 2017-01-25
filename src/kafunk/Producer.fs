@@ -122,10 +122,16 @@ type ProducerConfig = {
   timeout : Timeout
 
   /// The per-broker buffer size.
+  /// When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
+  /// Default: 100
   bufferSize : int
 
+  /// The maximum size of a batch of produce requests.
+  /// Default: 100
   batchSize : int
 
+  /// The maximum time to wait for a produce request btch to reach capacity.
+  /// Default: 1
   batchLinger : int
 
 } with
@@ -317,8 +323,14 @@ module Producer =
   let create (conn:KafkaConn) (cfg:ProducerConfig) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
 
+  /// Produces a message. The message will be sent as part of a batch and the result will correspond to the offsets
+  /// produced by the entire batch.
   let produce (p:Producer) (m:ProducerMessage) =
     p.produceBatch (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
 
+  /// Produces a batch of messages using the specified function which creates messages given a set of partitions
+  /// currently configured for the topic.
+  /// The messages will be sent as part of a batch and the result will correspond to the offsets
+  /// produced by the entire batch.
   let produceBatch (p:Producer) =
     p.produceBatch
