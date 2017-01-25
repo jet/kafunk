@@ -47,9 +47,11 @@ let go = async {
       (ms.highWatermarkOffset)
       (ConsumerMessageSet.lag ms) }
 
+  use counter = Metrics.counter Log 5000
+
   let handle = 
     handle
-    |> Metrics.throughputAsync2 Log 5000 (fun (_,ms,_) -> ms.messageSet.messages.Length)
+    |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
   do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) handle
 }

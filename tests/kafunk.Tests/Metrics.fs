@@ -58,8 +58,6 @@ module private Util =
     | None -> Console.WriteLine
 
 
-
-/// Measures averages, max and percentiles.
 type TimedCounter internal (?log:Logger, ?periodMs:float) =
 
   let periodMs = defaultArg periodMs 1000.0
@@ -122,30 +120,29 @@ type TimedCounter internal (?log:Logger, ?periodMs:float) =
     member x.Dispose() = x.Stop()
 
 
-/// Measures averages, max and percentiles.
 type IntHistogram internal (?log:Logger, ?periodMs:float) =
   let periodMs = defaultArg periodMs 1000.0
   let write = Util.write log
   let mutable count = 0
   let mutable sum = 0
-  let rates = new SortedBag<int>(Comparer.rev Comparer<_>.Default)
+  let values = new SortedBag<int>(Comparer.rev Comparer<_>.Default)
   let queue = new BlockingCollection<_>()
   let consume (_:obj) =
     use queue = queue
     queue.GetConsumingEnumerable()
     |> Seq.iter (fun x ->
-      rates.Add x |> ignore
+      values.Add x |> ignore
       Interlocked.Increment(&count) |> ignore
       Interlocked.Add(&sum, x) |> ignore)
   do (new Thread(ThreadStart(consume), IsBackground=true)).Start()
   let emit (_:obj) =
     let count = count
-    if count > 0 && rates.Count > 0 then
-      let tp50 = rates |> Util.getQuantile 0.50 |> float
-      let tp90 = rates |> Util.getQuantile 0.10 |> float
-      let tp99 = rates |> Util.getQuantile 0.01 |> float
-      let max = rates.[0] |> float
-      let min = rates.[rates.Count - 1] |> float
+    if count > 0 && values.Count > 0 then
+      let tp50 = values |> Util.getQuantile 0.50 |> float
+      let tp90 = values |> Util.getQuantile 0.10 |> float
+      let tp99 = values |> Util.getQuantile 0.01 |> float
+      let max = values.[0] |> float
+      let min = values.[values.Count - 1] |> float
       let count = float count
       let avg = (float sum) / count
       write(
@@ -166,6 +163,12 @@ type IntHistogram internal (?log:Logger, ?periodMs:float) =
 
 [<Compile(Module)>]
 module Metrics =
+
+  let counter (log:Logger) (periodMs:int) =
+    new TimedCounter (log, float periodMs)
+
+  let timer (log:Logger) (periodMs:int) =
+    new IntHistogram (log, float periodMs)
 
   let throughputAsyncTo (tc:TimedCounter) (count:'a * 'b -> int) (f:'a -> Async<'b>) : 'a -> Async<'b> =
     fun a -> async {

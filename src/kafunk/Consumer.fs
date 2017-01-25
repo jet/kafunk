@@ -649,9 +649,9 @@ module Consumer =
                       
       // consumes fetchStream and dispatches to per-partition buffers
       let fetchProcess = async {
-        Log.info "starting_fetch_process|generation_id=%i topic=%s partition_count=%i" state.state.generationId cfg.topic (assignedPartitions.Length)
+        Log.info "starting_fetch_process|group_id=%s generation_id=%i topic=%s partition_count=%i" cfg.groupId state.state.generationId cfg.topic (assignedPartitions.Length)
         return!
-          Async.tryFinnallyAsync
+          Async.tryFinnallyWithAsync
             (async {
               do!
                 fetchStream
@@ -671,7 +671,10 @@ module Consumer =
                   |> Map.toSeq
                   |> Seq.map (fun (_,buf) -> buf |> BoundedMb.put None)
                   |> Async.Parallel
-                return () }) }
+                return () })
+              (fun ex -> async { 
+                Log.error "fetch_process_errored|group_id=%s generation_id=%i topic=%s partition_count=%i" cfg.groupId state.state.generationId cfg.topic (assignedPartitions.Length)
+                return raise ex }) }
       
       let! _ = Async.StartChild fetchProcess
         

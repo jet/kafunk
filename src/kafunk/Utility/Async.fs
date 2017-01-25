@@ -109,6 +109,16 @@ type Async with
         do! comp
         return raise ex }
 
+  static member tryFinnallyWithAsync (a:Async<'a>) (comp:Async<unit>) (err:exn -> Async<'a>) : Async<'a> =
+    async {
+      try
+        let! a = a
+        do! comp
+        return a
+      with ex ->
+        do! comp
+        return! err ex }
+
   static member tryFinally (compensation:unit -> unit) (a:Async<'a>) : Async<'a> =
     async.TryFinally(a, compensation)
 
