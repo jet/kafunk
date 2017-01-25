@@ -336,7 +336,7 @@ module Consumer =
   /// Explicitly commits offsets to a consumer group.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
-    Log.info "committing_offsets|topic=%s offsets=%s" c.config.topic (Printers.partitionOffsetPairs offsets)
+    Log.info "committing_offsets|group_id=%s topic=%s offsets=%s" c.config.groupId c.config.topic (Printers.partitionOffsetPairs offsets)
     let! state = Group.stateInternal c.groupMember
     let conn = c.conn
     let cfg = c.config
@@ -363,7 +363,7 @@ module Consumer =
                     | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
                     | _ -> failwithf "unsupported commit offset error_code=%i" ec))
               if not (Seq.isEmpty errors) then
-                do! Group.closeGeneration state
+                do! Group.closeGeneration c.groupMember state
                 return ()
               else
                 return ()
@@ -476,7 +476,7 @@ module Consumer =
 
   /// Returns an async sequence corresponding to generations, where each generation
   /// is paired with the set of assigned fetch streams.
-  let generations (consumer:Consumer) =
+  let internal generations (consumer:Consumer) =
 
     let cfg = consumer.config
     let topic = cfg.topic
@@ -487,6 +487,9 @@ module Consumer =
     let consume (state:GroupMemberStateWrapper) = async {
       
       let assignedPartitions = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
+
+      let! ct = Async.CancellationToken
+      let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closedToken)
 
       // initialize per-partition messageset buffers
       let partitionBuffers =
@@ -649,7 +652,13 @@ module Consumer =
                       
       // consumes fetchStream and dispatches to per-partition buffers
       let fetchProcess = async {
-        Log.info "starting_fetch_process|group_id=%s generation_id=%i topic=%s partition_count=%i" cfg.groupId state.state.generationId cfg.topic (assignedPartitions.Length)
+        use! _cnc = Async.OnCancel (fun () -> 
+          Log.warn "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
+            cfg.groupId state.state.generationId state.state.memberId cfg.topic (assignedPartitions.Length))
+
+        Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
+          cfg.groupId state.state.generationId state.state.memberId cfg.topic (assignedPartitions.Length)
+
         return!
           Async.tryFinnallyWithAsync
             (async {
@@ -664,24 +673,25 @@ module Consumer =
                     |> Async.Parallel
                   return () }) })
               (async {
-                Log.info "fetch_process_stopping|generation_id=%i topic=%s" state.state.generationId cfg.topic
+                Log.info "fetch_process_stopping|group_id=%s generation_id=%i member_id=%s topic=%s" 
+                  cfg.groupId state.state.generationId state.state.memberId cfg.topic
                 do! Async.Sleep 1000 // flush logs
-                let! _ =
-                  partitionBuffers
-                  |> Map.toSeq
-                  |> Seq.map (fun (_,buf) -> buf |> BoundedMb.put None)
-                  |> Async.Parallel
+                if not fetchProcessCancellationToken.IsCancellationRequested then
+                  fetchProcessCancellationToken.Cancel ()
                 return () })
               (fun ex -> async { 
-                Log.error "fetch_process_errored|group_id=%s generation_id=%i topic=%s partition_count=%i" cfg.groupId state.state.generationId cfg.topic (assignedPartitions.Length)
+                Log.error "fetch_process_errored|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i error=%O" 
+                  cfg.groupId state.state.generationId state.state.memberId cfg.topic (assignedPartitions.Length) ex
                 return raise ex }) }
-      
-      let! _ = Async.StartChild fetchProcess
+            
+      Async.Start (fetchProcess, fetchProcessCancellationToken.Token)
         
       let partitionStreams =
         partitionBuffers
         |> Map.toSeq
-        |> Seq.map (fun (p,buf) -> p, AsyncSeq.replicateUntilNoneAsync (BoundedMb.take buf))
+        |> Seq.map (fun (p,buf) -> 
+          let tryTake = BoundedMb.take buf |> Async.cancelTokenWith fetchProcessCancellationToken.Token (konst None)
+          p, AsyncSeq.replicateUntilNoneAsync tryTake)
         |> Seq.toArray
 
       return partitionStreams }
@@ -703,7 +713,8 @@ module Consumer =
         partitionStreams
         |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
         |> Async.Parallel
-        |> Async.Ignore)
+        |> Async.Ignore
+        |> Async.cancelTokenWith groupMemberState.closedToken id)
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.

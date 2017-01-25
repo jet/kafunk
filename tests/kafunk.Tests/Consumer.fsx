@@ -32,11 +32,12 @@ let go = async {
       fetchMaxBytes = 200000,
       fetchBufferSize= 2,
       outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime,
-      sessionTimeout = 30000)
+      sessionTimeout = 10000)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   
   let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
+    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
       ms.topic
       ms.partition
@@ -45,7 +46,8 @@ let go = async {
       (ConsumerMessageSet.firstOffset ms)
       (ConsumerMessageSet.lastOffset ms)
       (ms.highWatermarkOffset)
-      (ConsumerMessageSet.lag ms) }
+      (ConsumerMessageSet.lag ms)
+    do! Async.Sleep 30000 }
 
   use counter = Metrics.counter Log 5000
 
