@@ -476,7 +476,7 @@ module Consumer =
 
   /// Returns an async sequence corresponding to generations, where each generation
   /// is paired with the set of assigned fetch streams.
-  let internal generations (consumer:Consumer) =
+  let generations (consumer:Consumer) =
 
     let cfg = consumer.config
     let topic = cfg.topic
