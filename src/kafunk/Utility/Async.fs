@@ -54,6 +54,13 @@ module IVar =
   let inline get (i:IVar<'a>) : Async<'a> = 
     i.Task |> Async.AwaitTask
 
+  /// Returns a cancellation token which is cancelled when the IVar is set.
+  let inline toCancellationToken (i:IVar<_>) =
+    let cts = new CancellationTokenSource ()
+    i.Task.ContinueWith (fun (t:Task<_>) -> cts.Cancel ()) |> ignore
+    cts.Token
+    
+
 
 
 
@@ -108,6 +115,16 @@ type Async with
       with ex ->
         do! comp
         return raise ex }
+
+  static member tryFinnallyWithAsync (a:Async<'a>) (comp:Async<unit>) (err:exn -> Async<'a>) : Async<'a> =
+    async {
+      try
+        let! a = a
+        do! comp
+        return a
+      with ex ->
+        do! comp
+        return! err ex }
 
   static member tryFinally (compensation:unit -> unit) (a:Async<'a>) : Async<'a> =
     async.TryFinally(a, compensation)
@@ -233,6 +250,22 @@ type Async with
 
   static member chooseChoice (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a, 'b>> =
     Async.choose (a |> Async.map Choice1Of2) (b |> Async.map Choice2Of2)
+
+  /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
+  /// computation completes.
+  static member cancelTokenWith (ct:CancellationToken) (f:unit -> 'a) (a:Async<'a>) : Async<'a> = async {
+    let! ct2 = Async.CancellationToken
+    use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
+    let tcs = new TaskCompletionSource<'a>()
+    use _reg = cts.Token.Register (fun () -> tcs.SetResult (f ()))
+    let a = async {
+      try
+        let! a = a
+        tcs.SetResult a
+      with ex ->
+        tcs.SetException ex }
+    Async.Start (a, cts.Token)
+    return! tcs.Task |> Async.AwaitTask }
 
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.

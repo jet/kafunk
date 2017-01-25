@@ -28,6 +28,9 @@ type GroupMemberState = {
   /// The selected protocol.
   protocolName : ProtocolName
 
+  /// Cancelled when the group is closed.
+  closedToken : CancellationToken
+
 } 
 
 /// A group protocol.
@@ -70,7 +73,7 @@ type GroupConfig = {
 
 type internal GroupMemberStateWrapper = {
   state : GroupMemberState
-  closed : TaskCompletionSource<bool>
+  closed : IVar<bool>  
 } 
 
 /// A member of a group.
@@ -94,32 +97,32 @@ module Group =
     else return! a }
     
   /// Closes a group specifying whether a new generation should begin.
-  let internal close (state:GroupMemberStateWrapper) (rejoin:bool) : Async<bool> =
+  let internal close (gm:GroupMember) (state:GroupMemberStateWrapper) (rejoin:bool) : Async<bool> =
     tryAsync
       state
       (fun _ -> false)
       (async {
         if rejoin then
-          if state.closed.TrySetResult rejoin then
-            Log.warn "closing_group_generation|generation_id=%i member_id=%s leader_id=%s" state.state.generationId state.state.memberId state.state.leaderId
+          if IVar.tryPut rejoin state.closed then
+            Log.warn "closing_group_generation|group_id=%s generation_id=%i member_id=%s leader_id=%s" gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
             return false
         else
-          if state.closed.TrySetResult rejoin then
-            Log.warn "closing_group|generation_id=%i member_id=%s leader_id=%s" state.state.generationId state.state.memberId state.state.leaderId
+          if IVar.tryPut rejoin state.closed then
+            Log.warn "closing_group|group_id=%s generation_id=%i member_id=%s leader_id=%s" gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
             return false
         })
 
   /// Closes a generation and causes a new generation to begin.
-  let internal closeGeneration (state:GroupMemberStateWrapper) : Async<unit> =
-    close state true |> Async.Ignore
+  let internal closeGeneration (gm:GroupMember) (state:GroupMemberStateWrapper) : Async<unit> =
+    close gm state true |> Async.Ignore
 
   /// Closes a group and sends a leave group request to Kafka.
   let internal leaveInternal (gm:GroupMember) (state:GroupMemberStateWrapper) : Async<unit> = async {
-    let! _ = close state false
+    let! _ = close gm state false
     let req = LeaveGroupRequest(gm.config.groupId, state.state.memberId)
     let! res = Kafka.leaveGroup gm.conn req
     match res.errorCode with
@@ -200,6 +203,8 @@ module Group =
       Log.info "starting_group_heartbeats|group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
         groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleep
 
+      let closed = IVar.create ()
+
       let state =
         {
           state =
@@ -210,8 +215,9 @@ module Group =
               memberAssignment = syncGroupRes.memberAssignment 
               protocolName = joinGroupRes.groupProtocol
               members = joinGroupRes.members.members
+              closedToken = IVar.toCancellationToken closed
             }
-          closed = TaskCompletionSource<bool>()
+          closed = closed
         }
           
       conn.CancellationToken.Register (fun () ->
@@ -230,7 +236,7 @@ module Group =
             | Success res ->
               match res.errorCode with
               | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
-                do! closeGeneration state
+                do! closeGeneration gm state
                 return ()
               | _ ->
                 do! Async.Sleep heartbeatSleep
@@ -240,7 +246,9 @@ module Group =
               do! leaveInternal gm state
               return () })
 
-      let! _ = Async.StartChild (heartbeat state)
+      let! ct = Async.CancellationToken
+      let cts = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closedToken)
+      Async.Start (heartbeat state, cts.Token)
 
       let! _ = gm.state |> MVar.put state
       return () }
@@ -306,11 +314,15 @@ module Group =
     let rec loop () = asyncSeq {
       let! state = stateInternal gm
       yield state
-      let! shouldRejoin = state.closed.Task |> Async.AwaitTask
+      // NB: this will only be reached once consumer is done processing @state
+      // unless the sequence is explicitly read ahead. this is acceptable in this case
+      // but may be unexpected.
+      let! shouldRejoin = IVar.get state.closed
       if shouldRejoin then
         let! _ = join gm (Some state.state)
         yield! loop () }
     loop ()
+
 
   /// Returns generations of the group protocol.
   let generations (gm:GroupMember) =

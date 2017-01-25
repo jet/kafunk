@@ -84,6 +84,27 @@ module RetryPolicy =
   let delayAt (s:RetryState) (b:RetryPolicy) : TimeSpan option =
     (un b) s
 
+  /// Returns an async computation which waits for the delay at the specified retry state and returns
+  /// the delay and next state, or None if the retries have stopped.
+  let awaitNext (p:RetryPolicy) (s:RetryState) : Async<(TimeSpan * RetryState) option> = async {
+    match delayAt s p with
+    | None -> 
+      return None
+    | Some delay -> 
+      do! Async.Sleep delay
+      return Some ((delay,nextState s)) }
+
+  /// Returns an async sequence where each item is emitted after the corresponding delay
+  /// has elapsed.
+  let delayStreamAt (p:RetryPolicy) =
+    AsyncSeq.unfoldAsync (awaitNext p)
+
+  /// Returns an async sequence where each item is emitted after the corresponding delay
+  /// has elapsed.
+  let delayStream (p:RetryPolicy) =
+    delayStreamAt p initState
+
+
   /// Returns an unbounded retry policy with a constant delay of the specified duration.
   let constant (delay:TimeSpan) = 
     create <| fun _ -> Some delay
@@ -104,22 +125,6 @@ module RetryPolicy =
   let maxAttempts (maxAttempts:int) (p:RetryPolicy) : RetryPolicy =
     create <| fun s -> if s.attempt <= maxAttempts then delayAt s p else None
 
-  /// Returns an async sequence where each item is emitted after the corresponding delay
-  /// has elapsed.
-  let delayStreamAt (p:RetryPolicy) =
-    AsyncSeq.unfoldAsync (fun s -> async { 
-      let delay = delayAt s p
-      match delay with
-      | Some delay -> 
-        do! Async.Sleep delay
-        return Some (delay, nextState s)
-      | None -> 
-        return None })
-
-  /// Returns an async sequence where each item is emitted after the corresponding delay
-  /// has elapsed.
-  let delayStream (p:RetryPolicy) =
-    delayStreamAt p initState
 
 
 /// A retry queue.
@@ -176,7 +181,7 @@ module RetryQueue =
   /// and returns the due items.
   let dueNowAwait (q:RetryQueue<'k, 'a>) = async {
     if q.items.Count = 0 then return Seq.empty else
-    let now = DateTime.UtcNow    
+    let now = DateTime.UtcNow
     let latestDue = items q |> Seq.map snd |> Seq.max
     if now >= latestDue then 
       return dueAt q now
@@ -326,5 +331,10 @@ module internal Faults =
     let retryResultThrowList (ex:'e list -> #exn) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex p
       
-
+    let loop (f:Async<'f> -> 'a -> Async<'b * 'f>) : 'a -> Async<'b> =
+      let fb = MVar.create ()
+      fun a -> async {
+        let! (b,fb') = f (MVar.take fb) a 
+        let! _ = MVar.put fb' fb
+        return b }
 

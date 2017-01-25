@@ -1,5 +1,6 @@
 ﻿#r "bin/release/fsharp.control.asyncseq.dll"
 #r "bin/release/kafunk.dll"
+#r "bin/release/kafunk.tests.dll"
 #time "on"
 
 open FSharp.Control
@@ -17,7 +18,10 @@ let group = argiDefault 3 "existential-group"
 let go = async {
   let! conn = 
     let connConfig = 
-      let chanConfig = ChanConfig.create (requestTimeout = TimeSpan.FromSeconds 60.0)
+      let chanConfig = 
+        ChanConfig.create (
+          requestTimeout = TimeSpan.FromSeconds 60.0,
+          receiveBufferSize = 8192 * 3)
       KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
     Kafka.connAsync connConfig
   let consumerConfig = 
@@ -25,14 +29,16 @@ let go = async {
       groupId = group, 
       topic = topic, 
       initialFetchTime = Time.EarliestOffset, 
-      fetchMaxBytes = 50000,
-      fetchBufferSize= 1,
+      fetchMaxBytes = 200000,
+      fetchBufferSize= 2,
       outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime,
-      sessionTimeout = 30000)
+      sessionTimeout = 10000)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
+  
   let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
-    Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
+    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
+    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
       ms.topic
       ms.partition
       (ms.messageSet.messages.Length)
@@ -40,7 +46,15 @@ let go = async {
       (ConsumerMessageSet.firstOffset ms)
       (ConsumerMessageSet.lastOffset ms)
       (ms.highWatermarkOffset)
-      (ConsumerMessageSet.lag ms) }
+      (ConsumerMessageSet.lag ms)
+    do! Async.Sleep 30000 }
+
+  use counter = Metrics.counter Log 5000
+
+  let handle = 
+    handle
+    |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
+
   do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) handle
 }
 

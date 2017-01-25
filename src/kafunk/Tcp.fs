@@ -323,7 +323,7 @@ type ReqRepSession<'a, 'b, 's> internal
         Log.error "response_decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.TrySetException ex |> ignore
     else
-      Log.error "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
+      Log.warn "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
   let mux (ct:CancellationToken) (req:'a) =
     let startTime = DateTime.UtcNow

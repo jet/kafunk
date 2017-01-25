@@ -1,5 +1,6 @@
 ﻿#r "bin/release/fsharp.control.asyncseq.dll"
 #r "bin/Release/kafunk.dll"
+#r "bin/Release/kafunk.Tests.dll"
 #time "on"
 
 open FSharp.Control
@@ -23,16 +24,31 @@ let volumeMB = (N * int64 messageSize) / int64 1000000
 let payload = Array.zeroCreate messageSize
 let batchCount = int (N / int64 batchSize)
 
-Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" host topic N batchSize batchCount messageSize parallelism volumeMB
+Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" 
+  host topic N batchSize batchCount messageSize parallelism volumeMB
 
 let conn = Kafka.connHost host
 
 let producerCfg =
-  ProducerConfig.create (topic, Partitioner.roundRobin, requiredAcks=RequiredAcks.Local)
+  ProducerConfig.create (
+    topic, 
+    Partitioner.roundRobin, 
+    requiredAcks = RequiredAcks.Local,
+    bufferSize = 2000000,
+    batchSize = 10000,
+    batchLinger = 1)
 
 let producer =
   Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
+
+let counter = Metrics.counter Log (1000 * 5)
+let timer = Metrics.timer Log (1000 * 5)
+
+let produceBatch = 
+  Producer.produceBatch producer
+  |> Metrics.throughputAsyncTo counter (fun _ -> batchSize)
+  |> Metrics.latencyAsyncTo timer
 
 let sw = Stopwatch.StartNew()
 
@@ -54,10 +70,10 @@ try
       (Exn.ofSeq)
 
   Seq.init batchCount id
-  |> Seq.map (fun is -> async {
+  |> Seq.map (fun batchNo -> async {
     try
       let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-      let! prodRes = Producer.produce producer msgs
+      let! prodRes = produceBatch (fun ps -> ps.[batchNo % ps.Length], msgs)
       Interlocked.Add(&completed, int64 batchSize) |> ignore
       return ()
     with ex ->
@@ -74,6 +90,7 @@ sw.Stop ()
 let missing = N - completed
 let ratePerSec = float completed / sw.Elapsed.TotalSeconds
 
-Log.info "producer_run_completed|messages=%i missing=%i batch_size=%i message_size=%i parallelism=%i elapsed_sec=%f rate_per_sec=%f MB=%i" completed missing batchSize messageSize parallelism sw.Elapsed.TotalSeconds ratePerSec volumeMB
+Log.info "producer_run_completed|messages=%i missing=%i batch_size=%i message_size=%i parallelism=%i elapsed_sec=%f rate_per_sec=%f MB=%i" 
+  completed missing batchSize messageSize parallelism sw.Elapsed.TotalSeconds ratePerSec volumeMB
 
 Thread.Sleep 2000

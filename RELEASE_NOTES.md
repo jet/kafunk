@@ -1,3 +1,9 @@
+### 0.0.19-alpha001 - 25.01.2017
+
+* Producer buffering
+* Ensure cancellation propagated to consumer on group close
+* Logging improvements
+
 ### 0.0.18-alpha001 - 20.01.2017
 
 * Fix ConsumerMessageSet.lag measure

@@ -51,7 +51,7 @@ let producer () = async {
       let messages = 
         Seq.init batchSize (fun j -> message (i * batchSize + j))
         |> Seq.toArray
-      let! res = Producer.produce producer messages
+      let! res = Producer.produce producer messages.[0]
       return () })
     |> Async.ParallelThrottledIgnore producerThreads
 
