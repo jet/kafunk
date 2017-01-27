@@ -29,7 +29,7 @@ type GroupMemberState = {
   protocolName : ProtocolName
 
   /// Cancelled when the group is closed.
-  closedToken : CancellationToken
+  closed : CancellationToken
 
 } 
 
@@ -73,7 +73,7 @@ type GroupConfig = {
 
 type internal GroupMemberStateWrapper = {
   state : GroupMemberState
-  closed : IVar<bool>  
+  closed : IVar<bool>
 } 
 
 /// A member of a group.
@@ -104,13 +104,15 @@ module Group =
       (async {
         if rejoin then
           if IVar.tryPut rejoin state.closed then
-            Log.warn "closing_group_generation|group_id=%s generation_id=%i member_id=%s leader_id=%s" gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
+            Log.warn "closing_group_generation|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s"
+              gm.conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
             return false
         else
           if IVar.tryPut rejoin state.closed then
-            Log.warn "closing_group|group_id=%s generation_id=%i member_id=%s leader_id=%s" gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
+            Log.warn "closing_group|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
+              gm.conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
             return false
@@ -154,7 +156,8 @@ module Group =
     let protocolNames = protocols |> Array.map (fun (n,_) -> n)
     let sessionTimeout = cfg.sessionTimeout
     let rebalanceTimeout = cfg.rebalanceTimeout
-    
+    let groupSyncErrorRetryTimeoutMs = 1000
+
     /// Attempts the initial group handshake.
     let join (prevMemberId:MemberId option) = async {
       let! _ = conn.GetGroupCoordinator groupId
@@ -200,8 +203,8 @@ module Group =
 
       let heartbeatSleep = cfg.sessionTimeout / cfg.heartbeatFrequency
 
-      Log.info "starting_group_heartbeats|group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
-        groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleep
+      Log.info "starting_heartbeat_process|client_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
+        conn.Config.clientId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleep
 
       let closed = IVar.create ()
 
@@ -215,7 +218,7 @@ module Group =
               memberAssignment = syncGroupRes.memberAssignment 
               protocolName = joinGroupRes.groupProtocol
               members = joinGroupRes.members.members
-              closedToken = IVar.toCancellationToken closed
+              closed = IVar.toCancellationToken closed
             }
           closed = closed
         }
@@ -236,18 +239,21 @@ module Group =
             | Success res ->
               match res.errorCode with
               | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
+                Log.warn "heartbeat_error|client_id=%s group_id=%s generation_id=%i error_code=%i" 
+                  conn.Config.clientId gm.config.groupId state.state.generationId res.errorCode
                 do! closeGeneration gm state
                 return ()
               | _ ->
                 do! Async.Sleep heartbeatSleep
                 return! heartbeat state
             | Failure ex ->
-              Log.warn "heartbeat_failure|generation_id=%i error=%O" state.state.generationId ex
+              Log.warn "heartbeat_exception|client_id=%s group_id=%s generation_id=%i error=%O" 
+                conn.Config.clientId gm.config.groupId state.state.generationId ex
               do! leaveInternal gm state
               return () })
 
       let! ct = Async.CancellationToken
-      let cts = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closedToken)
+      let cts = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
       Async.Start (heartbeat state, cts.Token)
 
       let! _ = gm.state |> MVar.put state
@@ -259,20 +265,23 @@ module Group =
       
       match prevMemberId with
       | None -> 
-        Log.info "joining_group|group_id=%s protocol_type=%s protocol_names=%A" groupId protocolType protocolNames
+        Log.info "joining_group|client_id=%s group_id=%s protocol_type=%s protocol_names=%A" 
+          conn.Config.clientId groupId protocolType protocolNames
       | Some prevMemberId -> 
-        Log.info "rejoining_group|group_id=%s protocol_type=%s protocol_names=%A member_id=%s" groupId protocolType protocolNames prevMemberId
+        Log.info "rejoining_group|client_id=%s group_id=%s protocol_type=%s protocol_names=%A member_id=%s"
+          conn.Config.clientId groupId protocolType protocolNames prevMemberId
 
       let! joinGroupRes = join prevMemberId
       match joinGroupRes with
       | Success joinGroupRes ->
                 
         if joinGroupRes.members.members.Length > 0 then
-          Log.info "joined_group_as_leader|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+          Log.info "joined_group_as_leader|client_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+            conn.Config.clientId
             groupId 
             joinGroupRes.memberId 
             joinGroupRes.generationId 
-            joinGroupRes.leaderId // redundant, but good for logs
+            joinGroupRes.leaderId
             joinGroupRes.groupProtocol
           let! syncGroupRes = syncGroupLeader joinGroupRes
           match syncGroupRes with
@@ -280,11 +289,14 @@ module Group =
             return! hearbeat (joinGroupRes,syncGroupRes)
           
           | Failure ec ->
-            Log.warn "sync_group_error|error_code=%i" ec
+            Log.warn "sync_group_error|client_id=%s group_id=%s error_code=%i" 
+              conn.Config.clientId groupId ec
+            do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
             return! joinSyncHeartbeat prevMemberId
         
         else
-          Log.info "joined_group_as_follower|group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+          Log.info "joined_group_as_follower|client_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+            conn.Config.clientId
             groupId 
             joinGroupRes.memberId 
             joinGroupRes.generationId 
@@ -296,11 +308,15 @@ module Group =
             return! hearbeat (joinGroupRes,syncGroupRes)
           
           | Failure ec ->
-            Log.warn "sync_group_error|error_code=%i" ec
+            Log.warn "sync_group_error|client_id=%s group_id=%s error_code=%i" 
+              conn.Config.clientId groupId ec
+            do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
             return! joinSyncHeartbeat prevMemberId
 
       | Failure joinGroupErr ->
-        Log.warn "join_group_error|error_code=%i" joinGroupErr
+        Log.warn "join_group_error|client_id=%s group_id=%s error_code=%i prev_member_id=%A" 
+          conn.Config.clientId groupId joinGroupErr prevMemberId
+        do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
         match joinGroupErr with
         | ErrorCode.UnknownMemberIdCode -> 
           Log.warn "resetting_member_id"
@@ -310,7 +326,7 @@ module Group =
 
     return! joinSyncHeartbeat (prevState |> Option.map (fun s -> s.memberId)) }
 
-  let internal generationInternal (gm:GroupMember) =
+  let internal generationsInternal (gm:GroupMember) =
     let rec loop () = asyncSeq {
       let! state = stateInternal gm
       yield state
@@ -323,11 +339,10 @@ module Group =
         yield! loop () }
     loop ()
 
-
   /// Returns generations of the group protocol.
   let generations (gm:GroupMember) =
     gm
-    |> generationInternal
+    |> generationsInternal
     |> AsyncSeq.map (fun state -> state.state)
 
   /// Creates a group member and joins it to the group.

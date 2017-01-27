@@ -489,7 +489,7 @@ module Consumer =
       let assignedPartitions = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
 
       let! ct = Async.CancellationToken
-      let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closedToken)
+      let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
 
       // initialize per-partition messageset buffers
       let partitionBuffers =
@@ -696,7 +696,7 @@ module Consumer =
 
       return partitionStreams }
     
-    Group.generationInternal consumer.groupMember
+    Group.generationsInternal consumer.groupMember
     |> AsyncSeq.mapAsync (fun state -> async {
       let! partitionStreams = consume state
       return state.state,partitionStreams })
@@ -709,12 +709,12 @@ module Consumer =
     (consumer:Consumer) : Async<unit> =
       consumer
       |> generations
-      |> AsyncSeq.iterAsync (fun (groupMemberState,partitionStreams) ->
+      |> AsyncSeq.iterAsyncParallel (fun (groupMemberState,partitionStreams) ->
         partitionStreams
         |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
         |> Async.Parallel
-        |> Async.Ignore
-        |> Async.cancelTokenWith groupMemberState.closedToken id)
+        |> Async.Ignore//)
+        |> Async.cancelTokenWith groupMemberState.closed id)
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
@@ -735,7 +735,7 @@ module Consumer =
   /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
   /// backpressure on the underlying consumer.
   let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
-    let mb = BoundedMb.create bufferSize
+    use mb = BoundedMb.create bufferSize
     let handle s ms = BoundedMb.put (s,ms) mb
     let! _ = Async.StartChild (consume handle consumer)
     yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }

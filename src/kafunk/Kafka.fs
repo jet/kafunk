@@ -464,11 +464,12 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// initial routing table.
   let rec bootstrap =
     let update (_:ConnState option) = 
+      Log.info "connecting_to_bootstrap_brokers|client_id=%s brokers=%A" cfg.clientId cfg.bootstrapServers
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
-          Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
+          Log.info "connecting_to_bootstrap_broker|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let! ch = Chan.discoverConnect (cfg.version, cfg.tcpConfig, cfg.clientId) (uri.Host,uri.Port)
           let state = ConnState.bootstrap ch
           return Success state
@@ -518,7 +519,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
     let update currentState = async {
       if currentState.version = callerState.version then
         let! res = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
-        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print res)
+        Log.info "received_group_coordinator|client_id=%s group_id=%s %s" 
+          cfg.clientId groupId (GroupCoordinatorResponse.Print res)
         let! ep = async {
           match IPAddress.tryParse res.coordinatorHost with
           | Some ip ->
@@ -552,7 +554,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 | None -> 
                   return res
                 | Some (errorCode,action,msg) ->
-                  Log.error "channel_response_errored|endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
+                  Log.error "channel_response_errored|client_id=%s endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" 
+                    cfg.clientId ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
                   match action with
                   | RetryAction.PassThru ->
                     return res
@@ -571,7 +574,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 let! state' = handleRequestFailure (state, req, ep, chanErr)
                 return! send state' req })
             |> Async.tryWith (fun ex -> async {
-              Log.error "channel_exception_escalated|endpoint=%O request=%s error=%O" ep (RequestMessage.Print req) ex
+              Log.error "channel_exception_escalated|client_id=%s endpoint=%O request=%s error=%O" 
+                cfg.clientId ep (RequestMessage.Print req) ex
+              do! Async.Sleep 1000
               return raise ex })
 
         | None ->
@@ -601,17 +606,18 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! sendHost requestRoutes.[0]
 
     | Failure (MissingTopicRoute topic) ->
-      Log.warn "missing_topic_partition_route|topic=%s request=%s" topic (RequestMessage.Print req)
+      Log.trace "missing_topic_partition_route|topic=%s request=%s" topic (RequestMessage.Print req)
       let! state' = getMetadata state [|topic|]
       return! send state' req
 
     | Failure (MissingGroupRoute group) ->
-      Log.warn "missing_group_goordinator_route|group=%s" group
+      Log.trace "missing_group_goordinator_route|group=%s" group
       let! state' = getGroupCoordinator state group
       return! send state' req }
 
   and handleRequestFailure (state:ConnState, req:RequestMessage, ep:EndPoint, chanErrs:ChanError list) = async {
-    Log.error "recovering_channel_error|endpoint=%O request=%s error=%A" ep (RequestMessage.Print req) chanErrs
+    Log.error "recovering_channel_error|client_id=%s endpoint=%O request=%s error=%A" 
+      cfg.clientId ep (RequestMessage.Print req) chanErrs
     let isBootstrapRequest =
       match req with
       | RequestMessage.Metadata _ | RequestMessage.Offset _ 
