@@ -234,9 +234,9 @@ module internal Chan =
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->
-        Log.info "discovering_dns_entries|host=%s" host
+        Log.info "discovering_dns|client_id=%s host=%s" clientId host
         let! ips = Dns.IPv4.getAllAsync host
-        Log.info "discovered_dns_entries|host=%s ips=%A" host ips
+        Log.info "discovered_dns|client_id=%s host=%s ips=[%s]" clientId host (Printers.stringsCsv ips)
         let ip = ips.[0]
         return ip
       | Some ip ->

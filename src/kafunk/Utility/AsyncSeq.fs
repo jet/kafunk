@@ -171,11 +171,19 @@ module AsyncSeq =
   let sequenceResultList (s:AsyncSeq<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
     traverseResultList id s
 
-  let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> =
-    AsyncSeq.mapAsyncParallel f s |> AsyncSeq.iter ignore
-
   let replicateUntilNoneAsync (next:Async<'a option>) : AsyncSeq<'a> =
     AsyncSeq.unfoldAsync 
       (fun () -> next |> Async.map (Option.map (fun a -> a,()))) 
       ()
-    
+
+  let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
+    use mb = Mb.create ()
+    let err = IVar.create ()
+    let! _ =
+      s 
+      |> AsyncSeq.iterAsync (fun a -> async {
+        let! x = Async.StartChild (f a)
+        do Mb.put (Some x) mb })
+      |> Async.tryWith (fun e -> async { IVar.error e err })
+      |> Async.StartChild
+    return! Async.choose (replicateUntilNoneAsync (Mb.take mb) |> AsyncSeq.iterAsync id) (IVar.get err) }

@@ -77,7 +77,7 @@
     <None Include="Producer.fsx" />
     <Compile Include="Fetch.fsx" />
     <None Include="Consumer.fsx" />
-    <Compile Include="ProducerConsumer.fsx" />
+    <None Include="ProducerConsumer.fsx" />
     <Compile Include="Offsets.fsx" />
     <None Include="Async.fsx" />
     <Content Include="App.config" />

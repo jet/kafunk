@@ -39,6 +39,9 @@ type ProducerResult =
     new (os) = { offsets = os }
   end
 
+/// The number of partitions of a topic.
+type PartitionCount = int
+
 /// A partition function.
 type Partitioner = TopicName * Partition[] * ProducerMessage -> Partition
 
@@ -182,58 +185,77 @@ module Producer =
 
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
   let private sendBatch (cfg:ProducerConfig) (messageVer) (ch:Chan) (batch:((ProducerMessage[] * Partition) * IVar<Result<ProducerResult, ChanError list>>)[]) = async {
-    let ms,reps = Array.unzip batch
+    
+    let ms,reps = 
+      batch
+      |> Seq.map (fun (((ms),p),rep) -> (p,ms),(p,rep))
+      |> Seq.toArray
+      |> Array.unzip
+
     let pms = 
       ms
-      |> Seq.groupBy snd
+      |> Seq.groupBy fst
       |> Seq.map (fun (p,pms) ->
         let ms = 
           pms 
-          |> Seq.collect (fun (pms,_) -> pms |> Seq.map (fun pm -> Message.create pm.value pm.key None))
+          |> Seq.collect (fun (_,pms) -> pms |> Seq.map (fun pm -> Message.create pm.value pm.key None))
           |> MessageSet.ofMessages
           |> Compression.compress messageVer cfg.compression
         p,ms)
       |> Seq.toArray
-    let prodReq = ProduceRequest.ofMessageSetTopics [| cfg.topic, pms |] cfg.requiredAcks cfg.timeout
-    let! res = Chan.send ch (RequestMessage.Produce prodReq)
+
+    let req = ProduceRequest.ofMessageSetTopics [| cfg.topic, pms |] cfg.requiredAcks cfg.timeout
+    let! res = Chan.send ch (RequestMessage.Produce req) |> Async.map (Result.map ResponseMessage.toProduce)
     match res with
     | Success res ->
-      let prodRes = ResponseMessage.toProduce res
-      let oks,errors =
-        prodRes.topics
+      
+      let oks,retryErrors,fatalErrors =
+        res.topics
         |> Seq.collect (fun (_t,os) ->
           os
           |> Seq.map (fun (p,ec,o) ->
             match ec with
-            | ErrorCode.NoError -> Choice1Of2 (p,o)
+            | ErrorCode.NoError -> Choice1Of3 (p,o)
 
             // 404
-            | ErrorCode.InvalidMessage -> Choice2Of2 (p,o)
-            | ErrorCode.MessageSizeTooLarge -> Choice2Of2 (p,o)
-            | ErrorCode.InvalidTopicCode -> Choice2Of2 (p,o)
-            | ErrorCode.InvalidRequiredAcksCode -> Choice2Of2 (p,o)
+            | ErrorCode.InvalidMessage | ErrorCode.MessageSizeTooLarge
+            | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice3Of3 (p,o,ec)
 
             // timeout  (retry)
-            | ErrorCode.RequestTimedOut -> Choice2Of2 (p,o)
-            | ErrorCode.LeaderNotAvailable -> Choice2Of2 (p,o)
+            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable -> Choice2Of3 (p,o)
 
             // topology change (retry)
-            | ErrorCode.UnknownTopicOrPartition -> Choice2Of2 (p,o)
-            | ErrorCode.NotLeaderForPartition -> Choice2Of2 (p,o)
+            | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice2Of3 (p,o)
               
-            | _ -> Choice2Of2 (p,o)))
-        |> Seq.partitionChoices
-      if errors.Length > 0 then
-        Log.error "produce_errors|offsets=%s" (Printers.partitionOffsetPairs errors)
-        return failwithf "produce_errors|%A" errors
-      let res = ProducerResult(oks)
-      let res = Success res
-      for rep in reps do
-        IVar.put res rep
+            // unknown
+            | _ -> Choice3Of3 (p,o,ec)))
+        |> Seq.partitionChoices3
+      
+      // TODO: error only by partition
+      if fatalErrors.Length > 0 then
+        let msg = sprintf "produce_fatal_errors|errors=%A" fatalErrors
+        Log.error "%s" msg
+        let ex = exn(msg)
+        for (_,rep) in reps do
+          IVar.error ex rep
+      elif retryErrors.Length > 0 then
+        Log.error "produce_transient_errors|errors=%A" retryErrors
+        let res = Failure [] // TODO: specific error
+        for (_,rep) in reps do
+          IVar.put res rep
+      elif oks.Length > 0 then
+        let res = ProducerResult(oks)
+        let res = Success res
+        for (_,rep) in reps do
+          IVar.put res rep
+      else
+        failwith "invalid state"
+
       return ()
+
     | Failure err ->
       let err = Failure err
-      for rep in reps do
+      for (_,rep) in reps do
         IVar.put err rep 
       return () }
 
@@ -262,7 +284,7 @@ module Producer =
               let! ch = Chan.connect (conn.Config.version,conn.Config.tcpConfig,conn.Config.clientId) ep
               return (Map.add ep ch brokerByEndPoint, Map.add p ch brokerByPartition)
         | None -> 
-          return failwith "" })
+          return failwith "invalid state" })
     
     let messageVer = ProducerConfig.messageVersion conn.Config.version
 
@@ -311,12 +333,12 @@ module Producer =
       Resource.recoverableRecreate 
         (getState conn config) 
         (fun (s,v,_req,ex) -> async {
-          Log.warn "closing_resource|version=%i partitions=%s error=%O" v (Printers.partitions s.partitions) ex
+          Log.warn "closing_resource|version=%i partitions=[%s] error=%O" v (Printers.partitions s.partitions) ex
           return () })
     let! state = Resource.get resource
     let produceBatch = Resource.injectWithRecovery resource (RetryPolicy.constantMs 500) (produceBatchInternal)
     let p = { state = resource ; config = config ; conn = conn ; messageVersion = messageVersion ; produceBatch = produceBatch }
-    Log.info "producer_initialized|topic=%s partitions=%s" config.topic (Printers.partitions state.partitions)
+    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.partitions)
     return p }
 
   /// Creates a producer.

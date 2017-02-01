@@ -29,7 +29,7 @@ module ConsumerGroup =
     
     Log.info "decoded_sync_group_response|version=%i member_assignment=[%s]"
       assignment.version
-      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%s" tn (Printers.partitions ps)))) 
+      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=[%s]" tn (Printers.partitions ps)))) 
       
     if assignment.partitionAssignment.assignments.Length = 0 then
       failwith "no partitions assigned!"
@@ -150,13 +150,13 @@ type ConsumerConfig = {
   
   /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
   /// period, a consumer is ejected from the consumer group.
-  /// Default: 20000
+  /// Default: 10000
   sessionTimeout : SessionTimeout
   
   /// The time during which a consumer must rejoin a group after a rebalance.
   /// If the consumer doesn't rejoin within this time, it will be ejected.
   /// Supported in v0.10.1.
-  /// Default: 20000
+  /// Default: 10000
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
@@ -213,8 +213,8 @@ type ConsumerConfig = {
       {
         groupId = groupId
         topic = topic
-        sessionTimeout = defaultArg sessionTimeout 20000
-        rebalanceTimeout = defaultArg rebalanceTimeout 20000
+        sessionTimeout = defaultArg sessionTimeout 10000
+        rebalanceTimeout = defaultArg rebalanceTimeout 10000
         heartbeatFrequency = defaultArg heartbeatFrequency 10
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
@@ -439,7 +439,7 @@ module Consumer =
         return failwithf "fetch_offset_errors|errors=%A" errors
       
       if missing.Length > 0 then
-        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=%s" cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
+        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
         let offsetReq = OffsetRequest(-1, [| topic, missing |> Array.map (fun (p,_) -> p, cfg.initialFetchTime, 1) |])
         let! offsetRes = Kafka.offset conn offsetReq
         // TODO: error check
@@ -646,7 +646,8 @@ module Consumer =
                     ends
                     |> Seq.map (fun (p,hwmo) -> sprintf "[partition=%i high_watermark_offset=%i]" p hwmo)
                     |> String.concat " ; "
-                  Log.info "end_of_topic_partition_reached|topic=%s %s" topic msg
+                  Log.info "end_of_topic_partition_reached|group_id=%s generation_id=%i member_id=%s topic=%s %s" 
+                    cfg.groupId state.state.generationId state.state.memberId topic msg
 
                 return Some (mss, (nextOffsets,retryQueue)) })
                       

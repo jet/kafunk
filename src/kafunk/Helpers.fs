@@ -129,11 +129,14 @@ module internal Printers =
     sb.ToString()
 
   let partitions (os:seq<Partition>) =
-    concatMapSb os (fun sb (p) -> sb.AppendFormat("[partition={0}]", p)) " ; "
+    concatMapSb os (fun sb (p) -> sb.AppendFormat("{0}", p)) ","
     
   let partitionOffsetPairs (os:seq<Partition * Offset>) =
     concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} offset={1}]", p, o)) " ; "
     
+  let stringsCsv (ss:seq<#obj>) =
+    concatMapSb ss (fun sb s -> sb.AppendFormat("{0}", s)) ","
+
   type MetadataResponse with
     static member Print (x:MetadataResponse) =
       let topics =
