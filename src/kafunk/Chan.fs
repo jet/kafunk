@@ -136,16 +136,16 @@ module internal Chan =
       |> AsyncFunc.timeoutResult config.connectTimeout
       |> AsyncFunc.catchResult
       |> AsyncFunc.doBeforeAfter
-          (fun ep -> Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" (EndPoint.endpoint ep) clientId)
+          (fun ep -> Log.info "tcp_connecting|client_id=%s remote_endpoint=%O" clientId (EndPoint.endpoint ep))
           (fun (ep,res) ->
             let ipep = EndPoint.endpoint ep
             match res with
             | Success s ->
-              Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" s.RemoteEndPoint s.LocalEndPoint
+              Log.info "tcp_connected|client_id=%s remote_endpoint=%O local_endpoint=%O" clientId s.RemoteEndPoint s.LocalEndPoint
             | Failure (Choice1Of2 _) ->
-              Log.error "tcp_connection_timed_out|remote_endpoint=%O timeout=%O" ipep config.connectTimeout
+              Log.error "tcp_connection_timed_out|client_id=%s remote_endpoint=%O timeout=%O" clientId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
-              Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ipep e)
+              Log.error "tcp_connection_failed|client_id=%s remote_endpoint=%O error=%O" clientId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
@@ -155,7 +155,7 @@ module internal Chan =
 
     let! socketAgent = 
       Resource.recoverableRecreate 
-        (fun _ -> conn ep)
+        (fun _ _ -> conn ep)
         recovery
 
     let! send =
@@ -167,12 +167,12 @@ module internal Chan =
         try
           let! received = Socket.receive s buf
           if received = 0 then 
-            Log.warn "received_empty_buffer|remote_endpoint=%O" ep
+            Log.warn "received_empty_buffer|client_id=%s remote_endpoint=%O" clientId ep
             return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|remote_endpoint=%O error=%O" ep ex
+          Log.error "receive_failure|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive
@@ -215,13 +215,16 @@ module internal Chan =
         | Success _ -> Failure (Choice1Of2 ())
         | Failure e -> Failure (Choice2Of2 e))
       |> AsyncFunc.doBeforeAfter
-          (fun req -> Log.trace "sending_request|request=%s" (RequestMessage.Print req))
+          //(fun _req -> (*Log.trace "sending_request|request=%s" (RequestMessage.Print req)*) ())
+          (ignore)
           (fun (req,res) -> 
             match res with
-            | Success res -> 
-              Log.trace "received_response|response=%s" (ResponseMessage.Print res)
+            | Success _res -> 
+              ()
+              //Log.trace "received_response|response=%s" (ResponseMessage.Print res)
             | Failure (Choice1Of2 ()) ->
-              Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout
+              Log.warn "request_timed_out|client_id=%s ep=%O request=%s timeout=%O" 
+                clientId ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
               Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)
       |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy

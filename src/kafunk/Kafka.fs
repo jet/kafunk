@@ -228,7 +228,7 @@ type private RetryAction =
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition (*| ErrorCode.OffsetOutOfRange*) ->
         Some (RetryAction.RefreshMetadataAndRetry [||])
 
-      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange -> 
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownMemberIdCode -> 
         Some (RetryAction.PassThru)
       
       | ErrorCode.InvalidMessage ->

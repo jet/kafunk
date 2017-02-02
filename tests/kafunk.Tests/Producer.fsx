@@ -34,8 +34,8 @@ let producerCfg =
     topic, 
     Partitioner.roundRobin, 
     requiredAcks = RequiredAcks.Local,
-    bufferSize = 2000000,
-    batchSize = 10000,
+    bufferSize = 1000,
+    batchSize = 1000,
     batchLinger = 1)
 
 let producer =

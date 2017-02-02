@@ -160,7 +160,7 @@ type ConsumerConfig = {
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
-  /// Default: 10
+  /// Default: 5
   heartbeatFrequency : int32
   
   /// The minimum bytes to buffer server side for a fetch request.
@@ -215,7 +215,7 @@ type ConsumerConfig = {
         topic = topic
         sessionTimeout = defaultArg sessionTimeout 10000
         rebalanceTimeout = defaultArg rebalanceTimeout 10000
-        heartbeatFrequency = defaultArg heartbeatFrequency 10
+        heartbeatFrequency = defaultArg heartbeatFrequency 5
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
         fetchMaxBytes = defaultArg fetchMaxBytes 100000
@@ -363,12 +363,15 @@ module Consumer =
                     | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
                     | _ -> failwithf "unsupported commit offset error_code=%i" ec))
               if not (Seq.isEmpty errors) then
-                do! Group.closeGeneration c.groupMember state
+                Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
+                  cfg.groupId c.config.topic (Printers.partitionErrorCodePairs errors)
+                do! Group.closeGenerationAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
                 return ()
               else
                 return ()
             | Failure ex ->
-              Log.warn "commit_offset_exception|generation_id=%i error=%O" state.state.generationId ex
+              Log.warn "commit_offset_exception|group_id=%s generation_id=%i error=%O" 
+                cfg.groupId state.state.generationId ex
               do! Group.leaveInternal c.groupMember state
               return () }) }
 
@@ -646,7 +649,7 @@ module Consumer =
                     ends
                     |> Seq.map (fun (p,hwmo) -> sprintf "[partition=%i high_watermark_offset=%i]" p hwmo)
                     |> String.concat " ; "
-                  Log.info "end_of_topic_partition_reached|group_id=%s generation_id=%i member_id=%s topic=%s %s" 
+                  Log.trace "end_of_topic_partition_reached|group_id=%s generation_id=%i member_id=%s topic=%s %s" 
                     cfg.groupId state.state.generationId state.state.memberId topic msg
 
                 return Some (mss, (nextOffsets,retryQueue)) })

@@ -58,7 +58,7 @@ module private Util =
     | None -> Console.WriteLine
 
 
-type TimedCounter internal (?log:Logger, ?periodMs:float) =
+type TimedCounter internal (log:Logger, ?periodMs:float) =
 
   let periodMs = defaultArg periodMs 1000.0
   let periodSs = periodMs / 1000.0
@@ -71,9 +71,7 @@ type TimedCounter internal (?log:Logger, ?periodMs:float) =
   let rates = new SortedBag<float>(Comparer.rev Comparer<_>.Default)
 
   let write : string * [<ParamArray>]obj[] -> unit =
-    match log with
-    | Some log -> fun (msg,args) -> log.info "%s" (String.Format(msg,args))
-    | None -> Console.WriteLine
+    fun (msg,args) -> log.info "%s" (String.Format(msg,args))
 
   let cb _ =
     let count = count
@@ -120,9 +118,10 @@ type TimedCounter internal (?log:Logger, ?periodMs:float) =
     member x.Dispose() = x.Stop()
 
 
-type IntHistogram internal (?log:Logger, ?periodMs:float) =
+type IntHistogram internal (log:Logger, ?periodMs:float) =
   let periodMs = defaultArg periodMs 1000.0
-  let write = Util.write log
+  let write : string * [<ParamArray>]obj[] -> unit =
+    fun (msg,args) -> log.info "%s" (String.Format(msg,args))
   let mutable count = 0
   let mutable sum = 0
   let values = new SortedBag<int>(Comparer.rev Comparer<_>.Default)

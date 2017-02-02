@@ -11,14 +11,13 @@ type LogLevel =
   | Error = 3
   | Fatal = 4
 
-type Logger = {
+type Logger = private {
   name : string
   buffer : BlockingCollection<string>
 }
 
-
 [<RequireQualifiedAccess>]
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Log =
 
   open System
@@ -44,17 +43,18 @@ module Log =
   let mutable MinLevel = LogLevel.Info
 
 
-
 [<AutoOpen>]
 module LoggerEx =
 
   type Logger with
 
-    member inline ts.log (format, level:LogLevel) =
-      let inline trace (m:string) =
-        if level >= Log.MinLevel then
-          ts.buffer.Add (String.Format("{0:yyyy-MM-dd HH:mm:ss:ffff}|{1}|{2}|{3}", DateTime.UtcNow, (level.ToString().ToUpperInvariant()), ts.name, m))
-      Printf.kprintf trace format
+    member ts.log (format, level:LogLevel) =
+      if level >= Log.MinLevel then
+        let dt = DateTime.UtcNow
+        let trace (m:string) = ts.buffer.Add (String.Format("{0:yyyy-MM-dd HH:mm:ss:ffff}|{1}|{2}|{3}", dt, (level.ToString().ToUpperInvariant()), ts.name, m))
+        Printf.kprintf trace format
+      else
+        Printf.kprintf ignore format
 
     member inline ts.fatal format = ts.log (format, LogLevel.Fatal)
 

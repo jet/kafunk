@@ -133,6 +133,9 @@ module internal Printers =
     
   let partitionOffsetPairs (os:seq<Partition * Offset>) =
     concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} offset={1}]", p, o)) " ; "
+
+  let partitionErrorCodePairs (os:seq<Partition * ErrorCode>) =
+    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} error_code={1}]", p, o)) " ; "
     
   let stringsCsv (ss:seq<#obj>) =
     concatMapSb ss (fun sb s -> sb.AppendFormat("{0}", s)) ","
@@ -303,6 +306,22 @@ module internal Printers =
       sprintf "GroupCoordinatorResponse|coordinator_id=%i host=%s port=%i error_code=%i" 
         x.coordinatorId x.coordinatorHost x.coordinatorPort x.errorCode
 
+  type JoinGroup.Request with
+    static member Print (x:JoinGroup.Request) =
+      sprintf "JoinGroupRequest|group_id=%s member_id=%s" x.groupId x.memberId
+
+  type JoinGroup.Response with
+    static member Print (x:JoinGroup.Response) =
+      sprintf "JoinGroupResponse|generation_id=%i error_code=%i member_id=%s leader_id=%s" x.generationId x.errorCode x.memberId x.leaderId
+
+  type SyncGroupRequest with
+    static member Print (x:SyncGroupRequest) =
+      sprintf "SyncGroupRequest|group_id=%s member_id=%s generation_id=%i" x.groupId x.memberId x.generationId
+
+  type SyncGroupResponse with
+    static member Print (x:SyncGroupResponse) =
+      sprintf "SyncGroupResponse|error_code=%i" x.errorCode
+
   type RequestMessage with
     static member Print (x:RequestMessage) =
       match x with
@@ -312,6 +331,8 @@ module internal Printers =
       | RequestMessage.OffsetFetch x -> OffsetFetchRequest.Print x
       | RequestMessage.Offset x -> OffsetRequest.Print x
       | RequestMessage.Heartbeat x -> HeartbeatRequest.Print x
+      | RequestMessage.JoinGroup x -> JoinGroup.Request.Print x
+      | RequestMessage.SyncGroup x -> SyncGroupRequest.Print x
       | _ ->  sprintf "%A" x
 
   type ResponseMessage with
@@ -325,6 +346,8 @@ module internal Printers =
       | ResponseMessage.OffsetResponse x -> OffsetResponse.Print x
       | ResponseMessage.HeartbeatResponse x -> HeartbeatResponse.Print x
       | ResponseMessage.GroupCoordinatorResponse x -> GroupCoordinatorResponse.Print x
+      | ResponseMessage.JoinGroupResponse x -> JoinGroup.Response.Print x
+      | ResponseMessage.SyncGroupResponse x -> SyncGroupResponse.Print x
       | x -> sprintf "%A" x
 
 // ------------------------------------------------------------------------------------------------------------------------------

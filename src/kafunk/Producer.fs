@@ -168,6 +168,7 @@ type Producer = private {
 
 /// Producer state corresponding to the state of a cluster.
 and private ProducerState = {
+  brokerByEndPoint : Map<EndPoint, Chan>
   partitionBrokers : Map<Partition, Chan>
   partitions : Partition[]
   brokerQueues : Map<EndPoint, (((ProducerMessage[] * Partition) * IVar<Result<ProducerResult, ChanError list>>)[] -> Async<unit>)>
@@ -222,10 +223,10 @@ module Producer =
             | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice3Of3 (p,o,ec)
 
             // timeout  (retry)
-            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable -> Choice2Of3 (p,o)
+            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable -> Choice2Of3 (p,o,ec)
 
             // topology change (retry)
-            | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice2Of3 (p,o)
+            | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice2Of3 (p,o,ec)
               
             // unknown
             | _ -> Choice3Of3 (p,o,ec)))
@@ -260,16 +261,23 @@ module Producer =
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
-  let private getState (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) = async {
+  let private getState (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (prevState:ProducerState option) = async {
     
     Log.info "fetching_topic_metadata|topic=%s" cfg.topic
     let! state = conn.GetMetadataState [|cfg.topic|]
 
     let partitions = 
       Routes.topicPartitions state.routes |> Map.find cfg.topic
+    
+    Log.info "establishing_broker_connections|topic=%s partitions=%s" cfg.topic (Printers.partitions partitions)
 
-    let! _,brokerByPartition =
-      ((Map.empty,Map.empty), AsyncSeq.ofSeq partitions)
+    let brokerByEndPoint =
+      prevState
+      |> Option.map (fun s -> s.brokerByEndPoint)
+      |> Option.getOr Map.empty
+
+    let! brokerByEndPoint,brokerByPartition =
+      ((brokerByEndPoint, Map.empty), AsyncSeq.ofSeq partitions)
       ||> AsyncSeq.foldAsync (fun (brokerByEndPoint,brokerByPartition) p -> async {
         match Routes.tryFindHostForTopic state.routes (cfg.topic,p) with
         | Some ep -> 
@@ -292,11 +300,14 @@ module Producer =
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
     let queue (ch:Chan) =
+      let ep = Chan.endpoint ch
       let buf = BoundedMb.create cfg.bufferSize
       BoundedMb.take buf
       |> AsyncSeq.replicateInfiniteAsync
       |> AsyncSeq.bufferByCountAndTime cfg.batchSize cfg.batchLinger
       |> AsyncSeq.iterAsync (Array.concat >> sendBatch cfg messageVer ch)
+      |> Async.tryWith (fun ex -> async {
+        Log.error "producer_queue_exception|ep=%O error=%O" ep ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
       (flip BoundedMb.put buf)
    
@@ -309,7 +320,7 @@ module Producer =
         ep,q)
       |> Map.ofSeq
         
-    return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues } }
+    return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues ; brokerByEndPoint = brokerByEndPoint } }
 
   let private produceBatchInternal (state:ProducerState) (createBatch:Partition[] -> Partition * ProducerMessage[]) = async {
     let p,ms = createBatch state.partitions
@@ -333,7 +344,7 @@ module Producer =
       Resource.recoverableRecreate 
         (getState conn config) 
         (fun (s,v,_req,ex) -> async {
-          Log.warn "closing_resource|version=%i partitions=[%s] error=%O" v (Printers.partitions s.partitions) ex
+          Log.warn "closing_resource|version=%i topic=%s partitions=[%s] error=%O" v config.topic (Printers.partitions s.partitions) ex
           return () })
     let! state = Resource.get resource
     let produceBatch = Resource.injectWithRecovery resource (RetryPolicy.constantMs 500) (produceBatchInternal)
