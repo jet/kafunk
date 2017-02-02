@@ -19,7 +19,7 @@ let topicName = argiDefault 2 "absurd-topic"
 let totalMessageCount = argiDefault 3 "10000" |> Int32.Parse
 let batchSize = argiDefault 4 "10" |> Int32.Parse
 let consumerCount = argiDefault 5 "2" |> Int32.Parse
-let producerThreads = argiDefault 6 "500" |> Int32.Parse
+let producerThreads = argiDefault 6 "1" |> Int32.Parse
 
 let testId = Guid.NewGuid().ToString("n")
 let consumerGroup = "kafunk-producer-consumer-test-" + testId
@@ -43,8 +43,9 @@ and Report =
     val duplicates : int
     val produced : int
     val skipped : int
-    val nonContig : (int * int)[]
-    new (r,d,p,s,nc) = { received = r ; duplicates = d ; produced = p ; skipped = s ; nonContig = nc }
+    val nonContigCount : int
+    val nonContigSample : (int * int)[]
+    new (r,d,p,s,nc,ncs) = { received = r ; duplicates = d ; produced = p ; skipped = s ; nonContigCount = nc ; nonContigSample = ncs }
   end
 
 let completed = IVar.create ()
@@ -62,10 +63,16 @@ let mb = Mb.Start (fun mb ->
     let nonContig =
       received.Keys
       |> Seq.pairwise
-      |> Seq.choose (fun (x,y) -> if y <> x + 1 then Some (x,y) else None)
-      |> Seq.truncate 100
-      |> Seq.toArray
-    Report(received.Count, duplicates.Count, !produced, !skipped, nonContig) 
+      |> Seq.where (fun (x,y) -> y <> x + 1)
+    let nonContigCount =
+      nonContig
+      |> Seq.length
+    let nonContigSample =
+      if totalMessageCount = !produced then
+        nonContig |> Seq.toArray
+      else 
+        [||]
+    Report(received.Count, duplicates.Count, !produced, !skipped, nonContigCount, nonContigSample) 
 
   let rec loop () = async {
     let! req = mb.Receive ()
@@ -128,7 +135,7 @@ let producer = async {
     ProducerConfig.create (
       topic = topicName, 
       partition = Partitioner.roundRobin,
-      requiredAcks = RequiredAcks.AllInSync,
+      requiredAcks = RequiredAcks.Local,
       batchSize = 1000,
       bufferSize = 1000)
 
@@ -139,7 +146,6 @@ let producer = async {
     |> Seq.map (fun batchNumber -> async {
       try
         let! res = Producer.produceBatch producer (messageBatch batchNumber)
-        //Interlocked.Add (producedCount, batchSize) |> ignore
         mb.Post (ReportReq.Produce batchSize)
       with ex ->
         Log.error "produce_error|error=%O" ex })
@@ -192,8 +198,10 @@ let monitor = async {
   while not completed.Task.IsCompleted do 
     do! Async.Sleep 5000
     let! report = mb.PostAndAsyncReply (ReportReq.Report)
-    Log.info "monitor|produced=%i received=%i skipped=%i duplicates=%i pending=%i non_contig=%A running_time_min=%f" 
-      report.produced report.produced report.skipped report.duplicates (totalMessageCount - report.received) report.nonContig sw.Elapsed.TotalMinutes }
+    let pending = totalMessageCount - report.received
+    let lag = report.produced - report.received
+    Log.info "monitor|produced=%i received=%i lag=%i skipped=%i duplicates=%i pending=%i non_contig=%i non_contig_sample=%A running_time_min=%f" 
+      report.produced report.received lag report.skipped report.duplicates pending report.nonContigCount report.nonContigSample sw.Elapsed.TotalMinutes }
 
 Log.info "starting_producer_consumer_test|host=%s topic=%s message_count=%i batch_size=%i consumer_count=%i producer_parallelism=%i" 
   host topicName totalMessageCount batchSize consumerCount producerThreads
