@@ -29,13 +29,13 @@ let messageKeyBytes = messageKey |> System.Text.Encoding.UTF8.GetBytes |> Binary
 let chanConfig = ChanConfig.create (requestTimeout = TimeSpan.FromSeconds 10.0)
 
 let consuming = new CountdownEvent(consumerCount)
-
+let completed = IVar.create ()
 
 
 
 
 type ReportReq = 
-  | Receive of values:int[] * messageCount:int
+  | Receive of values:(int * (Partition * Offset))[] * messageCount:int
   | Produce of count:int * offsets:(Partition * Offset)[]
   | Report of AsyncReplyChannel<Report>
 
@@ -45,60 +45,54 @@ and Report =
     val duplicates : int
     val produced : int
     val skipped : int
-    val nonContigCount : int
-    val nonContigSample : (int * int)[]
     val contigCount : int
+    val lastContigOffset : (Partition * Offset) option
     val offsets : Map<Partition, Offset>
-    new (r,d,p,s,nc,ncs,cc,os) = 
-      { received = r ; duplicates = d ; produced = p ; skipped = s ; nonContigCount = nc ; nonContigSample = ncs ; contigCount = cc ; offsets = os }
+    new (r,d,p,s,cc,lco,os) = 
+      { received = r ; duplicates = d ; produced = p ; skipped = s ; contigCount = cc ; lastContigOffset = lco ; offsets = os }
   end
-
-let completed = IVar.create ()
 
 let mb = Mb.Start (fun mb ->
   
   let duplicates = ResizeArray<int>()
-  let received = SortedList<int, int>()
+  let received = SortedList<int, _>()
   let produced = ref 0
   let skipped = ref 0
   let offsets = ref Map.empty
-  
+  let lastContigIndex = ref 0
+
   mb.Error.Add (fun e -> Log.error "mailbox_error|%O" e)
 
-  let report () = 
-    let contigCount =
-      received.Keys
+  let lastAndCountMonoid =
+    Monoid.product Monoid.optionLast Monoid.intSum
+
+  let report () =
+    let lastContigOffsetAndIndex,contigCount =
+      received
+      |> Seq.skip !lastContigIndex
+      |> Seq.mapi (fun i kvp -> kvp.Key, (i, kvp.Value))
       |> Seq.pairwise
-      |> Seq.where (fun (x,y) -> y = x + 1)
-      |> Seq.length
-    let nonContig =
-      received.Keys
-      |> Seq.pairwise
-      |> Seq.where (fun (x,y) -> y <> x + 1)
-    let nonContigCount =
-      nonContig
-      |> Seq.length
-    let nonContigSample =
-      if totalMessageCount = !produced then
-        nonContig |> Seq.toArray
-      else 
-        [||]
-    Report(received.Count, duplicates.Count, !produced, !skipped, nonContigCount, nonContigSample, contigCount, !offsets) 
+      |> Seq.takeWhile (fun ((x,_),(y,_)) -> y = x + 1)
+      |> Seq.foldMap lastAndCountMonoid (fun ((x,_),(y,(i,os))) -> Some (i,os), 1)
+    let contigCount = contigCount + !lastContigIndex
+    let lastContigOffset = lastContigOffsetAndIndex |> Option.map snd
+    lastContigIndex := lastContigOffsetAndIndex |> Option.map fst |> Option.getOr 0
+    Report(received.Count, duplicates.Count, !produced, !skipped, contigCount, lastContigOffset, !offsets) 
 
   let rec loop () = async {
     let! req = mb.Receive ()
     match req with
     | Receive (values,messageBatchCount) ->
       
-      for v in values do
+      for (v,(p,o)) in values do
         if received.ContainsKey v then
           duplicates.Add v
         else
-          received.Add (v, v)
+          received.Add (v,(p,o))
 
       if received.Count >= totalMessageCount then
         Log.info "received_complete_set|receive_count=%i" received.Count
-        IVar.put (report ()) completed
+        IVar.put () completed
 
       Interlocked.Add(skipped, messageBatchCount - values.Length) |> ignore
 
@@ -148,7 +142,7 @@ let producer = async {
 
   let! producer = Producer.createAsync conn producerCfg
 
-  do!
+  let produceProcess =
     Seq.init batchCount id
     |> Seq.map (fun batchNumber -> async {
       try
@@ -157,6 +151,8 @@ let producer = async {
       with ex ->
         Log.error "produce_error|error=%O" ex })
     |> Async.ParallelThrottledIgnore producerThreads
+
+  return! Async.choose (IVar.get completed) produceProcess
 
   Log.info "producer_done" }
 
@@ -167,11 +163,11 @@ let consumer = async {
         
     let values = 
       ms.messageSet.messages
-      |> Seq.choose (fun (o,ms,m) ->
+      |> Seq.choose (fun (o,_,m) ->
         let key = Binary.toString m.key
         if key = messageKey then
           let i,_ = Binary.readInt32 m.value
-          Some i
+          Some (i,(ms.partition,o))
         else
           None)
       |> Seq.toArray
@@ -187,35 +183,40 @@ let consumer = async {
       topic = topicName, 
       initialFetchTime = Time.LatestOffset, 
       outOfRangeAction = ConsumerOffsetOutOfRangeAction.HaltConsumer,
-      fetchMaxBytes = 100000,
       endOfTopicPollPolicy = RetryPolicy.constantMs 1000)
 
   let! consumer = Consumer.createAsync conn consumerCfg
 
   consuming.Signal () |> ignore
 
-  return!
-    Async.choose
-      (Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 5.0) handle consumer)
-      (IVar.get completed |> Async.Ignore) }
+  let consumeProcess = 
+    Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 5.0) handle consumer
+
+  return! Async.choose (consumeProcess) (IVar.get completed) }
 
 let sw = System.Diagnostics.Stopwatch.StartNew()
+
+let printReport (report:Report) =
+  let pending = totalMessageCount - report.received
+  let lag = report.produced - report.received
+  let offsetStr = report.offsets |> Seq.map (fun kvp -> sprintf "p=%i o=%i" kvp.Key kvp.Value) |> String.concat " ; "
+  let contigDelta = report.received - report.contigCount 
+  Log.info "monitor|produced=%i received=%i lag=%i duplicates=%i pending=%i contig=%i contig_delta=%i last_contig_offset=%A offsets=[%s] running_time_min=%f" 
+    report.produced report.received lag report.duplicates pending report.contigCount contigDelta report.lastContigOffset offsetStr sw.Elapsed.TotalMinutes
 
 let monitor = async {
   while not completed.Task.IsCompleted do 
     do! Async.Sleep 5000
     let! report = mb.PostAndAsyncReply (ReportReq.Report)
-    let pending = totalMessageCount - report.received
-    let lag = report.produced - report.received
-    let offsetStr = report.offsets |> Seq.map (fun kvp -> sprintf "p=%i o=%i" kvp.Key kvp.Value) |> String.concat " ; "
-    let contigDelta = report.received - report.contigCount 
-    Log.info "monitor|produced=%i received=%i lag=%i duplicates=%i pending=%i contig=%i contig_delta=%i non_contig=%i non_contig_sample=%A offsets=[%s] running_time_min=%f" 
-      report.produced report.received lag report.duplicates pending report.contigCount contigDelta report.nonContigCount report.nonContigSample offsetStr sw.Elapsed.TotalMinutes }
+    printReport report
+    if (report.received - report.contigCount) > 1000000 then
+      Log.warn "contig_delta_surpassed_threshold"
+      IVar.put () completed }
 
 Log.info "starting_producer_consumer_test|host=%s topic=%s message_count=%i batch_size=%i consumer_count=%i producer_parallelism=%i" 
   host topicName totalMessageCount batchSize consumerCount producerThreads
 
-try
+let go = 
   Async.Parallel
     [
       yield monitor
@@ -224,14 +225,14 @@ try
         Thread.Sleep 100
       yield (producer |> Async.tryWith (fun ex -> async { Log.error "producer_errror|%O" ex }))
     ]
-  |> Async.RunSynchronously
-  |> ignore
+  |> Async.Ignore
+
+try
+  Async.RunSynchronously (go)
 with ex ->
   Log.error "%O" ex
 
 sw.Stop()
 
-let report = completed |> IVar.get |> Async.RunSynchronously
-
-Log.info "completed_producer_consumer_test|message_count=%i duplicates=%i consumer_count=%i running_time_min=%f" 
-  totalMessageCount report.duplicates consumerCount (sw.Elapsed.TotalMinutes)
+let report = mb.PostAndAsyncReply (ReportReq.Report) |> Async.RunSynchronously
+printReport report

@@ -173,7 +173,7 @@ type ConsumerConfig = {
   fetchMaxWaitMs : MaxWaitTime
   
   /// The maximum bytes to return as part of a partition for a fetch request.
-  /// Default: 100000
+  /// Default: 1048576
   fetchMaxBytes : MaxBytes
   
   /// Offset retention time.
@@ -218,7 +218,7 @@ type ConsumerConfig = {
         heartbeatFrequency = defaultArg heartbeatFrequency 5
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
-        fetchMaxBytes = defaultArg fetchMaxBytes 100000
+        fetchMaxBytes = defaultArg fetchMaxBytes 1048576
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)

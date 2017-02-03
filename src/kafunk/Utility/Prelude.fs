@@ -95,8 +95,35 @@ module Monoid =
         member __.Zero = z
         member __.Merge (a,b) = m a b }
 
+  let endo<'a> : Monoid<'a -> 'a> =
+    monoid id (>>)
+
+  let dual (m:Monoid<'a>) : Monoid<'a> =
+    monoid m.Zero (fun a b -> m.Merge (b,a))
+
   let product (m1:Monoid<'a>) (m2:Monoid<'b>) : Monoid<'a * 'b> =
-    monoid (m1.Zero, m2.Zero) (fun (a1,b1) (a2,b2) -> m1.Merge (a1,a2), m2.Merge (b1,b2))
+    monoid 
+      (m1.Zero, m2.Zero) 
+      (fun (a1,b1) (a2,b2) -> 
+        m1.Merge (a1,a2), m2.Merge (b1,b2))
+
+  let product3 (m1:Monoid<'a>) (m2:Monoid<'b>) (m3:Monoid<'c>) : Monoid<'a * 'b * 'c> =
+    monoid 
+      (m1.Zero, m2.Zero, m3.Zero) 
+      (fun (a1,b1,c1) (a2,b2,c2) -> 
+        m1.Merge (a1,a2), m2.Merge (b1,b2), m3.Merge (c1, c2))
+
+  let product4 (m1:Monoid<'a>) (m2:Monoid<'b>) (m3:Monoid<'c>) (m4:Monoid<'d>) : Monoid<'a * 'b * 'c * 'd> =
+    monoid 
+      (m1.Zero, m2.Zero, m3.Zero, m4.Zero) 
+      (fun (a1,b1,c1,d1) (a2,b2,c2,d2) -> 
+        m1.Merge (a1,a2), m2.Merge (b1,b2), m3.Merge (c1, c2), m4.Merge (d1,d2))
+
+  let product5 (m1:Monoid<'a>) (m2:Monoid<'b>) (m3:Monoid<'c>) (m4:Monoid<'d>) (m5:Monoid<'e>) : Monoid<'a * 'b * 'c * 'd * 'e> =
+    monoid 
+      (m1.Zero, m2.Zero, m3.Zero, m4.Zero, m5.Zero) 
+      (fun (a1,b1,c1,d1,e1) (a2,b2,c2,d2,e2) -> 
+        m1.Merge (a1,a2), m2.Merge (b1,b2), m3.Merge (c1, c2), m4.Merge (d1,d2), m5.Merge (e1,e2))
 
   let freeList<'a> : Monoid<'a list> = 
     monoid [] List.append
@@ -116,6 +143,9 @@ module Monoid =
   [<GeneralizableValue>]
   let optionLast<'a> : Monoid<'a option> =
     monoid None (fun a b -> match a,b with _,Some _ -> b | a,None -> a)
+
+  let intSum : Monoid<int> =
+    monoid 0 ((+))
     
 
 // --------------------------------------------------------------------------------------------------
@@ -221,6 +251,10 @@ module Seq =
                   if i > 0 then
                       yield Array.take i batch
       }
+  
+  let foldMap (M:Monoid<'m>) (f:'a -> 'm) (s:seq<'a>) : 'm =
+    Seq.fold (fun s a -> Monoid.merge M s (f a)) M.Zero s
+
 
 /// Basic operations on dictionaries.
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

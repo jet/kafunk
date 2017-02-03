@@ -16,9 +16,11 @@ type ChanConfig = {
   useNagle : bool
   
   /// The socket receive buffer size.
+  /// Default: 65536
   receiveBufferSize : int
     
   /// The socket send buffer size.
+  /// Default: 65536
   sendBufferSize : int
         
   /// The connection timeout.
@@ -39,8 +41,8 @@ type ChanConfig = {
   static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
       useNagle = defaultArg useNagle false
-      receiveBufferSize = defaultArg receiveBufferSize 8192
-      sendBufferSize = defaultArg sendBufferSize 8192
+      receiveBufferSize = defaultArg receiveBufferSize 65536
+      sendBufferSize = defaultArg sendBufferSize 65536
       connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
       connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
       requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30)

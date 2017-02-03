@@ -811,9 +811,9 @@ module Offsets =
     let offsets =
       (earliest,latest)
       ||> Map.mergeChoice (fun _ -> function
-        | Choice1Of3 (a,b) -> (a,b)
-        | Choice2Of3 a -> (a,-1L)
-        | Choice3Of3 b -> (-1L,b))
+        | Choice1Of3 (e,l) -> (e,l)
+        | Choice2Of3 e -> (e,-1L)
+        | Choice3Of3 l -> (-1L,l))
     
     return offsets }
 
