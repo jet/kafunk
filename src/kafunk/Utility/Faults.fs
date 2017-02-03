@@ -233,6 +233,12 @@ module FlowMonitor =
     let mb = Mb.create ()
     let stream = watchMb mb
     mb.Post, stream
+
+  let overflowEvent (count:int) (period:TimeSpan) (e:IEvent<'a>) =
+    e
+    |> AsyncSeq.ofObservableBuffered
+    |> overflows count period
+    |> AsyncSeq.toObservable
       
   let escalateOnThreshold (count:int) (period:TimeSpan) (e:'a[] -> exn) =
     let post,stream = sinkStream

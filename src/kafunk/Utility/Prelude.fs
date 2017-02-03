@@ -235,6 +235,19 @@ module Dict =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Map =
 
+  let mergeChoice (f:'a -> Choice<'b * 'c, 'b, 'c> -> 'd) (a:Map<'a, 'b>) (b:Map<'a, 'c>) : Map<'a, 'd> =
+    Set.union (a |> Seq.map (fun k -> k.Key) |> set) (b |> Seq.map (fun k -> k.Key) |> set)
+    |> Seq.map (fun k ->
+      match Map.tryFind k a, Map.tryFind k b with
+      | Some b, Some c -> k, f k (Choice1Of3 (b,c))
+      | Some b, None   -> k, f k (Choice2Of3 b)
+      | None,   Some c -> k, f k (Choice3Of3 c)
+      | None,   None   -> failwith "invalid state")
+    |> Map.ofSeq
+
+  let mergeWith (m:'b -> 'b -> 'b) (a:Map<'a, 'b>) (b:Map<'a, 'b>) : Map<'a, 'b> =
+    mergeChoice (fun _ -> function Choice1Of3 (x,y) -> m x y | Choice2Of3 b | Choice3Of3 b -> b) a b
+
   let addMany (kvps:('a * 'b) seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
     kvps |> Seq.fold (fun m (k,v) -> Map.add k v m) m
 

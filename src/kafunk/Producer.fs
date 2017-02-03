@@ -234,13 +234,13 @@ module Producer =
       
       // TODO: error only by partition
       if fatalErrors.Length > 0 then
-        let msg = sprintf "produce_fatal_errors|errors=%A" fatalErrors
+        let msg = sprintf "produce_fatal_errors|errors=%A request=%s response=%s" retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         Log.error "%s" msg
         let ex = exn(msg)
         for (_,rep) in reps do
           IVar.error ex rep
       elif retryErrors.Length > 0 then
-        Log.error "produce_transient_errors|errors=%A" retryErrors
+        Log.error "produce_transient_errors|errors=%A request=%s response=%s" retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         let res = Failure [] // TODO: specific error
         for (_,rep) in reps do
           IVar.put res rep
