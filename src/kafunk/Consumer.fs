@@ -231,7 +231,8 @@ type ConsumerConfig = {
       }
 
 /// The action to take when the consumer attempts to fetch an offset which is out of range.
-/// This typically happens if the consumer is outpaced by the message cleanup process.
+/// This can happen if a) messages are produced faster than they are consumed or
+/// b) a lagging broker becomes the leader for a partition.
 /// The default action is to halt consumption.
 and ConsumerOffsetOutOfRangeAction =
 
@@ -243,6 +244,8 @@ and ConsumerOffsetOutOfRangeAction =
 
   /// Request a fresh set of offsets and resume consumption from the time
   /// configured as the initial fetch time for the consumer (earliest, or latest).
+  /// If the attempted offset is greater than the latest offset of the topic, it will
+  /// resume from the latest offset.
   | ResumeConsumerWithFreshInitialFetchTime
 
 
@@ -336,7 +339,7 @@ module Consumer =
   /// Explicitly commits offsets to a consumer group.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
-    Log.info "committing_offsets|group_id=%s topic=%s offsets=%s" c.config.groupId c.config.topic (Printers.partitionOffsetPairs offsets)
+    //Log.trace "committing_offsets|group_id=%s topic=%s offsets=%s" c.config.groupId c.config.topic (Printers.partitionOffsetPairs offsets)
     let! state = Group.stateInternal c.groupMember
     let conn = c.conn
     let cfg = c.config
@@ -360,7 +363,8 @@ module Consumer =
                   |> Seq.choose (fun (p,ec) ->
                     match ec with
                     | ErrorCode.NoError -> None
-                    | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
+                    | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode 
+                    | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
                     | _ -> failwithf "unsupported commit offset error_code=%i" ec))
               if not (Seq.isEmpty errors) then
                 Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
@@ -368,6 +372,7 @@ module Consumer =
                 do! Group.closeGenerationAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
                 return ()
               else
+                Log.info "committed_offsets|group_id=%s topic=%s offsets=%s" c.config.groupId c.config.topic (Printers.partitionOffsetPairs offsets)
                 return ()
             | Failure ex ->
               Log.warn "commit_offset_exception|group_id=%s generation_id=%i error=%O" 
@@ -575,41 +580,38 @@ module Consumer =
       /// Handles out of range offsets.
       and offsetsOutOfRange (attemptedOffsets:(Partition * Offset)[]) = async {
         let partitions = attemptedOffsets |> Array.map fst |> set
-        let! timeOffsets = Offsets.offsets consumer.conn topic partitions [|Time.EarliestOffset;Time.LatestOffset|] 1
-        let msg =
-          timeOffsets
+        let! topicOffsetRange = 
+          Offsets.offsetRange consumer.conn topic partitions
+        let offsetInfoStr =
+          topicOffsetRange
           |> Map.toSeq
-          |> Seq.map (fun (time,offsetRes) -> 
-            offsetRes.topics
-            |> Seq.map (fun (_tn,os) ->
-              let os =
-                os
-                |> Seq.map (fun o -> sprintf "offset=%i" (o.offsets |> Seq.tryItem 0 |> Option.getOr -1L))
-                |> String.concat " ; "
-              sprintf "time=%i %s" time os)
-            |> String.concat " ; ")
+          |> Seq.map (fun (p,(e,l)) -> sprintf "[p=%i earliest=%i latest=%i]" p e l)
           |> String.concat " ; "
-        Log.warn "offset_out_of_range|topic=%s attempted_offsets=%s offset_info=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) msg
+        Log.warn "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr
         match cfg.outOfRangeAction with
         | HaltConsumer ->
-          Log.error "halting_consumer|topic=%s attempted_offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
-          return raise (exn(sprintf "offset_out_of_range|topic=%s offset=%s latest_offset_info=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) msg))
+          Log.error "halting_consumer|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
+          return raise (exn(sprintf "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr))
         | HaltPartition -> 
-          Log.warn "halting_partition_fetch|topic=%s last_attempted_offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
+          Log.warn "halting_partition_fetch|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
           return None
         | ResumeConsumerWithFreshInitialFetchTime ->
-          let offsetInfo = timeOffsets |> Map.find cfg.initialFetchTime
-          let freshOffsets = 
-            offsetInfo.topics
-            |> Seq.collect (fun (tn,ps) ->
-              ps
-              |> Seq.map (fun p -> tn, p.partition, p.offsets.[0]))
-            |> Seq.choose (fun (tn,p,o) ->
-              if tn = topic && Set.contains p partitions then Some (p,o)
-              else None)
-            |> Seq.toArray
-          Log.info "resuming_fetch_from_fresh_offset|topic=%s initial_fetch_time=%i fresh_offsets=%s" topic cfg.initialFetchTime (Printers.partitionOffsetPairs freshOffsets)
-          return! tryFetch freshOffsets }
+          let resetOffsets =
+            (attemptedOffsets |> Map.ofArray, topicOffsetRange)
+            ||> Map.mergeChoice (fun _ -> function
+              | Choice2Of3 _ | Choice3Of3 _ -> failwith "invalid state: expected matching partitions!"
+              | Choice1Of3 (a,(e,l)) -> 
+                if a > l then l
+                elif a < e then
+                  match cfg.initialFetchTime with
+                  | Time.EarliestOffset -> e
+                  | Time.LatestOffset -> l
+                  | _ -> failwith "invalid state: expected valid initial fetch time"
+                else
+                  a)
+            |> Map.toArray
+          Log.info "resuming_fetch_from_reset_offsets|topic=%s reset_offsets=%s" topic (Printers.partitionOffsetPairs resetOffsets)
+          return! tryFetch resetOffsets }
              
       // multiplexed stream of all fetch responses for this consumer
       let fetchStream =

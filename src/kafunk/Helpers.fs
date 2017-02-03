@@ -130,12 +130,15 @@ module internal Printers =
 
   let partitions (os:seq<Partition>) =
     concatMapSb os (fun sb (p) -> sb.AppendFormat("{0}", p)) ","
+
+  let topicPartitions (os:seq<TopicName * Partition>) =
+    concatMapSb os (fun sb (t,p) -> sb.AppendFormat("[t={0} p={0}]", t, p)) ","
     
   let partitionOffsetPairs (os:seq<Partition * Offset>) =
-    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} offset={1}]", p, o)) " ; "
+    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[p={0} o={1}]", p, o)) " ; "
 
   let partitionErrorCodePairs (os:seq<Partition * ErrorCode>) =
-    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[partition={0} error_code={1}]", p, o)) " ; "
+    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[p={0} o={1}]", p, o)) " ; "
     
   let stringsCsv (ss:seq<#obj>) =
     concatMapSb ss (fun sb s -> sb.AppendFormat("{0}", s)) ","
@@ -147,7 +150,7 @@ module internal Printers =
         |> Seq.map (fun tmd -> 
           let partitions = 
             tmd.partitionMetadata
-            |> Seq.map (fun pmd -> sprintf "[partition_id=%i leader=%i]" pmd.partitionId pmd.leader)
+            |> Seq.map (fun pmd -> sprintf "[p=%i leader=%i]" pmd.partitionId pmd.leader)
             |> String.concat " ; "
           sprintf "[topic=%s partitions=%s]" tmd.topicName partitions)
         |> String.concat " ; "
@@ -164,7 +167,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,mss,ms) -> sprintf "partition=%i message_set_size=%i message_count=%i" p mss ms.messages.Length)
+            |> Seq.map (fun (p,mss,ms) -> sprintf "p=%i mss=%i mc=%i" p mss ms.messages.Length)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -177,7 +180,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,ec,o) -> sprintf "partition=%i offset=%i error_code=%i" p o ec)
+            |> Seq.map (fun (p,ec,o) -> sprintf "p=%i o=%i error_code=%i" p o ec)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -190,7 +193,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps = 
             ps
-            |> Seq.map (fun (p,o,_mb) -> sprintf "(partition=%i offset=%i)" p o)
+            |> Seq.map (fun (p,o,_mb) -> sprintf "(p=%i o=%i)" p o)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -204,8 +207,8 @@ module internal Printers =
           let ps =
             ps
             |> Seq.map (fun (p,ec,hwmo,mss,ms) ->
-              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " offset=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
-              sprintf "(partition=%i error_code=%i high_watermark_offset=%i message_set_size=%i%s)" p ec hwmo mss offsetInfo)
+              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " o=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
+              sprintf "(p=%i error_code=%i hwo=%i mss=%i%s)" p ec hwmo mss offsetInfo)
             |> String.concat ";"
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -218,7 +221,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,t,_) -> sprintf "partition=%i time=%i" p t)
+            |> Seq.map (fun (p,t,_) -> sprintf "p=%i time=%i" p t)
             |> String.concat " ; "
           sprintf "topic=%s partitions=%s" tn ps)
         |> String.concat " ; "
@@ -232,10 +235,10 @@ module internal Printers =
           let ps =
             ps
             |> Seq.map (fun po -> 
-              sprintf "partition=%i error_code=%i offsets=[%s]" 
+              sprintf "p=%i error_code=%i offsets=[%s]" 
                 po.partition 
                 po.errorCode 
-                (po.offsets |> Seq.map (sprintf "offset=%i") |> String.concat " ; "))
+                (po.offsets |> Seq.map (sprintf "o=%i") |> String.concat " ; "))
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -248,7 +251,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun p -> sprintf "partition=%i" p)
+            |> Seq.map (fun p -> sprintf "p=%i" p)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -261,7 +264,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,o,_md,ec) -> sprintf "partition=%i offset=%i error_code=%i" p o ec)
+            |> Seq.map (fun (p,o,_md,ec) -> sprintf "p=%i o=%i error_code=%i" p o ec)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -274,7 +277,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,o,_) -> sprintf "(partition=%i offset=%i)" p o)
+            |> Seq.map (fun (p,o,_) -> sprintf "(p=%i o=%i)" p o)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -287,7 +290,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,ec) -> sprintf "(partition=%i error_code=%i)" p ec)
+            |> Seq.map (fun (p,ec) -> sprintf "(p=%i ec=%i)" p ec)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "

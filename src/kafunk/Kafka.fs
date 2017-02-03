@@ -488,6 +488,16 @@ type KafkaConn internal (cfg:KafkaConfig) =
       if currentState.version = callerState.version then
         let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
+        let noLeader =
+          metadata.topicMetadata
+          |> Seq.collect (fun tmd -> 
+            tmd.partitionMetadata 
+            |> Seq.choose (fun p -> 
+              if p.leader = -1 then Some (tmd.topicName, p.partitionId)
+              else None))
+          |> Seq.toArray
+        if noLeader.Length > 0 then
+          Log.warn "leaderless_partitions_detected|partitions=%s" (Printers.topicPartitions noLeader)
         let! brokers = 
           metadata.brokers 
           |> Seq.map (fun b -> async {
@@ -500,8 +510,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
               return b.nodeId, EndPoint.ofIPEndPoint ep })
           |> Async.Parallel
         let topicNodes =
-          metadata.topicMetadata |> Seq.collect (fun tmd -> 
-            tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader))
+          metadata.topicMetadata 
+          |> Seq.collect (fun tmd -> 
+            tmd.partitionMetadata 
+            |> Seq.choose (fun pmd -> if pmd.leader >= 0 then Some (tmd.topicName, pmd.partitionId, pmd.leader) else None))
         return currentState |> ConnState.updateRoutes (Routes.addBrokersAndTopicNodes brokers topicNodes)
       else
         return currentState }
@@ -758,7 +770,7 @@ module Offsets =
 
   /// Gets available offsets for the specified topic, at the specified times.
   /// Returns a map of times to offset responses.
-  /// If empty is passed in for Partitions, will use partition information from metadata.
+  /// If empty is passed in for Partitions, will return information for all partitions.
   let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition seq) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
     let! metadata = conn.GetMetadata [|topic|]
     let partitions = set partitions
@@ -780,6 +792,31 @@ module Offsets =
         return time,offsetRes })
       |> Async.Parallel
       |> Async.map (Map.ofArray) }
+
+  /// Gets the offset range (Time.EarliestOffset,Time.LatestOffset) for a topic, for the specified partitions.
+  /// If empty is passed in for Partitions, will return information for all partitions.
+  let offsetRange (conn:KafkaConn) (topic:TopicName) (partitions:Partition seq) : Async<Map<Partition, Offset * Offset>> = async {
+    let! offsets = offsets conn topic partitions [Time.EarliestOffset;Time.LatestOffset] 1
+    
+    let filter (res:OffsetResponse) =
+      res.topics
+      |> Seq.collect (fun (t,ps) -> 
+        if t = topic then ps |> Seq.map (fun p -> p.partition, p.offsets.[0])
+        else Seq.empty)
+      |> Map.ofSeq
+
+    let earliest = offsets |> Map.find Time.EarliestOffset |> filter
+    let latest = offsets |> Map.find Time.LatestOffset |> filter
+
+    let offsets =
+      (earliest,latest)
+      ||> Map.mergeChoice (fun _ -> function
+        | Choice1Of3 (a,b) -> (a,b)
+        | Choice2Of3 a -> (a,-1L)
+        | Choice3Of3 b -> (-1L,b))
+    
+    return offsets }
+
 
 
   type private PeriodicCommitQueueMsg =

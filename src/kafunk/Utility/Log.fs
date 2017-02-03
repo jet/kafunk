@@ -15,7 +15,6 @@ type AsyncEvent<'a> (bufferSize:int) =
     for a in buf.GetConsumingEnumerable () do
       evt.Trigger a
   do (let t = new Thread(ThreadStart(trigger)) in t.IsBackground <- true ; t.Start())
-  //do ThreadPool.QueueUserWorkItem (fun _ -> trigger ()) |> ignore
   /// Puts an event into a buffer to be published asyncrhonously.
   member __.Trigger (a:'a) =
     if st = 0 then
