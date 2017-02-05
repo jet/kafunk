@@ -55,7 +55,7 @@ let go = async {
     handle
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
-  do! consumer |> Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 10.0) handle
+  do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
 }
 
 Async.RunSynchronously go

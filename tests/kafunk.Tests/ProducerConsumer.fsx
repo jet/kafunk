@@ -18,8 +18,8 @@ let host = argiDefault 1 "localhost"
 let topicName = argiDefault 2 "absurd-topic"
 let totalMessageCount = argiDefault 3 "10000" |> Int32.Parse
 let batchSize = argiDefault 4 "1000" |> Int32.Parse
-let consumerCount = argiDefault 5 "2" |> Int32.Parse
-let producerThreads = argiDefault 6 "1" |> Int32.Parse
+let consumerCount = argiDefault 5 "1" |> Int32.Parse
+let producerThreads = argiDefault 6 "100" |> Int32.Parse
 
 let testId = Guid.NewGuid().ToString("n")
 let consumerGroup = "kafunk-producer-consumer-test-" + testId
@@ -30,13 +30,6 @@ let chanConfig = ChanConfig.create (requestTimeout = TimeSpan.FromSeconds 10.0)
 
 let consuming = new CountdownEvent(consumerCount)
 let completed = IVar.create ()
-
-
-//let compareOrdered (nonContigThreshold:int) (s1:AsyncSeq<int>) (s2:AsyncSeq<int>) = async {  
-//  use en1 = s1.GetEnumerator()
-//  use en2 = s2.GetEnumerator()
-//  return () }
-
 
 
 type ReportReq = 
@@ -78,11 +71,29 @@ let mb = Mb.Start (fun mb ->
       else
         None) skip  
 
+//  let contig (skip:int) =
+//    if received.Count < 2 then Seq.empty else
+//    seq {
+//      let i = ref skip
+//      let go = ref true
+//      while !i < received.Count && !go do
+//        if !i > 0 then
+//          let i = !i
+//          let j = i - 1
+//          let currKey = received.Keys.[i]
+//          let prevKey = received.Keys.[j]
+//          if currKey <> prevKey + 1 then
+//            go := false
+//          else
+//            yield (prevKey,(j,received.Values.[j])),(currKey,(i,received.Values.[i]))
+//        incr i }
+
   let report () =
     let lastContigOffsetAndIndex,contigCount =
       skipMapi received.Keys !lastContigIndex (fun i k -> k, (i, received.Values.[i]))
       |> Seq.pairwise
       |> Seq.takeWhile (fun ((x,_),(y,_)) -> y = x + 1)
+      //contig !lastContigIndex
       |> Seq.foldMap lastAndCountMonoid (fun ((x,_),(y,(i,os))) -> Some (i,os), 1)
     let contigCount = contigCount + !lastContigIndex
     let lastContigOffset = lastContigOffsetAndIndex |> Option.map snd
@@ -147,8 +158,8 @@ let producer = async {
       topic = topicName, 
       partition = Partitioner.roundRobin,
       requiredAcks = RequiredAcks.Local,
-      batchSizeBytes = 20000,
-      bufferSize = 10)
+      batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
+      bufferSize = 1000)
 
   let! producer = Producer.createAsync conn producerCfg
 
@@ -200,7 +211,7 @@ let consumer = async {
   consuming.Signal () |> ignore
 
   let consumeProcess = 
-    Consumer.consumePeriodicCommit (TimeSpan.FromSeconds 5.0) handle consumer
+    Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 5.0) handle 
 
   return! Async.choose (consumeProcess) (IVar.get completed) }
 
