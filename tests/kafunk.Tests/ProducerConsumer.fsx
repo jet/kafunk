@@ -17,9 +17,9 @@ let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 let host = argiDefault 1 "localhost"
 let topicName = argiDefault 2 "absurd-topic"
 let totalMessageCount = argiDefault 3 "10000" |> Int32.Parse
-let batchSize = argiDefault 4 "10" |> Int32.Parse
+let batchSize = argiDefault 4 "1000" |> Int32.Parse
 let consumerCount = argiDefault 5 "2" |> Int32.Parse
-let producerThreads = argiDefault 6 "100" |> Int32.Parse
+let producerThreads = argiDefault 6 "1" |> Int32.Parse
 
 let testId = Guid.NewGuid().ToString("n")
 let consumerGroup = "kafunk-producer-consumer-test-" + testId
@@ -31,6 +31,11 @@ let chanConfig = ChanConfig.create (requestTimeout = TimeSpan.FromSeconds 10.0)
 let consuming = new CountdownEvent(consumerCount)
 let completed = IVar.create ()
 
+
+//let compareOrdered (nonContigThreshold:int) (s1:AsyncSeq<int>) (s2:AsyncSeq<int>) = async {  
+//  use en1 = s1.GetEnumerator()
+//  use en2 = s2.GetEnumerator()
+//  return () }
 
 
 
@@ -66,11 +71,16 @@ let mb = Mb.Start (fun mb ->
   let lastAndCountMonoid =
     Monoid.product Monoid.optionLast Monoid.intSum
 
+  let skipMapi (ls:System.Collections.Generic.IList<_>) (skip:int) (f:int -> 'a -> 'b) = 
+    Seq.unfold (fun i -> 
+      if i < ls.Count then
+        Some (f i ls.[i], i + 1)
+      else
+        None) skip  
+
   let report () =
     let lastContigOffsetAndIndex,contigCount =
-      received
-      |> Seq.skip !lastContigIndex
-      |> Seq.mapi (fun i kvp -> kvp.Key, (i, kvp.Value))
+      skipMapi received.Keys !lastContigIndex (fun i k -> k, (i, received.Values.[i]))
       |> Seq.pairwise
       |> Seq.takeWhile (fun ((x,_),(y,_)) -> y = x + 1)
       |> Seq.foldMap lastAndCountMonoid (fun ((x,_),(y,(i,os))) -> Some (i,os), 1)
@@ -137,8 +147,8 @@ let producer = async {
       topic = topicName, 
       partition = Partitioner.roundRobin,
       requiredAcks = RequiredAcks.Local,
-      batchSize = 1000,
-      bufferSize = 1000)
+      batchSizeBytes = 20000,
+      bufferSize = 10)
 
   let! producer = Producer.createAsync conn producerCfg
 
@@ -210,7 +220,7 @@ let monitor = async {
     let! report = mb.PostAndAsyncReply (ReportReq.Report)
     printReport report
     if (report.received - report.contigCount) > 1000000 then
-      Log.warn "contig_delta_surpassed_threshold"
+      Log.error "contig_delta_surpassed_threshold"
       IVar.put () completed }
 
 Log.info "starting_producer_consumer_test|host=%s topic=%s message_count=%i batch_size=%i consumer_count=%i producer_parallelism=%i" 

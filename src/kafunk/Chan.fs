@@ -37,16 +37,37 @@ type ChanConfig = {
 
 } with
   
-  /// Creates a channel configuration.
+  /// The default TCP receive buffer size = 65536.
+  static member DefaultReceiveBufferSize = 65536
+  
+  /// The default TCP send buffer size = 65536.
+  static member DefaultSendBufferSize = 65536
+  
+  /// The default TCP connection timeout = 10s.
+  static member DefaultConnectTimeout = TimeSpan.FromSeconds 10
+  
+  /// The default TCP connection retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
+  static member DefaultConnectRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  
+  /// The default TCP request timeout = 30s.
+  static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
+  
+  /// The default TCP request retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  
+  /// The default TCP Nagle setting = false.
+  static member DefaultUseNagle = false
+
+  /// Creates a broker TCP channel configuration.
   static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
-      useNagle = defaultArg useNagle false
-      receiveBufferSize = defaultArg receiveBufferSize 65536
-      sendBufferSize = defaultArg sendBufferSize 65536
-      connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
-      connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
-      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30)
-      requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
+      useNagle = defaultArg useNagle ChanConfig.DefaultUseNagle
+      receiveBufferSize = defaultArg receiveBufferSize ChanConfig.DefaultReceiveBufferSize
+      sendBufferSize = defaultArg sendBufferSize ChanConfig.DefaultSendBufferSize
+      connectTimeout = defaultArg connectTimeout ChanConfig.DefaultConnectTimeout
+      connectRetryPolicy = defaultArg connectRetryPolicy ChanConfig.DefaultConnectRetryPolicy
+      requestTimeout = defaultArg requestTimeout ChanConfig.DefaultRequestTimeout
+      requestRetryPolicy = defaultArg requestRetryPolicy ChanConfig.DefaultRequestRetryPolicy
     }
 
 

@@ -5,6 +5,7 @@ open FSharp.Control
 open System
 open System.Threading
 open System.Threading.Tasks
+open System.Diagnostics
 
 /// An async transducer.
 type AsyncPipe<'a, 'b> = Async<Step<'a, 'b>>
@@ -50,29 +51,6 @@ module AsyncPipe =
                   step := tail
                   return Some a }
               member __.Dispose () = () } }
-            
-  let windowed (windowSize:int) : AsyncPipe<'a, 'a[]> =
-    let rec loop (win:ResizeArray<_>) =
-      awaitHalt (fun a ->
-        win.Add a
-        if win.Count > windowSize then
-          win.RemoveAt 0
-        if win.Count = windowSize then
-          emit (win.ToArray()) (loop win)
-        else 
-          loop win)
-    loop (ResizeArray<_>(windowSize))
-
-  let bufferByTime (timeSpan:TimeSpan) : AsyncPipe<'a, 'a[]> =
-    let rec loop (t:DateTime) (buf:ResizeArray<_>) =
-      awaitHalt (fun a ->
-        buf.Add a
-        let t' = DateTime.UtcNow
-        if (t' - t) >= timeSpan then
-          emit (buf.ToArray()) (loop t' (ResizeArray<_>()))
-        else
-          loop t buf)
-    loop DateTime.UtcNow (ResizeArray<_>())
 
   /// Feeds an async sequence into a transducer and emits the resulting async sequence.
   let transduce (pipe:AsyncPipe<'a, 'b>) (source:AsyncSeq<'a>) : AsyncSeq<'b> = 
@@ -93,6 +71,45 @@ module AsyncPipe =
           | Some a ->
             yield! go (recv (Some a)) }
       yield! go pipe }
+            
+  let windowed (windowSize:int) : AsyncPipe<'a, 'a[]> =
+    let rec loop (win:ResizeArray<_>) =
+      awaitHalt (fun a ->
+        win.Add a
+        if win.Count > windowSize then
+          win.RemoveAt 0
+        if win.Count = windowSize then
+          emit (win.ToArray()) (loop win)
+        else 
+          loop win)
+    loop (ResizeArray<_>(windowSize))
+
+  // TODO: non-deterministic choice for time
+  let bufferByTime (timeSpan:TimeSpan) : AsyncPipe<'a, 'a[]> =
+    let rec loop (t:DateTime) (buf:ResizeArray<_>) =
+      awaitHalt (fun a ->
+        buf.Add a
+        let t' = DateTime.UtcNow
+        if (t' - t) >= timeSpan then
+          emit (buf.ToArray()) (loop t' (ResizeArray<_>()))
+        else
+          loop t buf)
+    loop DateTime.UtcNow (ResizeArray<_>())
+
+  let bufferByState (z:'s) (f:'s -> ResizeArray<'a> -> Choice<'s, 's>) : AsyncPipe<'a, 'a[]> =
+    let rec loop (s:'s) (buf:ResizeArray<_>) =
+      awaitHalt (fun a ->
+        buf.Add a
+        match f s buf with
+        | Choice1Of2 s' ->
+          emit (buf.ToArray()) (loop s' (ResizeArray<_>()))
+        | Choice2Of2 s' ->
+          loop s' buf)
+    loop z (ResizeArray<_>())
+
+  let bufferByBufferState (f:ResizeArray<'a> -> bool) : AsyncPipe<'a, 'a[]> =
+    bufferByState () (fun _ buf -> if f buf then Choice1Of2 () else Choice2Of2 ())
+    
         
         
 /// Module with helper functions for working with asynchronous sequences
@@ -187,3 +204,39 @@ module AsyncSeq =
       |> Async.tryWith (fun e -> async { IVar.error e err })
       |> Async.StartChild
     return! Async.choose (replicateUntilNoneAsync (Mb.take mb) |> AsyncSeq.iterAsync id) (IVar.get err) }
+
+  let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
+    //if (bufferSize < 1) then invalidArg "bufferSize" "must be positive"
+    if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
+    asyncSeq {
+      let buffer = new ResizeArray<_>()
+      use ie = source.GetEnumerator()
+      let rec loop rem rt = asyncSeq {
+        let! move = 
+          match rem with
+          | Some rem -> async.Return rem
+          | None -> Async.StartChildAsTask (ie.MoveNext())
+        let t = Stopwatch.GetTimestamp()
+        let! time = Async.StartChildAsTask (Async.Sleep (max 0 rt))
+        let! moveOr = Async.chooseTasks move time
+        let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
+        match moveOr with
+        | Choice1Of2 (None, _) -> 
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+        | Choice1Of2 (Some v, _) ->
+          buffer.Add v
+          if f buffer then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop None timeoutMs
+          else
+            yield! loop None (rt - delta)
+        | Choice2Of2 (_, rest) ->
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop (Some rest) timeoutMs
+          else
+            yield! loop (Some rest) timeoutMs }
+      yield! loop None timeoutMs }

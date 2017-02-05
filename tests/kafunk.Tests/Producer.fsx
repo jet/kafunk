@@ -33,10 +33,10 @@ let producerCfg =
   ProducerConfig.create (
     topic, 
     Partitioner.roundRobin, 
-    requiredAcks = RequiredAcks.AllInSync,
-    bufferSize = 1000,
-    batchSize = 100,
-    batchLinger = 1)
+    requiredAcks = RequiredAcks.Local,
+    bufferSize = 100,
+    batchSizeBytes = 2000000,
+    batchLingerMs = 0)
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -53,7 +53,7 @@ let produceBatch =
 let cts = new CancellationTokenSource()
 
 Kafunk.Log.Event 
-|> Event.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
+|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
 |> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
 |> Observable.add (fun es ->
   cts.Cancel ()

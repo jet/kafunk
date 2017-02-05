@@ -234,7 +234,7 @@ module FlowMonitor =
     let stream = watchMb mb
     mb.Post, stream
 
-  let overflowEvent (count:int) (period:TimeSpan) (e:IEvent<'a>) =
+  let overflowEvent (count:int) (period:TimeSpan) (e:IObservable<'a>) =
     e
     |> AsyncSeq.ofObservableBuffered
     |> overflows count period

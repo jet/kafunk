@@ -31,10 +31,14 @@ type ProducerMessage =
         let keyBuf = defaultArg (key |> Option.map (Encoding.UTF8.GetBytes >> Binary.ofArray)) Binary.empty
         ProducerMessage(Binary.ofArray (Encoding.UTF8.GetBytes value), keyBuf)
 
+      /// Returns the size, in bytes, of the message.
+      static member internal size (m:ProducerMessage) =
+        m.key.Count + m.value.Count
+
 /// A producer response.
 type ProducerResult =
-  struct
-    /// The offsets produced.
+  struct    
+    /// The offsets assigned to the first message in the message set appended to the partition.
     val offsets : (Partition * Offset)[]
     new (os) = { offsets = os }
   end
@@ -124,35 +128,61 @@ type ProducerConfig = {
   /// Default: 0
   timeout : Timeout
 
-  /// The per-broker buffer size.
+  /// The per-broker, in-memory buffer size, in terms of message count.
   /// When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
   /// Default: 100
   bufferSize : int
 
-  /// The maximum size of a batch of produce requests.
-  /// Default: 100
-  batchSize : int
+  /// The maximum size, in bytes, of a batch of produce requests per broker.
+  /// If set to 0, no batching will be performed.
+  /// Default: 16384
+  batchSizeBytes : int
 
-  /// The maximum time to wait for a produce request btch to reach capacity.
+  /// The maximum time, in milliseconds, to wait for a produce request btch to reach capacity.
+  /// If set to 0, no batching will be performed.
   /// Default: 1
-  batchLinger : int
+  batchLingerMs : int
+
+  /// The retry policy for produce requests.
+  /// Default: RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
+  retryPolicy : RetryPolicy
 
 } with
+
+  /// The default per-broker, produce request batch size in bytes = 16384.
+  static member DefaultBatchSizeBytes = 16384
+
+  /// The default in-memory, per-broker buffer size = 100.
+  static member DefaultBufferSize = 100
+
+  /// The default produce request timeout = 0.
+  static member DefaultTimeout = 0
+
+  /// The default required acks = RequiredAcks.Local.
+  static member DefaultRequiredAcks = RequiredAcks.Local
+
+  /// The default per-broker, produce request linger time in ms = 1.
+  static member DefaultLingerMs = 1
+
+  /// The default produce request retry policy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10.
+  static member DefaultRetryPolicy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
 
   static member internal messageVersion (connVersion:Version) = 
     Versions.produceReqMessage (Versions.byKey connVersion ApiKey.Produce)
 
   /// Creates a producer configuration.
-  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, ?batchSize, ?batchLinger) =
+  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, 
+                          ?batchSizeBytes, ?batchLingerMs, ?retryPolicy) =
     {
       topic = topic
-      requiredAcks = defaultArg requiredAcks RequiredAcks.Local
-      compression = defaultArg compression CompressionCodec.None
-      timeout = defaultArg timeout 0
       partitioner = partition
-      bufferSize = defaultArg bufferSize 100
-      batchSize = defaultArg batchSize 100
-      batchLinger = defaultArg batchLinger 10
+      requiredAcks = defaultArg requiredAcks ProducerConfig.DefaultRequiredAcks
+      compression = defaultArg compression CompressionCodec.None
+      timeout = defaultArg timeout ProducerConfig.DefaultTimeout      
+      bufferSize = defaultArg bufferSize ProducerConfig.DefaultBufferSize
+      batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
+      batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultLingerMs
+      retryPolicy = defaultArg retryPolicy ProducerConfig.DefaultRetryPolicy
     }
 
 
@@ -168,10 +198,18 @@ type Producer = private {
 
 /// Producer state corresponding to the state of a cluster.
 and private ProducerState = {
+
+  /// Brokers.
   brokerByEndPoint : Map<EndPoint, Chan>
+  
+  /// Brokers by partitions.
   partitionBrokers : Map<Partition, Chan>
+  
+  /// Current set of partitions for the topic.
   partitions : Partition[]
-  brokerQueues : Map<EndPoint, (((ProducerMessage[] * Partition) * IVar<Result<ProducerResult, ChanError list>>)[] -> Async<unit>)>
+  
+  /// Per-broker queues accepting a triple of partition, messages for the partition and a reply channel.
+  brokerQueues : Map<EndPoint, Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>> -> Async<unit>>
 }
 
 
@@ -185,21 +223,19 @@ module Producer =
   let private Log = Log.create "Kafunk.Producer"
 
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
-  let private sendBatch (cfg:ProducerConfig) (messageVer) (ch:Chan) (batch:((ProducerMessage[] * Partition) * IVar<Result<ProducerResult, ChanError list>>)[]) = async {
+  let private sendBatch 
+    (cfg:ProducerConfig) 
+    (messageVer:int16) 
+    (ch:Chan) 
+    (batch:(Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>>)[]) = async {
     
-    let ms,reps = 
-      batch
-      |> Seq.map (fun (((ms),p),rep) -> (p,ms),(p,rep))
-      |> Seq.toArray
-      |> Array.unzip
-
     let pms = 
-      ms
-      |> Seq.groupBy fst
+      batch
+      |> Seq.groupBy (fun (p,_,_) -> p)
       |> Seq.map (fun (p,pms) ->
         let ms = 
           pms 
-          |> Seq.collect (fun (_,pms) -> pms |> Seq.map (fun pm -> Message.create pm.value pm.key None))
+          |> Seq.collect (fun (_,pms,_) -> pms |> Seq.map (fun pm -> Message.create pm.value pm.key None))
           |> MessageSet.ofMessages
           |> Compression.compress messageVer cfg.compression
         p,ms)
@@ -218,45 +254,48 @@ module Producer =
             match ec with
             | ErrorCode.NoError -> Choice1Of3 (p,o)
 
-            // 404
-            | ErrorCode.InvalidMessage | ErrorCode.MessageSizeTooLarge
-            | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice3Of3 (p,o,ec)
-
             // timeout  (retry)
             | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable -> Choice2Of3 (p,o,ec)
 
             // topology change (retry)
             | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice2Of3 (p,o,ec)
-              
-            // unknown
+
+            // 404
+            | ErrorCode.InvalidMessage | ErrorCode.MessageSizeTooLarge
+            | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice3Of3 (p,o,ec)
+            
+            // other             
             | _ -> Choice3Of3 (p,o,ec)))
         |> Seq.partitionChoices3
       
       // TODO: error only by partition
       if fatalErrors.Length > 0 then
-        let msg = sprintf "produce_fatal_errors|errors=%A request=%s response=%s" retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        let msg = sprintf "produce_fatal_errors|errors=%A request=%s response=%s" fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         Log.error "%s" msg
         let ex = exn(msg)
-        for (_,rep) in reps do
-          IVar.error ex rep
-      elif retryErrors.Length > 0 then
+        let eps = retryErrors |> Seq.map (fun (p,_,_) -> p) |> set
+        for (p,_,rep) in batch do
+          if Set.contains p eps then
+            IVar.error ex rep
+      
+      if retryErrors.Length > 0 then
         Log.error "produce_transient_errors|errors=%A request=%s response=%s" retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        let eps = retryErrors |> Seq.map (fun (p,_,_) -> p) |> set
         let res = Failure [] // TODO: specific error
-        for (_,rep) in reps do
-          IVar.put res rep
-      elif oks.Length > 0 then
-        let res = ProducerResult(oks)
-        let res = Success res
-        for (_,rep) in reps do
-          IVar.put res rep
-      else
-        failwith "invalid state"
+        for (p,_,rep) in batch do
+          if Set.contains p eps then
+            IVar.put res rep
 
-      return ()
+      if oks.Length > 0 then
+        let oksps = oks |> Seq.map fst |> set
+        let res = Success (ProducerResult(oks))        
+        for (p,_,rep) in batch do
+          if Set.contains p oksps then
+            IVar.put res rep
 
     | Failure err ->
       let err = Failure err
-      for (_,rep) in reps do
+      for (_,_,rep) in batch do
         IVar.put err rep 
       return () }
 
@@ -269,7 +308,7 @@ module Producer =
     let partitions = 
       Routes.topicPartitions state.routes |> Map.find cfg.topic
     
-    Log.info "establishing_broker_connections|topic=%s partitions=%s" cfg.topic (Printers.partitions partitions)
+    Log.info "establishing_broker_connections|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
 
     let brokerByEndPoint =
       prevState
@@ -299,15 +338,29 @@ module Producer =
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
-    let queue (ch:Chan) =
-      let ep = Chan.endpoint ch
+    let batchSizeCondition (buf:ResizeArray<_ * ProducerMessage[] * _>) =
+      let batchSize =
+        buf
+        |> Seq.collect (fun (_,ms,_) -> ms)
+        |> Seq.sumBy (ProducerMessage.size)
+      batchSize >= cfg.batchSizeBytes
+
+    let queue (ch:Chan) =  
+      let sendBatch = sendBatch cfg messageVer ch
       let buf = BoundedMb.create cfg.bufferSize
-      BoundedMb.take buf
-      |> AsyncSeq.replicateInfiniteAsync
-      |> AsyncSeq.bufferByCountAndTime cfg.batchSize cfg.batchLinger
-      |> AsyncSeq.iterAsync (Array.concat >> sendBatch cfg messageVer ch)
+      let produceStream = 
+        AsyncSeq.replicateInfiniteAsync (BoundedMb.take buf)
+      let sendProcess =
+        if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then
+          produceStream
+          |> AsyncSeq.iterAsync (Array.singleton >> sendBatch)
+        else
+          produceStream
+          |> AsyncSeq.bufferByConditionAndTime batchSizeCondition cfg.batchLingerMs
+          |> AsyncSeq.iterAsync sendBatch      
+      sendProcess
       |> Async.tryWith (fun ex -> async {
-        Log.error "producer_queue_exception|ep=%O error=%O" ep ex })
+        Log.error "producer_broker_queue_exception|ep=%O error=%O" (Chan.endpoint ch) ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
       (flip BoundedMb.put buf)
    
@@ -322,13 +375,14 @@ module Producer =
         
     return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues ; brokerByEndPoint = brokerByEndPoint } }
 
-  let private produceBatchInternal (state:ProducerState) (createBatch:Partition[] -> Partition * ProducerMessage[]) = async {
+  let private produceBatchInternal (state:ProducerState) (createBatch:Partition[] -> Partition * ProducerMessage[]) = async {    
     let p,ms = createBatch state.partitions
+    // TODO: optimize to one lookup
     let q = 
       let ep = state.partitionBrokers |> Map.find p |> Chan.endpoint
       state.brokerQueues |> Map.find ep
     let rep = IVar.create ()
-    do! q [|(ms,p),rep|]
+    do! q (p,ms,rep)
     let! res = IVar.get rep
     match res with
     | Success res ->
@@ -347,7 +401,7 @@ module Producer =
           Log.warn "closing_resource|version=%i topic=%s partitions=[%s] error=%O" v config.topic (Printers.partitions s.partitions) ex
           return () })
     let! state = Resource.get resource
-    let produceBatch = Resource.injectWithRecovery resource (RetryPolicy.constantMs 500) (produceBatchInternal)
+    let produceBatch = Resource.injectWithRecovery resource config.retryPolicy (produceBatchInternal)
     let p = { state = resource ; config = config ; conn = conn ; messageVersion = messageVersion ; produceBatch = produceBatch }
     Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.partitions)
     return p }

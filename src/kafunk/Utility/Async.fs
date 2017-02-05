@@ -301,6 +301,14 @@ type Async with
   static member timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeoutException>> =
     Async.timeoutResultWith (fun () -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)) timeout c
 
+  static member internal chooseTasks (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> =
+    async { 
+        let! ct = Async.CancellationToken
+        let i = Task.WaitAny( [| (a :> Task);(b :> Task) |],ct)
+        if i = 0 then return (Choice1Of2 (a.Result, b))
+        elif i = 1 then return (Choice2Of2 (b.Result, a)) 
+        else return! failwith (sprintf "unreachable, i = %d" i) }
+
 
 /// Operations on functions of the form 'a -> Async<'b>.
 module AsyncFunc =
