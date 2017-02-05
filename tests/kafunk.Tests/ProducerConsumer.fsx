@@ -40,8 +40,8 @@ let completed = IVar.create ()
 
 
 type ReportReq = 
-  | Receive of values:(int * (Partition * Offset))[] * messageCount:int
-  | Produce of count:int * offsets:(Partition * Offset)[]
+  | Received of values:(int * (Partition * Offset))[] * messageCount:int
+  | Produced of count:int * offsets:(Partition * Offset)[]
   | Report of AsyncReplyChannel<Report>
 
 and Report =
@@ -92,7 +92,7 @@ let mb = Mb.Start (fun mb ->
   let rec loop () = async {
     let! req = mb.Receive ()
     match req with
-    | Receive (values,messageBatchCount) ->
+    | Received (values,messageBatchCount) ->
       
       for (v,(p,o)) in values do
         if received.ContainsKey v then
@@ -106,7 +106,7 @@ let mb = Mb.Start (fun mb ->
 
       Interlocked.Add(skipped, messageBatchCount - values.Length) |> ignore
 
-    | Produce (count,os) ->
+    | Produced (count,os) ->
       Interlocked.Add (produced, count) |> ignore
       offsets := (!offsets, os |> Map.ofArray) ||> Map.mergeWith max
 
@@ -157,7 +157,7 @@ let producer = async {
     |> Seq.map (fun batchNumber -> async {
       try
         let! res = Producer.produceBatch producer (messageBatch batchNumber)
-        mb.Post (ReportReq.Produce (batchSize, res.offsets))
+        mb.Post (ReportReq.Produced (batchSize, res.offsets))
       with ex ->
         Log.error "produce_error|error=%O" ex })
     |> Async.ParallelThrottledIgnore producerThreads
@@ -182,7 +182,7 @@ let consumer = async {
           None)
       |> Seq.toArray
 
-    mb.Post (ReportReq.Receive (values,ms.messageSet.messages.Length)) }
+    mb.Post (ReportReq.Received (values,ms.messageSet.messages.Length)) }
 
   let connCfg = KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
   use! conn = Kafka.connAsync connCfg
@@ -215,9 +215,10 @@ let printReport (report:Report) =
     report.produced report.received lag report.duplicates pending report.contigCount contigDelta report.lastContigOffset offsetStr sw.Elapsed.TotalMinutes
 
 let monitor = async {
+  let report = mb.PostAndAsyncReply (ReportReq.Report)
   while not completed.Task.IsCompleted do 
     do! Async.Sleep 5000
-    let! report = mb.PostAndAsyncReply (ReportReq.Report)
+    let! report = report
     printReport report
     if (report.received - report.contigCount) > 1000000 then
       Log.error "contig_delta_surpassed_threshold"

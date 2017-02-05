@@ -739,9 +739,9 @@ module Consumer =
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The handler accepts the topic, partition, message set and an async computation which commits offsets corresponding to the message set.
   let consume 
-    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) 
-    (consumer:Consumer) : Async<unit> =
-      consumer
+    (c:Consumer)
+    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> =
+      c
       |> generations
       |> AsyncSeq.iterAsyncParallel (fun (groupMemberState,partitionStreams) ->
         partitionStreams
@@ -755,23 +755,23 @@ module Consumer =
   /// The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
   /// the specified interval.
   let consumePeriodicCommit 
+    (c:Consumer)
     (commitInterval:TimeSpan)
-    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>)
-    (consumer:Consumer) : Async<unit> = async {
-      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets consumer)
+    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
+      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets c)
       let handler s ms = async {
         do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
-      do! consumer |> consume handler
+      do! consume c handler
       do! Offsets.flushPeriodicCommit commitQueue }
 
   /// Returns a stream of message sets across all partitions assigned to the consumer.
   /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
   /// backpressure on the underlying consumer.
-  let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
+  let stream (c:Consumer) (bufferSize:int) = asyncSeq {
     use mb = BoundedMb.create bufferSize
     let handle s ms = BoundedMb.put (s,ms) mb
-    let! _ = Async.StartChild (consume handle consumer)
+    let! _ = Async.StartChild (consume c handle)
     yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
 
   /// Returns the current consumer state.
