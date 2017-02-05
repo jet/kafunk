@@ -39,16 +39,16 @@ type GroupProtocol = {
   /// The group protocol type.
   protocolType : ProtocolType
 
-  /// The protocols (e.g. versions).
-  protocols : Async<(ProtocolName * ProtocolMetadata)[]>
+  /// Returns the supported protocols (ie versions) alogn with protocol metadata.
+  protocols : GroupMember -> GroupMemberState option -> Async<(ProtocolName * ProtocolMetadata)[]>
 
   /// Called by the leader to assign member specific states given a the previous state, if any, and the selected protocol name.
-  assign : KafkaConn -> GroupMemberState option -> ProtocolName -> (MemberId * ProtocolMetadata)[] -> Async<(MemberId * MemberAssignment)[]>
+  assign : GroupMember -> GroupMemberState option -> ProtocolName -> (MemberId * ProtocolMetadata)[] -> Async<(MemberId * MemberAssignment)[]>
 
 }
 
 /// Group member configuration.
-type GroupConfig = {
+and GroupConfig = {
   
   /// The group id shared by members in the group.
   groupId : GroupId
@@ -71,8 +71,15 @@ type GroupConfig = {
 
 }
 
+/// A member of a group.
+and GroupMember = internal {
+  conn : KafkaConn
+  config : GroupConfig
+  state : MVar<GroupMemberStateWrapper>
+}
+
 /// The action to take upon closing the group.
-type internal GroupCloseAction = 
+and internal GroupCloseAction = 
   
   /// Close the group entirely without rejoin.
   | LeaveGroup
@@ -80,18 +87,10 @@ type internal GroupCloseAction =
   /// Close the generation and rejoin.
   | CloseGenerationAndRejoin of ec:ErrorCode
 
-
-type internal GroupMemberStateWrapper = {
+and internal GroupMemberStateWrapper = {
   state : GroupMemberState
   closed : IVar<GroupCloseAction>
 } 
-
-/// A member of a group.
-type GroupMember = internal {
-  conn : KafkaConn
-  config : GroupConfig
-  state : MVar<GroupMemberStateWrapper>
-}
 
 /// Operations on Kafka groups.
 [<Compile(Module)>]
@@ -166,7 +165,7 @@ module Group =
     let cfg = gm.config
     let groupId = cfg.groupId
     let protocolType = cfg.protocol.protocolType
-    let! protocols = cfg.protocol.protocols
+    let! protocols = cfg.protocol.protocols gm prevState
     let protocolNames = protocols |> Array.map (fun (n,_) -> n)
     let sessionTimeout = cfg.sessionTimeout
     let rebalanceTimeout = cfg.rebalanceTimeout
@@ -189,7 +188,7 @@ module Group =
     let syncGroupLeader (joinGroupRes:JoinGroup.Response) = async {
                    
       let! memberAssignments = 
-        cfg.protocol.assign conn prevState joinGroupRes.groupProtocol joinGroupRes.members.members
+        cfg.protocol.assign gm prevState joinGroupRes.groupProtocol joinGroupRes.members.members
 
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
       let! res = Kafka.syncGroup conn req
