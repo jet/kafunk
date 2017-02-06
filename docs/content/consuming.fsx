@@ -71,11 +71,12 @@ receiving duplicate messages. Therefore, it is acceptable to commit offsets asyn
 *)
 
 
-consumer
-|> Consumer.consume (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
-  printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
-    s.memberId s.protocolName ms.topic ms.partition
-  do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
+
+Consumer.consume consumer 
+  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+    printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
+      s.memberId s.protocolName ms.topic ms.partition
+    do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
 |> Async.RunSynchronously
 
 
@@ -87,12 +88,12 @@ the critical path.
 
 *)
 
-consumer
-|> Consumer.consumePeriodicCommit 
-    (TimeSpan.FromSeconds 10.0) 
-    (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
-      printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
-        s.memberId s.protocolName ms.topic ms.partition })
+
+Consumer.consumePeriodicCommit consumer
+  (TimeSpan.FromSeconds 10.0) 
+  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+    printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
+      s.memberId s.protocolName ms.topic ms.partition })
 |> Async.RunSynchronously
 
 
@@ -130,7 +131,6 @@ let consumerOffsets =
 for (t,os) in consumerOffsets do
   for (p,o) in os do
     printfn "topic=%s partition=%i offset=%i" t p o
-
 
 
 (**

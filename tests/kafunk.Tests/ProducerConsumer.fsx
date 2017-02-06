@@ -226,10 +226,9 @@ let printReport (report:Report) =
     report.produced report.received lag report.duplicates pending report.contigCount contigDelta report.lastContigOffset offsetStr sw.Elapsed.TotalMinutes
 
 let monitor = async {
-  let report = mb.PostAndAsyncReply (ReportReq.Report)
   while not completed.Task.IsCompleted do 
     do! Async.Sleep 5000
-    let! report = report
+    let! report = mb.PostAndAsyncReply (ReportReq.Report)
     printReport report
     if (report.received - report.contigCount) > 1000000 then
       Log.error "contig_delta_surpassed_threshold"

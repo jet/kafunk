@@ -150,9 +150,9 @@ module internal Printers =
         |> Seq.map (fun tmd -> 
           let partitions = 
             tmd.partitionMetadata
-            |> Seq.map (fun pmd -> sprintf "[p=%i leader=%i]" pmd.partitionId pmd.leader)
+            |> Seq.map (fun pmd -> sprintf "[p=%i leader=%i isr=%s]" pmd.partitionId pmd.leader (pmd.isr |> Seq.map string |> String.concat ","))
             |> String.concat " ; "
-          sprintf "[topic=%s partitions=%s]" tmd.topicName partitions)
+          sprintf "[topic=%s partitions=[%s]]" tmd.topicName partitions)
         |> String.concat " ; "
       let brokers =
         x.brokers

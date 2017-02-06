@@ -33,10 +33,11 @@ let producerCfg =
   ProducerConfig.create (
     topic, 
     Partitioner.roundRobin, 
-    requiredAcks = RequiredAcks.Local,
+    requiredAcks = RequiredAcks.AllInSync,
+    timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSize = 100,
     batchSizeBytes = 2000000,
-    batchLingerMs = 0)
+    batchLingerMs = 1000)
 
 let producer =
   Producer.createAsync conn producerCfg

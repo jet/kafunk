@@ -37,7 +37,7 @@ type ProducerMessage =
 
 /// A producer response.
 type ProducerResult =
-  struct    
+  struct
     /// The offsets assigned to the first message in the message set appended to the partition.
     val offsets : (Partition * Offset)[]
     new (os) = { offsets = os }
@@ -120,13 +120,14 @@ type ProducerConfig = {
   /// Default: Local
   requiredAcks : RequiredAcks
 
+  // The amount of time, in milliseconds, the broker will wait trying to meet the RequiredAcks 
+  /// requirement before sending back an error to the client.
+  /// Default: 10000
+  timeout : Timeout
+
   /// The compression method to use.
   /// Default: None
   compression : byte
-
-  /// The maximum time to wait for acknowledgement.
-  /// Default: 0
-  timeout : Timeout
 
   /// The per-broker, in-memory buffer size, in terms of message count.
   /// When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
@@ -149,26 +150,23 @@ type ProducerConfig = {
 
 } with
 
+  /// The default required acks = RequiredAcks.Local.
+  static member DefaultRequiredAcks = RequiredAcks.Local
+
+  /// The default produce request timeout = 10000.
+  static member DefaultTimeoutMs = 10000
+
   /// The default per-broker, produce request batch size in bytes = 16384.
   static member DefaultBatchSizeBytes = 16384
 
   /// The default in-memory, per-broker buffer size = 100.
   static member DefaultBufferSize = 100
 
-  /// The default produce request timeout = 0.
-  static member DefaultTimeout = 0
-
-  /// The default required acks = RequiredAcks.Local.
-  static member DefaultRequiredAcks = RequiredAcks.Local
-
   /// The default per-broker, produce request linger time in ms = 1.
   static member DefaultLingerMs = 1
 
   /// The default produce request retry policy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10.
   static member DefaultRetryPolicy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
-
-  static member internal messageVersion (connVersion:Version) = 
-    Versions.produceReqMessage (Versions.byKey connVersion ApiKey.Produce)
 
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, 
@@ -178,13 +176,15 @@ type ProducerConfig = {
       partitioner = partition
       requiredAcks = defaultArg requiredAcks ProducerConfig.DefaultRequiredAcks
       compression = defaultArg compression CompressionCodec.None
-      timeout = defaultArg timeout ProducerConfig.DefaultTimeout      
+      timeout = defaultArg timeout ProducerConfig.DefaultTimeoutMs
       bufferSize = defaultArg bufferSize ProducerConfig.DefaultBufferSize
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultLingerMs
       retryPolicy = defaultArg retryPolicy ProducerConfig.DefaultRetryPolicy
     }
 
+  static member internal messageVersion (connVersion:Version) = 
+    Versions.produceReqMessage (Versions.byKey connVersion ApiKey.Produce)
 
 
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
@@ -241,7 +241,7 @@ module Producer =
         p,ms)
       |> Seq.toArray
 
-    let req = ProduceRequest.ofMessageSetTopics [| cfg.topic, pms |] cfg.requiredAcks cfg.timeout
+    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| (cfg.topic, pms |> Array.map (fun (p,ms) -> (p, MessageSet.size ms, ms))) |])
     let! res = Chan.send ch (RequestMessage.Produce req) |> Async.map (Result.map ResponseMessage.toProduce)
     match res with
     | Success res ->
@@ -264,7 +264,7 @@ module Producer =
             | ErrorCode.InvalidMessage | ErrorCode.MessageSizeTooLarge
             | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice3Of3 (p,o,ec)
             
-            // other             
+            // other
             | _ -> Choice3Of3 (p,o,ec)))
         |> Seq.partitionChoices3
       
@@ -288,7 +288,7 @@ module Producer =
 
       if oks.Length > 0 then
         let oksps = oks |> Seq.map fst |> set
-        let res = Success (ProducerResult(oks))        
+        let res = Success (ProducerResult(oks))
         for (p,_,rep) in batch do
           if Set.contains p oksps then
             IVar.put res rep
@@ -345,7 +345,7 @@ module Producer =
         |> Seq.sumBy (ProducerMessage.size)
       batchSize >= cfg.batchSizeBytes
 
-    let queue (ch:Chan) =  
+    let queue (ch:Chan) =
       let sendBatch = sendBatch cfg messageVer ch
       let buf = BoundedMb.create cfg.bufferSize
       let produceStream = 
@@ -357,7 +357,7 @@ module Producer =
         else
           produceStream
           |> AsyncSeq.bufferByConditionAndTime batchSizeCondition cfg.batchLingerMs
-          |> AsyncSeq.iterAsync sendBatch      
+          |> AsyncSeq.iterAsync sendBatch
       sendProcess
       |> Async.tryWith (fun ex -> async {
         Log.error "producer_broker_queue_exception|ep=%O error=%O" (Chan.endpoint ch) ex })
@@ -375,7 +375,7 @@ module Producer =
         
     return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues ; brokerByEndPoint = brokerByEndPoint } }
 
-  let private produceBatchInternal (state:ProducerState) (createBatch:Partition[] -> Partition * ProducerMessage[]) = async {    
+  let private produceBatchInternal (state:ProducerState) (createBatch:Partition[] -> Partition * ProducerMessage[]) = async {
     let p,ms = createBatch state.partitions
     // TODO: optimize to one lookup
     let q = 

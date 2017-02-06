@@ -1,3 +1,14 @@
+### 0.0.20-alpha001 - 06.02.2017
+
+* Producer buffering by size in bytes
+* Fixex bug where producer errors weren't being surfaced
+* Breaking changes:
+    - ProducerConfig buffer size settings are new
+    - Producer.produce takes a single message rather than array
+    - Consumer.consume arguments reordered
+* Logging improvements (more compact, more info)
+* Improved producer-consumer test
+
 ### 0.0.19-alpha001 - 25.01.2017
 
 * Producer buffering
