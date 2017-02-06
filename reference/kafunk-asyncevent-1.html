@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ListGroupsResponse - Kafunk</title>
+    <title>AsyncEvent<'a> - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,57 +35,15 @@
 
 
 
-<h1>ListGroupsResponse</h1>
+<h1>AsyncEvent<'a></h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
+<p>An asynchronous implementation of IEvent<_>.
+Triggers are placed into a buffer, and published on a separate thread.</p>
+
 </div>
-  <h3>Record Fields</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Record Field</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '457', 457)" onmouseover="showTip(event, '457', 457)">
-            errorCode
-          </code>
-          <div class="tip" id="457">
-            <strong>Signature:</strong> ErrorCode<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1146-1146" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '458', 458)" onmouseover="showTip(event, '458', 458)">
-            groups
-          </code>
-          <div class="tip" id="458">
-            <strong>Signature:</strong> (GroupId * ProtocolType) []<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1147-1147" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-    </tbody>
-  </table>
   <h3>Constructors</h3>
   <table class="table table-bordered member-list">
     <thead>
@@ -95,15 +53,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '459', 459)" onmouseover="showTip(event, '459', 459)">
-            new(errorCode, groups)
+          <code onmouseout="hideTip(event, '638', 638)" onmouseover="showTip(event, '638', 638)">
+            new(bufferSize)
           </code>
-          <div class="tip" id="459">
-            <strong>Signature:</strong> (errorCode:ErrorCode * groups:(GroupId * ProtocolType) []) -&gt; ListGroupsResponse<br />
+          <div class="tip" id="638">
+            <strong>Signature:</strong> bufferSize:int -&gt; AsyncEvent&lt;&#39;a&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1148-1148" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L10-10" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -113,28 +71,71 @@
       </tr>
     </tbody>
   </table>
-  <h3>Static members</h3>
+  <h3>Instance members</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Static member</td><td>Description</td></tr>
+      <tr><td>Instance member</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '460', 460)" onmouseover="showTip(event, '460', 460)">
-            read(buf)
+          <code onmouseout="hideTip(event, '639', 639)" onmouseover="showTip(event, '639', 639)">
+            Publish
           </code>
-          <div class="tip" id="460">
-            <strong>Signature:</strong> buf:Segment -&gt; ListGroupsResponse * Segment<br />
+          <div class="tip" id="639">
+            <strong>Signature:</strong> IEvent&lt;&#39;a&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1152-1152" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L24-24" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Publishes the observation.</p>
+
+
+              <p>CompiledName: <code>get_Publish</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '640', 640)" onmouseover="showTip(event, '640', 640)">
+            Stop()
+          </code>
+          <div class="tip" id="640">
+            <strong>Signature:</strong> unit -&gt; unit<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L27-27" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Stops the event and the publishing thread.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '641', 641)" onmouseover="showTip(event, '641', 641)">
+            Trigger(a)
+          </code>
+          <div class="tip" id="641">
+            <strong>Signature:</strong> a:&#39;a -&gt; unit<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L19-19" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Puts an event into a buffer to be published asyncrhonously.</p>
+
+
         </td>
       </tr>
     </tbody>

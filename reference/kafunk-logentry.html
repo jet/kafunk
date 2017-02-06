@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ListGroupsResponse - Kafunk</title>
+    <title>LogEntry - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,12 +35,13 @@
 
 
 
-<h1>ListGroupsResponse</h1>
+<h1>LogEntry</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
+<p>A log entry.</p>
+
 </div>
   <h3>Record Fields</h3>
   <table class="table table-bordered member-list">
@@ -51,15 +52,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '457', 457)" onmouseover="showTip(event, '457', 457)">
-            errorCode
+          <code onmouseout="hideTip(event, '724', 724)" onmouseover="showTip(event, '724', 724)">
+            dt
           </code>
-          <div class="tip" id="457">
-            <strong>Signature:</strong> ErrorCode<br />
+          <div class="tip" id="724">
+            <strong>Signature:</strong> DateTime<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1146-1146" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L42-42" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -69,15 +70,87 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '458', 458)" onmouseover="showTip(event, '458', 458)">
-            groups
+          <code onmouseout="hideTip(event, '725', 725)" onmouseover="showTip(event, '725', 725)">
+            event
           </code>
-          <div class="tip" id="458">
-            <strong>Signature:</strong> (GroupId * ProtocolType) []<br />
+          <div class="tip" id="725">
+            <strong>Signature:</strong> string<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1147-1147" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L46-46" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '726', 726)" onmouseover="showTip(event, '726', 726)">
+            kvps
+          </code>
+          <div class="tip" id="726">
+            <strong>Signature:</strong> (string * obj) []<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L47-47" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '727', 727)" onmouseover="showTip(event, '727', 727)">
+            level
+          </code>
+          <div class="tip" id="727">
+            <strong>Signature:</strong> LogLevel<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L43-43" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '728', 728)" onmouseover="showTip(event, '728', 728)">
+            logger
+          </code>
+          <div class="tip" id="728">
+            <strong>Signature:</strong> string<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L44-44" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '729', 729)" onmouseover="showTip(event, '729', 729)">
+            message
+          </code>
+          <div class="tip" id="729">
+            <strong>Signature:</strong> string<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L45-45" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -95,15 +168,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '459', 459)" onmouseover="showTip(event, '459', 459)">
-            new(errorCode, groups)
+          <code onmouseout="hideTip(event, '730', 730)" onmouseover="showTip(event, '730', 730)">
+            new(dt, level, logger, message, event)
           </code>
-          <div class="tip" id="459">
-            <strong>Signature:</strong> (errorCode:ErrorCode * groups:(GroupId * ProtocolType) []) -&gt; ListGroupsResponse<br />
+          <div class="tip" id="730">
+            <strong>Signature:</strong> (dt:DateTime * level:LogLevel * logger:string * message:string * event:string) -&gt; LogEntry<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1148-1148" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L48-48" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -122,15 +195,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '460', 460)" onmouseover="showTip(event, '460', 460)">
-            read(buf)
+          <code onmouseout="hideTip(event, '731', 731)" onmouseover="showTip(event, '731', 731)">
+            Print(e, sw)
           </code>
-          <div class="tip" id="460">
-            <strong>Signature:</strong> buf:Segment -&gt; ListGroupsResponse * Segment<br />
+          <div class="tip" id="731">
+            <strong>Signature:</strong> (e:LogEntry * sw:StreamWriter) -&gt; unit<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L1152-1152" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Log.fs#L51-51" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

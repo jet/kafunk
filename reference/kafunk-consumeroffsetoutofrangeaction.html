@@ -41,7 +41,8 @@
 </p>
 <div class="xmldoc">
 <p>The action to take when the consumer attempts to fetch an offset which is out of range.
-This typically happens if the consumer is outpaced by the message cleanup process.
+This can happen if a) messages are produced faster than they are consumed or
+b) a lagging broker becomes the leader for a partition.
 The default action is to halt consumption.</p>
 
 </div>
@@ -54,15 +55,15 @@ The default action is to halt consumption.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '659', 659)" onmouseover="showTip(event, '659', 659)">
+          <code onmouseout="hideTip(event, '689', 689)" onmouseover="showTip(event, '689', 689)">
             HaltConsumer
           </code>
-          <div class="tip" id="659">
+          <div class="tip" id="689">
             <strong>Signature:</strong> <br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L239-239" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L258-258" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -74,15 +75,15 @@ The default action is to halt consumption.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '660', 660)" onmouseover="showTip(event, '660', 660)">
+          <code onmouseout="hideTip(event, '690', 690)" onmouseover="showTip(event, '690', 690)">
             HaltPartition
           </code>
-          <div class="tip" id="660">
+          <div class="tip" id="690">
             <strong>Signature:</strong> <br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L242-242" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L261-261" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -94,20 +95,22 @@ The default action is to halt consumption.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '661', 661)" onmouseover="showTip(event, '661', 661)">
+          <code onmouseout="hideTip(event, '691', 691)" onmouseover="showTip(event, '691', 691)">
             ResumeConsumerWithFreshInitialFetchTime
           </code>
-          <div class="tip" id="661">
+          <div class="tip" id="691">
             <strong>Signature:</strong> <br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L246-246" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L267-267" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           <p>Request a fresh set of offsets and resume consumption from the time
-configured as the initial fetch time for the consumer (earliest, or latest).</p>
+configured as the initial fetch time for the consumer (earliest, or latest).
+If the attempted offset is greater than the latest offset of the topic, it will
+resume from the latest offset.</p>
 
 
         </td>

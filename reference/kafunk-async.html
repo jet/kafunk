@@ -111,7 +111,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L126-126" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L143-143" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -132,7 +132,7 @@
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L130-130" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L147-147" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -154,7 +154,7 @@ Task cancellations are propagated as exceptions so that they can be trapped.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L135-135" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L152-152" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -176,7 +176,7 @@ Task cancellations are propagated as exceptions so that they can be trapped.</p>
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L98-98" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L105-105" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -188,14 +188,36 @@ Task cancellations are propagated as exceptions so that they can be trapped.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '9', 9)" onmouseover="showTip(event, '9', 9)">
-            cancelWithToken(ct a)
+            cancelTokenWith(ct f a)
           </code>
           <div class="tip" id="9">
+            <strong>Signature:</strong> ct:CancellationToken -&gt; (f:(unit -&gt; &#39;a)) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'a          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L256-256" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Cancels a computation and returns None if the CancellationToken is cancelled before the
+computation completes.</p>
+
+
+              <p>CompiledName: <code>Async.cancelTokenWith.Static</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '10', 10)" onmouseover="showTip(event, '10', 10)">
+            cancelWithToken(ct a)
+          </code>
+          <div class="tip" id="10">
             <strong>Signature:</strong> ct:CancellationToken -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a option&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L239-239" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L272-272" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -209,15 +231,15 @@ computation completes.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '10', 10)" onmouseover="showTip(event, '10', 10)">
+          <code onmouseout="hideTip(event, '11', 11)" onmouseover="showTip(event, '11', 11)">
             choose(a b)
           </code>
-          <div class="tip" id="10">
+          <div class="tip" id="11">
             <strong>Signature:</strong> a:Async&lt;&#39;a&gt; -&gt; b:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L210-210" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L227-227" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -231,41 +253,20 @@ The other computation is cancelled.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '11', 11)" onmouseover="showTip(event, '11', 11)">
+          <code onmouseout="hideTip(event, '12', 12)" onmouseover="showTip(event, '12', 12)">
             chooseChoice(a b)
           </code>
-          <div class="tip" id="11">
+          <div class="tip" id="12">
             <strong>Signature:</strong> a:Async&lt;&#39;a&gt; -&gt; b:Async&lt;&#39;b&gt; -&gt; Async&lt;Choice&lt;&#39;a,&#39;b&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L234-234" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L251-251" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           
               <p>CompiledName: <code>Async.chooseChoice.Static</code></p>
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '12', 12)" onmouseover="showTip(event, '12', 12)">
-            empty
-          </code>
-          <div class="tip" id="12">
-            <strong>Signature:</strong> Async&lt;unit&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L91-91" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>An async computation which does nothing and completes immediately.</p>
-
-
-              <p>CompiledName: <code>Async.get_empty.Static</code></p>
         </td>
       </tr>
       <tr>
@@ -279,7 +280,7 @@ The other computation is cancelled.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L91-91" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L98-98" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -293,14 +294,35 @@ The other computation is cancelled.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '14', 14)" onmouseover="showTip(event, '14', 14)">
-            join(a)
+            empty
           </code>
           <div class="tip" id="14">
+            <strong>Signature:</strong> Async&lt;unit&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L98-98" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>An async computation which does nothing and completes immediately.</p>
+
+
+              <p>CompiledName: <code>Async.get_empty.Static</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '15', 15)" onmouseover="showTip(event, '15', 15)">
+            join(a)
+          </code>
+          <div class="tip" id="15">
             <strong>Signature:</strong> a:Async&lt;Async&lt;&#39;a&gt;&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L100-100" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L107-107" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -311,41 +333,20 @@ The other computation is cancelled.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '15', 15)" onmouseover="showTip(event, '15', 15)">
+          <code onmouseout="hideTip(event, '16', 16)" onmouseover="showTip(event, '16', 16)">
             map(f a)
           </code>
-          <div class="tip" id="15">
+          <div class="tip" id="16">
             <strong>Signature:</strong> (f:(&#39;a -&gt; &#39;b)) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L96-96" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L103-103" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           
               <p>CompiledName: <code>Async.map.Static</code></p>
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '16', 16)" onmouseover="showTip(event, '16', 16)">
-            never
-          </code>
-          <div class="tip" id="16">
-            <strong>Signature:</strong> Async&lt;unit&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L94-94" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>An async computation which does nothing and never completes.</p>
-
-
-              <p>CompiledName: <code>Async.get_never.Static</code></p>
         </td>
       </tr>
       <tr>
@@ -359,7 +360,7 @@ The other computation is cancelled.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L94-94" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L101-101" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -373,33 +374,35 @@ The other computation is cancelled.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '18', 18)" onmouseover="showTip(event, '18', 18)">
-            Parallel(c1, c2)
+            never
           </code>
           <div class="tip" id="18">
-            <strong>Signature:</strong> (c1:Async&lt;&#39;a&gt; * c2:Async&lt;&#39;b&gt;) -&gt; Async&lt;&#39;a * &#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
+            <strong>Signature:</strong> Async&lt;unit&gt;<br />
+                      </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L143-143" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L101-101" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
-              <p>CompiledName: <code>Async.Parallel.Static</code></p>
+          <p>An async computation which does nothing and never completes.</p>
+
+
+              <p>CompiledName: <code>Async.get_never.Static</code></p>
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '19', 19)" onmouseover="showTip(event, '19', 19)">
-            Parallel(c1, c2, c3)
+            Parallel(c1, c2)
           </code>
           <div class="tip" id="19">
-            <strong>Signature:</strong> (c1:Async&lt;&#39;a&gt; * c2:Async&lt;&#39;b&gt; * c3:Async&lt;&#39;c&gt;) -&gt; Async&lt;&#39;a * &#39;b * &#39;c&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
+            <strong>Signature:</strong> (c1:Async&lt;&#39;a&gt; * c2:Async&lt;&#39;b&gt;) -&gt; Async&lt;&#39;a * &#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L150-150" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L160-160" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -411,14 +414,14 @@ The other computation is cancelled.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '20', 20)" onmouseover="showTip(event, '20', 20)">
-            Parallel(c1, c2, c3, c4)
+            Parallel(c1, c2, c3)
           </code>
           <div class="tip" id="20">
-            <strong>Signature:</strong> (c1:Async&lt;&#39;a&gt; * c2:Async&lt;&#39;b&gt; * c3:Async&lt;&#39;c&gt; * c4:Async&lt;&#39;d&gt;) -&gt; Async&lt;&#39;a * &#39;b * &#39;c * &#39;d&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd          </div>
+            <strong>Signature:</strong> (c1:Async&lt;&#39;a&gt; * c2:Async&lt;&#39;b&gt; * c3:Async&lt;&#39;c&gt;) -&gt; Async&lt;&#39;a * &#39;b * &#39;c&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L159-159" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L167-167" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -430,14 +433,33 @@ The other computation is cancelled.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '21', 21)" onmouseover="showTip(event, '21', 21)">
-            ParallelThrottledIgnore(parallelism xs)
+            Parallel(c1, c2, c3, c4)
           </code>
           <div class="tip" id="21">
-            <strong>Signature:</strong> parallelism:int -&gt; xs:seq&lt;Async&lt;&#39;?9138&gt;&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> '?9138          </div>
+            <strong>Signature:</strong> (c1:Async&lt;&#39;a&gt; * c2:Async&lt;&#39;b&gt; * c3:Async&lt;&#39;c&gt; * c4:Async&lt;&#39;d&gt;) -&gt; Async&lt;&#39;a * &#39;b * &#39;c * &#39;d&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L174-174" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L176-176" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+              <p>CompiledName: <code>Async.Parallel.Static</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '22', 22)" onmouseover="showTip(event, '22', 22)">
+            ParallelThrottledIgnore(parallelism xs)
+          </code>
+          <div class="tip" id="22">
+            <strong>Signature:</strong> parallelism:int -&gt; xs:seq&lt;Async&lt;&#39;?9250&gt;&gt; -&gt; Async&lt;unit&gt;<br />
+                          <strong>Type parameters:</strong> '?9250          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L191-191" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -453,15 +475,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '22', 22)" onmouseover="showTip(event, '22', 22)">
+          <code onmouseout="hideTip(event, '23', 23)" onmouseover="showTip(event, '23', 23)">
             Sleep(s)
           </code>
-          <div class="tip" id="22">
+          <div class="tip" id="23">
             <strong>Signature:</strong> s:TimeSpan -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L253-253" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L286-286" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -472,15 +494,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '23', 23)" onmouseover="showTip(event, '23', 23)">
+          <code onmouseout="hideTip(event, '24', 24)" onmouseover="showTip(event, '24', 24)">
             StartThreadPoolWithContinuations(...)
           </code>
-          <div class="tip" id="23">
+          <div class="tip" id="24">
             <strong>Signature:</strong> (a:Async&lt;&#39;a&gt; * ok:(&#39;a -&gt; unit) * err:(exn -&gt; unit) * cnc:(OperationCanceledException -&gt; unit) * ct:CancellationToken option) -&gt; unit<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L139-139" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L156-156" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -493,15 +515,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '24', 24)" onmouseover="showTip(event, '24', 24)">
+          <code onmouseout="hideTip(event, '25', 25)" onmouseover="showTip(event, '25', 25)">
             timeoutOption(timeout c)
           </code>
-          <div class="tip" id="24">
+          <div class="tip" id="25">
             <strong>Signature:</strong> timeout:TimeSpan -&gt; c:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a option&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L262-262" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L295-295" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -512,15 +534,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '25', 25)" onmouseover="showTip(event, '25', 25)">
+          <code onmouseout="hideTip(event, '26', 26)" onmouseover="showTip(event, '26', 26)">
             timeoutResult(timeout c)
           </code>
-          <div class="tip" id="25">
+          <div class="tip" id="26">
             <strong>Signature:</strong> timeout:TimeSpan -&gt; c:Async&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;a,TimeoutException&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L268-268" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L301-301" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -531,15 +553,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '26', 26)" onmouseover="showTip(event, '26', 26)">
+          <code onmouseout="hideTip(event, '27', 27)" onmouseover="showTip(event, '27', 27)">
             timeoutResultWith(f timeout c)
           </code>
-          <div class="tip" id="26">
+          <div class="tip" id="27">
             <strong>Signature:</strong> (f:(unit -&gt; &#39;e)) -&gt; timeout:TimeSpan -&gt; c:Async&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'e, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L265-265" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L298-298" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -550,15 +572,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '27', 27)" onmouseover="showTip(event, '27', 27)">
+          <code onmouseout="hideTip(event, '28', 28)" onmouseover="showTip(event, '28', 28)">
             timeoutWith(g f timeout c)
           </code>
-          <div class="tip" id="27">
+          <div class="tip" id="28">
             <strong>Signature:</strong> (g:(&#39;a -&gt; &#39;b)) -&gt; (f:(unit -&gt; &#39;b)) -&gt; timeout:TimeSpan -&gt; c:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L256-256" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L289-289" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -569,15 +591,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '28', 28)" onmouseover="showTip(event, '28', 28)">
+          <code onmouseout="hideTip(event, '29', 29)" onmouseover="showTip(event, '29', 29)">
             tryCancelled(comp a)
           </code>
-          <div class="tip" id="28">
-            <strong>Signature:</strong> (comp:(OperationCanceledException -&gt; unit)) -&gt; a:Async&lt;&#39;?9116&gt; -&gt; Async&lt;&#39;?9116&gt;<br />
-                          <strong>Type parameters:</strong> '?9116          </div>
+          <div class="tip" id="29">
+            <strong>Signature:</strong> (comp:(OperationCanceledException -&gt; unit)) -&gt; a:Async&lt;&#39;?9228&gt; -&gt; Async&lt;&#39;?9228&gt;<br />
+                          <strong>Type parameters:</strong> '?9228          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L121-121" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L138-138" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -588,15 +610,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '29', 29)" onmouseover="showTip(event, '29', 29)">
+          <code onmouseout="hideTip(event, '30', 30)" onmouseover="showTip(event, '30', 30)">
             tryFinally(compensation a)
           </code>
-          <div class="tip" id="29">
+          <div class="tip" id="30">
             <strong>Signature:</strong> (compensation:(unit -&gt; unit)) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L112-112" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L129-129" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -607,15 +629,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '30', 30)" onmouseover="showTip(event, '30', 30)">
+          <code onmouseout="hideTip(event, '31', 31)" onmouseover="showTip(event, '31', 31)">
             tryFinallyDispose(d a)
           </code>
-          <div class="tip" id="30">
-            <strong>Signature:</strong> d:&#39;?9110 -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> '?9110, 'a          </div>
+          <div class="tip" id="31">
+            <strong>Signature:</strong> d:&#39;?9222 -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> '?9222, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L115-115" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L132-132" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -626,15 +648,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '31', 31)" onmouseover="showTip(event, '31', 31)">
+          <code onmouseout="hideTip(event, '32', 32)" onmouseover="showTip(event, '32', 32)">
             tryFinallyDisposeAll(ds a)
           </code>
-          <div class="tip" id="31">
-            <strong>Signature:</strong> ds:seq&lt;&#39;?9113&gt; -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> '?9113, 'a          </div>
+          <div class="tip" id="32">
+            <strong>Signature:</strong> ds:seq&lt;&#39;?9225&gt; -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> '?9225, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L118-118" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L135-135" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -645,15 +667,15 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '32', 32)" onmouseover="showTip(event, '32', 32)">
+          <code onmouseout="hideTip(event, '33', 33)" onmouseover="showTip(event, '33', 33)">
             tryFinnallyAsync(a comp)
           </code>
-          <div class="tip" id="32">
+          <div class="tip" id="33">
             <strong>Signature:</strong> a:Async&lt;&#39;a&gt; -&gt; comp:Async&lt;unit&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L102-102" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L109-109" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -664,15 +686,34 @@ the sequence causes the resulting computation to error or cancel, respectively.<
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '33', 33)" onmouseover="showTip(event, '33', 33)">
-            tryWith(h a)
+          <code onmouseout="hideTip(event, '34', 34)" onmouseover="showTip(event, '34', 34)">
+            tryFinnallyWithAsync(a comp err)
           </code>
-          <div class="tip" id="33">
-            <strong>Signature:</strong> (h:(exn -&gt; Async&lt;&#39;a&gt;)) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+          <div class="tip" id="34">
+            <strong>Signature:</strong> a:Async&lt;&#39;a&gt; -&gt; comp:Async&lt;unit&gt; -&gt; (err:(exn -&gt; Async&lt;&#39;a&gt;)) -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L123-123" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L119-119" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+              <p>CompiledName: <code>Async.tryFinnallyWithAsync.Static</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '35', 35)" onmouseover="showTip(event, '35', 35)">
+            tryWith(h a)
+          </code>
+          <div class="tip" id="35">
+            <strong>Signature:</strong> (h:(exn -&gt; Async&lt;&#39;b&gt;)) -&gt; a:Async&lt;&#39;b&gt; -&gt; Async&lt;&#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'b          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L140-140" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

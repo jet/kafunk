@@ -45,6 +45,15 @@
     <tbody>
         <tr>
           <td class="type-name">
+            <a href="kafunk-asyncevent-1.html">AsyncEvent<'a></a>
+          </td>
+          <td class="xmldoc"><p>An asynchronous implementation of IEvent<_>.
+Triggers are placed into a buffer, and published on a separate thread.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-chanconfig.html">ChanConfig</a>
           </td>
           <td class="xmldoc"><p>Configuration for an individual TCP channel.</p>
@@ -96,7 +105,8 @@
             <a href="kafunk-consumeroffsetoutofrangeaction.html">ConsumerOffsetOutOfRangeAction</a>
           </td>
           <td class="xmldoc"><p>The action to take when the consumer attempts to fetch an offset which is out of range.
-This typically happens if the consumer is outpaced by the message cleanup process.
+This can happen if a) messages are produced faster than they are consumed or
+b) a lagging broker becomes the leader for a partition.
 The default action is to halt consumption.</p>
 
 </td>
@@ -169,15 +179,27 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-logentry.html">LogEntry</a>
+          </td>
+          <td class="xmldoc"><p>A log entry.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-loglevel.html">LogLevel</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>The log level.</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
             <a href="kafunk-logger.html">Logger</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>A logger.</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -190,6 +212,14 @@ It acts as a context for API operations, providing filtering and fault tolerance
             <a href="kafunk-objectpool-1.html">ObjectPool<'a></a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-partitioncount.html">PartitionCount</a>
+          </td>
+          <td class="xmldoc"><p>The number of partitions of a topic.</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -382,7 +412,9 @@ It acts as a context for API operations, providing filtering and fault tolerance
           <td class="module-name">
             <a href="kafunk-logmodule.html">Log</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>Logging operations.</p>
+
+</td>
         </tr>
         <tr>
           <td class="module-name">

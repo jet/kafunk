@@ -55,15 +55,36 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '282', 282)" onmouseover="showTip(event, '282', 282)">
+          <code onmouseout="hideTip(event, '299', 299)" onmouseover="showTip(event, '299', 299)">
+            awaitNext p s
+          </code>
+          <div class="tip" id="299">
+            <strong>Signature:</strong> p:RetryPolicy -&gt; s:RetryState -&gt; Async&lt;(TimeSpan * RetryState) option&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L89-89" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns an async computation which waits for the delay at the specified retry state and returns
+the delay and next state, or None if the retries have stopped.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '300', 300)" onmouseover="showTip(event, '300', 300)">
             constant delay
           </code>
-          <div class="tip" id="282">
+          <div class="tip" id="300">
             <strong>Signature:</strong> delay:TimeSpan -&gt; RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L88-88" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L109-109" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -75,15 +96,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '283', 283)" onmouseover="showTip(event, '283', 283)">
+          <code onmouseout="hideTip(event, '301', 301)" onmouseover="showTip(event, '301', 301)">
             constantMs delayMs
           </code>
-          <div class="tip" id="283">
+          <div class="tip" id="301">
             <strong>Signature:</strong> delayMs:int -&gt; RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L92-92" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L113-113" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -95,10 +116,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '284', 284)" onmouseover="showTip(event, '284', 284)">
+          <code onmouseout="hideTip(event, '302', 302)" onmouseover="showTip(event, '302', 302)">
             create f
           </code>
-          <div class="tip" id="284">
+          <div class="tip" id="302">
             <strong>Signature:</strong> f:(RetryState -&gt; TimeSpan option) -&gt; RetryPolicy<br />
                       </div>
         </td>
@@ -115,10 +136,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '285', 285)" onmouseover="showTip(event, '285', 285)">
+          <code onmouseout="hideTip(event, '303', 303)" onmouseover="showTip(event, '303', 303)">
             delayAt s b
           </code>
-          <div class="tip" id="285">
+          <div class="tip" id="303">
             <strong>Signature:</strong> s:RetryState -&gt; b:RetryPolicy -&gt; TimeSpan option<br />
                       </div>
         </td>
@@ -135,15 +156,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '286', 286)" onmouseover="showTip(event, '286', 286)">
+          <code onmouseout="hideTip(event, '304', 304)" onmouseover="showTip(event, '304', 304)">
             delayStream p
           </code>
-          <div class="tip" id="286">
+          <div class="tip" id="304">
             <strong>Signature:</strong> p:RetryPolicy -&gt; AsyncSeq&lt;TimeSpan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L121-121" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L104-104" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -156,15 +177,15 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '287', 287)" onmouseover="showTip(event, '287', 287)">
+          <code onmouseout="hideTip(event, '305', 305)" onmouseover="showTip(event, '305', 305)">
             delayStreamAt p
           </code>
-          <div class="tip" id="287">
+          <div class="tip" id="305">
             <strong>Signature:</strong> p:RetryPolicy -&gt; RetryState -&gt; AsyncSeq&lt;TimeSpan&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L109-109" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L99-99" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -177,10 +198,10 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '288', 288)" onmouseover="showTip(event, '288', 288)">
+          <code onmouseout="hideTip(event, '306', 306)" onmouseover="showTip(event, '306', 306)">
             initState 
           </code>
-          <div class="tip" id="288">
+          <div class="tip" id="306">
             <strong>Signature:</strong> RetryState<br />
                       </div>
         </td>
@@ -197,15 +218,15 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '289', 289)" onmouseover="showTip(event, '289', 289)">
+          <code onmouseout="hideTip(event, '307', 307)" onmouseover="showTip(event, '307', 307)">
             linear init increment
           </code>
-          <div class="tip" id="289">
+          <div class="tip" id="307">
             <strong>Signature:</strong> init:TimeSpan -&gt; increment:TimeSpan -&gt; RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L96-96" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L117-117" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -217,15 +238,15 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '290', 290)" onmouseover="showTip(event, '290', 290)">
+          <code onmouseout="hideTip(event, '308', 308)" onmouseover="showTip(event, '308', 308)">
             maxAttempts maxAttempts p
           </code>
-          <div class="tip" id="290">
+          <div class="tip" id="308">
             <strong>Signature:</strong> maxAttempts:int -&gt; p:RetryPolicy -&gt; RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L104-104" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L125-125" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -237,15 +258,15 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '291', 291)" onmouseover="showTip(event, '291', 291)">
+          <code onmouseout="hideTip(event, '309', 309)" onmouseover="showTip(event, '309', 309)">
             maxDelay maxDelay b
           </code>
-          <div class="tip" id="291">
+          <div class="tip" id="309">
             <strong>Signature:</strong> maxDelay:TimeSpan -&gt; b:RetryPolicy -&gt; RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L100-100" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L121-121" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -257,10 +278,10 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '292', 292)" onmouseover="showTip(event, '292', 292)">
+          <code onmouseout="hideTip(event, '310', 310)" onmouseover="showTip(event, '310', 310)">
             nextState s
           </code>
-          <div class="tip" id="292">
+          <div class="tip" id="310">
             <strong>Signature:</strong> s:RetryState -&gt; RetryState<br />
                       </div>
         </td>
@@ -277,10 +298,10 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '293', 293)" onmouseover="showTip(event, '293', 293)">
+          <code onmouseout="hideTip(event, '311', 311)" onmouseover="showTip(event, '311', 311)">
             none 
           </code>
-          <div class="tip" id="293">
+          <div class="tip" id="311">
             <strong>Signature:</strong> RetryPolicy<br />
                       </div>
         </td>

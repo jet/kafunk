@@ -55,15 +55,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '140', 140)" onmouseover="showTip(event, '140', 140)">
+          <code onmouseout="hideTip(event, '144', 144)" onmouseover="showTip(event, '144', 144)">
             createJoin conn config
           </code>
-          <div class="tip" id="140">
+          <div class="tip" id="144">
             <strong>Signature:</strong> conn:KafkaConn -&gt; config:GroupConfig -&gt; Async&lt;GroupMember&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L321-321" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L377-377" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -75,15 +75,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '141', 141)" onmouseover="showTip(event, '141', 141)">
+          <code onmouseout="hideTip(event, '145', 145)" onmouseover="showTip(event, '145', 145)">
             generations gm
           </code>
-          <div class="tip" id="141">
+          <div class="tip" id="145">
             <strong>Signature:</strong> gm:GroupMember -&gt; AsyncSeq&lt;GroupMemberState&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L315-315" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L371-371" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -95,15 +95,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '142', 142)" onmouseover="showTip(event, '142', 142)">
-            join gm prevState
+          <code onmouseout="hideTip(event, '146', 146)" onmouseover="showTip(event, '146', 146)">
+            join gm (prevState, prevErrorCode)
           </code>
-          <div class="tip" id="142">
-            <strong>Signature:</strong> gm:GroupMember -&gt; prevState:GroupMemberState option -&gt; Async&lt;unit&gt;<br />
+          <div class="tip" id="146">
+            <strong>Signature:</strong> gm:GroupMember -&gt; (prevState:GroupMemberState option * prevErrorCode:ErrorCode option) -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L144-144" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L162-162" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -115,15 +115,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '143', 143)" onmouseover="showTip(event, '143', 143)">
+          <code onmouseout="hideTip(event, '147', 147)" onmouseover="showTip(event, '147', 147)">
             leave gm
           </code>
-          <div class="tip" id="143">
+          <div class="tip" id="147">
             <strong>Signature:</strong> gm:GroupMember -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L131-131" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L149-149" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -135,15 +135,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '144', 144)" onmouseover="showTip(event, '144', 144)">
+          <code onmouseout="hideTip(event, '148', 148)" onmouseover="showTip(event, '148', 148)">
             state gm
           </code>
-          <div class="tip" id="144">
+          <div class="tip" id="148">
             <strong>Signature:</strong> gm:GroupMember -&gt; Async&lt;GroupMemberState&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L139-139" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Group.fs#L157-157" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

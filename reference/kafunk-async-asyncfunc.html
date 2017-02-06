@@ -56,51 +56,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '34', 34)" onmouseover="showTip(event, '34', 34)">
+          <code onmouseout="hideTip(event, '36', 36)" onmouseover="showTip(event, '36', 36)">
             catch f
           </code>
-          <div class="tip" id="34">
+          <div class="tip" id="36">
             <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;a -&gt; Async&lt;Result&lt;&#39;b,exn&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L275-275" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '35', 35)" onmouseover="showTip(event, '35', 35)">
-            catchResult f
-          </code>
-          <div class="tip" id="35">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; &#39;a -&gt; Async&lt;Result&lt;&#39;b,Choice&lt;&#39;e,exn&gt;&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'e          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L281-281" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '36', 36)" onmouseover="showTip(event, '36', 36)">
-            catchWith e f
-          </code>
-          <div class="tip" id="36">
-            <strong>Signature:</strong> e:(exn -&gt; &#39;b) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;a -&gt; Async&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'b, 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L278-278" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L316-316" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -111,14 +75,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '37', 37)" onmouseover="showTip(event, '37', 37)">
-            dimap g h f
+            catchResult f
           </code>
           <div class="tip" id="37">
-            <strong>Signature:</strong> g:(&#39;c -&gt; &#39;a) -&gt; h:(&#39;b -&gt; &#39;d) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;c -&gt; Async&lt;&#39;d&gt;<br />
-                          <strong>Type parameters:</strong> 'c, 'a, 'b, 'd          </div>
+            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; &#39;a -&gt; Async&lt;Result&lt;&#39;b,Choice&lt;&#39;e,exn&gt;&gt;&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'e          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L284-284" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L322-322" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -129,14 +93,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '38', 38)" onmouseover="showTip(event, '38', 38)">
-            doBeforeAfter before after f a
+            catchWith e f
           </code>
           <div class="tip" id="38">
-            <strong>Signature:</strong> before:(&#39;a -&gt; unit) -&gt; after:(&#39;a * &#39;b -&gt; unit) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
+            <strong>Signature:</strong> e:(exn -&gt; &#39;b) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;a -&gt; Async&lt;&#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'b, 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L296-296" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L319-319" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -147,14 +111,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '39', 39)" onmouseover="showTip(event, '39', 39)">
-            doBeforeAfterExn before after error f a
+            dimap g h f
           </code>
           <div class="tip" id="39">
-            <strong>Signature:</strong> before:(&#39;a -&gt; unit) -&gt; after:(&#39;a * &#39;b -&gt; unit) -&gt; error:(&#39;a * exn -&gt; unit) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
+            <strong>Signature:</strong> g:(&#39;c -&gt; &#39;a) -&gt; h:(&#39;b -&gt; &#39;d) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;c -&gt; Async&lt;&#39;d&gt;<br />
+                          <strong>Type parameters:</strong> 'c, 'a, 'b, 'd          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L303-303" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L325-325" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -165,14 +129,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '40', 40)" onmouseover="showTip(event, '40', 40)">
-            doExn error f a
+            doBeforeAfter before after f a
           </code>
           <div class="tip" id="40">
-            <strong>Signature:</strong> error:(&#39;a * exn -&gt; unit) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b&gt;<br />
+            <strong>Signature:</strong> before:(&#39;a -&gt; unit) -&gt; after:(&#39;a * &#39;b -&gt; unit) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L314-314" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L337-337" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -183,14 +147,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '41', 41)" onmouseover="showTip(event, '41', 41)">
-            mapInput g f
+            doBeforeAfterExn before after error f a
           </code>
           <div class="tip" id="41">
-            <strong>Signature:</strong> g:(&#39;c -&gt; &#39;a) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;c -&gt; Async&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'c, 'a, 'b          </div>
+            <strong>Signature:</strong> before:(&#39;a -&gt; unit) -&gt; after:(&#39;a * &#39;b -&gt; unit) -&gt; error:(&#39;a * exn -&gt; unit) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L287-287" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L344-344" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -201,14 +165,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '42', 42)" onmouseover="showTip(event, '42', 42)">
-            mapOut h f a
+            doExn error f a
           </code>
           <div class="tip" id="42">
-            <strong>Signature:</strong> h:(&#39;a * &#39;b -&gt; &#39;c) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;c&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
+            <strong>Signature:</strong> error:(&#39;a * exn -&gt; unit) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L290-290" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L355-355" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -219,14 +183,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '43', 43)" onmouseover="showTip(event, '43', 43)">
-            mapOutAsync h f a
+            mapInput g f
           </code>
           <div class="tip" id="43">
-            <strong>Signature:</strong> h:(&#39;a * &#39;b -&gt; Async&lt;&#39;c&gt;) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;c&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
+            <strong>Signature:</strong> g:(&#39;c -&gt; &#39;a) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; &#39;c -&gt; Async&lt;&#39;b&gt;<br />
+                          <strong>Type parameters:</strong> 'c, 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L293-293" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L328-328" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -237,14 +201,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '44', 44)" onmouseover="showTip(event, '44', 44)">
-            timeoutOption t f a
+            mapOut h f a
           </code>
           <div class="tip" id="44">
-            <strong>Signature:</strong> t:TimeSpan -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b option&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
+            <strong>Signature:</strong> h:(&#39;a * &#39;b -&gt; &#39;c) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;c&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L321-321" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L331-331" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -255,14 +219,50 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '45', 45)" onmouseover="showTip(event, '45', 45)">
-            timeoutResult t f a
+            mapOutAsync h f a
           </code>
           <div class="tip" id="45">
+            <strong>Signature:</strong> h:(&#39;a * &#39;b -&gt; Async&lt;&#39;c&gt;) -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;c&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L334-334" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '46', 46)" onmouseover="showTip(event, '46', 46)">
+            timeoutOption t f a
+          </code>
+          <div class="tip" id="46">
+            <strong>Signature:</strong> t:TimeSpan -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;&#39;b option&gt;<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L362-362" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '47', 47)" onmouseover="showTip(event, '47', 47)">
+            timeoutResult t f a
+          </code>
+          <div class="tip" id="47">
             <strong>Signature:</strong> t:TimeSpan -&gt; f:(&#39;a -&gt; Async&lt;&#39;b&gt;) -&gt; a:&#39;a -&gt; Async&lt;Result&lt;&#39;b,TimeoutException&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L324-324" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L365-365" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

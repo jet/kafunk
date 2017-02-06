@@ -52,15 +52,81 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '708', 708)" onmouseover="showTip(event, '708', 708)">
+          <code onmouseout="hideTip(event, '748', 748)" onmouseover="showTip(event, '748', 748)">
+            batchLingerMs
+          </code>
+          <div class="tip" id="748">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L145-145" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The maximum time, in milliseconds, to wait for a produce request btch to reach capacity.
+If set to 0, no batching will be performed.
+Default: 1</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '749', 749)" onmouseover="showTip(event, '749', 749)">
+            batchSizeBytes
+          </code>
+          <div class="tip" id="749">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L140-140" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The maximum size, in bytes, of a batch of produce requests per broker.
+If set to 0, no batching will be performed.
+Default: 16384</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '750', 750)" onmouseover="showTip(event, '750', 750)">
+            bufferSize
+          </code>
+          <div class="tip" id="750">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L135-135" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The per-broker, in-memory buffer size, in terms of message count.
+When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
+Default: 100</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '751', 751)" onmouseover="showTip(event, '751', 751)">
             compression
           </code>
-          <div class="tip" id="708">
+          <div class="tip" id="751">
             <strong>Signature:</strong> byte<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L120-120" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L130-130" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -73,15 +139,15 @@ Default: None</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '709', 709)" onmouseover="showTip(event, '709', 709)">
+          <code onmouseout="hideTip(event, '752', 752)" onmouseover="showTip(event, '752', 752)">
             partitioner
           </code>
-          <div class="tip" id="709">
+          <div class="tip" id="752">
             <strong>Signature:</strong> Partitioner<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L112-112" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L117-117" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -94,15 +160,15 @@ which the message should be written to.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '710', 710)" onmouseover="showTip(event, '710', 710)">
+          <code onmouseout="hideTip(event, '753', 753)" onmouseover="showTip(event, '753', 753)">
             requiredAcks
           </code>
-          <div class="tip" id="710">
+          <div class="tip" id="753">
             <strong>Signature:</strong> RequiredAcks<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L116-116" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L121-121" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -115,20 +181,20 @@ Default: Local</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '711', 711)" onmouseover="showTip(event, '711', 711)">
-            timeout
+          <code onmouseout="hideTip(event, '754', 754)" onmouseover="showTip(event, '754', 754)">
+            retryPolicy
           </code>
-          <div class="tip" id="711">
-            <strong>Signature:</strong> Timeout<br />
+          <div class="tip" id="754">
+            <strong>Signature:</strong> RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L124-124" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L149-149" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The maximum time to wait for acknowledgement.
-Default: 0</p>
+          <p>The retry policy for produce requests.
+Default: RetryPolicy.constantMs 1000 |&gt; RetryPolicy.maxAttempts 10</p>
 
 
         </td>
@@ -136,15 +202,36 @@ Default: 0</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '712', 712)" onmouseover="showTip(event, '712', 712)">
+          <code onmouseout="hideTip(event, '755', 755)" onmouseover="showTip(event, '755', 755)">
+            timeout
+          </code>
+          <div class="tip" id="755">
+            <strong>Signature:</strong> Timeout<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L126-126" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>requirement before sending back an error to the client.
+Default: 10000</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '756', 756)" onmouseover="showTip(event, '756', 756)">
             topic
           </code>
-          <div class="tip" id="712">
+          <div class="tip" id="756">
             <strong>Signature:</strong> TopicName<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L108-108" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L113-113" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -164,21 +251,147 @@ Default: 0</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '713', 713)" onmouseover="showTip(event, '713', 713)">
+          <code onmouseout="hideTip(event, '757', 757)" onmouseover="showTip(event, '757', 757)">
             create(...)
           </code>
-          <div class="tip" id="713">
-            <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:byte option * timeout:Timeout option) -&gt; ProducerConfig<br />
+          <div class="tip" id="757">
+            <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:byte option * timeout:Timeout option * bufferSize:int option * batchSizeBytes:int option * batchLingerMs:int option * retryPolicy:RetryPolicy option) -&gt; ProducerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L129-129" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L172-172" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           <p>Creates a producer configuration.</p>
 
 
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '758', 758)" onmouseover="showTip(event, '758', 758)">
+            DefaultBatchSizeBytes
+          </code>
+          <div class="tip" id="758">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L160-160" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default per-broker, produce request batch size in bytes = 16384.</p>
+
+
+              <p>CompiledName: <code>get_DefaultBatchSizeBytes</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '759', 759)" onmouseover="showTip(event, '759', 759)">
+            DefaultBufferSize
+          </code>
+          <div class="tip" id="759">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L163-163" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default in-memory, per-broker buffer size = 100.</p>
+
+
+              <p>CompiledName: <code>get_DefaultBufferSize</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '760', 760)" onmouseover="showTip(event, '760', 760)">
+            DefaultLingerMs
+          </code>
+          <div class="tip" id="760">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L166-166" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default per-broker, produce request linger time in ms = 1.</p>
+
+
+              <p>CompiledName: <code>get_DefaultLingerMs</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '761', 761)" onmouseover="showTip(event, '761', 761)">
+            DefaultRequiredAcks
+          </code>
+          <div class="tip" id="761">
+            <strong>Signature:</strong> RequiredAcks<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L154-154" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default required acks = RequiredAcks.Local.</p>
+
+
+              <p>CompiledName: <code>get_DefaultRequiredAcks</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '762', 762)" onmouseover="showTip(event, '762', 762)">
+            DefaultRetryPolicy
+          </code>
+          <div class="tip" id="762">
+            <strong>Signature:</strong> RetryPolicy<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L169-169" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default produce request retry policy = RetryPolicy.constantMs 1000 |&gt; RetryPolicy.maxAttempts 10.</p>
+
+
+              <p>CompiledName: <code>get_DefaultRetryPolicy</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '763', 763)" onmouseover="showTip(event, '763', 763)">
+            DefaultTimeoutMs
+          </code>
+          <div class="tip" id="763">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L157-157" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default produce request timeout = 10000.</p>
+
+
+              <p>CompiledName: <code>get_DefaultTimeoutMs</code></p>
         </td>
       </tr>
     </tbody>
