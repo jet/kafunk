@@ -305,7 +305,7 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let txs = new ConcurrentDictionary<int, DateTime * 's * TaskCompletionSource<'b>>()
+  let txs = new ConcurrentDictionary<CorrelationId, DateTime * 's * TaskCompletionSource<'b>>()
   let cts = new CancellationTokenSource()
 
   let demux (data:Binary.Segment) =

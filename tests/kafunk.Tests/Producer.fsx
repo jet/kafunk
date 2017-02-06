@@ -16,9 +16,9 @@ let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
 let N = argiDefault 3 "1000000" |> Int64.Parse
-let batchSize = argiDefault 4 "500" |> Int32.Parse
-let messageSize = argiDefault 5 "100" |> Int32.Parse
-let parallelism = argiDefault 6 "100" |> Int32.Parse
+let batchSize = argiDefault 4 "100" |> Int32.Parse
+let messageSize = argiDefault 5 "10" |> Int32.Parse
+let parallelism = argiDefault 6 "1" |> Int32.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
 let payload = Array.zeroCreate messageSize
@@ -33,10 +33,11 @@ let producerCfg =
   ProducerConfig.create (
     topic, 
     Partitioner.roundRobin, 
-    requiredAcks = RequiredAcks.Local,
-    bufferSize = 2000000,
-    batchSize = 10000,
-    batchLinger = 1)
+    requiredAcks = RequiredAcks.AllInSync,
+    timeout = ProducerConfig.DefaultTimeoutMs,
+    bufferSize = 100,
+    batchSizeBytes = 2000000,
+    batchLingerMs = 1000)
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -50,38 +51,42 @@ let produceBatch =
   |> Metrics.throughputAsyncTo counter (fun _ -> batchSize)
   |> Metrics.latencyAsyncTo timer
 
-let sw = Stopwatch.StartNew()
+let cts = new CancellationTokenSource()
 
+Kafunk.Log.Event 
+|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
+|> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
+|> Observable.add (fun es ->
+  cts.Cancel ()
+  printfn "ERROR_OVERFLOW|count=%i" es.Length)
+
+let sw = Stopwatch.StartNew()
 let mutable completed = 0L
 
-Async.Start (async {
-  while true do
-    do! Async.Sleep (1000 * 5)
-    let completed = completed
-    let mb = (int64 completed * int64 messageSize) / int64 1000000
-    Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
+let go = async {
 
-try
+  let! _ = Async.StartChild (async {
+    while true do
+      do! Async.Sleep (1000 * 5)
+      let completed = completed
+      let mb = (int64 completed * int64 messageSize) / int64 1000000
+      Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
 
-  let errMonitor = 
-    FlowMonitor.escalateOnThreshold
-      100
-      (TimeSpan.FromSeconds 1.0)
-      (Exn.ofSeq)
+  return!
+    Seq.init batchCount id
+    |> Seq.map (fun batchNo -> async {
+      try
+        let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
+        let! prodRes = produceBatch (fun ps -> ps.[batchNo % ps.Length], msgs)
+        Interlocked.Add(&completed, int64 batchSize) |> ignore
+        return ()
+      with ex ->
+        Log.error "produce_error|%O" ex
+        return () })
+    |> Async.ParallelThrottledIgnore parallelism }
 
-  Seq.init batchCount id
-  |> Seq.map (fun batchNo -> async {
-    try
-      let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-      let! prodRes = produceBatch (fun ps -> ps.[batchNo % ps.Length], msgs)
-      Interlocked.Add(&completed, int64 batchSize) |> ignore
-      return ()
-    with ex ->
-      Log.error "%O" ex
-      errMonitor ex
-      return () })
-  |> Async.ParallelThrottledIgnore parallelism
-  |> Async.RunSynchronously
+try 
+  Async.RunSynchronously (go, cancellationToken = cts.Token)
 with ex ->
   Log.error "%O" ex
 

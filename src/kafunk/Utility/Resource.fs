@@ -28,7 +28,7 @@ type internal ResourceEpoch<'r> = {
   version : int
 }
 
-type Resource<'r> internal (create:CancellationToken -> Async<'r>, handle:('r * int * obj * exn) -> Async<unit>) =
+type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, handle:('r * int * obj * exn) -> Async<unit>) =
       
   let Log = Log.create "Resource"
     
@@ -43,7 +43,7 @@ type Resource<'r> internal (create:CancellationToken -> Async<'r>, handle:('r * 
         prev.version + 1
       | None ->
         0
-    let! res = create closed.Token |> Async.Catch
+    let! res = create closed.Token (prevEpoch |> Option.map (fun e -> e.resource)) |> Async.Catch
     match res with
     | Success r ->
       return { resource = r ; closed = closed ; version = version }
@@ -72,7 +72,7 @@ type Resource<'r> internal (create:CancellationToken -> Async<'r>, handle:('r * 
           return ep2
         with ex ->
           Log.error "recovery_failed|error=%O" ex
-          do! Async.Sleep 2000
+          //do! Async.Sleep 2000
           return raise ex
       else
         Log.trace "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
@@ -144,7 +144,7 @@ type Resource<'r> internal (create:CancellationToken -> Async<'r>, handle:('r * 
 // operations on resource monitors.
 module Resource =
     
-  let recoverableRecreate (create:CancellationToken -> Async<'r>) (handleError:('r * int * obj * exn) -> Async<unit>) = async {
+  let recoverableRecreate (create:CancellationToken -> 'r option -> Async<'r>) (handleError:('r * int * obj * exn) -> Async<unit>) = async {
     let r = new Resource<_>(create, handleError)
     let! _ = r.Create()
     return r }

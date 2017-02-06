@@ -228,7 +228,7 @@ type private RetryAction =
       | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition (*| ErrorCode.OffsetOutOfRange*) ->
         Some (RetryAction.RefreshMetadataAndRetry [||])
 
-      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange -> 
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownMemberIdCode -> 
         Some (RetryAction.PassThru)
       
       | ErrorCode.InvalidMessage ->
@@ -464,11 +464,12 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// initial routing table.
   let rec bootstrap =
     let update (_:ConnState option) = 
+      Log.info "connecting_to_bootstrap_brokers|client_id=%s brokers=%A" cfg.clientId cfg.bootstrapServers
       cfg.bootstrapServers
       |> AsyncSeq.ofSeq
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
         try
-          Log.info "connecting_to_bootstrap_brokers|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
+          Log.info "connecting_to_bootstrap_broker|client_id=%s host=%s:%i" cfg.clientId uri.Host uri.Port
           let! ch = Chan.discoverConnect (cfg.version, cfg.tcpConfig, cfg.clientId) (uri.Host,uri.Port)
           let state = ConnState.bootstrap ch
           return Success state
@@ -487,6 +488,16 @@ type KafkaConn internal (cfg:KafkaConfig) =
       if currentState.version = callerState.version then
         let! metadata = Chan.metadata (send currentState) (Metadata.Request(topics))
         Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
+        let noLeader =
+          metadata.topicMetadata
+          |> Seq.collect (fun tmd -> 
+            tmd.partitionMetadata 
+            |> Seq.choose (fun p -> 
+              if p.leader = -1 then Some (tmd.topicName, p.partitionId)
+              else None))
+          |> Seq.toArray
+        if noLeader.Length > 0 then
+          Log.warn "leaderless_partitions_detected|partitions=%s" (Printers.topicPartitions noLeader)
         let! brokers = 
           metadata.brokers 
           |> Seq.map (fun b -> async {
@@ -499,8 +510,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
               return b.nodeId, EndPoint.ofIPEndPoint ep })
           |> Async.Parallel
         let topicNodes =
-          metadata.topicMetadata |> Seq.collect (fun tmd -> 
-            tmd.partitionMetadata |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader))
+          metadata.topicMetadata 
+          |> Seq.collect (fun tmd -> 
+            tmd.partitionMetadata 
+            |> Seq.choose (fun pmd -> if pmd.leader >= 0 then Some (tmd.topicName, pmd.partitionId, pmd.leader) else None))
         return currentState |> ConnState.updateRoutes (Routes.addBrokersAndTopicNodes brokers topicNodes)
       else
         return currentState }
@@ -518,7 +531,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
     let update currentState = async {
       if currentState.version = callerState.version then
         let! res = Chan.groupCoordinator (send currentState) (GroupCoordinatorRequest(groupId))
-        Log.info "received_group_coordinator|%s" (GroupCoordinatorResponse.Print res)
+        Log.info "received_group_coordinator|client_id=%s group_id=%s %s" 
+          cfg.clientId groupId (GroupCoordinatorResponse.Print res)
         let! ep = async {
           match IPAddress.tryParse res.coordinatorHost with
           | Some ip ->
@@ -552,7 +566,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 | None -> 
                   return res
                 | Some (errorCode,action,msg) ->
-                  Log.error "channel_response_errored|endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
+                  Log.error "channel_response_errored|client_id=%s endpoint=%O error_code=%i retry_action=%A message=%s req=%s res=%s" 
+                    cfg.clientId ep errorCode action msg (RequestMessage.Print req) (ResponseMessage.Print res)
                   match action with
                   | RetryAction.PassThru ->
                     return res
@@ -571,7 +586,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 let! state' = handleRequestFailure (state, req, ep, chanErr)
                 return! send state' req })
             |> Async.tryWith (fun ex -> async {
-              Log.error "channel_exception_escalated|endpoint=%O request=%s error=%O" ep (RequestMessage.Print req) ex
+              Log.error "channel_exception_escalated|client_id=%s endpoint=%O request=%s error=%O" 
+                cfg.clientId ep (RequestMessage.Print req) ex
+              do! Async.Sleep 1000
               return raise ex })
 
         | None ->
@@ -601,17 +618,18 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! sendHost requestRoutes.[0]
 
     | Failure (MissingTopicRoute topic) ->
-      Log.warn "missing_topic_partition_route|topic=%s request=%s" topic (RequestMessage.Print req)
+      Log.trace "missing_topic_partition_route|topic=%s request=%s" topic (RequestMessage.Print req)
       let! state' = getMetadata state [|topic|]
       return! send state' req
 
     | Failure (MissingGroupRoute group) ->
-      Log.warn "missing_group_goordinator_route|group=%s" group
+      Log.trace "missing_group_goordinator_route|group=%s" group
       let! state' = getGroupCoordinator state group
       return! send state' req }
 
   and handleRequestFailure (state:ConnState, req:RequestMessage, ep:EndPoint, chanErrs:ChanError list) = async {
-    Log.error "recovering_channel_error|endpoint=%O request=%s error=%A" ep (RequestMessage.Print req) chanErrs
+    Log.error "recovering_channel_error|client_id=%s endpoint=%O request=%s error=%A" 
+      cfg.clientId ep (RequestMessage.Print req) chanErrs
     let isBootstrapRequest =
       match req with
       | RequestMessage.Metadata _ | RequestMessage.Offset _ 
@@ -752,7 +770,7 @@ module Offsets =
 
   /// Gets available offsets for the specified topic, at the specified times.
   /// Returns a map of times to offset responses.
-  /// If empty is passed in for Partitions, will use partition information from metadata.
+  /// If empty is passed in for Partitions, will return information for all partitions.
   let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition seq) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
     let! metadata = conn.GetMetadata [|topic|]
     let partitions = set partitions
@@ -774,6 +792,31 @@ module Offsets =
         return time,offsetRes })
       |> Async.Parallel
       |> Async.map (Map.ofArray) }
+
+  /// Gets the offset range (Time.EarliestOffset,Time.LatestOffset) for a topic, for the specified partitions.
+  /// If empty is passed in for Partitions, will return information for all partitions.
+  let offsetRange (conn:KafkaConn) (topic:TopicName) (partitions:Partition seq) : Async<Map<Partition, Offset * Offset>> = async {
+    let! offsets = offsets conn topic partitions [Time.EarliestOffset;Time.LatestOffset] 1
+    
+    let filter (res:OffsetResponse) =
+      res.topics
+      |> Seq.collect (fun (t,ps) -> 
+        if t = topic then ps |> Seq.map (fun p -> p.partition, p.offsets.[0])
+        else Seq.empty)
+      |> Map.ofSeq
+
+    let earliest = offsets |> Map.find Time.EarliestOffset |> filter
+    let latest = offsets |> Map.find Time.LatestOffset |> filter
+
+    let offsets =
+      (earliest,latest)
+      ||> Map.mergeChoice (fun _ -> function
+        | Choice1Of3 (e,l) -> (e,l)
+        | Choice2Of3 e -> (e,-1L)
+        | Choice3Of3 l -> (-1L,l))
+    
+    return offsets }
+
 
 
   type private PeriodicCommitQueueMsg =

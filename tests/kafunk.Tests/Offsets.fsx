@@ -7,8 +7,10 @@ open Kafunk
 
 let Log = Log.create __SOURCE_FILE__
 
-let host = ""
-let topic = ""
+let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
+
+let host = argiDefault 1 "localhost"
+let topic = argiDefault 2 "absurd-topic"
 
 let conn = Kafka.connHost host
 
@@ -19,4 +21,4 @@ let offsets =
 for kvp in offsets do
   for (tn,offsets) in kvp.Value.topics do
     for p in offsets do
-      printfn "time=%i topic=%s partition=%i offsets=%A" kvp.Key tn p.partition p.offsets
+      printfn "time=%i topic=%s p=%i os=%A" kvp.Key tn p.partition p.offsets

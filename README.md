@@ -40,18 +40,26 @@ for t in metadata.topicMetadata do
 // producer
 
 let producerCfg =
-  ProducerConfig.create ("absurd-topic", Partitioner.roundRobin, requiredAcks = RequiredAcks.Local)
+  ProducerConfig.create (
+    topic = "absurd-topic", 
+    partition = Partitioner.roundRobin, 
+    requiredAcks = RequiredAcks.Local)
 
 let producer =
   Producer.createAsync conn producerCfg
   |> Async.RunSynchronously
 
+// produce single message
+
 let prodRes =
-  Producer.produce producer [| ProducerMessage.ofBytes ("hello world"B) |]
+  Producer.produce producer (ProducerMessage.ofBytes ("hello world"B))
   |> Async.RunSynchronously
 
 for (p,offset) in prodRes.offsets do
   printfn "partition=%i offset=%i" p offset
+
+
+
 
 
 
@@ -65,20 +73,20 @@ let consumer =
 
 // commit on every message set
 
-consumer
-|> Consumer.consume (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
-  printfn "member_id=%s topic=%s partition=%i" s.memberId ms.topic ms.partition
-  do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
+Consumer.consume consumer 
+  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+    printfn "member_id=%s topic=%s partition=%i" s.memberId ms.topic ms.partition
+    do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
 |> Async.RunSynchronously
 
 
 // commit periodically
 
-consumer
-|> Consumer.consumePeriodicCommit 
-    (TimeSpan.FromSeconds 10.0) 
-    (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
-      printfn "member_id=%s topic=%s partition=%i" s.memberId ms.topic ms.partition })
+
+Consumer.consumePeriodicCommit consumer
+  (TimeSpan.FromSeconds 10.0) 
+  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+    printfn "member_id=%s topic=%s partition=%i" s.memberId ms.topic ms.partition })
 |> Async.RunSynchronously
 
 
@@ -100,7 +108,8 @@ let consumerState =
   |> Async.RunSynchronously
 
 printfn "generation_id=%i member_id=%s leader_id=%s assignment_stratgey=%s partitions=%A" 
-  consumerState.generationId consumerState.memberId consumerState.leaderId consumerState.assignmentStrategy consumerState.assignments 
+  consumerState.generationId consumerState.memberId consumerState.leaderId 
+  consumerState.assignmentStrategy consumerState.assignments 
 
 
 
@@ -113,8 +122,6 @@ let consumerOffsets =
 for (t,os) in consumerOffsets do
   for (p,o) in os do
     printfn "topic=%s partition=%i offset=%i" t p o
-
-
 
 
 // fetch topic offset information

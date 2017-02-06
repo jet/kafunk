@@ -15,54 +15,74 @@ module ConsumerGroup =
   type AssignmentStrategy = {
             
     /// Given the configured topic name, returns metadata for the consumer group protocol.
-    metadata : TopicName -> Async<ConsumerGroupProtocolMetadata>
+    metadata : GroupMember -> TopicName[] -> Async<ConsumerGroupProtocolMetadata>
       
     /// Assigns members to partitions given a set of available topic partitions and members.
-    assign : (TopicName * Partition[])[] -> (MemberId * ConsumerGroupProtocolMetadata)[] -> (GroupMemberState option) -> Async<(MemberId * ConsumerGroupMemberAssignment)[]>
-
+    assign : GroupMember ->
+             (GroupMemberState option) -> 
+             (TopicName * Partition[])[] -> 
+             (MemberId * ConsumerGroupProtocolMetadata)[] ->             
+             Async<(MemberId * ConsumerGroupMemberAssignment)[]>
   }
 
   /// Decodes member state from the MemberAssignment field in SyncGroupResponse.
   let internal decodeMemberAssignment (memberAssignment:MemberAssignment) =
       
     let assignment,_ = ConsumerGroupMemberAssignment.read memberAssignment
-    
-    Log.info "decoded_sync_group_response|version=%i member_assignment=[%s]"
-      assignment.version
-      (String.concat ", " (assignment.partitionAssignment.assignments |> Seq.map (fun (tn,ps) -> sprintf "topic=%s partitions=%s" tn (Printers.partitions ps)))) 
-      
+          
     if assignment.partitionAssignment.assignments.Length = 0 then
       failwith "no partitions assigned!"
 
     let assignments = 
       assignment.partitionAssignment.assignments
-      |> Seq.collect (fun (_,ps) -> ps)
+      |> Seq.groupBy fst
+      |> Seq.map (fun (t,ps) -> t, ps |> Seq.collect snd |> Seq.toArray)
       |> Seq.toArray
 
-    assignments
+    // TODO: consider support for multi-topic subscriptions
+    assignments.[0]
 
   /// Creates an instances of the consumer groups protocol given the specified assignment strategies.
-  let create (strategies:(AssignmentStrategyName * AssignmentStrategy)[]) (topic:TopicName) =
+  let create (strategies:(AssignmentStrategyName * AssignmentStrategy)[]) (topicSubscription:TopicName[]) =
       
-    let strategies = strategies |> Map.ofArray
+    let strategies = Map.ofArray strategies
 
-    let assign (conn:KafkaConn) (prevState:GroupMemberState option) (startegyName:AssignmentStrategyName) (members:(MemberId * MemberMetadata)[]) : Async<(MemberId * ProtocolMetadata)[]> = async {
-        
-      let! topicPartitions = conn.GetMetadata [|topic|]
-        
-      let topicPartitions = 
-        let ps = topicPartitions |> Map.find topic
-        [|topic,ps|]
+    let protocols (gm:GroupMember) (_:GroupMemberState option) = async {
+      return!
+        strategies
+        |> Seq.map (fun kvp -> async {
+          let startegyName = kvp.Key
+          let strategy = kvp.Value
+          let! metadata = strategy.metadata gm topicSubscription
+          return startegyName, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write metadata })
+        |> Async.Parallel }
 
-      let assignmentStrategy = Map.find startegyName strategies
+    let assign 
+      (gm:GroupMember) (prevState:GroupMemberState option) (startegyName:AssignmentStrategyName) 
+      (members:(MemberId * MemberMetadata)[]) : Async<(MemberId * ProtocolMetadata)[]> = async {
 
       let members = 
         members
         |> Array.map (fun (memberId,meta) ->
           let meta,_ = ConsumerGroupProtocolMetadata.read meta
           memberId,meta)
+        
+      let topics = 
+        members 
+        |> Seq.collect (fun (_,meta) -> meta.subscription) 
+        |> Seq.distinct
+        |> Seq.toArray
 
-      let! memberAssignments = assignmentStrategy.assign topicPartitions members prevState
+      let! topicPartitions = gm.conn.GetMetadata topics
+        
+      let topicPartitions = 
+        topicPartitions
+        |> Map.onlyKeys topics
+        |> Map.toArray
+
+      let assignmentStrategy = Map.find startegyName strategies
+
+      let! memberAssignments = assignmentStrategy.assign gm prevState topicPartitions members
 
       let memberAssignments =
         memberAssignments
@@ -70,16 +90,6 @@ module ConsumerGroup =
           memberId, (toArraySeg ConsumerGroupMemberAssignment.size ConsumerGroupMemberAssignment.write assignment))
         
       return memberAssignments }
-
-    let protocols = async {
-      return!
-        strategies
-        |> Seq.map (fun kvp -> async {
-          let startegyName = kvp.Key
-          let strategy = kvp.Value
-          let! metadata = strategy.metadata topic
-          return startegyName, toArraySeg ConsumerGroupProtocolMetadata.size ConsumerGroupProtocolMetadata.write metadata })
-        |> Async.Parallel }
         
     { protocolType = ProtocolType.consumer ; protocols = protocols ; assign = assign }
 
@@ -89,49 +99,57 @@ module ConsumerGroup =
     /// The range consumer group assignment startegy.
     let Range =
       
-      let metadata topic = async {
+      let metadata (_:GroupMember) (topicSubscription:TopicName[]) = async {
         let version = 0s
         let userData = Binary.empty
-        return ConsumerGroupProtocolMetadata(version, [|topic|], userData) }
+        return ConsumerGroupProtocolMetadata(version, topicSubscription, userData) }
 
-      let assign (topicPartitions:(TopicName * Partition[])[]) (members:(MemberId * ConsumerGroupProtocolMetadata)[]) _ = 
+      let assign 
+        (gm:GroupMember) (_:GroupMemberState option) (topicPartitions:(TopicName * Partition[])[]) (members:(MemberId * ConsumerGroupProtocolMetadata)[]) = 
       
         let memberAssignments =
           
-          let topicPartitions =
-            topicPartitions
-            |> Seq.collect (fun (t,ps) -> 
-              ps |> Seq.map (fun p -> t,p))
-            |> Seq.toArray
-            |> Array.groupInto members.Length
-
-          (members,topicPartitions)
-          ||> Array.zip 
-          |> Array.map (fun ((memberId,meta),ps) ->
-            let assignment = 
-              ps 
-              |> Seq.groupBy fst 
-              |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
-              |> Seq.toArray
-            memberId, meta, assignment)
+          let membersByTopic =
+            members
+            |> Seq.collect (fun (mid,meta) -> meta.subscription |> Seq.map (fun t -> t,mid))
+            |> Seq.groupBy fst
+            |> Seq.map (fun (t,xs) -> t, xs |> Seq.map snd |> Seq.toArray)
+            |> Map.ofSeq
+          
+          let members = Map.ofSeq members
+          
+          (membersByTopic, Map.ofArray topicPartitions)
+          ||> Map.mergeChoice (fun t -> function
+            | Choice2Of3 _ | Choice3Of3 _ -> failwith "invalid state"
+            | Choice1Of3 (memberIds,ps) -> 
+              let memberPartitions = ps |> Array.groupInto memberIds.Length                
+              (memberIds,memberPartitions)
+              ||> Array.zip
+              |> Array.map (fun (mid,ps) -> mid,t,ps))
+          |> Map.toSeq
+          |> Seq.collect snd
+          |> Seq.groupBy (fun (mid,_,_) -> mid)
+          |> Seq.map (fun (mid,xs) -> mid, Map.find mid members, xs |> Seq.map (fun (_,t,ps) -> t,ps) |> Seq.toArray)
+          |> Seq.toArray
 
         let memberAssignmentsStr =
           memberAssignments
           |> Seq.map (fun (memberId,meta,topicPartitions) -> 
             let str = 
               topicPartitions 
-              |> Seq.map (fun (t,ps) -> sprintf "[topic=%s partitions=%s]" t (String.concat "," (ps |> Seq.map (string))))
+              |> Seq.map (fun (t,ps) -> sprintf "[topic=%s partitions=%s]" t (Printers.partitions ps))
               |> String.concat " ; "
             sprintf "[member_id=%s user_data=%s assignments=%s]" memberId (Binary.toString meta.userData) str)
           |> String.concat " ; "
-        Log.info "leader_determined_member_assignments|%s" memberAssignmentsStr
+        Log.info "leader_determined_member_assignments|client_id=%s group_id=%s %s" 
+          gm.conn.Config.clientId gm.config.groupId memberAssignmentsStr
 
         let memberAssignments =
           memberAssignments
-          |> Array.map (fun (memberId,meta,ps) ->
+          |> Array.map (fun (memberId,meta,tps) ->
             let userData = meta.userData
             let version = meta.version
-            let assignment = ConsumerGroupMemberAssignment(version, PartitionAssignment(ps), userData)
+            let assignment = ConsumerGroupMemberAssignment(version, PartitionAssignment(tps), userData)
             memberId, assignment)
 
         async.Return memberAssignments
@@ -150,17 +168,17 @@ type ConsumerConfig = {
   
   /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
   /// period, a consumer is ejected from the consumer group.
-  /// Default: 20000
+  /// Default: 10000
   sessionTimeout : SessionTimeout
   
   /// The time during which a consumer must rejoin a group after a rebalance.
   /// If the consumer doesn't rejoin within this time, it will be ejected.
   /// Supported in v0.10.1.
-  /// Default: 20000
+  /// Default: 10000
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
-  /// Default: 10
+  /// Default: 5
   heartbeatFrequency : int32
   
   /// The minimum bytes to buffer server side for a fetch request.
@@ -173,7 +191,7 @@ type ConsumerConfig = {
   fetchMaxWaitMs : MaxWaitTime
   
   /// The maximum bytes to return as part of a partition for a fetch request.
-  /// Default: 100000
+  /// Default: 1048576
   fetchMaxBytes : MaxBytes
   
   /// Offset retention time.
@@ -213,12 +231,12 @@ type ConsumerConfig = {
       {
         groupId = groupId
         topic = topic
-        sessionTimeout = defaultArg sessionTimeout 20000
-        rebalanceTimeout = defaultArg rebalanceTimeout 20000
-        heartbeatFrequency = defaultArg heartbeatFrequency 10
+        sessionTimeout = defaultArg sessionTimeout 10000
+        rebalanceTimeout = defaultArg rebalanceTimeout 10000
+        heartbeatFrequency = defaultArg heartbeatFrequency 5
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
-        fetchMaxBytes = defaultArg fetchMaxBytes 100000
+        fetchMaxBytes = defaultArg fetchMaxBytes 1048576
         offsetRetentionTime = defaultArg offsetRetentionTime -1L
         initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
@@ -231,7 +249,8 @@ type ConsumerConfig = {
       }
 
 /// The action to take when the consumer attempts to fetch an offset which is out of range.
-/// This typically happens if the consumer is outpaced by the message cleanup process.
+/// This can happen if a) messages are produced faster than they are consumed or
+/// b) a lagging broker becomes the leader for a partition.
 /// The default action is to halt consumption.
 and ConsumerOffsetOutOfRangeAction =
 
@@ -243,6 +262,8 @@ and ConsumerOffsetOutOfRangeAction =
 
   /// Request a fresh set of offsets and resume consumption from the time
   /// configured as the initial fetch time for the consumer (earliest, or latest).
+  /// If the attempted offset is greater than the latest offset of the topic, it will
+  /// resume from the latest offset.
   | ResumeConsumerWithFreshInitialFetchTime
 
 
@@ -336,7 +357,7 @@ module Consumer =
   /// Explicitly commits offsets to a consumer group.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
-    Log.info "committing_offsets|group_id=%s topic=%s offsets=%s" c.config.groupId c.config.topic (Printers.partitionOffsetPairs offsets)
+    //Log.trace "committing_offsets|group_id=%s topic=%s offsets=%s" c.config.groupId c.config.topic (Printers.partitionOffsetPairs offsets)
     let! state = Group.stateInternal c.groupMember
     let conn = c.conn
     let cfg = c.config
@@ -346,12 +367,15 @@ module Consumer =
           (state)
           (ignore)
           (async {
-            let req = OffsetCommitRequest(cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
+            let req = 
+              OffsetCommitRequest(
+                cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
             let! res = Kafka.offsetCommit conn req |> Async.Catch
             match res with
             | Success res ->
               if res.topics.Length = 0 then
-                Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
+                Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" 
+                  cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
                 return failwith "offset commit failed!"
               let errors =
                 res.topics
@@ -360,15 +384,21 @@ module Consumer =
                   |> Seq.choose (fun (p,ec) ->
                     match ec with
                     | ErrorCode.NoError -> None
-                    | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
+                    | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode 
+                    | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
                     | _ -> failwithf "unsupported commit offset error_code=%i" ec))
               if not (Seq.isEmpty errors) then
-                do! Group.closeGeneration c.groupMember state
+                Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
+                  cfg.groupId topic (Printers.partitionErrorCodePairs errors)
+                do! Group.closeGenerationAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
                 return ()
               else
+                Log.info "committed_offsets|client_id=%s group_id=%s topic=%s offsets=%s" 
+                  c.conn.Config.clientId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
                 return ()
             | Failure ex ->
-              Log.warn "commit_offset_exception|generation_id=%i error=%O" state.state.generationId ex
+              Log.warn "commit_offset_exception|client_id=%s group_id=%s generation_id=%i error=%O" 
+                c.conn.Config.clientId cfg.groupId state.state.generationId ex
               do! Group.leaveInternal c.groupMember state
               return () }) }
 
@@ -439,7 +469,8 @@ module Consumer =
         return failwithf "fetch_offset_errors|errors=%A" errors
       
       if missing.Length > 0 then
-        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=%s" cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
+        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" 
+          cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
         let offsetReq = OffsetRequest(-1, [| topic, missing |> Array.map (fun (p,_) -> p, cfg.initialFetchTime, 1) |])
         let! offsetRes = Kafka.offset conn offsetReq
         // TODO: error check
@@ -459,7 +490,7 @@ module Consumer =
   
   /// Creates a participant in the consumer groups protocol and joins the group.
   let createAsync (conn:KafkaConn) (cfg:ConsumerConfig) = async {
-    let groupProtocol = ConsumerGroup.create cfg.assignmentStrategies cfg.topic
+    let groupProtocol = ConsumerGroup.create cfg.assignmentStrategies [|cfg.topic|]
     let config = 
       { GroupConfig.groupId = cfg.groupId
         heartbeatFrequency = cfg.heartbeatFrequency
@@ -476,31 +507,35 @@ module Consumer =
 
   /// Returns an async sequence corresponding to generations, where each generation
   /// is paired with the set of assigned fetch streams.
-  let generations (consumer:Consumer) =
+  let generations (c:Consumer) =
 
-    let cfg = consumer.config
-    let topic = cfg.topic
-    let fetch = Kafka.fetch consumer.conn |> AsyncFunc.catch
-    let messageVer = Versions.fetchResMessage (Versions.byKey consumer.conn.Config.version ApiKey.Fetch)
+    let cfg = c.config
+    let fetch = Kafka.fetch c.conn |> AsyncFunc.catch
+    let messageVer = Versions.fetchResMessage (Versions.byKey c.conn.Config.version ApiKey.Fetch)
     
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:GroupMemberStateWrapper) = async {
       
-      let assignedPartitions = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
+      let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment      
+      Log.info "consumer_group_assignment_received|client_id=%s group_id=%s topic=%s partitions=[%s]"
+        c.conn.Config.clientId cfg.groupId topic (Printers.partitions assignment)
 
       let! ct = Async.CancellationToken
-      let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closedToken)
+      let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
 
       // initialize per-partition messageset buffers
       let partitionBuffers =
-        assignedPartitions
+        assignment
         |> Seq.map (fun p -> p, BoundedMb.create cfg.fetchBufferSize)
         |> Map.ofSeq
 
-      let! initOffsets = fetchOffsetsFallback consumer cfg.topic assignedPartitions
-      Log.info "fetched_initial_offsets|group_id=%s member_id=%s topic=%s offsets=%s" cfg.groupId state.state.memberId cfg.topic (Printers.partitionOffsetPairs initOffsets)
+      let! initOffsets = fetchOffsetsFallback c topic assignment
+      Log.info "fetched_initial_offsets|client_id=%s group_id=%s member_id=%s topic=%s offsets=%s" 
+        c.conn.Config.clientId cfg.groupId state.state.memberId topic (Printers.partitionOffsetPairs initOffsets)
 
-      let combineFetchResponses (r1:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) (r2:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) =
+      let combineFetchResponses 
+        (r1:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) 
+        (r2:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) =
         match r1,r2 with
         | Some (oks1,ends1), Some (oks2,ends2) -> Some (Array.append oks1 oks2, Array.append ends1 ends2)
         | Some _, _ -> r1
@@ -515,7 +550,7 @@ module Consumer =
           (state)
           (fun _ -> None)
           (async {
-            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| cfg.topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |])
+            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |])
             let! res = fetch req
             match res with
             | Success res ->
@@ -549,7 +584,7 @@ module Consumer =
                   |> Seq.map (fun p -> p, Map.find p offsets)
                   |> Seq.toArray
                 Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%s" (Printers.partitionOffsetPairs staleOffsets)
-                let! _ = consumer.conn.GetMetadata ([|cfg.topic|])
+                let! _ = c.conn.GetMetadata ([|topic|])
                 // TODO: only fetch stale and combine
                 return! tryFetch offsets else
               
@@ -565,48 +600,46 @@ module Consumer =
                 return oksAndEnds
 
             | Failure ex ->
-              Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
-              do! Group.leaveInternal consumer.groupMember state
+              Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" 
+                state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
+              do! Group.leaveInternal c.groupMember state
               return raise ex })
 
       /// Handles out of range offsets.
       and offsetsOutOfRange (attemptedOffsets:(Partition * Offset)[]) = async {
         let partitions = attemptedOffsets |> Array.map fst |> set
-        let! timeOffsets = Offsets.offsets consumer.conn topic partitions [|Time.EarliestOffset;Time.LatestOffset|] 1
-        let msg =
-          timeOffsets
+        let! topicOffsetRange = 
+          Offsets.offsetRange c.conn topic partitions
+        let offsetInfoStr =
+          topicOffsetRange
           |> Map.toSeq
-          |> Seq.map (fun (time,offsetRes) -> 
-            offsetRes.topics
-            |> Seq.map (fun (_tn,os) ->
-              let os =
-                os
-                |> Seq.map (fun o -> sprintf "offset=%i" (o.offsets |> Seq.tryItem 0 |> Option.getOr -1L))
-                |> String.concat " ; "
-              sprintf "time=%i %s" time os)
-            |> String.concat " ; ")
+          |> Seq.map (fun (p,(e,l)) -> sprintf "[p=%i earliest=%i latest=%i]" p e l)
           |> String.concat " ; "
-        Log.warn "offset_out_of_range|topic=%s attempted_offsets=%s offset_info=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) msg
+        Log.warn "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr
         match cfg.outOfRangeAction with
         | HaltConsumer ->
-          Log.error "halting_consumer|topic=%s attempted_offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
-          return raise (exn(sprintf "offset_out_of_range|topic=%s offset=%s latest_offset_info=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) msg))
+          Log.error "halting_consumer|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
+          return raise (exn(sprintf "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr))
         | HaltPartition -> 
-          Log.warn "halting_partition_fetch|topic=%s last_attempted_offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
+          Log.warn "halting_partition_fetch|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
           return None
         | ResumeConsumerWithFreshInitialFetchTime ->
-          let offsetInfo = timeOffsets |> Map.find cfg.initialFetchTime
-          let freshOffsets = 
-            offsetInfo.topics
-            |> Seq.collect (fun (tn,ps) ->
-              ps
-              |> Seq.map (fun p -> tn, p.partition, p.offsets.[0]))
-            |> Seq.choose (fun (tn,p,o) ->
-              if tn = topic && Set.contains p partitions then Some (p,o)
-              else None)
-            |> Seq.toArray
-          Log.info "resuming_fetch_from_fresh_offset|topic=%s initial_fetch_time=%i fresh_offsets=%s" topic cfg.initialFetchTime (Printers.partitionOffsetPairs freshOffsets)
-          return! tryFetch freshOffsets }
+          let resetOffsets =
+            (attemptedOffsets |> Map.ofArray, topicOffsetRange)
+            ||> Map.mergeChoice (fun _ -> function
+              | Choice2Of3 _ | Choice3Of3 _ -> failwith "invalid state: expected matching partitions!"
+              | Choice1Of3 (a,(e,l)) -> 
+                if a > l then l
+                elif a < e then
+                  match cfg.initialFetchTime with
+                  | Time.EarliestOffset -> e
+                  | Time.LatestOffset -> l
+                  | _ -> failwith "invalid state: expected valid initial fetch time"
+                else
+                  a)
+            |> Map.toArray
+          Log.info "resuming_fetch_from_reset_offsets|topic=%s reset_offsets=%s" topic (Printers.partitionOffsetPairs resetOffsets)
+          return! tryFetch resetOffsets }
              
       // multiplexed stream of all fetch responses for this consumer
       let fetchStream =
@@ -646,7 +679,8 @@ module Consumer =
                     ends
                     |> Seq.map (fun (p,hwmo) -> sprintf "[partition=%i high_watermark_offset=%i]" p hwmo)
                     |> String.concat " ; "
-                  Log.info "end_of_topic_partition_reached|topic=%s %s" topic msg
+                  Log.trace "end_of_topic_partition_reached|group_id=%s generation_id=%i member_id=%s topic=%s %s" 
+                    cfg.groupId state.state.generationId state.state.memberId topic msg
 
                 return Some (mss, (nextOffsets,retryQueue)) })
                       
@@ -654,10 +688,10 @@ module Consumer =
       let fetchProcess = async {
         use! _cnc = Async.OnCancel (fun () -> 
           Log.warn "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
-            cfg.groupId state.state.generationId state.state.memberId cfg.topic (assignedPartitions.Length))
+            cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
 
         Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
-          cfg.groupId state.state.generationId state.state.memberId cfg.topic (assignedPartitions.Length)
+          cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
 
         return!
           Async.tryFinnallyWithAsync
@@ -674,14 +708,14 @@ module Consumer =
                   return () }) })
               (async {
                 Log.info "fetch_process_stopping|group_id=%s generation_id=%i member_id=%s topic=%s" 
-                  cfg.groupId state.state.generationId state.state.memberId cfg.topic
+                  cfg.groupId state.state.generationId state.state.memberId topic
                 do! Async.Sleep 1000 // flush logs
                 if not fetchProcessCancellationToken.IsCancellationRequested then
                   fetchProcessCancellationToken.Cancel ()
                 return () })
               (fun ex -> async { 
                 Log.error "fetch_process_errored|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i error=%O" 
-                  cfg.groupId state.state.generationId state.state.memberId cfg.topic (assignedPartitions.Length) ex
+                  cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length) ex
                 return raise ex }) }
             
       Async.Start (fetchProcess, fetchProcessCancellationToken.Token)
@@ -696,7 +730,7 @@ module Consumer =
 
       return partitionStreams }
     
-    Group.generationInternal consumer.groupMember
+    Group.generationsInternal c.groupMember
     |> AsyncSeq.mapAsync (fun state -> async {
       let! partitionStreams = consume state
       return state.state,partitionStreams })
@@ -705,45 +739,45 @@ module Consumer =
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The handler accepts the topic, partition, message set and an async computation which commits offsets corresponding to the message set.
   let consume 
-    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) 
-    (consumer:Consumer) : Async<unit> =
-      consumer
+    (c:Consumer)
+    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> =
+      c
       |> generations
-      |> AsyncSeq.iterAsync (fun (groupMemberState,partitionStreams) ->
+      |> AsyncSeq.iterAsyncParallel (fun (groupMemberState,partitionStreams) ->
         partitionStreams
         |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
         |> Async.Parallel
-        |> Async.Ignore
-        |> Async.cancelTokenWith groupMemberState.closedToken id)
+        |> Async.Ignore//)
+        |> Async.cancelTokenWith groupMemberState.closed id)
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
   /// the specified interval.
   let consumePeriodicCommit 
+    (c:Consumer)
     (commitInterval:TimeSpan)
-    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>)
-    (consumer:Consumer) : Async<unit> = async {
-      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets consumer)
+    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
+      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets c)
       let handler s ms = async {
         do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
-      do! consumer |> consume handler
+      do! consume c handler
       do! Offsets.flushPeriodicCommit commitQueue }
 
   /// Returns a stream of message sets across all partitions assigned to the consumer.
   /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
   /// backpressure on the underlying consumer.
-  let stream (bufferSize:int) (consumer:Consumer) = asyncSeq {
-    let mb = BoundedMb.create bufferSize
+  let stream (c:Consumer) (bufferSize:int) = asyncSeq {
+    use mb = BoundedMb.create bufferSize
     let handle s ms = BoundedMb.put (s,ms) mb
-    let! _ = Async.StartChild (consume handle consumer)
+    let! _ = Async.StartChild (consume c handle)
     yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
 
   /// Returns the current consumer state.
   let state (c:Consumer) : Async<ConsumerState> = async {
     let! state = Group.stateInternal c.groupMember
-    let assignments = ConsumerGroup.decodeMemberAssignment state.state.memberAssignment
+    let _,assignments = ConsumerGroup.decodeMemberAssignment state.state.memberAssignment
     return 
       { ConsumerState.assignments = assignments
         memberId = state.state.memberId

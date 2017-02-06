@@ -16,9 +16,11 @@ type ChanConfig = {
   useNagle : bool
   
   /// The socket receive buffer size.
+  /// Default: 65536
   receiveBufferSize : int
     
   /// The socket send buffer size.
+  /// Default: 65536
   sendBufferSize : int
         
   /// The connection timeout.
@@ -35,16 +37,37 @@ type ChanConfig = {
 
 } with
   
-  /// Creates a channel configuration.
+  /// The default TCP receive buffer size = 65536.
+  static member DefaultReceiveBufferSize = 65536
+  
+  /// The default TCP send buffer size = 65536.
+  static member DefaultSendBufferSize = 65536
+  
+  /// The default TCP connection timeout = 10s.
+  static member DefaultConnectTimeout = TimeSpan.FromSeconds 10
+  
+  /// The default TCP connection retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
+  static member DefaultConnectRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  
+  /// The default TCP request timeout = 30s.
+  static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
+  
+  /// The default TCP request retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  
+  /// The default TCP Nagle setting = false.
+  static member DefaultUseNagle = false
+
+  /// Creates a broker TCP channel configuration.
   static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
     {
-      useNagle = defaultArg useNagle false
-      receiveBufferSize = defaultArg receiveBufferSize 8192
-      sendBufferSize = defaultArg sendBufferSize 8192
-      connectTimeout = defaultArg connectTimeout (TimeSpan.FromSeconds 10)
-      connectRetryPolicy = defaultArg connectRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
-      requestTimeout = defaultArg requestTimeout (TimeSpan.FromSeconds 30)
-      requestRetryPolicy = defaultArg requestRetryPolicy (RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50)
+      useNagle = defaultArg useNagle ChanConfig.DefaultUseNagle
+      receiveBufferSize = defaultArg receiveBufferSize ChanConfig.DefaultReceiveBufferSize
+      sendBufferSize = defaultArg sendBufferSize ChanConfig.DefaultSendBufferSize
+      connectTimeout = defaultArg connectTimeout ChanConfig.DefaultConnectTimeout
+      connectRetryPolicy = defaultArg connectRetryPolicy ChanConfig.DefaultConnectRetryPolicy
+      requestTimeout = defaultArg requestTimeout ChanConfig.DefaultRequestTimeout
+      requestRetryPolicy = defaultArg requestRetryPolicy ChanConfig.DefaultRequestRetryPolicy
     }
 
 
@@ -136,16 +159,16 @@ module internal Chan =
       |> AsyncFunc.timeoutResult config.connectTimeout
       |> AsyncFunc.catchResult
       |> AsyncFunc.doBeforeAfter
-          (fun ep -> Log.info "tcp_connecting|remote_endpoint=%O client_id=%s" (EndPoint.endpoint ep) clientId)
+          (fun ep -> Log.info "tcp_connecting|client_id=%s remote_endpoint=%O" clientId (EndPoint.endpoint ep))
           (fun (ep,res) ->
             let ipep = EndPoint.endpoint ep
             match res with
             | Success s ->
-              Log.info "tcp_connected|remote_endpoint=%O local_endpoint=%O" s.RemoteEndPoint s.LocalEndPoint
+              Log.info "tcp_connected|client_id=%s remote_endpoint=%O local_endpoint=%O" clientId s.RemoteEndPoint s.LocalEndPoint
             | Failure (Choice1Of2 _) ->
-              Log.error "tcp_connection_timed_out|remote_endpoint=%O timeout=%O" ipep config.connectTimeout
+              Log.error "tcp_connection_timed_out|client_id=%s remote_endpoint=%O timeout=%O" clientId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
-              Log.error "tcp_connection_failed|remote_endpoint=%O error=%O" ipep e)
+              Log.error "tcp_connection_failed|client_id=%s remote_endpoint=%O error=%O" clientId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
@@ -155,7 +178,7 @@ module internal Chan =
 
     let! socketAgent = 
       Resource.recoverableRecreate 
-        (fun _ -> conn ep)
+        (fun _ _ -> conn ep)
         recovery
 
     let! send =
@@ -167,12 +190,12 @@ module internal Chan =
         try
           let! received = Socket.receive s buf
           if received = 0 then 
-            Log.warn "received_empty_buffer|remote_endpoint=%O" ep
+            Log.warn "received_empty_buffer|client_id=%s remote_endpoint=%O" clientId ep
             return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|remote_endpoint=%O error=%O" ep ex
+          Log.error "receive_failure|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive
@@ -215,13 +238,16 @@ module internal Chan =
         | Success _ -> Failure (Choice1Of2 ())
         | Failure e -> Failure (Choice2Of2 e))
       |> AsyncFunc.doBeforeAfter
-          (fun req -> Log.trace "sending_request|request=%s" (RequestMessage.Print req))
+          //(fun _req -> (*Log.trace "sending_request|request=%s" (RequestMessage.Print req)*) ())
+          (ignore)
           (fun (req,res) -> 
             match res with
-            | Success res -> 
-              Log.trace "received_response|response=%s" (ResponseMessage.Print res)
+            | Success _res -> 
+              ()
+              //Log.trace "received_response|response=%s" (ResponseMessage.Print res)
             | Failure (Choice1Of2 ()) ->
-              Log.warn "request_timed_out|ep=%O request=%s timeout=%O" ep (RequestMessage.Print req) config.requestTimeout
+              Log.warn "request_timed_out|client_id=%s ep=%O request=%s timeout=%O" 
+                clientId ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
               Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)
       |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy
@@ -234,9 +260,9 @@ module internal Chan =
     let! ip = async {
       match IPAddress.tryParse host with
       | None ->
-        Log.info "discovering_dns_entries|host=%s" host
+        Log.info "discovering_dns|client_id=%s host=%s" clientId host
         let! ips = Dns.IPv4.getAllAsync host
-        Log.info "discovered_dns_entries|host=%s ips=%A" host ips
+        Log.info "discovered_dns|client_id=%s host=%s ips=[%s]" clientId host (Printers.stringsCsv ips)
         let ip = ips.[0]
         return ip
       | Some ip ->
