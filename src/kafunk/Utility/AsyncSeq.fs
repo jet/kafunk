@@ -193,17 +193,40 @@ module AsyncSeq =
       (fun () -> next |> Async.map (Option.map (fun a -> a,()))) 
       ()
 
+  let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) = asyncSeq {
+    use mb = Mb.create ()
+    let! iterTask =
+      s 
+      |> AsyncSeq.iterAsync (fun a -> async {
+        let! b = Async.StartChild (f a)
+        mb.Post (Some b) })
+      |> Async.bind (fun _ -> async {
+        mb.Post None })
+      |> Async.StartChildAsTask
+    yield! 
+      replicateUntilNoneAsync (Mb.take mb) 
+      |> AsyncSeq.mapAsync (fun b -> async {
+        if iterTask.IsFaulted then
+          return! raise iterTask.Exception
+        let! b = b
+        return b }) }
+
   let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
     use mb = Mb.create ()
-    let err = IVar.create ()
-    let! _ =
+    let! iterTask =
       s 
       |> AsyncSeq.iterAsync (fun a -> async {
         let! x = Async.StartChild (f a)
         do Mb.put (Some x) mb })
-      |> Async.tryWith (fun e -> async { IVar.error e err })
-      |> Async.StartChild
-    return! Async.choose (replicateUntilNoneAsync (Mb.take mb) |> AsyncSeq.iterAsync id) (IVar.get err) }
+      |> Async.bind (fun _ -> async {
+        do Mb.put None mb })
+      |> Async.StartChildAsTask
+    return! 
+      replicateUntilNoneAsync (Mb.take mb) 
+      |> AsyncSeq.iterAsync (fun x -> async {
+        if iterTask.IsFaulted then
+          return! raise iterTask.Exception
+        do! x }) }
 
   let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
     //if (bufferSize < 1) then invalidArg "bufferSize" "must be positive"

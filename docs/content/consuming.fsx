@@ -14,6 +14,7 @@ This example demonstrates how to consume using Kafunk.
 (**
 
 Joining the consumer group:
+See also: (ConsumerConfig)[https://jet.github.io/kafunk/reference/kafunk-consumerconfig.html]
 
 *)
 
@@ -21,6 +22,7 @@ Joining the consumer group:
 #r "kafunk.dll"
 #r "FSharp.Control.AsyncSeq.dll"
 
+open FSharp.Control
 open Kafunk
 open System
 
@@ -29,7 +31,11 @@ let conn = Kafka.connHost "existential-host"
 /// Configuration.
 let consumerConfig = 
   ConsumerConfig.create (
+
+    /// The name of the consumer group.
     groupId = "consumer-group", 
+
+    /// The topic to consume.
     topic = "absurd-topic")
 
 
@@ -95,6 +101,60 @@ Consumer.consumePeriodicCommit consumer
     printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
       s.memberId s.protocolName ms.topic ms.partition })
 |> Async.RunSynchronously
+
+
+
+(**
+
+## Periodic Offset Commit
+
+`Consumer.consumePeriodicCommit` commits offsets periodically using the following mechanism.
+
+*)
+
+
+/// Create a commit queue
+let commitQueue = Offsets.createPeriodicCommitQueue (TimeSpan.FromHours 1.0, Consumer.commitOffsets consumer)
+
+let ms : ConsumerMessageSet = failwith "some message set"
+
+/// Asynchronously enqueue offsets to be committed.
+Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms)
+
+(**
+
+The commit queue will commit enqueued offsets periodically. It will commit the greatest offset enqueued by partition.
+
+*)
+
+
+
+
+(**
+
+## Streaming
+
+In order to have explicit control of buffering and parallelism, or to perform other streaming operations, it is possible
+to consume messages directly using an asynchronous sequence:
+
+*)
+
+
+
+Consumer.stream consumer
+|> AsyncSeq.iterAsync (fun (s,ms) -> async {
+  printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
+    s.memberId s.protocolName ms.topic ms.partition })
+
+
+(**
+
+The resulting stream merges all of the per-broker streams covering all assigned partitions of the consumed topic. Note that offsets 
+must be committed explicitly.
+
+*)
+
+
 
 
 

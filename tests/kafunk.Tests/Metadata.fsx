@@ -5,7 +5,7 @@
 open FSharp.Control
 open Kafunk
 
-let conn = Kafka.connHost "localhost:9092"
+let conn = Kafka.connHost "localhost"
 
 let metadata = Kafka.metadata conn (Metadata.Request([||])) |> Async.RunSynchronously
 

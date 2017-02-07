@@ -38,16 +38,20 @@ type ProducerMessage =
 /// A producer response.
 type ProducerResult =
   struct
-    /// The offsets assigned to the first message in the message set appended to the partition.
-    val offsets : (Partition * Offset)[]
-    new (os) = { offsets = os }
+    /// The partition to which the message was written.
+    val partition : Partition
+    
+    /// The offset of the first message produced to the partition.
+    val offset : Offset
+    
+    new (p,o) = { partition = p ; offset = o }
   end
 
 /// The number of partitions of a topic.
 type PartitionCount = int
 
 /// A partition function.
-type Partitioner = TopicName * Partition[] * ProducerMessage -> Partition
+type Partitioner = TopicName * PartitionCount * ProducerMessage -> Partition
 
 /// Partition functions.
 [<Compile(Module)>]
@@ -55,17 +59,16 @@ module Partitioner =
 
   open System.Threading
 
-  let private ensurePartitions (ps:Partition[]) =
-    if isNull ps then nullArg "ps"
-    if ps.Length = 0 then invalidArg "ps" "must have partitions"
+  let private ensurePartitions (ps:PartitionCount) =
+    if ps = 0 then invalidArg "ps" "must have partitions"
     
   /// Creates a partition function.
-  let create (f:TopicName * Partition[] * ProducerMessage -> Partition) : Partitioner = 
+  let create (f:TopicName * PartitionCount * ProducerMessage -> Partition) : Partitioner = 
     f
 
   /// Computes the partition.
-  let partition (p:Partitioner) (t:TopicName) (ps:Partition[]) (m:ProducerMessage) =
-    p (t,ps,m)
+  let partition (p:Partitioner) (t:TopicName) (pc:PartitionCount) (m:ProducerMessage) =
+    p (t,pc,m)
 
   /// Constantly returns the same partition.
   let konst (p:Partition) : Partitioner =
@@ -74,20 +77,20 @@ module Partitioner =
   /// Round-robin partition assignment.
   let roundRobin : Partitioner =
     let mutable i = 0
-    create <| fun (_,ps,_) -> 
-      ensurePartitions ps
+    create <| fun (_,pc,_) -> 
+      ensurePartitions pc
       let i' = Interlocked.Increment &i
       if i' < 0 then
         Interlocked.Exchange (&i, 0) |> ignore
-        ps.[0]
+        0
       else 
-        ps.[i' % ps.Length]
+        i' % pc
 
   /// Computes the hash-code of the routing key to get the topic partition.
   let hashKey (h:Binary.Segment -> int) : Partitioner =
-    create <| fun (_,ps,pm) -> 
-      ensurePartitions ps
-      ps.[abs (h pm.key) % ps.Length]
+    create <| fun (_,pc,pm) -> 
+      ensurePartitions pc
+      abs (h pm.key) % pc
 
   /// Random partition assignment.
   let rand (seed:int option) : Partitioner =
@@ -95,11 +98,10 @@ module Partitioner =
       match seed with 
       | Some s -> new Random(s)
       | None -> new Random()
-    let inline next ps = lock rng (fun () -> rng.Next (0, ps))
-    create <| fun (_,ps,_) ->
-      ensurePartitions ps
-      let i = next ps.Length
-      ps.[i]
+    let inline next pc = lock rng (fun () -> rng.Next (0, pc))
+    create <| fun (_,pc,_) ->
+      ensurePartitions pc
+      next pc
   
   /// CRC32 of the message key.
   let crc32Key : Partitioner =
@@ -163,7 +165,7 @@ type ProducerConfig = {
   static member DefaultBufferSize = 100
 
   /// The default per-broker, produce request linger time in ms = 1.
-  static member DefaultLingerMs = 1
+  static member DefaultBatchLingerMs = 1
 
   /// The default produce request retry policy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10.
   static member DefaultRetryPolicy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
@@ -179,7 +181,7 @@ type ProducerConfig = {
       timeout = defaultArg timeout ProducerConfig.DefaultTimeoutMs
       bufferSize = defaultArg bufferSize ProducerConfig.DefaultBufferSize
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
-      batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultLingerMs
+      batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
       retryPolicy = defaultArg retryPolicy ProducerConfig.DefaultRetryPolicy
     }
 
@@ -193,7 +195,7 @@ type Producer = private {
   config : ProducerConfig
   messageVersion : ApiVersion
   state : Resource<ProducerState>
-  produceBatch : (Partition[] -> Partition * ProducerMessage[]) -> Async<ProducerResult>
+  produceBatch : (PartitionCount -> Partition * ProducerMessage[]) -> Async<ProducerResult>
 }
 
 /// Producer state corresponding to the state of a cluster.
@@ -268,6 +270,8 @@ module Producer =
             | _ -> Choice3Of3 (p,o,ec)))
         |> Seq.partitionChoices3
       
+
+
       // TODO: error only by partition
       if fatalErrors.Length > 0 then
         let msg = sprintf "produce_fatal_errors|errors=%A request=%s response=%s" fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
@@ -287,11 +291,10 @@ module Producer =
             IVar.put res rep
 
       if oks.Length > 0 then
-        let oksps = oks |> Seq.map fst |> set
-        let res = Success (ProducerResult(oks))
+        let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
         for (p,_,rep) in batch do
-          if Set.contains p oksps then
-            IVar.put res rep
+          let res = Map.find p oks
+          IVar.put res rep
 
     | Failure err ->
       let err = Failure err
@@ -375,8 +378,8 @@ module Producer =
         
     return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues ; brokerByEndPoint = brokerByEndPoint } }
 
-  let private produceBatchInternal (state:ProducerState) (createBatch:Partition[] -> Partition * ProducerMessage[]) = async {
-    let p,ms = createBatch state.partitions
+  let private produceBatchInternal (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
+    let p,ms = createBatch state.partitions.Length
     // TODO: optimize to one lookup
     let q = 
       let ep = state.partitionBrokers |> Map.find p |> Chan.endpoint
@@ -410,14 +413,15 @@ module Producer =
   let create (conn:KafkaConn) (cfg:ProducerConfig) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
 
-  /// Produces a message. The message will be sent as part of a batch and the result will correspond to the offsets
+  /// Produces a message. 
+  /// The message will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
   let produce (p:Producer) (m:ProducerMessage) =
     p.produceBatch (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
 
   /// Produces a batch of messages using the specified function which creates messages given a set of partitions
   /// currently configured for the topic.
-  /// The messages will be sent as part of a batch and the result will correspond to the offsets
+  /// The messages will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
   let produceBatch (p:Producer) =
     p.produceBatch

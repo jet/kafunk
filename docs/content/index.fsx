@@ -55,8 +55,7 @@ let prodRes =
   Producer.produce producer (ProducerMessage.ofBytes ("hello world"B))
   |> Async.RunSynchronously
 
-for (p,offset) in prodRes.offsets do
-  printfn "partition=%i offset=%i" p offset
+printfn "partition=%i offset=%i" prodRes.partition prodRes.offset
 
 
 

@@ -17,6 +17,9 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 ## Hello World
 
 ```fsharp
+#r "kafunk.dll"
+#r "FSharp.Control.AsyncSeq.dll"
+
 open Kafunk
 open System
 
@@ -55,8 +58,7 @@ let prodRes =
   Producer.produce producer (ProducerMessage.ofBytes ("hello world"B))
   |> Async.RunSynchronously
 
-for (p,offset) in prodRes.offsets do
-  printfn "partition=%i offset=%i" p offset
+printfn "partition=%i offset=%i" prodRes.partition prodRes.offset
 
 
 

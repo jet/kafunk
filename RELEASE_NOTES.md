@@ -1,3 +1,10 @@
+### 0.0.21-alpha001 - 07.02.2017
+
+* Updated exampled/readme
+* Breaking changes:
+	- Consumer.stream drops bufferSize parameter
+	- ProducerResult contains a single partition-offset pair rather than array
+
 ### 0.0.20-alpha001 - 06.02.2017
 
 * Producer buffering by size in bytes

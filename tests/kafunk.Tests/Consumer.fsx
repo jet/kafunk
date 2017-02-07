@@ -38,6 +38,7 @@ let go = async {
   
   let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
+    //do! Async.Sleep 30000
     Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
       ms.topic
       ms.partition
@@ -46,8 +47,7 @@ let go = async {
       (ConsumerMessageSet.firstOffset ms)
       (ConsumerMessageSet.lastOffset ms)
       (ms.highWatermarkOffset)
-      (ConsumerMessageSet.lag ms)
-    do! Async.Sleep 30000 }
+      (ConsumerMessageSet.lag ms) }
 
   use counter = Metrics.counter Log 5000
 
@@ -56,6 +56,8 @@ let go = async {
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
   do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
+  //do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
+
 }
 
 Async.RunSynchronously go
