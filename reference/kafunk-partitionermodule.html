@@ -63,7 +63,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L105-105" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L107-107" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -79,11 +79,11 @@
             create f
           </code>
           <div class="tip" id="210">
-            <strong>Signature:</strong> f:(TopicName * Partition [] * ProducerMessage -&gt; Partition) -&gt; Partitioner<br />
+            <strong>Signature:</strong> f:(TopicName * PartitionCount * ProducerMessage -&gt; Partition) -&gt; Partitioner<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L63-63" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L66-66" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -103,7 +103,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L87-87" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L90-90" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -123,7 +123,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L71-71" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L74-74" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -136,14 +136,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '213', 213)" onmouseover="showTip(event, '213', 213)">
-            partition p t ps m
+            partition p t pc m
           </code>
           <div class="tip" id="213">
-            <strong>Signature:</strong> p:Partitioner -&gt; t:TopicName -&gt; ps:Partition [] -&gt; m:ProducerMessage -&gt; Partition<br />
+            <strong>Signature:</strong> p:Partitioner -&gt; t:TopicName -&gt; pc:PartitionCount -&gt; m:ProducerMessage -&gt; Partition<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L67-67" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L70-70" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -163,7 +163,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L93-93" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L96-96" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -183,7 +183,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L75-75" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L78-78" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -209,6 +209,7 @@
             
             <li class="nav-header">Getting started</li>
             <li><a href="/kafunk/consuming.html">Consuming</a></li>
+            <li><a href="/kafunk/producing.html">Producing</a></li>
 
             <li class="nav-header">Documentation</li>
             <li><a href="/kafunk/reference/index.html">API Reference</a></li>

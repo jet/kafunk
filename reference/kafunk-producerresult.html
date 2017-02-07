@@ -53,10 +53,30 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '770', 770)" onmouseover="showTip(event, '770', 770)">
-            offsets
+            offset
           </code>
           <div class="tip" id="770">
-            <strong>Signature:</strong> (Partition * Offset) []<br />
+            <strong>Signature:</strong> Offset<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L45-45" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The offset of the first message produced to the partition.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '771', 771)" onmouseover="showTip(event, '771', 771)">
+            partition
+          </code>
+          <div class="tip" id="771">
+            <strong>Signature:</strong> Partition<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -64,7 +84,7 @@
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The offsets assigned to the first message in the message set appended to the partition.</p>
+          <p>The partition to which the message was written.</p>
 
 
         </td>
@@ -80,15 +100,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '771', 771)" onmouseover="showTip(event, '771', 771)">
-            new(os)
+          <code onmouseout="hideTip(event, '772', 772)" onmouseover="showTip(event, '772', 772)">
+            new(p, o)
           </code>
-          <div class="tip" id="771">
-            <strong>Signature:</strong> (os:(Partition * Offset) []) -&gt; ProducerResult<br />
+          <div class="tip" id="772">
+            <strong>Signature:</strong> (p:Partition * o:Offset) -&gt; ProducerResult<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L43-43" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L47-47" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -113,6 +133,7 @@
             
             <li class="nav-header">Getting started</li>
             <li><a href="/kafunk/consuming.html">Consuming</a></li>
+            <li><a href="/kafunk/producing.html">Producing</a></li>
 
             <li class="nav-header">Documentation</li>
             <li><a href="/kafunk/reference/index.html">API Reference</a></li>

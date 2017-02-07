@@ -455,8 +455,8 @@ The other computation is cancelled.</p>
             ParallelThrottledIgnore(parallelism xs)
           </code>
           <div class="tip" id="22">
-            <strong>Signature:</strong> parallelism:int -&gt; xs:seq&lt;Async&lt;&#39;?9250&gt;&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> '?9250          </div>
+            <strong>Signature:</strong> parallelism:int -&gt; xs:seq&lt;Async&lt;&#39;?9253&gt;&gt; -&gt; Async&lt;unit&gt;<br />
+                          <strong>Type parameters:</strong> '?9253          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L191-191" class="github-link">
@@ -595,8 +595,8 @@ the sequence causes the resulting computation to error or cancel, respectively.<
             tryCancelled(comp a)
           </code>
           <div class="tip" id="29">
-            <strong>Signature:</strong> (comp:(OperationCanceledException -&gt; unit)) -&gt; a:Async&lt;&#39;?9228&gt; -&gt; Async&lt;&#39;?9228&gt;<br />
-                          <strong>Type parameters:</strong> '?9228          </div>
+            <strong>Signature:</strong> (comp:(OperationCanceledException -&gt; unit)) -&gt; a:Async&lt;&#39;?9231&gt; -&gt; Async&lt;&#39;?9231&gt;<br />
+                          <strong>Type parameters:</strong> '?9231          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L138-138" class="github-link">
@@ -633,8 +633,8 @@ the sequence causes the resulting computation to error or cancel, respectively.<
             tryFinallyDispose(d a)
           </code>
           <div class="tip" id="31">
-            <strong>Signature:</strong> d:&#39;?9222 -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> '?9222, 'a          </div>
+            <strong>Signature:</strong> d:&#39;?9225 -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> '?9225, 'a          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L132-132" class="github-link">
@@ -652,8 +652,8 @@ the sequence causes the resulting computation to error or cancel, respectively.<
             tryFinallyDisposeAll(ds a)
           </code>
           <div class="tip" id="32">
-            <strong>Signature:</strong> ds:seq&lt;&#39;?9225&gt; -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> '?9225, 'a          </div>
+            <strong>Signature:</strong> ds:seq&lt;&#39;?9228&gt; -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> '?9228, 'a          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L135-135" class="github-link">
@@ -709,8 +709,8 @@ the sequence causes the resulting computation to error or cancel, respectively.<
             tryWith(h a)
           </code>
           <div class="tip" id="35">
-            <strong>Signature:</strong> (h:(exn -&gt; Async&lt;&#39;b&gt;)) -&gt; a:Async&lt;&#39;b&gt; -&gt; Async&lt;&#39;b&gt;<br />
-                          <strong>Type parameters:</strong> 'b          </div>
+            <strong>Signature:</strong> (h:(exn -&gt; Async&lt;&#39;a&gt;)) -&gt; a:Async&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L140-140" class="github-link">
@@ -738,6 +738,7 @@ the sequence causes the resulting computation to error or cancel, respectively.<
             
             <li class="nav-header">Getting started</li>
             <li><a href="/kafunk/consuming.html">Consuming</a></li>
+            <li><a href="/kafunk/producing.html">Producing</a></li>
 
             <li class="nav-header">Documentation</li>
             <li><a href="/kafunk/reference/index.html">API Reference</a></li>

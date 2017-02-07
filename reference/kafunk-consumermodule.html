@@ -63,7 +63,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L791-791" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L787-787" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -254,7 +254,7 @@ is paired with the set of assigned fetch streams.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L778-778" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L774-774" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -267,20 +267,18 @@ is paired with the set of assigned fetch streams.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '129', 129)" onmouseover="showTip(event, '129', 129)">
-            stream c bufferSize
+            stream c
           </code>
           <div class="tip" id="129">
-            <strong>Signature:</strong> c:Consumer -&gt; bufferSize:int -&gt; AsyncSeq&lt;GroupMemberState * ConsumerMessageSet&gt;<br />
+            <strong>Signature:</strong> c:Consumer -&gt; AsyncSeq&lt;GroupMemberState * ConsumerMessageSet&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L771-771" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L769-769" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns a stream of message sets across all partitions assigned to the consumer.
-The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
-backpressure on the underlying consumer.</p>
+          <p>Returns a stream of message sets across all partitions assigned to the consumer.</p>
 
 
         </td>
@@ -302,6 +300,7 @@ backpressure on the underlying consumer.</p>
             
             <li class="nav-header">Getting started</li>
             <li><a href="/kafunk/consuming.html">Consuming</a></li>
+            <li><a href="/kafunk/producing.html">Producing</a></li>
 
             <li class="nav-header">Documentation</li>
             <li><a href="/kafunk/reference/index.html">API Reference</a></li>
