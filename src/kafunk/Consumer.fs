@@ -21,7 +21,7 @@ module ConsumerGroup =
     assign : GroupMember ->
              (GroupMemberState option) -> 
              (TopicName * Partition[])[] -> 
-             (MemberId * ConsumerGroupProtocolMetadata)[] ->             
+             (MemberId * ConsumerGroupProtocolMetadata)[] ->
              Async<(MemberId * ConsumerGroupMemberAssignment)[]>
   }
 
@@ -122,7 +122,7 @@ module ConsumerGroup =
           ||> Map.mergeChoice (fun t -> function
             | Choice2Of3 _ | Choice3Of3 _ -> failwith "invalid state"
             | Choice1Of3 (memberIds,ps) -> 
-              let memberPartitions = ps |> Array.groupInto memberIds.Length                
+              let memberPartitions = ps |> Array.groupInto memberIds.Length
               (memberIds,memberPartitions)
               ||> Array.zip
               |> Array.map (fun (mid,ps) -> mid,t,ps))
@@ -516,7 +516,7 @@ module Consumer =
     /// Initiates consumption of a single generation of the consumer group protocol.
     let consume (state:GroupMemberStateWrapper) = async {
       
-      let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment      
+      let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
       Log.info "consumer_group_assignment_received|client_id=%s group_id=%s topic=%s partitions=[%s]"
         c.conn.Config.clientId cfg.groupId topic (Printers.partitions assignment)
 
@@ -731,7 +731,7 @@ module Consumer =
       return partitionStreams }
     
     Group.generationsInternal c.groupMember
-    |> AsyncSeq.mapAsync (fun state -> async {
+    |> AsyncSeq.mapAsyncParallel (fun state -> async {
       let! partitionStreams = consume state
       return state.state,partitionStreams })
 
@@ -745,9 +745,9 @@ module Consumer =
       |> generations
       |> AsyncSeq.iterAsyncParallel (fun (groupMemberState,partitionStreams) ->
         partitionStreams
-        |> Seq.map (fun (_p,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
+        |> Seq.map (fun (_,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
         |> Async.Parallel
-        |> Async.Ignore//)
+        |> Async.Ignore
         |> Async.cancelTokenWith groupMemberState.closed id)
 
   /// Starts consumption using the specified handler.
@@ -766,13 +766,9 @@ module Consumer =
       do! Offsets.flushPeriodicCommit commitQueue }
 
   /// Returns a stream of message sets across all partitions assigned to the consumer.
-  /// The buffer size is the size of the buffer into which messages sets are read before the buffer exerts
-  /// backpressure on the underlying consumer.
-  let stream (c:Consumer) (bufferSize:int) = asyncSeq {
-    use mb = BoundedMb.create bufferSize
-    let handle s ms = BoundedMb.put (s,ms) mb
-    let! _ = Async.StartChild (consume c handle)
-    yield! AsyncSeq.replicateInfiniteAsync (BoundedMb.take mb) }
+  let stream (c:Consumer) =
+    generations c
+    |> AsyncSeq.collect (fun (s,ps) -> AsyncSeq.mergeAll (ps |> Seq.map snd |> Seq.toList) |> AsyncSeq.map (fun ms -> s,ms))
 
   /// Returns the current consumer state.
   let state (c:Consumer) : Async<ConsumerState> = async {

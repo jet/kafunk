@@ -77,7 +77,7 @@ let go = async {
     |> Seq.map (fun batchNo -> async {
       try
         let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-        let! prodRes = produceBatch (fun ps -> ps.[batchNo % ps.Length], msgs)
+        let! prodRes = produceBatch (fun pc -> batchNo % pc, msgs)
         Interlocked.Add(&completed, int64 batchSize) |> ignore
         return ()
       with ex ->

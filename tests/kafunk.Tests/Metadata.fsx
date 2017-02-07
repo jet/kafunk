@@ -5,9 +5,9 @@
 open FSharp.Control
 open Kafunk
 
-let conn = Kafka.connHost "localhost:9092"
+let conn = Kafka.connHost "guardians-kafka-cluster.qa.jet.com:9092"
 
-let metadata = Kafka.metadata conn (Metadata.Request([||])) |> Async.RunSynchronously
+let metadata = Kafka.metadata conn (Metadata.Request([|"nova-retailskus-profx"|])) |> Async.RunSynchronously
 
 for b in metadata.brokers do
   printfn "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId

@@ -69,7 +69,7 @@ let mb = Mb.Start (fun mb ->
       if i < ls.Count then
         Some (f i ls.[i], i + 1)
       else
-        None) skip  
+        None) skip
 
 //  let contig (skip:int) =
 //    if received.Count < 2 then Seq.empty else
@@ -138,8 +138,8 @@ let producer = async {
     let _ = Binary.writeInt32 messageNumber value
     ProducerMessage.ofBytes (value, messageKeyBytes)
 
-  let messageBatch (batchNumber:int) (ps:Partition[]) = 
-    let p = ps.[batchNumber % ps.Length]
+  let messageBatch (batchNumber:int) (pc:PartitionCount) = 
+    let p = batchNumber % pc
     let messages = Array.init batchSize (fun j -> message (batchNumber * batchSize + j))
     p, messages
 
@@ -168,7 +168,7 @@ let producer = async {
     |> Seq.map (fun batchNumber -> async {
       try
         let! res = Producer.produceBatch producer (messageBatch batchNumber)
-        mb.Post (ReportReq.Produced (batchSize, res.offsets))
+        mb.Post (ReportReq.Produced (batchSize, ([|res.partition,res.offset|])))
       with ex ->
         Log.error "produce_error|error=%O" ex })
     |> Async.ParallelThrottledIgnore producerThreads
