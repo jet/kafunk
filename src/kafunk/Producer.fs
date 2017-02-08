@@ -131,10 +131,10 @@ type ProducerConfig = {
   /// Default: None
   compression : byte
 
-  /// The per-broker, in-memory buffer size, in terms of message count.
+  /// The per-broker, in-memory buffer size in bytes.
   /// When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
-  /// Default: 100
-  bufferSize : int
+  /// Default: 33554432
+  bufferSizeBytes : int
 
   /// The maximum size, in bytes, of a batch of produce requests per broker.
   /// If set to 0, no batching will be performed.
@@ -161,8 +161,8 @@ type ProducerConfig = {
   /// The default per-broker, produce request batch size in bytes = 16384.
   static member DefaultBatchSizeBytes = 16384
 
-  /// The default in-memory, per-broker buffer size = 100.
-  static member DefaultBufferSize = 100
+  /// The default in-memory, per-broker buffer size = 33554432.
+  static member DefaultBufferSizeBytes = 33554432
 
   /// The default per-broker, produce request linger time in ms = 1.
   static member DefaultBatchLingerMs = 1
@@ -171,15 +171,15 @@ type ProducerConfig = {
   static member DefaultRetryPolicy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
 
   /// Creates a producer configuration.
-  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, ?bufferSize:int, 
-                          ?batchSizeBytes, ?batchLingerMs, ?retryPolicy) =
+  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, 
+                        ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs, ?retryPolicy) =
     {
       topic = topic
       partitioner = partition
       requiredAcks = defaultArg requiredAcks ProducerConfig.DefaultRequiredAcks
       compression = defaultArg compression CompressionCodec.None
       timeout = defaultArg timeout ProducerConfig.DefaultTimeoutMs
-      bufferSize = defaultArg bufferSize ProducerConfig.DefaultBufferSize
+      bufferSizeBytes = defaultArg bufferSizeBytes ProducerConfig.DefaultBufferSizeBytes
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
       retryPolicy = defaultArg retryPolicy ProducerConfig.DefaultRetryPolicy
@@ -224,13 +224,19 @@ module Producer =
 
   let private Log = Log.create "Kafunk.Producer"
 
+  let private batchSizeBytes (batch:(Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>>) seq) =
+    batch
+    |> Seq.collect (fun (_,ms,_) -> ms)
+    |> Seq.sumBy (ProducerMessage.size)
+
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
   let private sendBatch 
     (cfg:ProducerConfig) 
     (messageVer:int16) 
     (ch:Chan) 
     (batch:(Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>>)[]) = async {
-    
+    //Log.info "sending_batch|ep=%O batch_size_count=%i batch_size_bytes=%i" (Chan.endpoint ch) batch.Length (batchSizeBytes batch)
+
     let pms = 
       batch
       |> Seq.groupBy (fun (p,_,_) -> p)
@@ -257,7 +263,8 @@ module Producer =
             | ErrorCode.NoError -> Choice1Of3 (p,o)
 
             // timeout  (retry)
-            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable -> Choice2Of3 (p,o,ec)
+            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable | ErrorCode.NotEnoughReplicasCode
+            | ErrorCode.NotEnoughReplicasAfterAppendCode -> Choice2Of3 (p,o,ec)
 
             // topology change (retry)
             | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice2Of3 (p,o,ec)
@@ -270,32 +277,31 @@ module Producer =
             | _ -> Choice3Of3 (p,o,ec)))
         |> Seq.partitionChoices3
       
-
-
       // TODO: error only by partition
       if fatalErrors.Length > 0 then
-        let msg = sprintf "produce_fatal_errors|errors=%A request=%s response=%s" fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        let msg = sprintf "produce_fatal_errors|ep=%O errors=%A request=%s response=%s" (Chan.endpoint ch) fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         Log.error "%s" msg
         let ex = exn(msg)
-        let eps = retryErrors |> Seq.map (fun (p,_,_) -> p) |> set
+        let eps = fatalErrors |> Seq.map (fun (p,_,_) -> p,ex) |> Map.ofSeq
         for (p,_,rep) in batch do
-          if Set.contains p eps then
-            IVar.error ex rep
+          Map.tryFind p eps
+          |> Option.iter (fun ex -> IVar.error ex rep)
       
       if retryErrors.Length > 0 then
-        Log.error "produce_transient_errors|errors=%A request=%s response=%s" retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
-        let eps = retryErrors |> Seq.map (fun (p,_,_) -> p) |> set
+        Log.error "produce_transient_errors|ep=%O errors=%A request=%s response=%s" 
+          (Chan.endpoint ch) retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         let res = Failure [] // TODO: specific error
+        let eps = retryErrors |> Seq.map (fun (p,_,_) -> p,res) |> Map.ofSeq
         for (p,_,rep) in batch do
-          if Set.contains p eps then
-            IVar.put res rep
+          Map.tryFind p eps
+          |> Option.iter (fun res -> IVar.put res rep)
 
       if oks.Length > 0 then
         let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
         for (p,_,rep) in batch do
-          let res = Map.find p oks
-          IVar.put res rep
-
+          Map.tryFind p oks 
+          |> Option.iter (fun res -> IVar.put res rep)
+          
     | Failure err ->
       let err = Failure err
       for (_,_,rep) in batch do
@@ -342,15 +348,11 @@ module Producer =
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
     let batchSizeCondition (buf:ResizeArray<_ * ProducerMessage[] * _>) =
-      let batchSize =
-        buf
-        |> Seq.collect (fun (_,ms,_) -> ms)
-        |> Seq.sumBy (ProducerMessage.size)
-      batchSize >= cfg.batchSizeBytes
+      (batchSizeBytes buf) >= cfg.batchSizeBytes
 
-    let queue (ch:Chan) =
+    let brokerQueue (ch:Chan) =
       let sendBatch = sendBatch cfg messageVer ch
-      let buf = BoundedMb.create cfg.bufferSize
+      let buf = BoundedMb.createByCondition (fun buf -> batchSizeBytes buf >= cfg.bufferSizeBytes)
       let produceStream = 
         AsyncSeq.replicateInfiniteAsync (BoundedMb.take buf)
       let sendProcess =
@@ -372,7 +374,7 @@ module Producer =
       |> Map.toSeq
       |> Seq.map (fun (_,ch) ->
         let ep = Chan.endpoint ch
-        let q = queue ch
+        let q = brokerQueue ch
         ep,q)
       |> Map.ofSeq
         

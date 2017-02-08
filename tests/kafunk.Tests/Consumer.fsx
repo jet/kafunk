@@ -36,6 +36,19 @@ let go = async {
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   
+  let showProgress =
+    AsyncSeq.intervalMs 10000
+    |> AsyncSeq.iterAsync (fun _ -> async {
+      let! info = ConsumerInfo.consumerProgress consumer
+      let str = 
+        info.partitions
+        |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.earliestOffset)
+        |> String.concat " ; "
+      Log.info "consumer_progress|total_lag=%i partitions=%s" info.totalLag str
+      return () })
+
+  let! _ = Async.StartChild showProgress
+
   let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     //do! Async.Sleep 30000

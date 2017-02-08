@@ -349,7 +349,7 @@ type ConsumerMessageSet =
 
 
 /// High-level consumer API.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Consumer =
 
   let private Log = Log.create "Kafunk.Consumer"
@@ -786,3 +786,54 @@ module Consumer =
   /// This causes all underlying streams to complete.
   let close (c:Consumer) = async {
     return! Group.leave c.groupMember }
+  
+
+
+/// Progress information for a consumer in a group.
+type ConsumerProgressInfo = {
+  group : GroupId
+  topic : TopicName
+  partitions : ConsumerPartitionProgressInfo[]
+  totalLag : int64
+}
+
+/// Progress information for a consumer in a group, for a specific topic-partition.
+and ConsumerPartitionProgressInfo = {
+  partition : Partition
+  consumerOffset : Offset
+  earliestOffset : Offset
+  highWatermarkOffset : Offset
+  lag : int64
+}
+
+/// Operations for providing consumer progress information.
+[<Compile(Module)>]
+module ConsumerInfo =
+
+  /// Returns consumer progress information.
+  /// Passing empty set of partitions returns information for all partitions.
+  let progress (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) (ps:Partition[]) = async {
+    let! topicOffsets,consumerOffsets = 
+      Async.Parallel (
+        Offsets.offsetRange conn topic ps,
+        Consumer.fetchOffsets conn groupId [|topic,ps|])
+    let consumerOffsets = 
+      consumerOffsets 
+      |> Array.pick (fun (t,os) -> if t = topic then Some os else None)
+      |> Map.ofArray
+    let partitions =
+      (topicOffsets, consumerOffsets)
+      ||> Map.mergeChoice (fun p -> function
+        | Choice1Of3 ((e,l),o) -> 
+          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o }
+        | _ -> failwith "invalid state")
+      |> Seq.map (fun kvp -> kvp.Value)
+      |> Seq.toArray
+    return { 
+      topic = topic ; group = groupId ; partitions = partitions ; 
+      totalLag = partitions |> Seq.sumBy (fun p -> p.lag) } }
+
+  /// Returns consumer progress information for the partitions currently assigned to the consumer.
+  let consumerProgress (c:Consumer) = async {
+    let! state = Consumer.state c
+    return! progress c.conn c.config.groupId c.config.topic state.assignments }
