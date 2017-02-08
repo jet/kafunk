@@ -1,3 +1,8 @@
+### 0.0.24-alpha001 - 08.02.2017
+
+* Adjust consumer group heartbeat defaults
+* Added AsyncSeq tests
+
 ### 0.0.23-alpha001 - 08.02.2017
 
 * Improve producer performance (batch size measurement)
