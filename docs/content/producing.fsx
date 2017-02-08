@@ -40,8 +40,8 @@ let producerConfig =
     /// The required acks setting.
     requiredAcks = RequiredAcks.AllInSync,
 
-    /// The in-memory buffer size, in terms of message count.
-    bufferSize = ProducerConfig.DefaultBufferSize,
+    /// The per-broker in-memory buffer size, in bytes.
+    bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
 
     /// The maximum size, in bytes, of an individual produce request.
     batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
@@ -82,7 +82,7 @@ at the cost of increased latency.
 
 The batching workflow is as follows. A message is assigned to a partition using the configured partition function. (Note that this operation
 depends on cluster state and may change, albeit infrequently). Then, a message is placed into the queue of the broker currently responsible for
-the partition long with a reply channel. An independent process consumes the broker queue, buffering to form batches and then sends the 
+the partition along with a reply channel. An independent process consumes the broker queue, buffering to form batches and then sends the 
 batched produce request to the broker. Once a response is received, all of the outstanding reply channels are acknowledged. The offsets in the
 `ProducerResponse` correspond to the first offsets for the entire batch.
 

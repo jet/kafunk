@@ -35,9 +35,9 @@ let producerCfg =
     Partitioner.roundRobin, 
     requiredAcks = RequiredAcks.AllInSync,
     timeout = ProducerConfig.DefaultTimeoutMs,
-    bufferSize = 100,
+    bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
-    batchLingerMs = 1000)
+    batchLingerMs = 500)
 
 let producer =
   Producer.createAsync conn producerCfg

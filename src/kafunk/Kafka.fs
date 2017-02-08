@@ -772,22 +772,19 @@ module Offsets =
   /// Returns a map of times to offset responses.
   /// If empty is passed in for Partitions, will return information for all partitions.
   let offsets (conn:KafkaConn) (topic:TopicName) (partitions:Partition seq) (times:Time seq) (maxOffsets:MaxNumberOfOffsets) : Async<Map<Time, OffsetResponse>> = async {
-    let! metadata = conn.GetMetadata [|topic|]
-    let partitions = set partitions
+    let! partitions = async {
+      if Seq.isEmpty partitions then
+        let! meta = conn.GetMetadata [|topic|]
+        return
+          meta
+          |> Seq.collect (fun kvp -> kvp.Value)
+          |> Seq.toArray
+      else
+        return partitions |> Seq.toArray }
     return!
       times
       |> Seq.map (fun time -> async {
-        let topics =
-          metadata
-          |> Map.toSeq
-          |> Seq.choose (fun (tn,ps) ->
-            let ps =
-              if partitions.Count = 0 then ps |> Array.map (fun p -> p,time,maxOffsets)
-              else ps |> Array.filter (fun x -> Set.contains x partitions) |> Array.map (fun p -> p,time,maxOffsets)
-            if ps.Length > 0 then Some (tn,ps)
-            else None)
-          |> Seq.toArray
-        let offsetReq = OffsetRequest(-1, topics)
+        let offsetReq = OffsetRequest(-1, [| topic, partitions |> Array.map (fun p -> p,time,maxOffsets) |]) 
         let! offsetRes = Kafka.offset conn offsetReq
         return time,offsetRes })
       |> Async.Parallel
