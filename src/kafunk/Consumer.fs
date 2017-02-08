@@ -30,9 +30,6 @@ module ConsumerGroup =
       
     let assignment,_ = ConsumerGroupMemberAssignment.read memberAssignment
           
-    if assignment.partitionAssignment.assignments.Length = 0 then
-      failwith "no partitions assigned!"
-
     let assignments = 
       assignment.partitionAssignment.assignments
       |> Seq.groupBy fst
@@ -40,7 +37,11 @@ module ConsumerGroup =
       |> Seq.toArray
 
     // TODO: consider support for multi-topic subscriptions
-    assignments.[0]
+    let t,ps = assignments.[0]
+    if ps.Length = 0 then
+      failwith "no partitions assigned!"
+
+    t,ps
 
   /// Creates an instances of the consumer groups protocol given the specified assignment strategies.
   let create (strategies:(AssignmentStrategyName * AssignmentStrategy)[]) (topicSubscription:TopicName[]) =

@@ -32,9 +32,64 @@ let consuming = new CountdownEvent(consumerCount)
 let completed = IVar.create ()
 
 
+type Ack () =
+  
+  let pending = SortedList<int, int>(Comparer.Default)
+  let mutable contig = -1
+  let mutable duplicates = 0
+  let mutable received = 0
+  let mutable sent = 0
+
+  let rec findContig i prev =
+    if i = pending.Count then prev else
+    let v = pending.Keys.[i]
+    let s = pending.Values.[i]
+    if s = 1 then
+      findContig (i + 1) v
+    else
+      prev
+
+  let pruneUpTo v =
+    let i = pending.IndexOfKey v
+    if i > 0 then
+      for _ in [0..i] do
+        pending.RemoveAt 0
+    
+  member __.Contig = contig
+  member __.Duplicates = duplicates
+  member __.Sent = sent
+  member __.Received = received
+
+  member __.Prepare (vs:int seq) =
+    for v in vs do
+      pending.Add (v, 0)
+      sent <- sent + 1
+  
+  member __.Ack (vs:int seq) = 
+    for v in vs do
+      //if v <= contig then
+      //  duplicates <- duplicates + 1
+      //else
+        let mutable s = Unchecked.defaultof<_>
+        if (pending.TryGetValue (v, &s)) then
+          if s = 1 then
+            duplicates <- duplicates + 1
+          else
+            pending.[v] <- 1
+            received <- received + 1
+        else
+          failwithf "invalid state=%i" v
+    let wm = contig
+    let wm' = findContig 0 wm
+    if wm' > wm then
+      contig <- wm'
+      pruneUpTo wm'
+
+
+
 type ReportReq = 
   | Received of values:(int * (Partition * Offset))[] * messageCount:int
-  | Produced of count:int * offsets:(Partition * Offset)[]
+  | Produced of values:int[] * p:Partition * o:Offset
   | Report of AsyncReplyChannel<Report>
 
 and Report =
@@ -52,74 +107,31 @@ and Report =
 
 let mb = Mb.Start (fun mb ->
   
-  let duplicates = ResizeArray<int>()
-  let received = SortedList<int, _>()
-  let produced = ref 0
+  let ack = Ack ()
   let skipped = ref 0
   let offsets = ref Map.empty
-  let lastContigIndex = ref 0
 
   mb.Error.Add (fun e -> Log.error "mailbox_error|%O" e)
 
-  let lastAndCountMonoid =
-    Monoid.product Monoid.optionLast Monoid.intSum
-
-  let skipMapi (ls:System.Collections.Generic.IList<_>) (skip:int) (f:int -> 'a -> 'b) = 
-    Seq.unfold (fun i -> 
-      if i < ls.Count then
-        Some (f i ls.[i], i + 1)
-      else
-        None) skip
-
-//  let contig (skip:int) =
-//    if received.Count < 2 then Seq.empty else
-//    seq {
-//      let i = ref skip
-//      let go = ref true
-//      while !i < received.Count && !go do
-//        if !i > 0 then
-//          let i = !i
-//          let j = i - 1
-//          let currKey = received.Keys.[i]
-//          let prevKey = received.Keys.[j]
-//          if currKey <> prevKey + 1 then
-//            go := false
-//          else
-//            yield (prevKey,(j,received.Values.[j])),(currKey,(i,received.Values.[i]))
-//        incr i }
-
   let report () =
-    let lastContigOffsetAndIndex,contigCount =
-      skipMapi received.Keys !lastContigIndex (fun i k -> k, (i, received.Values.[i]))
-      |> Seq.pairwise
-      |> Seq.takeWhile (fun ((x,_),(y,_)) -> y = x + 1)
-      //contig !lastContigIndex
-      |> Seq.foldMap lastAndCountMonoid (fun ((x,_),(y,(i,os))) -> Some (i,os), 1)
-    let contigCount = contigCount + !lastContigIndex
-    let lastContigOffset = lastContigOffsetAndIndex |> Option.map snd
-    lastContigIndex := lastContigOffsetAndIndex |> Option.map fst |> Option.getOr 0
-    Report(received.Count, duplicates.Count, !produced, !skipped, contigCount, lastContigOffset, !offsets) 
+    Report(ack.Received, ack.Duplicates, ack.Sent, !skipped, ack.Contig, None, !offsets) 
 
   let rec loop () = async {
     let! req = mb.Receive ()
     match req with
     | Received (values,messageBatchCount) ->
       
-      for (v,(p,o)) in values do
-        if received.ContainsKey v then
-          duplicates.Add v
-        else
-          received.Add (v,(p,o))
-
-      if received.Count >= totalMessageCount then
-        Log.info "received_complete_set|receive_count=%i" received.Count
-        IVar.put () completed
+      ack.Ack (values |> Seq.map fst)
 
       Interlocked.Add(skipped, messageBatchCount - values.Length) |> ignore
 
-    | Produced (count,os) ->
-      Interlocked.Add (produced, count) |> ignore
-      offsets := (!offsets, os |> Map.ofArray) ||> Map.mergeWith max
+      if ack.Received >= totalMessageCount then
+        Log.info "received_complete_set|receive_count=%i" ack.Contig
+        IVar.tryPut () completed |> ignore
+
+
+    | Produced (values,p,o) ->
+      ack.Prepare values
 
     | Report rep ->
       rep.Reply (report ())
@@ -137,11 +149,6 @@ let producer = async {
     let value = Binary.ofArray (Array.zeroCreate 4)
     let _ = Binary.writeInt32 messageNumber value
     ProducerMessage.ofBytes (value, messageKeyBytes)
-
-  let messageBatch (batchNumber:int) (pc:PartitionCount) = 
-    let p = batchNumber % pc
-    let messages = Array.init batchSize (fun j -> message (batchNumber * batchSize + j))
-    p, messages
 
   let batchCount = totalMessageCount / batchSize
 
@@ -167,8 +174,10 @@ let producer = async {
     Seq.init batchCount id
     |> Seq.map (fun batchNumber -> async {
       try
-        let! res = Producer.produceBatch producer (messageBatch batchNumber)
-        mb.Post (ReportReq.Produced (batchSize, ([|res.partition,res.offset|])))
+        let batch = Array.init batchSize (fun j -> (batchNumber * batchSize + j))
+        let pms = batch |> Array.map message
+        let! res = Producer.produceBatch producer (fun pc -> batchNumber % pc,pms)
+        mb.Post (ReportReq.Produced (batch,res.partition,res.offset))
       with ex ->
         Log.error "produce_error|error=%O" ex })
     |> Async.ParallelThrottledIgnore producerThreads
@@ -228,11 +237,13 @@ let printReport (report:Report) =
 let monitor = async {
   while not completed.Task.IsCompleted do 
     do! Async.Sleep 5000
+    Log.info "requesting_report"
     let! report = mb.PostAndAsyncReply (ReportReq.Report)
+    Log.info "report_received"
     printReport report
     if (report.received - report.contigCount) > 1000000 then
       Log.error "contig_delta_surpassed_threshold"
-      IVar.put () completed }
+      IVar.tryPut () completed |> ignore }
 
 Log.info "starting_producer_consumer_test|host=%s topic=%s message_count=%i batch_size=%i consumer_count=%i producer_parallelism=%i" 
   host topicName totalMessageCount batchSize consumerCount producerThreads
