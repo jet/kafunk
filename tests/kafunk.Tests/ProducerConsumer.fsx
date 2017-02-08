@@ -159,7 +159,7 @@ let producer = async {
       partition = Partitioner.roundRobin,
       requiredAcks = RequiredAcks.Local,
       batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
-      bufferSize = 1000)
+      bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes)
 
   let! producer = Producer.createAsync conn producerCfg
 

@@ -211,8 +211,17 @@ and private ProducerState = {
   partitions : Partition[]
   
   /// Per-broker queues accepting a triple of partition, messages for the partition and a reply channel.
-  brokerQueues : Map<EndPoint, Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>> -> Async<unit>>
+  brokerQueues : Map<EndPoint, ProducerMessageBatch -> Async<unit>>
 }
+
+and private ProducerMessageBatch =
+  struct
+    val partition : Partition
+    val messages : ProducerMessage[]
+    val rep : IVar<Result<ProducerResult, ChanError list>>
+    val size : int
+    new (p,ms,rep,size) = { partition = p ; messages = ms ; rep = rep ; size = size }
+  end
 
 
 /// High-level producer API.
@@ -224,26 +233,33 @@ module Producer =
 
   let private Log = Log.create "Kafunk.Producer"
 
-  let private batchSizeBytes (batch:(Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>>) seq) =
-    batch
-    |> Seq.collect (fun (_,ms,_) -> ms)
-    |> Seq.sumBy (ProducerMessage.size)
+  let private messageBatchSizeBytes (batch:ProducerMessage seq) =
+    let mutable size = 0
+    for m in batch do
+      size <- size + (ProducerMessage.size m)
+    size
+
+  let private batchSizeBytes (batch:ProducerMessageBatch seq) =
+    let mutable size = 0
+    for b in batch do
+      size <- size + b.size
+    size
 
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
   let private sendBatch 
     (cfg:ProducerConfig) 
     (messageVer:int16) 
     (ch:Chan) 
-    (batch:(Partition * ProducerMessage[] * IVar<Result<ProducerResult, ChanError list>>)[]) = async {
+    (batch:ProducerMessageBatch seq) = async {
     //Log.info "sending_batch|ep=%O batch_size_count=%i batch_size_bytes=%i" (Chan.endpoint ch) batch.Length (batchSizeBytes batch)
 
     let pms = 
       batch
-      |> Seq.groupBy (fun (p,_,_) -> p)
+      |> Seq.groupBy (fun b -> b.partition)
       |> Seq.map (fun (p,pms) ->
         let ms = 
           pms 
-          |> Seq.collect (fun (_,pms,_) -> pms |> Seq.map (fun pm -> Message.create pm.value pm.key None))
+          |> Seq.collect (fun bs -> bs.messages |> Seq.map (fun pm -> Message.create pm.value pm.key None))
           |> MessageSet.ofMessages
           |> Compression.compress messageVer cfg.compression
         p,ms)
@@ -283,29 +299,29 @@ module Producer =
         Log.error "%s" msg
         let ex = exn(msg)
         let eps = fatalErrors |> Seq.map (fun (p,_,_) -> p,ex) |> Map.ofSeq
-        for (p,_,rep) in batch do
-          Map.tryFind p eps
-          |> Option.iter (fun ex -> IVar.error ex rep)
+        for b in batch do
+          Map.tryFind b.partition eps
+          |> Option.iter (fun ex -> IVar.error ex b.rep)
       
       if retryErrors.Length > 0 then
         Log.error "produce_transient_errors|ep=%O errors=%A request=%s response=%s" 
           (Chan.endpoint ch) retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         let res = Failure [] // TODO: specific error
         let eps = retryErrors |> Seq.map (fun (p,_,_) -> p,res) |> Map.ofSeq
-        for (p,_,rep) in batch do
-          Map.tryFind p eps
-          |> Option.iter (fun res -> IVar.put res rep)
+        for b in batch do
+          Map.tryFind b.partition eps
+          |> Option.iter (fun res -> IVar.put res b.rep)
 
       if oks.Length > 0 then
         let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
-        for (p,_,rep) in batch do
-          Map.tryFind p oks 
-          |> Option.iter (fun res -> IVar.put res rep)
+        for b in batch do
+          Map.tryFind b.partition oks 
+          |> Option.iter (fun res -> IVar.put res b.rep)
           
     | Failure err ->
       let err = Failure err
-      for (_,_,rep) in batch do
-        IVar.put err rep 
+      for b in batch do
+        IVar.put err b.rep 
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
@@ -347,7 +363,7 @@ module Producer =
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
-    let batchSizeCondition (buf:ResizeArray<_ * ProducerMessage[] * _>) =
+    let batchSizeCondition (buf:ResizeArray<ProducerMessageBatch>) =
       (batchSizeBytes buf) >= cfg.batchSizeBytes
 
     let brokerQueue (ch:Chan) =
@@ -382,12 +398,12 @@ module Producer =
 
   let private produceBatchInternal (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let p,ms = createBatch state.partitions.Length
-    // TODO: optimize to one lookup
+    let rep = IVar.create ()
+    let batch = ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
     let q = 
       let ep = state.partitionBrokers |> Map.find p |> Chan.endpoint
       state.brokerQueues |> Map.find ep
-    let rep = IVar.create ()
-    do! q (p,ms,rep)
+    do! q batch
     let! res = IVar.get rep
     match res with
     | Success res ->

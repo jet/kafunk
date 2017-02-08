@@ -37,7 +37,7 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
-    batchLingerMs = 500)
+    batchLingerMs = 1000)
 
 let producer =
   Producer.createAsync conn producerCfg
