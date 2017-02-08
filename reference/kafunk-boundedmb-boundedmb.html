@@ -41,6 +41,8 @@
   <span>Parent Module: <a href="kafunk-boundedmb.html">BoundedMb</a></span>
 </p>
 <div class="xmldoc">
+<p>Operations on bounded mailboxes.</p>
+
 </div>
 
 <!-- Render nested types and modules, if there are any -->
@@ -62,25 +64,48 @@
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L69-69" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L86-86" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Creates a bounded mailbox with the specified capacity.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '111', 111)" onmouseover="showTip(event, '111', 111)">
-            put a mb
+            createByCondition condition
           </code>
           <div class="tip" id="111">
+            <strong>Signature:</strong> condition:(seq&lt;&#39;a&gt; -&gt; bool) -&gt; BoundedMb&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'a          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L92-92" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Creates a bounded mailbox bounded by the specified condition.
+If the condition return true, the mailbox blocks puts, otherwise accepts them.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
+            put a mb
+          </code>
+          <div class="tip" id="112">
             <strong>Signature:</strong> a:&#39;a -&gt; mb:BoundedMb&lt;&#39;a&gt; -&gt; Async&lt;unit&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L76-76" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L99-99" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -94,15 +119,15 @@ If the mailbox has vacancy, add the message to the buffer and return immediately
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
+          <code onmouseout="hideTip(event, '113', 113)" onmouseover="showTip(event, '113', 113)">
             take mb
           </code>
-          <div class="tip" id="112">
+          <div class="tip" id="113">
             <strong>Signature:</strong> mb:BoundedMb&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L80-80" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/BoundedMb.fs#L103-103" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

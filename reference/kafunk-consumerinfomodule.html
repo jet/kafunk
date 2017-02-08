@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerId - Kafunk</title>
+    <title>ConsumerInfo - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,45 +35,62 @@
 
 
 
-<h1>ConsumerId</h1>
+<h1>ConsumerInfo</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
+<p>Operations for providing consumer progress information.</p>
+
 </div>
-  <h3>Instance members</h3>
+
+<!-- Render nested types and modules, if there are any -->
+
+  <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Instance member</td><td>Description</td></tr>
+      <tr><td>Function or value</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '385', 385)" onmouseover="showTip(event, '385', 385)">
-            Chars(arg1)
+          <code onmouseout="hideTip(event, '133', 133)" onmouseover="showTip(event, '133', 133)">
+            consumerProgress c
           </code>
-          <div class="tip" id="385">
-            <strong>Signature:</strong> int -&gt; char<br />
+          <div class="tip" id="133">
+            <strong>Signature:</strong> c:Consumer -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-          
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L837-837" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns consumer progress information for the partitions currently assigned to the consumer.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '386', 386)" onmouseover="showTip(event, '386', 386)">
-            Length
+          <code onmouseout="hideTip(event, '134', 134)" onmouseover="showTip(event, '134', 134)">
+            progress conn groupId topic ps
           </code>
-          <div class="tip" id="386">
-            <strong>Signature:</strong> int<br />
+          <div class="tip" id="134">
+            <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topic:TopicName -&gt; ps:Partition [] -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-          
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L815-815" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns consumer progress information.
+Passing empty set of partitions returns information for all partitions.</p>
+
+
         </td>
       </tr>
     </tbody>

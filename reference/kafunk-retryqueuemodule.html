@@ -55,10 +55,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '312', 312)" onmouseover="showTip(event, '312', 312)">
+          <code onmouseout="hideTip(event, '315', 315)" onmouseover="showTip(event, '315', 315)">
             create p key
           </code>
-          <div class="tip" id="312">
+          <div class="tip" id="315">
             <strong>Signature:</strong> p:RetryPolicy -&gt; key:(&#39;a -&gt; &#39;b) -&gt; RetryQueue&lt;&#39;b,&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
@@ -75,10 +75,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '313', 313)" onmouseover="showTip(event, '313', 313)">
+          <code onmouseout="hideTip(event, '316', 316)" onmouseover="showTip(event, '316', 316)">
             dueAt q dt
           </code>
-          <div class="tip" id="313">
+          <div class="tip" id="316">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; dt:DateTime -&gt; seq&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -95,10 +95,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '314', 314)" onmouseover="showTip(event, '314', 314)">
+          <code onmouseout="hideTip(event, '317', 317)" onmouseover="showTip(event, '317', 317)">
             dueNow q
           </code>
-          <div class="tip" id="314">
+          <div class="tip" id="317">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; seq&lt;&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -115,10 +115,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '315', 315)" onmouseover="showTip(event, '315', 315)">
+          <code onmouseout="hideTip(event, '318', 318)" onmouseover="showTip(event, '318', 318)">
             dueNowAwait q
           </code>
-          <div class="tip" id="315">
+          <div class="tip" id="318">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; Async&lt;seq&lt;&#39;a&gt;&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -136,10 +136,10 @@ and returns the due items.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '316', 316)" onmouseover="showTip(event, '316', 316)">
+          <code onmouseout="hideTip(event, '319', 319)" onmouseover="showTip(event, '319', 319)">
             items q
           </code>
-          <div class="tip" id="316">
+          <div class="tip" id="319">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; seq&lt;&#39;a * DateTime&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -156,10 +156,10 @@ and returns the due items.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '317', 317)" onmouseover="showTip(event, '317', 317)">
+          <code onmouseout="hideTip(event, '320', 320)" onmouseover="showTip(event, '320', 320)">
             remove q k
           </code>
-          <div class="tip" id="317">
+          <div class="tip" id="320">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; k:&#39;k -&gt; RetryQueue&lt;&#39;k,&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -176,12 +176,12 @@ and returns the due items.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '318', 318)" onmouseover="showTip(event, '318', 318)">
+          <code onmouseout="hideTip(event, '321', 321)" onmouseover="showTip(event, '321', 321)">
             removeAll q ks
           </code>
-          <div class="tip" id="318">
-            <strong>Signature:</strong> q:RetryQueue&lt;&#39;?7573,&#39;?7574&gt; -&gt; ks:seq&lt;&#39;?7573&gt; -&gt; RetryQueue&lt;&#39;?7573,&#39;?7574&gt;<br />
-                          <strong>Type parameters:</strong> '?7573, '?7574          </div>
+          <div class="tip" id="321">
+            <strong>Signature:</strong> q:RetryQueue&lt;&#39;?7593,&#39;?7594&gt; -&gt; ks:seq&lt;&#39;?7593&gt; -&gt; RetryQueue&lt;&#39;?7593,&#39;?7594&gt;<br />
+                          <strong>Type parameters:</strong> '?7593, '?7594          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L196-196" class="github-link">
@@ -194,10 +194,10 @@ and returns the due items.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '319', 319)" onmouseover="showTip(event, '319', 319)">
+          <code onmouseout="hideTip(event, '322', 322)" onmouseover="showTip(event, '322', 322)">
             retry q a
           </code>
-          <div class="tip" id="319">
+          <div class="tip" id="322">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; a:&#39;a -&gt; RetryQueue&lt;&#39;k,&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -216,12 +216,12 @@ the initial RetryState is used.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '320', 320)" onmouseover="showTip(event, '320', 320)">
+          <code onmouseout="hideTip(event, '323', 323)" onmouseover="showTip(event, '323', 323)">
             retryAll q xs
           </code>
-          <div class="tip" id="320">
-            <strong>Signature:</strong> q:RetryQueue&lt;&#39;?7558,&#39;?7559&gt; -&gt; xs:seq&lt;&#39;?7559&gt; -&gt; RetryQueue&lt;&#39;?7558,&#39;?7559&gt;<br />
-                          <strong>Type parameters:</strong> '?7558, '?7559          </div>
+          <div class="tip" id="323">
+            <strong>Signature:</strong> q:RetryQueue&lt;&#39;?7578,&#39;?7579&gt; -&gt; xs:seq&lt;&#39;?7579&gt; -&gt; RetryQueue&lt;&#39;?7578,&#39;?7579&gt;<br />
+                          <strong>Type parameters:</strong> '?7578, '?7579          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L167-167" class="github-link">
@@ -234,10 +234,10 @@ the initial RetryState is used.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '321', 321)" onmouseover="showTip(event, '321', 321)">
+          <code onmouseout="hideTip(event, '324', 324)" onmouseover="showTip(event, '324', 324)">
             retryAt q dt a
           </code>
-          <div class="tip" id="321">
+          <div class="tip" id="324">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;k,&#39;a&gt; -&gt; dt:DateTime -&gt; a:&#39;a -&gt; RetryQueue&lt;&#39;k,&#39;a&gt;<br />
                           <strong>Type parameters:</strong> 'k, 'a          </div>
         </td>
@@ -256,10 +256,10 @@ the initial RetryState is used.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '322', 322)" onmouseover="showTip(event, '322', 322)">
+          <code onmouseout="hideTip(event, '325', 325)" onmouseover="showTip(event, '325', 325)">
             retryRemoveAll q retryItems removeItems
           </code>
-          <div class="tip" id="322">
+          <div class="tip" id="325">
             <strong>Signature:</strong> q:RetryQueue&lt;&#39;a,&#39;b&gt; -&gt; retryItems:seq&lt;&#39;b&gt; -&gt; removeItems:seq&lt;&#39;a&gt; -&gt; RetryQueue&lt;&#39;a,&#39;b&gt;<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
