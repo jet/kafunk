@@ -229,7 +229,6 @@ module AsyncSeq =
         do! x }) }
 
   let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
-    //if (bufferSize < 1) then invalidArg "bufferSize" "must be positive"
     if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
     asyncSeq {
       let buffer = new ResizeArray<_>()
