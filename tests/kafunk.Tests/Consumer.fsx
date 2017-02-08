@@ -14,15 +14,18 @@ let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
 let group = argiDefault 3 "existential-group"
+let count = argiDefault 4 "1" |> Int32.Parse
 
 let go = async {
+  let clientId = Guid.NewGuid().ToString("N")
+
   let! conn = 
     let connConfig = 
       let chanConfig = 
         ChanConfig.create (
           requestTimeout = TimeSpan.FromSeconds 60.0,
           receiveBufferSize = 8192 * 3)
-      KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
+      KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig, clientId = clientId)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
@@ -44,7 +47,7 @@ let go = async {
         info.partitions
         |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.earliestOffset)
         |> String.concat " ; "
-      Log.info "consumer_progress|total_lag=%i partitions=%s" info.totalLag str
+      Log.info "consumer_progress|client_id=%s total_lag=%i partitions=%s" clientId info.totalLag str
       return () })
 
   let! _ = Async.StartChild showProgress
@@ -73,4 +76,7 @@ let go = async {
 
 }
 
-Async.RunSynchronously go
+Seq.init count (fun _ -> go)
+|> Async.Parallel
+|> Async.RunSynchronously
+|> ignore

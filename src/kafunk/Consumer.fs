@@ -38,9 +38,6 @@ module ConsumerGroup =
 
     // TODO: consider support for multi-topic subscriptions
     let t,ps = assignments.[0]
-    if ps.Length = 0 then
-      failwith "no partitions assigned!"
-
     t,ps
 
   /// Creates an instances of the consumer groups protocol given the specified assignment strategies.
@@ -179,7 +176,7 @@ type ConsumerConfig = {
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
-  /// Default: 5
+  /// Default: 3
   heartbeatFrequency : int32
   
   /// The minimum bytes to buffer server side for a fetch request.
@@ -234,7 +231,7 @@ type ConsumerConfig = {
         topic = topic
         sessionTimeout = defaultArg sessionTimeout 10000
         rebalanceTimeout = defaultArg rebalanceTimeout 10000
-        heartbeatFrequency = defaultArg heartbeatFrequency 5
+        heartbeatFrequency = defaultArg heartbeatFrequency 3
         fetchMinBytes = defaultArg fetchMinBytes 0
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
         fetchMaxBytes = defaultArg fetchMaxBytes 1048576
@@ -520,6 +517,9 @@ module Consumer =
       let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
       Log.info "consumer_group_assignment_received|client_id=%s group_id=%s topic=%s partitions=[%s]"
         c.conn.Config.clientId cfg.groupId topic (Printers.partitions assignment)
+      
+      if assignment.Length = 0 then
+        return failwithf "no partitions assigned!"
 
       let! ct = Async.CancellationToken
       let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
@@ -744,7 +744,7 @@ module Consumer =
     (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> =
       c
       |> generations
-      |> AsyncSeq.iterAsyncParallel (fun (groupMemberState,partitionStreams) ->
+      |> AsyncSeq.iterAsync (fun (groupMemberState,partitionStreams) ->
         partitionStreams
         |> Seq.map (fun (_,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
         |> Async.Parallel

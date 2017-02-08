@@ -135,3 +135,31 @@ let ``AsyncSeq.windowed should work`` () =
         |> AsyncSeq.map List.ofArray
         |> AsyncSeq.toList
       shouldEqual expected actual None
+
+[<Test>]
+let ``AsyncSeq.iterAsyncParallel should propagate exception`` () =
+  
+  for N in [2..100] do
+    
+    let fail = N / 2
+
+    let res = 
+      Seq.init N id
+      |> AsyncSeq.ofSeq
+      |> AsyncSeq.mapAsyncParallel (fun i -> async {
+        if i = fail then 
+          return failwith  "error"
+        return i })
+//      |> AsyncSeq.iterAsyncParallel (fun i -> async {
+//        if i = fail then 
+//          return failwith "error"
+//        else () })
+      //|> AsyncSeq.iter ignore
+      |> AsyncSeq.iterAsyncParallel (async.Return >> Async.Ignore)
+      |> Async.Catch
+      |> Async.RunSynchronously
+  
+    match res with
+    | Failure _ -> ()
+    | Success _ -> Assert.Fail ("error expected")
+
