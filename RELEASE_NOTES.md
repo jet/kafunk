@@ -1,3 +1,8 @@
+### 0.0.22-alpha001 - 08.02.2017
+
+* Producer in-memory buffer in bytes
+* ConsumerInfo module for consumer progress tracking
+
 ### 0.0.21-alpha001 - 07.02.2017
 
 * Updated exampled/readme
