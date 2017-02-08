@@ -1,3 +1,7 @@
+### 0.0.23-alpha001 - 08.02.2017
+
+* Improve producer performance (batch size measurement)
+
 ### 0.0.22-alpha001 - 08.02.2017
 
 * Producer in-memory buffer in bytes
