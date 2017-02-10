@@ -175,7 +175,9 @@ module Framing =
     [<Literal>]
     let HeaderLength = 4
 
-    let inline allocBuffer length = Binary.zeros length 
+    let inline allocBuffer size =
+      try Binary.zeros size 
+      with ex -> raise (exn(sprintf "Error trying to allocate a buffer of size=%i" size, ex))
 
     [<Struct>]
     type private ReadResult =
@@ -323,7 +325,7 @@ type ReqRepSession<'a, 'b, 's> internal
         Log.error "response_decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.TrySetException ex |> ignore
     else
-      Log.warn "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
+      Log.trace "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
   let mux (ct:CancellationToken) (req:'a) =
     let startTime = DateTime.UtcNow
@@ -334,7 +336,7 @@ type ReqRepSession<'a, 'b, 's> internal
       if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
         let endTime = DateTime.UtcNow
         let elapsed = endTime - startTime
-        Log.warn "request_cancelled|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
+        Log.trace "request_cancelled|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore
     ct.Register (Action(cancel)) |> ignore

@@ -588,8 +588,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
             |> Async.tryWith (fun ex -> async {
               Log.error "channel_exception_escalated|client_id=%s endpoint=%O request=%s error=%O" 
                 cfg.clientId ep (RequestMessage.Print req) ex
-              do! Async.Sleep 1000
-              return raise ex })
+              let! state' = handleRequestFailure (state, req, ep, [])
+              return! send state' req })
+              //do! Async.Sleep 1000
+              //return raise ex })
 
         | None ->
           let! state' = stateCell |> MVar.updateAsync (fun state' -> connCh state' ep)

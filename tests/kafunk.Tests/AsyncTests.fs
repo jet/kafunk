@@ -1,10 +1,19 @@
 ﻿module AsyncTests
 
+open FSharp.Control
 open Kafunk
 open NUnit.Framework
 open System.Threading
 open System.Threading.Tasks
-open FSharp.Control
+
+module Async =
+  
+  let runTimeout (timeoutMs:int) (a:Async<'a>) : 'a =
+    Async.RunSynchronously (a, timeoutMs)
+
+  let runTest a = runTimeout 5000 a
+
+
 
 [<Test>]
 let ``Async.never should regard infinite timeouts as equal`` () =
@@ -49,7 +58,8 @@ let ``MVar.updateAsync should execute update serially`` () =
 
   let actual = 
     Async.Parallel (Seq.init calls (fun _ -> op calling))
-    |> Async.RunSynchronously
+    //|> Async.RunSynchronously
+    |> Async.runTest
     |> List.ofArray
   
   let expected = List.init calls (fun _ -> calling + 1)
@@ -74,7 +84,7 @@ let ``Async.withCancellation should cancel`` () =
   cts.CancelAfter 200
 
   let expected = None
-  let actual = Async.RunSynchronously cancellableComp
+  let actual = Async.runTimeout 5000 cancellableComp
 
   shouldEqual expected actual None
   shouldEqual true !cancelled None
@@ -133,20 +143,21 @@ let ``AsyncSeq.windowed should work`` () =
         AsyncSeq.ofSeq input
         |> AsyncSeq.windowed windowSize 
         |> AsyncSeq.map List.ofArray
-        |> AsyncSeq.toList
+        |> AsyncSeq.toListAsync
+        |> Async.runTest
       shouldEqual expected actual None
 
 [<Test>]
 let ``AsyncSeq.iterAsyncParallel should propagate exception`` () =
   
-  for N in [2..100] do
+  for N in [100] do
     
     let fail = N / 2
 
     let res = 
       Seq.init N id
       |> AsyncSeq.ofSeq
-      |> AsyncSeq.mapAsyncParallel (fun i -> async {
+      |> FSharp.Control.AsyncSeq.mapAsyncParallel (fun i -> async {
         if i = fail then 
           return failwith  "error"
         return i })
@@ -157,7 +168,7 @@ let ``AsyncSeq.iterAsyncParallel should propagate exception`` () =
       //|> AsyncSeq.iter ignore
       |> AsyncSeq.iterAsyncParallel (async.Return >> Async.Ignore)
       |> Async.Catch
-      |> Async.RunSynchronously
+      |> Async.runTest
   
     match res with
     | Failure _ -> ()

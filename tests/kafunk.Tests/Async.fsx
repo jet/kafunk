@@ -2,105 +2,101 @@
 #r "bin/release/kafunk.dll"
 #time "on"
 
-
+open FSharp.Control
 open Kafunk
 open System
 open System.Threading
+open System.Threading.Tasks
 
-let N = 1000000
-
-//let choose i = async {
-//  return! Async.choose2 (Async.Sleep 1) (Async.Sleep 1) }
-
-[<AutoOpen>]
-module Ex =
+module Task =
   
-  type Async with
+  let join (t:Task<Task<'a>>) : Task<'a> =
+    t.Unwrap()
 
-    /// Creates an async computation which completes when any of the argument computations completes.
-    /// The other computation is cancelled.
-    static member choose3 (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {
-      let! ct = Async.CancellationToken
-      return!
-        Async.FromContinuations <| fun (ok,err,cnc) ->
-          let state = ref 0
-          let cts = CancellationTokenSource.CreateLinkedTokenSource ct
-          let cancel () = 
-            cts.Cancel ()
-            //cts.Dispose () // under load, this can cause slow downs and errors interllay in Async
-          let ok a =
-            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
-              ok a
-              cancel ()
-          let err (ex:exn) =
-            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
-              cancel ()
-              err ex
-          let cnc ex =
-            if (Interlocked.CompareExchange(state, 1, 0) = 0) then 
-              cancel ()
-              cnc ex
-          Async.StartThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
-          Async.StartThreadPoolWithContinuations (b, ok, err, cnc, cts.Token) }
+  let continueWith (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
+    t.ContinueWith f
 
-    static member choose2 a b : Async<'T> = async {
-      let! ct = Async.CancellationToken
-      return!
-        Async.FromContinuations (fun (cont, econt, ccont) ->
-          let result1 = ref (Choice1Of3())
-          let result2 = ref (Choice1Of3())
-          let handled = ref false
-          let lock f = lock handled f
-          let cts = CancellationTokenSource.CreateLinkedTokenSource ct
+module AsyncSeq =
 
-          // Called when one of the workflows completes
-          let complete () = 
-            let op =
-              lock (fun () ->
-                // If we already handled result (and called continuation)
-                // then ignore. Otherwise, if the computation succeeds, then
-                // run the continuation and mark state as handled.
-                // Only throw if both workflows failed.
-                match !handled, !result1, !result2 with 
-                | true, _, _ -> ignore
-                | false, (Choice2Of3 value), _ 
-                | false, _, (Choice2Of3 value) -> 
-                    handled := true
-                    cts.Cancel ()
-                    //cts.Dispose ()
-                    (fun () -> cont value)
-                | false, Choice3Of3 e1, Choice3Of3 e2 -> 
-                    handled := true
-                    cts.Cancel () 
-                    //cts.Dispose ()
-                    (fun () -> econt (new AggregateException("Both clauses of a choice failed.", [| e1; e2 |])))
-                | false, Choice1Of3 _, Choice3Of3 _ 
-                | false, Choice3Of3 _, Choice1Of3 _ 
-                | false, Choice1Of3 _, Choice1Of3 _ -> ignore)
-            op()
-            cts.Cancel()
+  let tryWithPrint (tag:string) (a:Async<'a>) : Async<'a> =
+    async.TryWith (a, fun ex -> async { 
+      //printfn "%s%O" tag ex 
+      return raise ex })
 
-          let run resCell a = async {
-            try
-              let! res = a
-              lock (fun () -> resCell := Choice2Of3 res)
-            with e ->
-              lock (fun () -> resCell := Choice3Of3 e)
-            complete () }
+//  let private peekTaskError (t:Task<_>) (a:Async<'b>) : Async<'b> = async {
+//    if t.IsFaulted then 
+//      return raise t.Exception
+//    else return! a }
 
-          Async.Start (run result1 a, cts.Token)
-          Async.Start (run result2 b, cts.Token)) }
+  let private chooseTask (t:Task<'a>) (a:Async<'a>) : Async<'a> = async {
+    let! a = Async.StartChildAsTask a
+    return! Task.WhenAny (t, a) |> Task.join |> Async.AwaitTask }
+
+  /// Starts an async computation as a child.
+  /// Returns a Task which completes with error if the computation errors.
+  let private startWithError (a:Async<unit>) = async {
+    let err = IVar.create ()
+    let! _ =
+      a
+      |> Async.tryWith (fun ex -> async { IVar.error ex err })
+      |> Async.StartChild
+    return err }
+
+  let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = asyncSeq {
+    use mb = Mb.create ()
+    let! err =
+      s 
+      |> AsyncSeq.iterAsync (fun a -> async {
+        let! b = Async.StartChild (f a)
+        mb.Post (Some b) })
+      |> Async.map (fun _ -> mb.Post None)
+      |> startWithError
+    yield! 
+      AsyncSeq.replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
+      |> AsyncSeq.mapAsync id }
+
+  let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
+    use mb = Mb.create ()
+    let! err =
+      s 
+      |> AsyncSeq.iterAsync (fun a -> async {
+        let! b = Async.StartChild (f a)
+        mb.Post (Some b) })
+      |> Async.map (fun _ -> mb.Post None)
+      |> startWithError
+    return!
+      AsyncSeq.replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
+      |> AsyncSeq.iterAsync id }
 
 
-let choose i = async {
-  return! Async.choose (Async.empty) (Async.empty) }
-
-Seq.init N choose
-|> Async.ParallelThrottledIgnore Int32.MaxValue
-//|> Async.Parallel
-|> Async.RunSynchronously
-|> ignore
+let N = 1000
+let fail = 50
 
 
+let op i = async {
+  do! Async.SwitchToThreadPool ()
+  if i = fail then 
+    printfn "error"
+    return failwith "error"
+  do! Async.Sleep 1
+  return 1 }
 
-// Real: 00:00:02.676, CPU: 00:00:11.203, GC gen0: 520, gen1: 217, gen2: 1
+
+let res = 
+  Seq.init N id
+  |> AsyncSeq.ofSeq
+  |> AsyncSeq.mapAsyncParallel op
+  |> AsyncSeq.mapAsyncParallel (id >> async.Return)
+  |> AsyncSeq.mapAsyncParallel (id >> async.Return)
+  |> AsyncSeq.mapAsyncParallel (id >> async.Return)
+  //|> AsyncSeq.mapAsyncParallel (id >> async.Return)
+  //|> AsyncSeq.mapAsyncParallel (id >> async.Return)
+  //|> AsyncSeq.mapAsyncParallel (id >> async.Return)
+  //|> AsyncSeq.mapAsyncParallel op
+  //|> AsyncSeq.mapAsyncParallel op
+  //|> FSharp.Control.AsyncSeq.mapAsyncParallel op
+  //|> AsyncSeq.iter ignore
+  |> AsyncSeq.iterAsyncParallel (op >> Async.Ignore)
+  |> Async.Catch
+  |> Async.RunSynchronously
+

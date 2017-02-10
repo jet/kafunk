@@ -177,23 +177,6 @@ module Array =
       System.Array.Copy(array, sub, count)
       sub
 
-  /// Partitions the array into the specified number of groups.
-  /// If there are more groups than elements, then the empty groups are returned.
-  /// When the array doesn't divide into the number of groups, the last group will 
-  /// have one fewer element.
-  let groupInto (groups:int) (a:'a[]) : 'a[][] =
-    if groups < 1 then invalidArg "groups" "must be positive"
-    let perGroup = int (ceil (float a.Length / float groups))
-    let groups = Array.zeroCreate groups
-    for i = 0 to groups.Length - 1 do
-      let group = ResizeArray<_>(perGroup)
-      for j = 0 to perGroup - 1 do
-        let idx = i * perGroup + j
-        if idx < a.Length then
-          group.Add (a.[idx])
-      groups.[i] <- group.ToArray()
-    groups
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Seq =
   

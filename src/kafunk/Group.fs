@@ -78,18 +78,18 @@ and GroupMember = internal {
   state : MVar<GroupMemberStateWrapper>
 }
 
-/// The action to take upon closing the group.
-and internal GroupCloseAction = 
+/// The action to take upon leaving the group.
+and internal GroupLeaveAction = 
   
-  /// Close the group entirely without rejoin.
+  /// Leave without rejoin.
   | LeaveGroup
   
-  /// Close the generation and rejoin.
-  | CloseGenerationAndRejoin of ec:ErrorCode
+  /// Leave and rejoin.
+  | LeaveAndRejoin of ec:ErrorCode
 
 and internal GroupMemberStateWrapper = {
   state : GroupMemberState
-  closed : IVar<GroupCloseAction>
+  closed : IVar<GroupLeaveAction>
 } 
 
 /// Operations on Kafka groups.
@@ -100,28 +100,28 @@ module Group =
 
   /// Checks if the group state is closed, in which cases it evaluates f.
   /// Otherwise, evaluates the async computation.
-  let internal tryAsync (state:GroupMemberStateWrapper) (f:GroupCloseAction -> 'a) (a:Async<'a>) : Async<'a> = async {
+  let internal tryAsync (state:GroupMemberStateWrapper) (f:GroupLeaveAction -> 'a) (a:Async<'a>) : Async<'a> = async {
     let t = state.closed.Task
     if t.IsCompleted then return f t.Result
     else return! a }
     
   /// Closes a group specifying whether a new generation should begin.
-  let private close (gm:GroupMember) (state:GroupMemberStateWrapper) (action:GroupCloseAction) : Async<bool> =
+  let private leaveGroup (gm:GroupMember) (state:GroupMemberStateWrapper) (action:GroupLeaveAction) : Async<bool> =
     tryAsync
       state
       (fun _ -> false)
       (async {
         match action with
-        | GroupCloseAction.CloseGenerationAndRejoin ec ->
+        | GroupLeaveAction.LeaveAndRejoin ec ->
           if IVar.tryPut action state.closed then
-            Log.warn "closing_group_generation|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i"
+            Log.warn "leaving_group_to_rejoin|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i"
               gm.conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId ec
             return true
           else
             return false
-        | GroupCloseAction.LeaveGroup ->
+        | GroupLeaveAction.LeaveGroup ->
           if IVar.tryPut action state.closed then
-            Log.warn "closing_group|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
+            Log.warn "leaving_group|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
               gm.conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
@@ -129,12 +129,12 @@ module Group =
         })
 
   /// Closes a generation and causes a new generation to begin.
-  let internal closeGenerationAndRejoin (gm:GroupMember) (state:GroupMemberStateWrapper) (ec:ErrorCode) : Async<unit> =
-    close gm state (GroupCloseAction.CloseGenerationAndRejoin ec) |> Async.Ignore
+  let internal leaveAndRejoin (gm:GroupMember) (state:GroupMemberStateWrapper) (ec:ErrorCode) : Async<unit> =
+    leaveGroup gm state (GroupLeaveAction.LeaveAndRejoin ec) |> Async.Ignore
 
   /// Closes a group and sends a leave group request to Kafka.
   let internal leaveInternal (gm:GroupMember) (state:GroupMemberStateWrapper) : Async<unit> = async {
-    let! _ = close gm state (GroupCloseAction.LeaveGroup)
+    let! _ = leaveGroup gm state (GroupLeaveAction.LeaveGroup)
     let req = LeaveGroupRequest(gm.config.groupId, state.state.memberId)
     let! res = Kafka.leaveGroup gm.conn req
     match res.errorCode with
@@ -177,7 +177,8 @@ module Group =
       let req = JoinGroup.Request(groupId, sessionTimeout, rebalanceTimeout, defaultArg prevMemberId "", protocolType, GroupProtocols(protocols))
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
-      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
+      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode 
+      | ErrorCode.NotCoordinatorForGroupCode ->
         return Failure res.errorCode
       | ErrorCode.NoError ->
         return Success res
@@ -193,7 +194,8 @@ module Group =
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
       let! res = Kafka.syncGroup conn req
       match res.errorCode with
-      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
+      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode 
+      | ErrorCode.NotCoordinatorForGroupCode ->
         return Failure res.errorCode
       | ErrorCode.NoError ->
         return Success res
@@ -204,7 +206,8 @@ module Group =
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment([||]))
       let! res = Kafka.syncGroup conn req
       match res.errorCode with
-      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
+      | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode 
+      | ErrorCode.NotCoordinatorForGroupCode ->
         return Failure res.errorCode
       | ErrorCode.NoError ->
         return Success res
@@ -219,9 +222,8 @@ module Group =
       Log.info "starting_heartbeat_process|client_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
         conn.Config.clientId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs
 
-      let closed = IVar.create ()
-
       let state =
+        let closed = IVar.create ()
         {
           state =
             {
@@ -237,15 +239,15 @@ module Group =
         }
           
       conn.CancellationToken.Register (fun () ->
-        Log.info "closing_group_on_connection_close|client_id=%s group_id=%s member_id=%s generation_id=%i" 
+        Log.info "leaving_group_on_connection_close|client_id=%s group_id=%s member_id=%s generation_id=%i" 
           conn.Config.clientId gm.config.groupId state.state.memberId state.state.generationId 
-        leave gm |> Async.Start) |> ignore
+        Async.Start (leave gm)) |> ignore
       
       /// Sends a heartbeat.
       let heartbeat (count:int) (state:GroupMemberStateWrapper) =
         tryAsync
           state
-          ignore
+          (konst false)
           (async {
             let req = HeartbeatRequest(cfg.groupId, state.state.generationId, state.state.memberId)
             let! res = Kafka.heartbeat conn req |> Async.Catch
@@ -253,12 +255,13 @@ module Group =
             | Success res ->
               match res.errorCode with
               | ErrorCode.NoError -> 
-                return ()
-              | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode ->
+                return true
+              | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode 
+              | ErrorCode.NotCoordinatorForGroupCode ->
                 Log.warn "heartbeat_error|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i heartbeat_count=%i" 
                   conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count
-                do! closeGenerationAndRejoin gm state res.errorCode
-                return ()
+                do! leaveAndRejoin gm state res.errorCode
+                return false
               | ec ->
                 return failwithf "unknown_heartbeat_error|client_id=%s error_code=%i" 
                   conn.Config.clientId ec
@@ -266,13 +269,14 @@ module Group =
               Log.warn "heartbeat_exception|client_id=%s group_id=%s generation_id=%i error=%O" 
                 conn.Config.clientId gm.config.groupId state.state.generationId ex
               do! leaveInternal gm state
-              return () })
+              return false })
 
       let heartbeatProcess =
         AsyncSeq.intervalMs heartbeatSleepMs
         |> AsyncSeq.skip 1
         |> AsyncSeq.mapiAsync (fun i _ -> async.Return i)
-        |> AsyncSeq.iterAsyncParallel (fun i -> heartbeat (int i) state)
+        |> AsyncSeq.mapAsyncParallel (fun i -> heartbeat (int i) state)
+        |> AsyncSeq.pick (fun cont -> if cont then None else Some ())
 
       let! ct = Async.CancellationToken
       let cts = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
@@ -341,7 +345,6 @@ module Group =
             Log.warn "sync_group_error|client_id=%s group_id=%s error_code=%i" 
               conn.Config.clientId groupId ec
             do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
-            //let prevMemberId = if ec = ErrorCode.UnknownMemberIdCode then None else prevMemberId
             return! joinSyncHeartbeat (prevMemberId, Some ec)
 
       | Failure joinGroupErr ->
@@ -361,7 +364,7 @@ module Group =
       // but may be unexpected.
       let! action = IVar.get state.closed
       match action with
-      | GroupCloseAction.CloseGenerationAndRejoin ec ->
+      | GroupLeaveAction.LeaveAndRejoin ec ->
         let! _ = join gm (Some state.state, Some ec)
         yield! loop ()
       | _ -> () }

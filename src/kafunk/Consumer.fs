@@ -94,6 +94,17 @@ module ConsumerGroup =
   /// Built-in assignment stratgies.
   module AssignmentStratgies =
 
+    let internal RangeAssign (ps:Partition[]) (ms:MemberId[]) =
+      let asmts =
+        ms
+        |> Array.map (fun m -> m, ResizeArray<_>()) 
+      let f = float ms.Length / float ps.Length
+      for i in [0..ps.Length - 1] do
+        let j = int (floor (float i * f))
+        (snd asmts.[j]).Add ps.[i]
+      asmts
+      |> Array.map (fun (m,ps) -> m, ps.ToArray())
+
     /// The range consumer group assignment startegy.
     let Range =
       
@@ -116,13 +127,11 @@ module ConsumerGroup =
           
           let members = Map.ofSeq members
           
-          (membersByTopic, Map.ofArray topicPartitions)
+          (Map.ofArray topicPartitions, membersByTopic)
           ||> Map.mergeChoice (fun t -> function
             | Choice2Of3 _ | Choice3Of3 _ -> failwith "invalid state"
-            | Choice1Of3 (memberIds,ps) -> 
-              let memberPartitions = ps |> Array.groupInto memberIds.Length
-              (memberIds,memberPartitions)
-              ||> Array.zip
+            | Choice1Of3 (ps,memberIds) ->
+              RangeAssign ps memberIds
               |> Array.map (fun (mid,ps) -> mid,t,ps))
           |> Map.toSeq
           |> Seq.collect snd
@@ -388,7 +397,7 @@ module Consumer =
               if not (Seq.isEmpty errors) then
                 Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
                   cfg.groupId topic (Printers.partitionErrorCodePairs errors)
-                do! Group.closeGenerationAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
+                do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
                 return ()
               else
                 Log.info "committed_offsets|client_id=%s group_id=%s topic=%s offsets=%s" 
@@ -519,6 +528,8 @@ module Consumer =
         c.conn.Config.clientId cfg.groupId topic (Printers.partitions assignment)
       
       if assignment.Length = 0 then
+        Log.error "no_partitions_assigned|client_id=%s group_id=%s member_id=%s topic=%s" 
+          c.conn.Config.clientId cfg.groupId state.state.memberId topic
         return failwithf "no partitions assigned!"
 
       let! ct = Async.CancellationToken
@@ -551,7 +562,9 @@ module Consumer =
           (state)
           (fun _ -> None)
           (async {
-            let req = FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, [| topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |])
+            let req = 
+              let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |]
+              FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os)
             let! res = fetch req
             match res with
             | Success res ->
