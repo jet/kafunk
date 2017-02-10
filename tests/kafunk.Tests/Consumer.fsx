@@ -23,8 +23,8 @@ let go = async {
     let connConfig = 
       let chanConfig = 
         ChanConfig.create (
-          requestTimeout = TimeSpan.FromSeconds 60.0,
-          receiveBufferSize = 8192 * 3)
+          requestTimeout = TimeSpan.FromSeconds 30.0,
+          receiveBufferSize = 8192 * 10)
       KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig, clientId = clientId)
     Kafka.connAsync connConfig
   let consumerConfig = 
@@ -33,9 +33,9 @@ let go = async {
       topic = topic, 
       initialFetchTime = Time.EarliestOffset, 
       fetchMaxBytes = 200000,
-      fetchBufferSize= 2,
+      fetchBufferSize= 1,
       outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime,
-      sessionTimeout = 10000)
+      sessionTimeout = 30000)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   
@@ -47,7 +47,7 @@ let go = async {
         info.partitions
         |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.earliestOffset)
         |> String.concat " ; "
-      Log.info "consumer_progress|client_id=%s total_lag=%i partitions=%s" clientId info.totalLag str
+      Log.info "consumer_progress|client_id=%s topic=%s total_lag=%i partitions=%s" clientId info.topic info.totalLag str
       return () })
 
   let! _ = Async.StartChild showProgress

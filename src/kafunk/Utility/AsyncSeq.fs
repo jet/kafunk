@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module internal Kafunk.AsyncSeq
+module Kafunk.AsyncSeq
 
 open FSharp.Control
 open System
@@ -193,40 +193,58 @@ module AsyncSeq =
       (fun () -> next |> Async.map (Option.map (fun a -> a,()))) 
       ()
 
-  let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) = asyncSeq {
+  let private peekTask (f:'a -> 'b) (t:Task<'a>) (a:Async<'b>) : Async<'b> = async {
+    if t.IsCompleted then 
+      return f t.Result
+    else return! a }
+
+  let private peekTaskError (t:Task<_>) (a:Async<'b>) : Async<'b> = async {
+    if t.IsFaulted then 
+      return raise t.Exception
+    else return! a }
+
+  /// Starts an async computation as a child.
+  /// Returns a Task which completes with error if the computation errors.
+  let private startCaptureError (a:Async<unit>) = async {
+    let err = IVar.create ()
+    let! _ =
+      a
+      |> Async.tryWith (fun ex -> async { IVar.error ex err })
+      |> Async.StartChild
+    return err }
+
+  let private chooseTaskAsTask (t:Task<'a>) (a:Async<'a>) = async {
+    let! a = Async.StartChildAsTask a
+    return Task.WhenAny (t, a) |> Task.join }
+
+  let private chooseTask (t:Task<'a>) (a:Async<'a>) : Async<'a> =
+    chooseTaskAsTask t a |> Async.bind Async.AwaitTask
+
+  let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = asyncSeq {
     use mb = Mb.create ()
-    let! iterTask =
+    let! err =
       s 
       |> AsyncSeq.iterAsync (fun a -> async {
         let! b = Async.StartChild (f a)
         mb.Post (Some b) })
-      |> Async.bind (fun _ -> async {
-        mb.Post None })
-      |> Async.StartChildAsTask
+      |> Async.map (fun _ -> mb.Post None)
+      |> startCaptureError
     yield! 
-      replicateUntilNoneAsync (Mb.take mb) 
-      |> AsyncSeq.mapAsync (fun b -> async {
-        if iterTask.IsFaulted then
-          return! raise iterTask.Exception
-        let! b = b
-        return b }) }
+      replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
+      |> AsyncSeq.mapAsync id }
 
   let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
     use mb = Mb.create ()
-    let! iterTask =
+    let! err =
       s 
       |> AsyncSeq.iterAsync (fun a -> async {
-        let! x = Async.StartChild (f a)
-        do Mb.put (Some x) mb })
-      |> Async.bind (fun _ -> async {
-        do Mb.put None mb })
-      |> Async.StartChildAsTask
-    return! 
-      replicateUntilNoneAsync (Mb.take mb) 
-      |> AsyncSeq.iterAsync (fun x -> async {
-        if iterTask.IsFaulted then
-          return! raise iterTask.Exception
-        do! x }) }
+        let! b = Async.StartChild (f a)
+        mb.Post (Some b) })
+      |> Async.map (fun _ -> mb.Post None)
+      |> startCaptureError
+    return!
+      replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
+      |> AsyncSeq.iterAsync id }
 
   let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
     if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"

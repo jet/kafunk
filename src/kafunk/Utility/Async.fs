@@ -375,7 +375,7 @@ module AsyncFunc =
 type Mb<'a> = MailboxProcessor<'a>
 
 /// Operations on unbounded FIFO mailboxes.
-module internal Mb =
+module Mb =
 
   /// Creates a new unbounded mailbox.
   let create () : Mb<'a> = 
@@ -386,3 +386,13 @@ module internal Mb =
 
   /// Creates an async computation that completes when a message is available in a mailbox.
   let inline take (mb:Mb<'a>) = async.Delay mb.Receive
+
+
+/// Operations on System.Threading.Tasks.Task<_>.
+module internal Task =
+  
+  let join (t:Task<Task<'a>>) : Task<'a> =
+    t.Unwrap()
+
+  let extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
+    t.ContinueWith f
