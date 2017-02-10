@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>Metadata - Kafunk</title>
+    <title>Step<'a, 'b> - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,54 +35,33 @@
 
 
 
-<h1>Metadata</h1>
+<h1>Step<'a, 'b></h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
+  <span>Parent Module: <a href="kafunk-asyncseq.html">AsyncSeq</a></span>
 </p>
 <div class="xmldoc">
+<p>An individual step of an async transducer.</p>
+
 </div>
-
-<!-- Render nested types and modules, if there are any -->
-  <h2>Nested types and modules</h2>
-  <div>
-      <table class="table table-bordered type-list">
-    <thead>
-      <tr><td>Type</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-protocol-metadata-request.html">Request</a>
-          </td>
-          <td class="xmldoc"><p>Request metadata on all or a specific set of topics.
-Can be routed to any node in the bootstrap list.</p>
-
-</td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
-
-  <h3>Functions and values</h3>
+  <h3>Union Cases</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Function or value</td><td>Description</td></tr>
+      <tr><td>Union Case</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '300', 300)" onmouseover="showTip(event, '300', 300)">
-            sizeRequest x
+          <code onmouseout="hideTip(event, '367', 367)" onmouseover="showTip(event, '367', 367)">
+            Await(&#39;a option -&gt; AsyncPipe&lt;&#39;a,&#39;b&gt;)
           </code>
-          <div class="tip" id="300">
-            <strong>Signature:</strong> x:Request -&gt; int<br />
+          <div class="tip" id="367">
+            <strong>Signature:</strong> &#39;a option -&gt; AsyncPipe&lt;&#39;a,&#39;b&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L472-472" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L17-17" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -92,15 +71,33 @@ Can be routed to any node in the bootstrap list.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '301', 301)" onmouseover="showTip(event, '301', 301)">
-            writeRequest x
+          <code onmouseout="hideTip(event, '368', 368)" onmouseover="showTip(event, '368', 368)">
+            Emit(&#39;b,tail)
           </code>
-          <div class="tip" id="301">
-            <strong>Signature:</strong> x:Request -&gt; Segment -&gt; Segment<br />
+          <div class="tip" id="368">
+            <strong>Signature:</strong> &#39;b * AsyncPipe&lt;&#39;a,&#39;b&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L475-475" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L16-16" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '369', 369)" onmouseover="showTip(event, '369', 369)">
+            Halt
+          </code>
+          <div class="tip" id="369">
+            <strong>Signature:</strong> <br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L15-15" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

@@ -40,293 +40,58 @@
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>Module with helper functions for working with asynchronous sequences</p>
-
 </div>
 
 <!-- Render nested types and modules, if there are any -->
-
-  <h3>Functions and values</h3>
-  <table class="table table-bordered member-list">
+  <h2>Nested types and modules</h2>
+  <div>
+      <table class="table table-bordered type-list">
     <thead>
-      <tr><td>Function or value</td><td>Description</td></tr>
+      <tr><td>Type</td><td>Description</td></tr>
     </thead>
     <tbody>
-      <tr>
-        <td class="member-name">
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncseq-asyncpipe-2.html">AsyncPipe<'a, 'b></a>
+          </td>
+          <td class="xmldoc"><p>An async transducer.</p>
 
-          <code onmouseout="hideTip(event, '61', 61)" onmouseover="showTip(event, '61', 61)">
-            bufferByTime timeSpan
-          </code>
-          <div class="tip" id="61">
-            <strong>Signature:</strong> timeSpan:TimeSpan -&gt; AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;a []&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L103-103" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-asyncseq-step-2.html">Step<'a, 'b></a>
+          </td>
+          <td class="xmldoc"><p>An individual step of an async transducer.</p>
 
-          <code onmouseout="hideTip(event, '62', 62)" onmouseover="showTip(event, '62', 62)">
-            interleaveChoice a b
-          </code>
-          <div class="tip" id="62">
-            <strong>Signature:</strong> a:AsyncSeq&lt;&#39;a&gt; -&gt; b:AsyncSeq&lt;&#39;b&gt; -&gt; AsyncSeq&lt;Choice&lt;&#39;a,&#39;b&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L109-109" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '63', 63)" onmouseover="showTip(event, '63', 63)">
-            iterAsyncParallel f s
-          </code>
-          <div class="tip" id="63">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;unit&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;unit&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L173-173" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '64', 64)" onmouseover="showTip(event, '64', 64)">
-            replicateUntilNoneAsync next
-          </code>
-          <div class="tip" id="64">
-            <strong>Signature:</strong> next:Async&lt;&#39;a option&gt; -&gt; AsyncSeq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L176-176" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '65', 65)" onmouseover="showTip(event, '65', 65)">
-            sequenceResult m s
-          </code>
-          <div class="tip" id="65">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; s:AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'e, 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L167-167" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '66', 66)" onmouseover="showTip(event, '66', 66)">
-            sequenceResultList s
-          </code>
-          <div class="tip" id="66">
-            <strong>Signature:</strong> s:AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;&#39;a,&#39;e list&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'e          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L170-170" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '67', 67)" onmouseover="showTip(event, '67', 67)">
-            sequenceResultWarn m s
-          </code>
-          <div class="tip" id="67">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; s:AsyncSeq&lt;Result&lt;&#39;a,&#39;e&gt;&gt; -&gt; Async&lt;Result&lt;(&#39;a * &#39;e),&#39;e&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'e, 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L164-164" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '68', 68)" onmouseover="showTip(event, '68', 68)">
-            traverseAsyncResult m f s
-          </code>
-          <div class="tip" id="68">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L114-114" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>A traversal of an async sequence specialized to the Result type.
-Returns the first successful result or a list of all erroneous results.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '69', 69)" onmouseover="showTip(event, '69', 69)">
-            traverseAsyncResultList f s
-          </code>
-          <div class="tip" id="69">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e list&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'e          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L152-152" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '70', 70)" onmouseover="showTip(event, '70', 70)">
-            traverseAsyncResultWarn m f s
-          </code>
-          <div class="tip" id="70">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;(&#39;b * &#39;e),&#39;e&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L133-133" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '71', 71)" onmouseover="showTip(event, '71', 71)">
-            traverseResult m f s
-          </code>
-          <div class="tip" id="71">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Result&lt;&#39;b,&#39;e&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L155-155" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '72', 72)" onmouseover="showTip(event, '72', 72)">
-            traverseResultList f s
-          </code>
-          <div class="tip" id="72">
-            <strong>Signature:</strong> f:(&#39;a -&gt; Result&lt;&#39;b,&#39;e&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;&#39;b,&#39;e list&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'e          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L161-161" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '73', 73)" onmouseover="showTip(event, '73', 73)">
-            traverseResultWarn m f s
-          </code>
-          <div class="tip" id="73">
-            <strong>Signature:</strong> m:Monoid&lt;&#39;e&gt; -&gt; f:(&#39;a -&gt; Result&lt;&#39;b,&#39;e&gt;) -&gt; s:AsyncSeq&lt;&#39;a&gt; -&gt; Async&lt;Result&lt;(&#39;b * &#39;e),&#39;e&gt;&gt;<br />
-                          <strong>Type parameters:</strong> 'e, 'a, 'b          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L158-158" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '74', 74)" onmouseover="showTip(event, '74', 74)">
-            unfoldInfiniteAsync s f
-          </code>
-          <div class="tip" id="74">
-            <strong>Signature:</strong> s:&#39;s -&gt; f:(&#39;s -&gt; Async&lt;&#39;a * &#39;s&gt;) -&gt; AsyncSeq&lt;&#39;a&gt;<br />
-                          <strong>Type parameters:</strong> 's, 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L106-106" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '75', 75)" onmouseover="showTip(event, '75', 75)">
-            windowed windowSize
-          </code>
-          <div class="tip" id="75">
-            <strong>Signature:</strong> windowSize:int -&gt; AsyncSeq&lt;&#39;a&gt; -&gt; AsyncSeq&lt;&#39;a []&gt;<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/AsyncSeq.fs#L100-100" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
+</td>
+        </tr>
     </tbody>
   </table>
+  <table class="table table-bordered module-list">
+    <thead>
+      <tr><td>Module</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncseq-asyncpipe.html">AsyncPipe</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="module-name">
+            <a href="kafunk-asyncseq-asyncseq.html">AsyncSeq</a>
+          </td>
+          <td class="xmldoc"><p>Module with helper functions for working with asynchronous sequences</p>
+
+</td>
+        </tr>
+    </tbody>
+  </table>
+
+  </div>
+
 
         </div>
         <div class="span3">
@@ -341,7 +106,8 @@ Returns the first successful result or a list of all erroneous results.</p>
             <li><a href="/kafunk/release-notes.html">Release Notes</a></li>
             
             <li class="nav-header">Getting started</li>
-            <li><a href="/kafunk/tutorial.html">Sample tutorial</a></li>
+            <li><a href="/kafunk/consuming.html">Consuming</a></li>
+            <li><a href="/kafunk/producing.html">Producing</a></li>
 
             <li class="nav-header">Documentation</li>
             <li><a href="/kafunk/reference/index.html">API Reference</a></li>

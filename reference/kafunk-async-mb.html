@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>Metadata - Kafunk</title>
+    <title>Mb - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,35 +35,17 @@
 
 
 
-<h1>Metadata</h1>
+<h1>Mb</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
+  <span>Parent Module: <a href="kafunk-async.html">Async</a></span>
 </p>
 <div class="xmldoc">
+<p>Operations on unbounded FIFO mailboxes.</p>
+
 </div>
 
 <!-- Render nested types and modules, if there are any -->
-  <h2>Nested types and modules</h2>
-  <div>
-      <table class="table table-bordered type-list">
-    <thead>
-      <tr><td>Type</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-protocol-metadata-request.html">Request</a>
-          </td>
-          <td class="xmldoc"><p>Request metadata on all or a specific set of topics.
-Can be routed to any node in the bootstrap list.</p>
-
-</td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
 
   <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
@@ -74,37 +56,61 @@ Can be routed to any node in the bootstrap list.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '300', 300)" onmouseover="showTip(event, '300', 300)">
-            sizeRequest x
+          <code onmouseout="hideTip(event, '57', 57)" onmouseover="showTip(event, '57', 57)">
+            create ()
           </code>
-          <div class="tip" id="300">
-            <strong>Signature:</strong> x:Request -&gt; int<br />
-                      </div>
+          <div class="tip" id="57">
+            <strong>Signature:</strong> unit -&gt; Mb&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L472-472" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L381-381" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Creates a new unbounded mailbox.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '301', 301)" onmouseover="showTip(event, '301', 301)">
-            writeRequest x
+          <code onmouseout="hideTip(event, '58', 58)" onmouseover="showTip(event, '58', 58)">
+            put a mb
           </code>
-          <div class="tip" id="301">
-            <strong>Signature:</strong> x:Request -&gt; Segment -&gt; Segment<br />
-                      </div>
+          <div class="tip" id="58">
+            <strong>Signature:</strong> a:&#39;a -&gt; mb:Mb&lt;&#39;a&gt; -&gt; unit<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L475-475" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L385-385" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          
+          <p>Puts a message into a mailbox, no waiting.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '59', 59)" onmouseover="showTip(event, '59', 59)">
+            take mb
+          </code>
+          <div class="tip" id="59">
+            <strong>Signature:</strong> mb:Mb&lt;&#39;a&gt; -&gt; Async&lt;&#39;a&gt;<br />
+                          <strong>Type parameters:</strong> 'a          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Async.fs#L388-388" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Creates an async computation that completes when a message is available in a mailbox.</p>
+
+
         </td>
       </tr>
     </tbody>
