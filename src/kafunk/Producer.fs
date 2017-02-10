@@ -153,7 +153,7 @@ type ProducerConfig = {
 } with
 
   /// The default required acks = RequiredAcks.Local.
-  static member DefaultRequiredAcks = RequiredAcks.Local
+  static member DefaultRequiredAcks = RequiredAcks.AllInSync
 
   /// The default produce request timeout = 10000.
   static member DefaultTimeoutMs = 10000

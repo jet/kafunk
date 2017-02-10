@@ -1,3 +1,8 @@
+### 0.0.25-alpha001 - 10.02.2017
+
+* Default producer to RequiredAcks.AllInSync
+* Fix range consumer partition assignment strategy
+
 ### 0.0.24-alpha001 - 08.02.2017
 
 * Adjust consumer group heartbeat defaults
