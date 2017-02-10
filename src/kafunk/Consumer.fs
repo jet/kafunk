@@ -94,7 +94,7 @@ module ConsumerGroup =
   /// Built-in assignment stratgies.
   module AssignmentStratgies =
 
-    let internal RangeAssign (ps:Partition[]) (ms:MemberId[]) =  
+    let internal RangeAssign (ps:Partition[]) (ms:MemberId[]) =
       let asmts =
         ms
         |> Array.map (fun m -> m, ResizeArray<_>()) 
@@ -397,7 +397,7 @@ module Consumer =
               if not (Seq.isEmpty errors) then
                 Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
                   cfg.groupId topic (Printers.partitionErrorCodePairs errors)
-                do! Group.closeGenerationAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
+                do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
                 return ()
               else
                 Log.info "committed_offsets|client_id=%s group_id=%s topic=%s offsets=%s" 
@@ -528,8 +528,8 @@ module Consumer =
         c.conn.Config.clientId cfg.groupId topic (Printers.partitions assignment)
       
       if assignment.Length = 0 then
-        Log.warn "no_partitions_assigned|client_id=%s group_id=%s topic=%s" 
-          c.conn.Config.clientId cfg.groupId topic
+        Log.error "no_partitions_assigned|client_id=%s group_id=%s member_id=%s topic=%s" 
+          c.conn.Config.clientId cfg.groupId state.state.memberId topic
         return failwithf "no partitions assigned!"
 
       let! ct = Async.CancellationToken
