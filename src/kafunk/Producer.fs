@@ -201,15 +201,12 @@ type Producer = private {
 /// Producer state corresponding to the state of a cluster.
 and private ProducerState = {
 
-  /// Brokers.
-  brokerByEndPoint : Map<EndPoint, Chan>
-  
-  /// Brokers by partitions.
-  partitionBrokers : Map<Partition, Chan>
-  
   /// Current set of partitions for the topic.
   partitions : Partition[]
-  
+
+  /// Brokers by partitions.
+  partitionBrokers : Map<Partition, Chan>
+    
   /// Per-broker queues accepting a triple of partition, messages for the partition and a reply channel.
   brokerQueues : Map<EndPoint, ProducerMessageBatch -> Async<unit>>
 }
@@ -325,38 +322,23 @@ module Producer =
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
-  let private getState (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (prevState:ProducerState option) = async {
+  let private getState (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
     
     Log.info "fetching_topic_metadata|topic=%s" cfg.topic
     let! state = conn.GetMetadataState [|cfg.topic|]
 
     let partitions = 
-      Routes.topicPartitions state.routes |> Map.find cfg.topic
+      ConnState.topicPartitions state |> Map.find cfg.topic
     
-    Log.info "establishing_broker_connections|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
+    Log.info "discovered_topic_partitions|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
 
-    let brokerByEndPoint =
-      prevState
-      |> Option.map (fun s -> s.brokerByEndPoint)
-      |> Option.getOr Map.empty
-
-    let! brokerByEndPoint,brokerByPartition =
-      ((brokerByEndPoint, Map.empty), AsyncSeq.ofSeq partitions)
-      ||> AsyncSeq.foldAsync (fun (brokerByEndPoint,brokerByPartition) p -> async {
-        match Routes.tryFindHostForTopic state.routes (cfg.topic,p) with
-        | Some ep -> 
-          match ConnState.tryFindChanByEndPoint ep state with
-          | Some ch ->
-            return (Map.add ep ch brokerByEndPoint, Map.add p ch brokerByPartition)
-          | None -> 
-            match brokerByEndPoint |> Map.tryFind ep with
-            | Some ch ->
-              return (brokerByEndPoint, Map.add p ch brokerByPartition)
-            | None ->
-              let! ch = Chan.connect (conn.Config.version,conn.Config.tcpConfig,conn.Config.clientId) ep
-              return (Map.add ep ch brokerByEndPoint, Map.add p ch brokerByPartition)
-        | None -> 
-          return failwith "invalid state" })
+    let brokerByPartition =
+      partitions
+      |> Seq.map (fun p -> 
+        match ConnState.topicPartitionBroker (cfg.topic, p) state with
+        | Some ch -> p, ch
+        | None -> failwith "invalid state")
+      |> Map.ofSeq
     
     let messageVer = ProducerConfig.messageVersion conn.Config.version
 
@@ -394,7 +376,7 @@ module Producer =
         ep,q)
       |> Map.ofSeq
         
-    return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues ; brokerByEndPoint = brokerByEndPoint } }
+    return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues } }
 
   let private produceBatchInternal (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let p,ms = createBatch state.partitions.Length

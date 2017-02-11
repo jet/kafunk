@@ -26,10 +26,15 @@ let consumerGroup = "kafunk-producer-consumer-test-" + testId
 
 let messageKey = "at-least-once-test-" + testId
 let messageKeyBytes = messageKey |> System.Text.Encoding.UTF8.GetBytes |> Binary.ofArray
-let chanConfig = ChanConfig.create (requestTimeout = TimeSpan.FromSeconds 10.0)
+
+let chanConfig = 
+  ChanConfig.create (
+    requestTimeout = TimeSpan.FromSeconds 10.0,
+    connectRetryPolicy = RetryPolicy.none)
 
 let consuming = new CountdownEvent(consumerCount)
 let completed = IVar.create ()
+let sw = System.Diagnostics.Stopwatch.StartNew()
 
 
 type Ack () =
@@ -59,6 +64,7 @@ type Ack () =
   member __.Duplicates = duplicates
   member __.Sent = sent
   member __.Received = received
+  member __.Pending = pending.Count
 
   member __.Prepare (vs:int seq) =
     for v in vs do
@@ -87,12 +93,7 @@ type Ack () =
 
 
 
-type ReportReq = 
-  | Received of values:(int * (Partition * Offset))[] * messageCount:int
-  | Produced of values:int[] * p:Partition * o:Offset
-  | Report of AsyncReplyChannel<Report>
-
-and Report =
+type Report =
   struct
     val received : int
     val duplicates : int
@@ -105,41 +106,86 @@ and Report =
       { received = r ; duplicates = d ; produced = p ; skipped = s ; contigCount = cc ; lastContigOffset = lco ; offsets = os }
   end
 
-let mb = Mb.Start (fun mb ->
+
+let printReport (report:Report) =
+  let pending = totalMessageCount - report.received
+  let lag = report.produced - report.received
+  let offsetStr = report.offsets |> Seq.map (fun kvp -> sprintf "p=%i o=%i" kvp.Key kvp.Value) |> String.concat " ; "
+  let contigDelta = report.received - report.contigCount 
+  Log.info "monitor|produced=%i received=%i lag=%i duplicates=%i pending=%i contig=%i contig_delta=%i last_contig_offset=%A offsets=[%s] running_time_min=%f" 
+    report.produced report.received lag report.duplicates pending report.contigCount contigDelta report.lastContigOffset offsetStr sw.Elapsed.TotalMinutes
+
+
+
+// ----------------------------------------------------------------------------------------------------------------------------------
+
+[<Compile(Module)>]
+module Reporter =
+
+  type Reporter = 
+    private 
+    | R of Mb<ReportReq>
+
+  and private ReportReq = 
+    | Received of values:(int * (Partition * Offset))[] * messageCount:int
+    | Produced of values:int[] * p:Partition * o:Offset
+    | Report of AsyncReplyChannel<Report>
+
+  let create () =
+
+    let mb = Mb.Start (fun mb ->
   
-  let ack = Ack ()
-  let skipped = ref 0
-  let offsets = ref Map.empty
+      let ack = Ack ()
+      let skipped = ref 0
+      let offsets = ref Map.empty
 
-  mb.Error.Add (fun e -> Log.error "mailbox_error|%O" e)
+      mb.Error.Add (fun e -> Log.error "mailbox_error|%O" e)
 
-  let report () =
-    Report(ack.Received, ack.Duplicates, ack.Sent, !skipped, ack.Contig, None, !offsets) 
+      let report () =
+        let r = new Report(ack.Received, ack.Duplicates, ack.Sent, !skipped, ack.Contig, None, !offsets) 
+        printReport r
+        Log.info "pending=%i" ack.Pending
+        r
 
-  let rec loop () = async {
-    let! req = mb.Receive ()
-    match req with
-    | Received (values,messageBatchCount) ->
+      let rec loop () = async {
+        let! req = mb.Receive ()
+        match req with
+        | Received (values,messageBatchCount) ->
       
-      ack.Ack (values |> Seq.map fst)
+          ack.Ack (values |> Seq.map fst)
 
-      Interlocked.Add(skipped, messageBatchCount - values.Length) |> ignore
+          Interlocked.Add(skipped, messageBatchCount - values.Length) |> ignore
 
-      if ack.Received >= totalMessageCount then
-        Log.info "received_complete_set|receive_count=%i" ack.Contig
-        IVar.tryPut () completed |> ignore
+          if ack.Received >= totalMessageCount then
+            Log.info "received_complete_set|receive_count=%i" ack.Contig
+            IVar.tryPut () completed |> ignore
 
 
-    | Produced (values,p,o) ->
-      ack.Prepare values
+        | Produced (values,p,o) ->
+          ack.Prepare values
 
-    | Report rep ->
-      rep.Reply (report ())
+        | Report rep ->
+          rep.Reply (report ())
 
-    return! loop () }
+        return! loop () }
 
-  loop ())
+      loop ())
 
+    R mb
+
+  let report (R(mb)) = 
+    mb.PostAndAsyncReply (ReportReq.Report)
+
+  let produced (R(mb)) (batch,p,o) = 
+    mb.Post (ReportReq.Produced(batch,p,o))
+
+  let consumed (R(mb)) (values,ms:ConsumerMessageSet) = 
+    mb.Post (ReportReq.Received (values,ms.messageSet.messages.Length))
+
+
+let reporter = Reporter.create ()
+
+// ----------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -177,7 +223,7 @@ let producer = async {
         let batch = Array.init batchSize (fun j -> (batchNumber * batchSize + j))
         let pms = batch |> Array.map message
         let! res = Producer.produceBatch producer (fun pc -> batchNumber % pc,pms)
-        mb.Post (ReportReq.Produced (batch,res.partition,res.offset))
+        Reporter.produced reporter (batch,res.partition,res.offset)
       with ex ->
         Log.error "produce_error|error=%O" ex })
     |> Async.ParallelThrottledIgnore producerThreads
@@ -185,6 +231,10 @@ let producer = async {
   return! Async.choose (IVar.get completed) produceProcess
 
   Log.info "producer_done" }
+
+
+
+// ----------------------------------------------------------------------------------------------------------------------------------
 
 
 let consumer = async {
@@ -202,9 +252,13 @@ let consumer = async {
           None)
       |> Seq.toArray
 
-    mb.Post (ReportReq.Received (values,ms.messageSet.messages.Length)) }
+    Reporter.consumed reporter (values,ms) }
 
-  let connCfg = KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
+  let connCfg = 
+    KafkaConfig.create (
+      [KafkaUri.parse host], 
+      tcpConfig = chanConfig,
+      bootstrapConnectRetryPolicy = (RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 2))
   use! conn = Kafka.connAsync connCfg
 
   let consumerCfg = 
@@ -224,22 +278,14 @@ let consumer = async {
 
   return! Async.choose (consumeProcess) (IVar.get completed) }
 
-let sw = System.Diagnostics.Stopwatch.StartNew()
 
-let printReport (report:Report) =
-  let pending = totalMessageCount - report.received
-  let lag = report.produced - report.received
-  let offsetStr = report.offsets |> Seq.map (fun kvp -> sprintf "p=%i o=%i" kvp.Key kvp.Value) |> String.concat " ; "
-  let contigDelta = report.received - report.contigCount 
-  Log.info "monitor|produced=%i received=%i lag=%i duplicates=%i pending=%i contig=%i contig_delta=%i last_contig_offset=%A offsets=[%s] running_time_min=%f" 
-    report.produced report.received lag report.duplicates pending report.contigCount contigDelta report.lastContigOffset offsetStr sw.Elapsed.TotalMinutes
+// ----------------------------------------------------------------------------------------------------------------------------------
+
 
 let monitor = async {
   while not completed.Task.IsCompleted do 
     do! Async.Sleep 5000
-    Log.info "requesting_report"
-    let! report = mb.PostAndAsyncReply (ReportReq.Report)
-    Log.info "report_received"
+    let! report = Reporter.report reporter
     printReport report
     if (report.received - report.contigCount) > 1000000 then
       Log.error "contig_delta_surpassed_threshold"
@@ -253,9 +299,9 @@ let go =
     [
       yield monitor
       for _ in [1..consumerCount] do
-        yield (consumer |> Async.tryWith (fun ex -> async { Log.error "consumer_error|%O" ex }))
+        yield consumer
         Thread.Sleep 100
-      yield (producer |> Async.tryWith (fun ex -> async { Log.error "producer_errror|%O" ex }))
+      yield producer
     ]
   |> Async.Ignore
 
@@ -266,5 +312,5 @@ with ex ->
 
 sw.Stop()
 
-let report = mb.PostAndAsyncReply (ReportReq.Report) |> Async.RunSynchronously
+let report = Reporter.report reporter |> Async.RunSynchronously
 printReport report

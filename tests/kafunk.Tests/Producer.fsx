@@ -27,7 +27,17 @@ let batchCount = int (N / int64 batchSize)
 Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" 
   host topic N batchSize batchCount messageSize parallelism volumeMB
 
-let conn = Kafka.connHost host
+let connCfg = 
+  
+  let chanConfig = 
+    ChanConfig.create (
+      requestTimeout = TimeSpan.FromSeconds 10.0,
+      connectRetryPolicy = RetryPolicy.none,
+      requestRetryPolicy = RetryPolicy.none)
+
+  KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
+
+let conn = Kafka.conn connCfg
 
 let producerCfg =
   ProducerConfig.create (
@@ -37,7 +47,8 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
-    batchLingerMs = 1000)
+    batchLingerMs = 1000,
+    retryPolicy = RetryPolicy.constantBoundedMs 0 3)
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -82,7 +93,7 @@ let go = async {
         return ()
       with ex ->
         Log.error "produce_error|%O" ex
-        return () })
+        return raise ex })
     |> Async.ParallelThrottledIgnore parallelism }
 
 try 

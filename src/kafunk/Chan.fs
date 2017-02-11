@@ -104,8 +104,24 @@ and ChanError =
   | ChanFailure of exn
 
 /// A request/reply TCP channel to a Kafka broker.
+[<CustomEquality;NoComparison>]
 type internal Chan =
   | Chan of ep:EndPoint * send:(RequestMessage -> Async<ChanResult>) * reconnect:Async<unit> * close:Async<unit>
+  with 
+    override this.GetHashCode () =
+      let (Chan(ep1,_,_,_)) = this in
+      ep1.GetHashCode ()
+    override this.Equals (o:obj) =
+      match o with
+      | :? Chan as o -> this.Equals o
+      | _ -> false
+    member this.Equals (o:Chan) =
+      let (Chan(ep1,_,_,_)) = this in
+      let (Chan(ep2,_,_,_)) = o in
+      ep1 = ep2
+    interface IEquatable<Chan> with
+      member this.Equals (o:Chan) = this.Equals o        
+        
 
 /// API operations on a generic request/reply channel.
 [<Compile(Module)>]
@@ -121,20 +137,6 @@ module internal Chan =
 
 //  /// Re-established the connection to the socket.
 //  let reconnect (Chan(_,reconnect,_)) = reconnect
-
-  let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
-  let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
-  let produce = AsyncFunc.dimap RequestMessage.Produce ResponseMessage.toProduce
-  let offset = AsyncFunc.dimap RequestMessage.Offset ResponseMessage.toOffset
-  let groupCoordinator = AsyncFunc.dimap RequestMessage.GroupCoordinator ResponseMessage.toGroupCoordinator
-  let offsetCommit = AsyncFunc.dimap RequestMessage.OffsetCommit ResponseMessage.toOffsetCommit
-  let offsetFetch = AsyncFunc.dimap RequestMessage.OffsetFetch ResponseMessage.toOffsetFetch
-  let joinGroup = AsyncFunc.dimap RequestMessage.JoinGroup ResponseMessage.toJoinGroup
-  let syncGroup = AsyncFunc.dimap RequestMessage.SyncGroup ResponseMessage.toSyncGroup
-  let heartbeat = AsyncFunc.dimap RequestMessage.Heartbeat ResponseMessage.toHeartbeat
-  let leaveGroup = AsyncFunc.dimap RequestMessage.LeaveGroup ResponseMessage.toLeaveGroup
-  let listGroups = AsyncFunc.dimap RequestMessage.ListGroups ResponseMessage.toListGroups
-  let describeGroups = AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups
 
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
@@ -166,7 +168,7 @@ module internal Chan =
             | Success s ->
               Log.info "tcp_connected|client_id=%s remote_endpoint=%O local_endpoint=%O" clientId s.RemoteEndPoint s.LocalEndPoint
             | Failure (Choice1Of2 _) ->
-              Log.error "tcp_connection_timed_out|client_id=%s remote_endpoint=%O timeout=%O" clientId ipep config.connectTimeout
+              Log.warn "tcp_connection_timed_out|client_id=%s remote_endpoint=%O timeout=%O" clientId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
               Log.error "tcp_connection_failed|client_id=%s remote_endpoint=%O error=%O" clientId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
@@ -254,18 +256,3 @@ module internal Chan =
       |> AsyncFunc.mapOut (snd >> Result.mapError (List.map (Choice.fold (konst ChanTimeout) (ChanFailure))))
 
     return Chan (ep, send, Async.empty, Async.empty) }
-
-  /// Discovers brokers via DNS and connects to the first IPv4.
-  let discoverConnect (version:System.Version, config:ChanConfig, clientId:ClientId) (host:Host, port:Port) = async {
-    let! ip = async {
-      match IPAddress.tryParse host with
-      | None ->
-        Log.info "discovering_dns|client_id=%s host=%s" clientId host
-        let! ips = Dns.IPv4.getAllAsync host
-        Log.info "discovered_dns|client_id=%s host=%s ips=[%s]" clientId host (Printers.stringsCsv ips)
-        let ip = ips.[0]
-        return ip
-      | Some ip ->
-        return ip }
-    let ep = EndPoint.ofIPAddressAndPort (ip, port)
-    return! connect (version, config, clientId) ep }

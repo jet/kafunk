@@ -598,7 +598,7 @@ module Consumer =
                   |> Seq.map (fun p -> p, Map.find p offsets)
                   |> Seq.toArray
                 Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%s" (Printers.partitionOffsetPairs staleOffsets)
-                let! _ = c.conn.GetMetadata ([|topic|])
+                let! _ = c.conn.GetMetadataState ([|topic|])
                 // TODO: only fetch stale and combine
                 return! tryFetch offsets else
               

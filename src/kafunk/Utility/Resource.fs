@@ -109,7 +109,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           return raise (exn())
         | Some (_,rs) ->
           return! go rs a }
-    go RetryPolicy.initState
+    go RetryState.init
         
   member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) : Async<'a -> Async<'b>> = async {
     let rec go a = async {
