@@ -203,16 +203,6 @@ module AsyncSeq =
       return raise t.Exception
     else return! a }
 
-  /// Starts an async computation as a child.
-  /// Returns a Task which completes with error if the computation errors.
-  let private startCaptureError (a:Async<unit>) = async {
-    let err = IVar.create ()
-    let! _ =
-      a
-      |> Async.tryWith (fun ex -> async { IVar.error ex err })
-      |> Async.StartChild
-    return err }
-
   let private chooseTaskAsTask (t:Task<'a>) (a:Async<'a>) = async {
     let! a = Async.StartChildAsTask a
     return Task.WhenAny (t, a) |> Task.join }
@@ -228,9 +218,9 @@ module AsyncSeq =
         let! b = Async.StartChild (f a)
         mb.Post (Some b) })
       |> Async.map (fun _ -> mb.Post None)
-      |> startCaptureError
+      |> Async.StartChildAsTask
     yield! 
-      replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
+      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
       |> AsyncSeq.mapAsync id }
 
   let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
@@ -241,9 +231,9 @@ module AsyncSeq =
         let! b = Async.StartChild (f a)
         mb.Post (Some b) })
       |> Async.map (fun _ -> mb.Post None)
-      |> startCaptureError
+      |> Async.StartChildAsTask
     return!
-      replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
+      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
       |> AsyncSeq.iterAsync id }
 
   let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 

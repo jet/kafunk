@@ -9,18 +9,16 @@ open System.Threading
 open System.Threading.Tasks
 
 
-/// Configuration for an individual TCP channel.
+/// Configuration for a TCP channel to an individual broker.
 type ChanConfig = {
   
   /// Specifies whether the socket should use Nagle's algorithm.
   useNagle : bool
   
   /// The socket receive buffer size.
-  /// Default: 65536
   receiveBufferSize : int
     
   /// The socket send buffer size.
-  /// Default: 65536
   sendBufferSize : int
         
   /// The connection timeout.
@@ -46,14 +44,14 @@ type ChanConfig = {
   /// The default TCP connection timeout = 10s.
   static member DefaultConnectTimeout = TimeSpan.FromSeconds 10
   
-  /// The default TCP connection retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
-  static member DefaultConnectRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  /// The default TCP connection retry policy = RetryPolicy.constantBoundedMs 2000 50.
+  static member DefaultConnectRetryPolicy = RetryPolicy.constantBoundedMs 2000 50
   
   /// The default TCP request timeout = 30s.
   static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
   
-  /// The default TCP request retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 2000 50.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 2000 50
   
   /// The default TCP Nagle setting = false.
   static member DefaultUseNagle = false
@@ -84,13 +82,15 @@ type internal EndPoint =
     member this.Display = this.ToString()
     override this.Equals (o:obj) = 
       match o with 
-      | :? EndPoint as ep -> (EndPoint.endpoint this).Equals(EndPoint.endpoint ep)
+      | :? EndPoint as ep -> this.Equals (ep)
       | _ -> false
+    member this.Equals (other:EndPoint) =
+      (EndPoint.endpoint this).Equals(EndPoint.endpoint other)
     override this.GetHashCode () = (EndPoint.endpoint this).GetHashCode()
     override this.ToString () = (EndPoint.endpoint this).ToString()
     interface IEquatable<EndPoint> with
       member this.Equals (other:EndPoint) =
-        (EndPoint.endpoint this).Equals(EndPoint.endpoint other)
+        this.Equals (other)
     interface IComparable with
       member this.CompareTo (other) =
         this.ToString().CompareTo(other.ToString())
@@ -105,22 +105,20 @@ and ChanError =
 
 /// A request/reply TCP channel to a Kafka broker.
 [<CustomEquality;NoComparison>]
-type internal Chan =
-  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ChanResult>) * reconnect:Async<unit> * close:Async<unit>
+type internal Chan = private {
+  ep : EndPoint
+  send : RequestMessage -> Async<ChanResult>
+  task : Task<unit>
+}
   with 
-    override this.GetHashCode () =
-      let (Chan(ep1,_,_,_)) = this in
-      ep1.GetHashCode ()
+    override this.GetHashCode () = this.ep.GetHashCode ()
+    member this.Equals (o:Chan) = this.ep.Equals (o.ep)
     override this.Equals (o:obj) =
       match o with
       | :? Chan as o -> this.Equals o
       | _ -> false
-    member this.Equals (o:Chan) =
-      let (Chan(ep1,_,_,_)) = this in
-      let (Chan(ep2,_,_,_)) = o in
-      ep1 = ep2
     interface IEquatable<Chan> with
-      member this.Equals (o:Chan) = this.Equals o        
+      member this.Equals (o:Chan) = this.Equals o
         
 
 /// API operations on a generic request/reply channel.
@@ -130,13 +128,12 @@ module internal Chan =
   let private Log = Log.create "Kafunk.Chan"
 
   /// Sends a request.
-  let send (Chan(_,send,_,_)) req = send req
+  let send (ch:Chan) req = ch.send req
   
   /// Gets the endpoint.
-  let endpoint (Chan(ep,_,_,_)) = ep
+  let endpoint (ch:Chan) = ch.ep
 
-//  /// Re-established the connection to the socket.
-//  let reconnect (Chan(_,reconnect,_)) = reconnect
+  let internal task (ch:Chan) = ch.task
 
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
@@ -232,7 +229,8 @@ module internal Chan =
     let send = 
       send
       |> AsyncFunc.timeoutOption config.requestTimeout
-      |> Resource.timeoutIndep socketAgent
+      //|> Resource.timeoutIndep socketAgent
+      |> AsyncFunc.mapOut (snd >> Some)
       |> AsyncFunc.catch
       |> AsyncFunc.mapOut (fun (_,res) ->
         match res with
@@ -255,4 +253,4 @@ module internal Chan =
       |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy
       |> AsyncFunc.mapOut (snd >> Result.mapError (List.map (Choice.fold (konst ChanTimeout) (ChanFailure))))
 
-    return Chan (ep, send, Async.empty, Async.empty) }
+    return  { ep = ep ; send = send ; task = session.Task } }

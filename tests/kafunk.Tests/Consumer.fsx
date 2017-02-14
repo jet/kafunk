@@ -71,8 +71,10 @@ let go = async {
     handle
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
-  do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
-  //do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
+  //do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
+  do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
+  //let! first = Consumer.stream consumer |> AsyncSeq.tryFirst
+  //do! Async.Sleep 100000
 
 }
 

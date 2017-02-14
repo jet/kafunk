@@ -72,7 +72,6 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           return ep2
         with ex ->
           Log.error "recovery_failed|error=%O" ex
-          //do! Async.Sleep 2000
           return raise ex
       else
         Log.trace "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version

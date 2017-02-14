@@ -349,22 +349,22 @@ type ReqRepSession<'a, 'b, 's> internal
       rep.SetResult res
     correlationId,sessionReq,rep
 
-  let rec receiveLoop = async {
+  let rec receiveProcess = async {
     try
       do! receive |> AsyncSeq.iter demux
       Log.warn "restarting_receive_loop"
-      return! receiveLoop
+      return! receiveProcess
     with ex ->
       Log.error "receive_loop_faiure|error=%O" ex
-      cts.Cancel ()
-      do! Async.Sleep 1000
       return raise ex }
 
-  do Async.Start (receiveLoop, cts.Token)
+  let receiveTask : Task<unit> = 
+    Async.StartAsTask (receiveProcess, cancellationToken = cts.Token)
 
-  member internal x.Send (req:'a) = async {
-    if cts.IsCancellationRequested then 
-      return failwith "session is closed!"
+  member internal __.Task = receiveTask
+
+  member internal __.Send (req:'a) = async {
+    if receiveTask.IsFaulted then return raise receiveTask.Exception else
     let! ct = Async.CancellationToken
     let _correlationId,sessionData,rep = mux ct req
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
@@ -400,3 +400,7 @@ module Session =
 
   /// Sends a request on the session and awaits the response.
   let send (session:ReqRepSession<_, _, _>) req = session.Send req
+
+  /// Gets the Task corresponding to the lifecycle of the session.
+  /// The Task completes with error when the session fails.
+  let task (session:ReqRepSession<_, _, _>) = session.Task

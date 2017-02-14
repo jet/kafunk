@@ -9,6 +9,7 @@ open System
 open System.Diagnostics
 open System.Threading
 
+Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -32,8 +33,12 @@ let connCfg =
   let chanConfig = 
     ChanConfig.create (
       requestTimeout = TimeSpan.FromSeconds 10.0,
+      sendBufferSize = ChanConfig.DefaultSendBufferSize,
+      //connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
+      //requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy
       connectRetryPolicy = RetryPolicy.none,
-      requestRetryPolicy = RetryPolicy.none)
+      requestRetryPolicy = RetryPolicy.none
+      )
 
   KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
 
@@ -48,7 +53,9 @@ let producerCfg =
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
     batchLingerMs = 1000,
-    retryPolicy = RetryPolicy.constantBoundedMs 0 3)
+    retryPolicy = RetryPolicy.constantBoundedMs 5000 5
+    //retryPolicy = ProducerConfig.DefaultRetryPolicy
+    )
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -64,12 +71,12 @@ let produceBatch =
 
 let cts = new CancellationTokenSource()
 
-Kafunk.Log.Event 
-|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
-|> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
-|> Observable.add (fun es ->
-  cts.Cancel ()
-  printfn "ERROR_OVERFLOW|count=%i" es.Length)
+//Kafunk.Log.Event 
+//|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
+//|> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
+//|> Observable.add (fun es ->
+//  cts.Cancel ()
+//  printfn "ERROR_OVERFLOW|count=%i" es.Length)
 
 let sw = Stopwatch.StartNew()
 let mutable completed = 0L

@@ -96,7 +96,8 @@ let res =
   //|> AsyncSeq.mapAsyncParallel op
   //|> FSharp.Control.AsyncSeq.mapAsyncParallel op
   //|> AsyncSeq.iter ignore
-  |> AsyncSeq.iterAsyncParallel (op >> Async.Ignore)
+  //|> AsyncSeq.iterAsyncParallel (id >> Async.Ignore)
+  |> AsyncSeq.iterAsyncParallel (async.Return >> Async.Ignore)
   |> Async.Catch
   |> Async.RunSynchronously
 

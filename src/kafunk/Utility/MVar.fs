@@ -9,11 +9,11 @@ open System.Threading
 open System.Threading.Tasks
 
 type private MVarReq<'a> =
-  | PutAsync of Async<'a> * TaskCompletionSource<'a>
-  | UpdateAsync of update:('a -> Async<'a>) * TaskCompletionSource<'a>
-  | PutOrUpdateAsync of update:('a option -> Async<'a>) * TaskCompletionSource<'a>
-  | Get of TaskCompletionSource<'a>
-  | Take of TaskCompletionSource<'a>
+  | PutAsync of Async<'a> * IVar<'a>
+  | UpdateAsync of update:('a -> Async<'a>)
+  | PutOrUpdateAsync of update:('a option -> Async<'a>) * IVar<'a>
+  | Get of IVar<'a>
+  | Take of IVar<'a>
 
 /// A serialized variable.
 type MVar<'a> internal (?a:'a) =
@@ -28,20 +28,20 @@ type MVar<'a> internal (?a:'a) =
             try
               let! a = a
               state <- Some a
-              rep.SetResult a
+              IVar.put a rep
               return! loop a
             with ex ->
-              rep.SetException ex
+              IVar.error ex rep
               return! init () })
         | PutOrUpdateAsync (update,rep) ->
           Some (async {
             try
               let! a = update None
               state <- Some a
-              rep.SetResult a
+              IVar.put a rep
               return! loop (a)
             with ex ->
-              rep.SetException ex
+              IVar.error ex rep
               return! init () })
         | _ ->
           None) }
@@ -52,36 +52,30 @@ type MVar<'a> internal (?a:'a) =
         try
           let! a = a'
           state <- Some a
-          rep.SetResult a
+          IVar.put a rep
           return! loop (a)
         with ex ->
-          rep.SetException ex
+          IVar.error ex rep
           return! loop (a)
       | PutOrUpdateAsync (update,rep) ->
         try
           let! a = update (Some a)
           state <- Some a
-          rep.SetResult a
+          IVar.put a rep
           return! loop (a)
         with ex ->
-          rep.SetException ex
+          IVar.error ex rep
           return! loop (a)
       | Get rep ->
-        rep.SetResult a
+        IVar.put a rep
         return! loop (a)
       | Take (rep) ->
         state <- None
-        rep.SetResult a
+        IVar.put a rep
         return! init ()
-      | UpdateAsync (f,rep) ->
-        try
-          let! a = f a
-          state <- Some a
-          rep.SetResult a
-          return! loop (a)
-        with ex ->
-          rep.SetException ex
-          return! loop (a) }
+      | UpdateAsync f ->
+        let! a = f a
+        return! loop a }
     match a with
     | Some a ->
       state <- Some a
@@ -92,9 +86,9 @@ type MVar<'a> internal (?a:'a) =
   do mbp.Error.Add (fun x -> printfn "|MVar|ERROR|%O" x) // shouldn't happen
   
   let postAndAsyncReply f = async {
-    let tcs = new TaskCompletionSource<'a>()
-    mbp.Post (f tcs)
-    return! tcs.Task |> Async.AwaitTask }
+    let ivar = IVar.create ()
+    mbp.Post (f ivar)
+    return! IVar.get ivar }
 
   member __.Get () : Async<'a> =
     postAndAsyncReply (Get)
@@ -111,14 +105,27 @@ type MVar<'a> internal (?a:'a) =
   member __.PutAsync (a:Async<'a>) : Async<'a> =
     postAndAsyncReply (fun ch -> PutAsync (a,ch))
 
+  member __.UpdateStateAsync (update:'a -> Async<'a * 's>) : Async<'s> = async {
+    let rep = IVar.create ()
+    let up a = async {
+      try
+        let! (a,s) = update a
+        IVar.put s rep
+        return a
+      with ex ->
+        IVar.error ex rep
+        return a  }
+    mbp.Post (UpdateAsync up)
+    return! IVar.get rep }
+
+  member __.PutOrUpdateAsync (update:'a option -> Async<'a>) : Async<'a> =
+    postAndAsyncReply (fun ch -> PutOrUpdateAsync (update,ch))
+
   member __.Update (f:'a -> 'a) : Async<'a> =
     __.UpdateAsync (f >> async.Return)
 
   member __.UpdateAsync (update:'a -> Async<'a>) : Async<'a> =
-    postAndAsyncReply (fun ch -> UpdateAsync (update, ch))
-
-  member __.PutOrUpdateAsync (update:'a option -> Async<'a>) : Async<'a> =
-    postAndAsyncReply (fun ch -> PutOrUpdateAsync (update,ch))
+    __.UpdateStateAsync (update >> Async.map diag)
 
   interface IDisposable with
     member __.Dispose () = (mbp :> IDisposable).Dispose()
@@ -162,6 +169,11 @@ module MVar =
   /// Returns the value that was put or the updated value.
   let putOrUpdateAsync (update:'a option -> Async<'a>) (c:MVar<'a>) : Async<'a> =
     async.Delay (fun () -> c.PutOrUpdateAsync update)
+
+  /// Updates an item in the MVar.
+  /// Returns when an item is available to update.
+  let updateStateAsync (update:'a -> Async<'a * 's>) (c:MVar<'a>) : Async<'s> =
+    async.Delay (fun () -> c.UpdateStateAsync update)
 
   /// Updates an item in the MVar.
   /// Returns when an item is available to update.

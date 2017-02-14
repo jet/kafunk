@@ -185,6 +185,15 @@ module Reporter =
 
 let reporter = Reporter.create ()
 
+let monitor = async {
+  while not completed.Task.IsCompleted do 
+    do! Async.Sleep 5000
+    let! report = Reporter.report reporter
+    printReport report
+    if (report.received - report.contigCount) > 1000000 then
+      Log.error "contig_delta_surpassed_threshold"
+      IVar.tryPut () completed |> ignore }
+
 // ----------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -281,15 +290,6 @@ let consumer = async {
 
 // ----------------------------------------------------------------------------------------------------------------------------------
 
-
-let monitor = async {
-  while not completed.Task.IsCompleted do 
-    do! Async.Sleep 5000
-    let! report = Reporter.report reporter
-    printReport report
-    if (report.received - report.contigCount) > 1000000 then
-      Log.error "contig_delta_surpassed_threshold"
-      IVar.tryPut () completed |> ignore }
 
 Log.info "starting_producer_consumer_test|host=%s topic=%s message_count=%i batch_size=%i consumer_count=%i producer_parallelism=%i" 
   host topicName totalMessageCount batchSize consumerCount producerThreads
