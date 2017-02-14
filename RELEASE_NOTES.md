@@ -1,3 +1,8 @@
+### 0.0.26-alpha001 - 14.02.2017
+
+* Special Valentine's day edition.
+* Refined flow for handling escalated failures.
+
 ### 0.0.25-alpha001 - 10.02.2017
 
 * Default producer to RequiredAcks.AllInSync
