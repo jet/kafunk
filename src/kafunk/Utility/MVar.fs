@@ -31,6 +31,7 @@ type MVar<'a> internal (?a:'a) =
               IVar.put a rep
               return! loop a
             with ex ->
+              state <- None
               IVar.error ex rep
               return! init () })
         | PutOrUpdateAsync (update,rep) ->
@@ -41,6 +42,7 @@ type MVar<'a> internal (?a:'a) =
               IVar.put a rep
               return! loop (a)
             with ex ->
+              state <- None
               IVar.error ex rep
               return! init () })
         | _ ->
@@ -55,6 +57,7 @@ type MVar<'a> internal (?a:'a) =
           IVar.put a rep
           return! loop (a)
         with ex ->
+          state <- Some a
           IVar.error ex rep
           return! loop (a)
       | PutOrUpdateAsync (update,rep) ->
@@ -64,6 +67,7 @@ type MVar<'a> internal (?a:'a) =
           IVar.put a rep
           return! loop (a)
         with ex ->
+          state <- Some a
           IVar.error ex rep
           return! loop (a)
       | Get rep ->
@@ -110,9 +114,11 @@ type MVar<'a> internal (?a:'a) =
     let up a = async {
       try
         let! (a,s) = update a
+        state <- Some a
         IVar.put s rep
         return a
       with ex ->
+        state <- Some a
         IVar.error ex rep
         return a  }
     mbp.Post (UpdateAsync up)

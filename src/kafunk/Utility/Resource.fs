@@ -21,7 +21,6 @@ and ResourceErrorAction<'a, 'e> =
   /// Retry the operation.
   | Retry
 
-
 type internal ResourceEpoch<'r> = {
   resource : 'r
   closed : CancellationTokenSource
@@ -71,7 +70,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           let! ep2 = recover req ex callingEpoch
           return ep2
         with ex ->
-          Log.error "recovery_failed|error=%O" ex
+          Log.trace "recovery_failed|error=%O" ex
           return raise ex
       else
         Log.trace "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version

@@ -24,8 +24,16 @@ let go = async {
       let chanConfig = 
         ChanConfig.create (
           requestTimeout = TimeSpan.FromSeconds 30.0,
-          receiveBufferSize = 8192 * 10)
-      KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig, clientId = clientId)
+          receiveBufferSize = 8192 * 10,
+          connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
+          requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy)
+//          connectRetryPolicy = RetryPolicy.none,
+//          requestRetryPolicy = RetryPolicy.none)
+      KafkaConfig.create (
+        [KafkaUri.parse host], 
+        tcpConfig = chanConfig, 
+        clientId = clientId,
+        requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
@@ -73,8 +81,6 @@ let go = async {
 
   //do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
   do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
-  //let! first = Consumer.stream consumer |> AsyncSeq.tryFirst
-  //do! Async.Sleep 100000
 
 }
 

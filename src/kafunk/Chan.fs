@@ -229,8 +229,8 @@ module internal Chan =
     let send = 
       send
       |> AsyncFunc.timeoutOption config.requestTimeout
-      //|> Resource.timeoutIndep socketAgent
-      |> AsyncFunc.mapOut (snd >> Some)
+      |> Resource.timeoutIndep socketAgent
+      //|> AsyncFunc.mapOut (snd >> Some)
       |> AsyncFunc.catch
       |> AsyncFunc.mapOut (fun (_,res) ->
         match res with

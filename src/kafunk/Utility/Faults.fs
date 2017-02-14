@@ -104,6 +104,11 @@ module RetryPolicy =
       do! Async.Sleep delay
       return Some ((delay, RetryState.next s)) }
 
+  /// Returns an async computation which waits for the delay at the specified retry state and returns
+  /// the delay and next state, or None if the retries have stopped.
+  let awaitNextState (p:RetryPolicy) (s:RetryState) : Async<RetryState option> =
+    awaitNext p s |> Async.map (Option.map snd)
+
   /// Returns an async sequence where each item is emitted after the corresponding delay
   /// has elapsed.
   let delayStreamAt (p:RetryPolicy) =

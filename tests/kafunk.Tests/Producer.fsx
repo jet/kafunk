@@ -9,7 +9,7 @@ open System
 open System.Diagnostics
 open System.Threading
 
-Log.MinLevel <- LogLevel.Trace
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -34,13 +34,17 @@ let connCfg =
     ChanConfig.create (
       requestTimeout = TimeSpan.FromSeconds 10.0,
       sendBufferSize = ChanConfig.DefaultSendBufferSize,
-      //connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
-      //requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy
-      connectRetryPolicy = RetryPolicy.none,
-      requestRetryPolicy = RetryPolicy.none
+      connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
+      requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy
+//      connectRetryPolicy = RetryPolicy.none,
+//      requestRetryPolicy = RetryPolicy.none
       )
 
-  KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
+  KafkaConfig.create (
+    [KafkaUri.parse host], 
+    tcpConfig = chanConfig,
+    requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy)
+    //requestRetryPolicy = RetryPolicy.none)
 
 let conn = Kafka.conn connCfg
 
@@ -54,7 +58,7 @@ let producerCfg =
     batchSizeBytes = 2000000,
     batchLingerMs = 1000,
     retryPolicy = RetryPolicy.constantBoundedMs 5000 5
-    //retryPolicy = ProducerConfig.DefaultRetryPolicy
+    //retryPolicy = RetryPolicy.none
     )
 
 let producer =

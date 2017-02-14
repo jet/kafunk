@@ -119,12 +119,10 @@ type ProducerConfig = {
   partitioner : Partitioner
 
   /// The acks required.
-  /// Default: Local
   requiredAcks : RequiredAcks
 
   // The amount of time, in milliseconds, the broker will wait trying to meet the RequiredAcks 
   /// requirement before sending back an error to the client.
-  /// Default: 10000
   timeout : Timeout
 
   /// The compression method to use.
@@ -133,21 +131,17 @@ type ProducerConfig = {
 
   /// The per-broker, in-memory buffer size in bytes.
   /// When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
-  /// Default: 33554432
   bufferSizeBytes : int
 
   /// The maximum size, in bytes, of a batch of produce requests per broker.
   /// If set to 0, no batching will be performed.
-  /// Default: 16384
   batchSizeBytes : int
 
   /// The maximum time, in milliseconds, to wait for a produce request btch to reach capacity.
   /// If set to 0, no batching will be performed.
-  /// Default: 1
   batchLingerMs : int
 
   /// The retry policy for produce requests.
-  /// Default: RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
   retryPolicy : RetryPolicy
 
 } with
@@ -167,8 +161,8 @@ type ProducerConfig = {
   /// The default per-broker, produce request linger time in ms = 1.
   static member DefaultBatchLingerMs = 1
 
-  /// The default produce request retry policy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10.
-  static member DefaultRetryPolicy = RetryPolicy.constantMs 1000 |> RetryPolicy.maxAttempts 10
+  /// The default produce request retry policy = RetryPolicy.constantBoundedMs 1000 10.
+  static member DefaultRetryPolicy = RetryPolicy.constantBoundedMs 1000 10
 
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, 
@@ -321,7 +315,6 @@ module Producer =
       let err = Failure err
       for b in batch do
         IVar.put err b.rep
-      // TODO: remove channel
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
@@ -415,7 +408,6 @@ module Producer =
         (fun (s,v,_,ex) -> async {
           Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=%O" 
             v config.topic (Printers.partitions s.partitions) ex
-          
           return () })
     let! state = Resource.get resource
     let produceBatch = Resource.injectWithRecovery resource config.retryPolicy (produceBatchInternal)
