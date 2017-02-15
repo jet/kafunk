@@ -9,6 +9,7 @@ open System
 open System.Diagnostics
 open System.Threading
 
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -27,7 +28,26 @@ let batchCount = int (N / int64 batchSize)
 Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" 
   host topic N batchSize batchCount messageSize parallelism volumeMB
 
-let conn = Kafka.connHost host
+let connCfg = 
+  
+  let chanConfig = 
+    ChanConfig.create (
+      requestTimeout = TimeSpan.FromSeconds 10.0,
+      sendBufferSize = ChanConfig.DefaultSendBufferSize,
+      connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
+      requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy
+//      connectRetryPolicy = RetryPolicy.none,
+//      requestRetryPolicy = RetryPolicy.none
+      )
+
+  KafkaConfig.create (
+    [KafkaUri.parse host], 
+    tcpConfig = chanConfig,
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 5000 5,
+    bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
+    //requestRetryPolicy = RetryPolicy.none)
+
+let conn = Kafka.conn connCfg
 
 let producerCfg =
   ProducerConfig.create (
@@ -37,7 +57,8 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
-    batchLingerMs = 1000)
+    batchLingerMs = 1000
+    )
 
 let producer =
   Producer.createAsync conn producerCfg
@@ -53,12 +74,12 @@ let produceBatch =
 
 let cts = new CancellationTokenSource()
 
-Kafunk.Log.Event 
-|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
-|> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
-|> Observable.add (fun es ->
-  cts.Cancel ()
-  printfn "ERROR_OVERFLOW|count=%i" es.Length)
+//Kafunk.Log.Event 
+//|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
+//|> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
+//|> Observable.add (fun es ->
+//  cts.Cancel ()
+//  printfn "ERROR_OVERFLOW|count=%i" es.Length)
 
 let sw = Stopwatch.StartNew()
 let mutable completed = 0L
@@ -82,7 +103,7 @@ let go = async {
         return ()
       with ex ->
         Log.error "produce_error|%O" ex
-        return () })
+        return raise ex })
     |> Async.ParallelThrottledIgnore parallelism }
 
 try 

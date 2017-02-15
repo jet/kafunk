@@ -151,20 +151,4 @@ let ``Faults.AsyncFunc.retry should retry with condition and retry policy`` () =
 
       shouldEqual expected actual None
 
-[<Test>]
-let ``FlowMonitor.escalateOnThreshold should work`` () =
-  
-  let post =
-    FlowMonitor.escalateOnThreshold 
-      10
-      (TimeSpan.FromMilliseconds 10)
-      (fun xs -> exn(sprintf "escalating_on=%A" xs))
-
-  try
-    Seq.initInfinite id
-    |> Seq.iter post
-    Assert.Fail ()
-  with ex ->
-   ()
-
 

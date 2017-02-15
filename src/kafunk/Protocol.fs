@@ -87,10 +87,10 @@ module Protocol =
     let Snappy = 2uy
 
   /// A Kafka message key (bytes).
-  type Key = Binary.Segment
+  type Key = System.ArraySegment<byte>
 
   /// A Kafka message value (bytes).
-  type Value = Binary.Segment
+  type Value = System.ArraySegment<byte>
 
   /// A name of a Kafka topic.
   type TopicName = string
@@ -189,7 +189,7 @@ module Protocol =
     let ReplicaNotAvailable = 9s
 
     [<Literal>]
-    let MessageSizeTooLarge = 9s
+    let MessageSizeTooLarge = 10s
 
     [<Literal>]
     let StaleControllerEpochCode = 11s
@@ -320,7 +320,7 @@ module Protocol =
 
   type ProtocolName = string
 
-  type ProtocolMetadata = Binary.Segment
+  type ProtocolMetadata = System.ArraySegment<byte>
 
   /// An id of a Kafka group protocol generation.
   type GenerationId = int32
@@ -331,10 +331,10 @@ module Protocol =
   type LeaderId = string
 
   /// Metadata associated with a Kafka group member.
-  type MemberMetadata = Binary.Segment
+  type MemberMetadata = System.ArraySegment<byte>
 
   /// A byte[] representing member assignment of a particular Kafka group protocol.
-  type MemberAssignment = Binary.Segment
+  type MemberAssignment = System.ArraySegment<byte>
 
   /// Raised when the received message CRC32 is different from the computed CRC32.
   type CorruptCrc32Exception (msg:string, ex:exn) =
@@ -353,8 +353,8 @@ module Protocol =
       val magicByte : MagicByte
       val attributes : Attributes
       val timestamp : Timestamp
-      val key : Key
-      val value : Value
+      val key : System.ArraySegment<byte>
+      val value : System.ArraySegment<byte>
       new (crc, magicByte, attributes, ts, key, value) =
         { crc = crc ; magicByte = magicByte ; attributes = attributes ; timestamp = ts ; key = key ; value = value }
     end
@@ -1055,7 +1055,7 @@ module Protocol =
     struct
       val version : ConsumerGroupProtocolMetadataVersion
       val subscription : TopicName[]
-      val userData : Binary.Segment
+      val userData : System.ArraySegment<byte>
       new (version, subscription, userData) =
         { version = version; subscription = subscription; userData = userData }
     end
@@ -1109,7 +1109,7 @@ module Protocol =
     struct
       val version : ConsumerGroupProtocolMetadataVersion
       val partitionAssignment : PartitionAssignment
-      val userData : Binary.Segment
+      val userData : System.ArraySegment<byte>
       new (version, partitionAssignment, userData) = 
         { version = version; partitionAssignment = partitionAssignment ; userData = userData }
     end

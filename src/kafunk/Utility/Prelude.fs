@@ -12,10 +12,12 @@ module Prelude =
   /// Given a value, creates a function with one ignored argument which returns the value.
   let inline konst x _ = x
 
-  /// Active pattern for matching Result<'a, 'e>.
-  let (|Success|Failure|) = function | Choice1Of2 a -> Success a | Choice2Of2 b -> Failure b
+  let inline flip f a b = f b a
 
-  let flip f a b = f b a
+  let inline diag a = a,a
+
+//  /// Active pattern for matching Result<'a, 'e>.
+//  let (|Success|Failure|) = function Choice1Of2 a -> Success a | Choice2Of2 b -> Failure b
 
   let tryDispose (d:#System.IDisposable) = 
     try d.Dispose() finally ()
@@ -272,7 +274,11 @@ module Map =
     ks 
     |> Seq.choose (fun k -> Map.tryFind k m |> Option.map (fun v -> k,v))
     |> Map.ofSeq
-    
+  
+  let removeAll (ks:seq<'a>) (m:Map<'a, 'b>) : Map<'a, 'b> =
+    (m, ks) ||> Seq.fold (fun m k -> Map.remove k m)
+        
+
 
 // --------------------------------------------------------------------------------------------------
 

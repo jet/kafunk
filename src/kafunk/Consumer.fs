@@ -148,8 +148,8 @@ module ConsumerGroup =
               |> String.concat " ; "
             sprintf "[member_id=%s user_data=%s assignments=%s]" memberId (Binary.toString meta.userData) str)
           |> String.concat " ; "
-        Log.info "leader_determined_member_assignments|client_id=%s group_id=%s %s" 
-          gm.conn.Config.clientId gm.config.groupId memberAssignmentsStr
+        Log.info "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
+          gm.conn.Config.connId gm.config.groupId memberAssignmentsStr
 
         let memberAssignments =
           memberAssignments
@@ -175,13 +175,11 @@ type ConsumerConfig = {
   
   /// The session timeout period, in milliseconds, such that if no heartbeats are received within the
   /// period, a consumer is ejected from the consumer group.
-  /// Default: 10000
   sessionTimeout : SessionTimeout
   
   /// The time during which a consumer must rejoin a group after a rebalance.
   /// If the consumer doesn't rejoin within this time, it will be ejected.
   /// Supported in v0.10.1.
-  /// Default: 10000
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
@@ -190,46 +188,73 @@ type ConsumerConfig = {
   
   /// The minimum bytes to buffer server side for a fetch request.
   /// 0 to return immediately.
-  /// Default: 0
   fetchMinBytes : MinBytes
 
   /// The maximum time to wait for a fetch request to return sufficient data.
-  /// Default: 0
   fetchMaxWaitMs : MaxWaitTime
   
   /// The maximum bytes to return as part of a partition for a fetch request.
-  /// Default: 1048576
   fetchMaxBytes : MaxBytes
   
   /// Offset retention time.
-  /// Default: -1L
   offsetRetentionTime : RetentionTime
 
   /// The time of offsets to fetch if no offsets are stored (usually for a new group).
-  /// Default: Time.EarliestOffset
   initialFetchTime : Time
   
   /// The poll policy to employ when the end of the topic is reached.
-  /// Default: RetryPolicy.constantMs 10000
   endOfTopicPollPolicy : RetryPolicy
   
   /// The action to take when a consumer attempts to fetch an out of range offset.
-  /// Default: HaltConsumer
   outOfRangeAction : ConsumerOffsetOutOfRangeAction
 
   /// The size of the per-partition fetch buffer in terms of message set count.
   /// When at capacity, fetching stops until the buffer is drained.
-  /// Default: 1
   fetchBufferSize : int
 
   /// The consumer group assignment strategies to use.
   /// The group coordinator ensures that all members support the same strategy.
   /// When multiple stratgies are supported by all members, the first one in the list is selected.
-  /// Default: [ "range", ConsumerGroupProtocol.AssignmentStratgies.Range ]
   assignmentStrategies : (AssignmentStrategyName * ConsumerGroup.AssignmentStrategy)[]
 
 } with
     
+    /// Gets the default session timeout = 10000.
+    static member DefaultSessionTimeout = 10000
+
+    /// Gets the default rebalance timeout = 10000.
+    static member DefaultRebalanceTimeout = 10000
+
+    /// Gets the default heartbeat frequency = 3.
+    static member DefaultHeartbeatFrequency = 3
+
+    /// Gets the default fetch min bytes = 0.
+    static member DefaultFetchMinBytes = 0
+    
+    /// Gets the default fetch max wait = 0.
+    static member DefaultFetchMaxWait = 0
+
+    /// Gets the default fetch max bytes = 1048576.
+    static member DefaultFetchMaxBytes = 1048576
+
+    /// Gets the default offset retention time = -1.
+    static member DefaultOffsetRetentionTime = -1L
+
+    /// Gets the default initial fetch time = Time.EarliestOffset.
+    static member DefaultInitialFetchTime = Time.EarliestOffset
+
+    /// Gets the default end of topic poll policy = RetryPolicy.constantMs 10000.
+    static member DefaultEndOfTopicPollPolicy = RetryPolicy.constantMs 10000
+
+    /// Gets the default out of range action = ConsumerOffsetOutOfRangeAction.HaltConsumer.
+    static member DefaultOutOfRangeAction = ConsumerOffsetOutOfRangeAction.HaltConsumer
+
+    /// Gets the default fetch buffer size = 1.
+    static member DefaultFetchBufferSize = 1
+
+    /// Gets the default fetch buffer size = [| "range", ConsumerGroup.AssignmentStratgies.Range |].
+    static member DefaultAssignmentStrategies = [| "range", ConsumerGroup.AssignmentStratgies.Range |]
+
     /// Creates a consumer configuration.
     static member create 
       (groupId:GroupId, topic:TopicName, ?initialFetchTime, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
@@ -238,20 +263,20 @@ type ConsumerConfig = {
       {
         groupId = groupId
         topic = topic
-        sessionTimeout = defaultArg sessionTimeout 10000
-        rebalanceTimeout = defaultArg rebalanceTimeout 10000
-        heartbeatFrequency = defaultArg heartbeatFrequency 3
-        fetchMinBytes = defaultArg fetchMinBytes 0
-        fetchMaxWaitMs = defaultArg fetchMaxWaitMs 0
-        fetchMaxBytes = defaultArg fetchMaxBytes 1048576
-        offsetRetentionTime = defaultArg offsetRetentionTime -1L
-        initialFetchTime = defaultArg initialFetchTime Time.EarliestOffset
-        endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy (RetryPolicy.constantMs 10000)
-        outOfRangeAction = defaultArg outOfRangeAction ConsumerOffsetOutOfRangeAction.HaltConsumer
-        fetchBufferSize = defaultArg fetchBufferSize 1
+        sessionTimeout = defaultArg sessionTimeout ConsumerConfig.DefaultSessionTimeout
+        rebalanceTimeout = defaultArg rebalanceTimeout ConsumerConfig.DefaultRebalanceTimeout
+        heartbeatFrequency = defaultArg heartbeatFrequency ConsumerConfig.DefaultHeartbeatFrequency
+        fetchMinBytes = defaultArg fetchMinBytes ConsumerConfig.DefaultFetchMinBytes
+        fetchMaxWaitMs = defaultArg fetchMaxWaitMs ConsumerConfig.DefaultFetchMaxWait
+        fetchMaxBytes = defaultArg fetchMaxBytes ConsumerConfig.DefaultFetchMaxBytes
+        offsetRetentionTime = defaultArg offsetRetentionTime ConsumerConfig.DefaultOffsetRetentionTime
+        initialFetchTime = defaultArg initialFetchTime ConsumerConfig.DefaultInitialFetchTime
+        endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy ConsumerConfig.DefaultEndOfTopicPollPolicy
+        outOfRangeAction = defaultArg outOfRangeAction ConsumerConfig.DefaultOutOfRangeAction
+        fetchBufferSize = defaultArg fetchBufferSize ConsumerConfig.DefaultFetchBufferSize
         assignmentStrategies =
           match assignmentStrategies with
-          | None -> [| "range", ConsumerGroup.AssignmentStratgies.Range |]
+          | None -> ConsumerConfig.DefaultAssignmentStrategies
           | Some xs -> xs
       }
 
@@ -361,6 +386,10 @@ module Consumer =
 
   let private Log = Log.create "Kafunk.Consumer"
 
+  /// Gets the configuration for the consumer.
+  let configuration (c:Consumer) = 
+    c.config
+
   /// Explicitly commits offsets to a consumer group.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
   let commitOffsets (c:Consumer) (offsets:(Partition * Offset)[]) = async {
@@ -400,12 +429,12 @@ module Consumer =
                 do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
                 return ()
               else
-                Log.info "committed_offsets|client_id=%s group_id=%s topic=%s offsets=%s" 
-                  c.conn.Config.clientId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
+                Log.info "committed_offsets|conn_id=%s group_id=%s topic=%s offsets=%s" 
+                  c.conn.Config.connId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
                 return ()
             | Failure ex ->
-              Log.warn "commit_offset_exception|client_id=%s group_id=%s generation_id=%i error=%O" 
-                c.conn.Config.clientId cfg.groupId state.state.generationId ex
+              Log.warn "commit_offset_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
+                c.conn.Config.connId cfg.groupId state.state.generationId ex
               do! Group.leaveInternal c.groupMember state
               return () }) }
 
@@ -524,12 +553,12 @@ module Consumer =
     let consume (state:GroupMemberStateWrapper) = async {
       
       let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
-      Log.info "consumer_group_assignment_received|client_id=%s group_id=%s topic=%s partitions=[%s]"
-        c.conn.Config.clientId cfg.groupId topic (Printers.partitions assignment)
+      Log.info "consumer_group_assignment_received|conn_id=%s group_id=%s topic=%s partitions=[%s]"
+        c.conn.Config.connId cfg.groupId topic (Printers.partitions assignment)
       
       if assignment.Length = 0 then
-        Log.error "no_partitions_assigned|client_id=%s group_id=%s member_id=%s topic=%s" 
-          c.conn.Config.clientId cfg.groupId state.state.memberId topic
+        Log.error "no_partitions_assigned|conn_id=%s group_id=%s member_id=%s topic=%s" 
+          c.conn.Config.connId cfg.groupId state.state.memberId topic
         return failwithf "no partitions assigned!"
 
       let! ct = Async.CancellationToken
@@ -542,8 +571,8 @@ module Consumer =
         |> Map.ofSeq
 
       let! initOffsets = fetchOffsetsFallback c topic assignment
-      Log.info "fetched_initial_offsets|client_id=%s group_id=%s member_id=%s topic=%s offsets=%s" 
-        c.conn.Config.clientId cfg.groupId state.state.memberId topic (Printers.partitionOffsetPairs initOffsets)
+      Log.info "fetched_initial_offsets|conn_id=%s group_id=%s member_id=%s topic=%s offsets=%s" 
+        c.conn.Config.connId cfg.groupId state.state.memberId topic (Printers.partitionOffsetPairs initOffsets)
 
       let combineFetchResponses 
         (r1:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) 
@@ -598,7 +627,7 @@ module Consumer =
                   |> Seq.map (fun p -> p, Map.find p offsets)
                   |> Seq.toArray
                 Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%s" (Printers.partitionOffsetPairs staleOffsets)
-                let! _ = c.conn.GetMetadata ([|topic|])
+                let! _ = c.conn.GetMetadataState ([|topic|])
                 // TODO: only fetch stale and combine
                 return! tryFetch offsets else
               

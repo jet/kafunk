@@ -52,9 +52,21 @@ module Exn =
 [<StructuredFormatDisplay("RetryState({attempt})")>]
 type RetryState =
   struct
+    /// The attempt number.
     val attempt : int
     new (a) = { attempt = a }
   end
+
+/// Operations on retry states.
+[<Compile(Module)>]
+module RetryState = 
+
+  /// The initial retry state with attempt = 1.
+  let init = RetryState(1)
+
+  /// Returns the next retry state.
+  let next (s:RetryState) = RetryState (s.attempt + 1)
+
 
 /// Retry policy.
 type RetryPolicy = 
@@ -71,18 +83,17 @@ module RetryPolicy =
   /// Creates a retry policy.
   let create f = RP f
 
-  /// The initial retry state.
-  let initState = RetryState(0)
-
-  /// Returns the next retry state.
-  let nextState (s:RetryState) = RetryState (s.attempt + 1)
-
-  /// No retry.
-  let none = create (konst None)
-
   /// Returns the delay for the specified retry state.
   let delayAt (s:RetryState) (b:RetryPolicy) : TimeSpan option =
     (un b) s
+
+  /// Returns a backoff strategy where no wait time is greater than the specified value.
+  let maxDelay (maxDelay:TimeSpan) (b:RetryPolicy) : RetryPolicy =
+    create <| fun s -> delayAt s b |> Option.map (max maxDelay)
+
+  /// Returns a backoff strategy which attempts at most a specified number of times.
+  let maxAttempts (maxAttempts:int) (p:RetryPolicy) : RetryPolicy =
+    create <| fun s -> if s.attempt < maxAttempts then delayAt s p else None
 
   /// Returns an async computation which waits for the delay at the specified retry state and returns
   /// the delay and next state, or None if the retries have stopped.
@@ -92,7 +103,12 @@ module RetryPolicy =
       return None
     | Some delay -> 
       do! Async.Sleep delay
-      return Some ((delay,nextState s)) }
+      return Some ((delay, RetryState.next s)) }
+
+  /// Returns an async computation which waits for the delay at the specified retry state and returns
+  /// the delay and next state, or None if the retries have stopped.
+  let awaitNextState (p:RetryPolicy) (s:RetryState) : Async<RetryState option> =
+    awaitNext p s |> Async.map (Option.map snd)
 
   /// Returns an async sequence where each item is emitted after the corresponding delay
   /// has elapsed.
@@ -102,8 +118,11 @@ module RetryPolicy =
   /// Returns an async sequence where each item is emitted after the corresponding delay
   /// has elapsed.
   let delayStream (p:RetryPolicy) =
-    delayStreamAt p initState
+    delayStreamAt p RetryState.init
 
+
+  /// No retry.
+  let none = create (konst None)
 
   /// Returns an unbounded retry policy with a constant delay of the specified duration.
   let constant (delay:TimeSpan) = 
@@ -113,18 +132,21 @@ module RetryPolicy =
   let constantMs (delayMs:int) =
     constant (TimeSpan.FromMilliseconds delayMs)
 
+  /// Returns a bounded retry policy with a constant delay of the specified duration.
+  let constantBounded (delay:TimeSpan) (attempts:int) =
+    constant delay |> maxAttempts attempts
+
+  /// Returns a bounded retry policy with a constant delay of the specified duration.
+  let constantBoundedMs (delayMs:int) (attempts:int) =
+    constantMs delayMs |> maxAttempts attempts
+
   /// Returns an unbounded retry policy with a linearly increasing delay.
   let linear (init:TimeSpan) (increment:TimeSpan) = 
     create <| fun s -> Some (init + (TimeSpan.Mutiply increment s.attempt))
- 
-  /// Returns a backoff strategy where no wait time is greater than the specified value.
-  let maxDelay (maxDelay:TimeSpan) (b:RetryPolicy) : RetryPolicy =
-    create <| fun s -> delayAt s b |> Option.map (max maxDelay)
 
-  /// Returns a backoff strategy which attempts at most a specified number of times.
-  let maxAttempts (maxAttempts:int) (p:RetryPolicy) : RetryPolicy =
-    create <| fun s -> if s.attempt <= maxAttempts then delayAt s p else None
-
+  /// Returns an unbounded retry policy with a linearly increasing delay.
+  let linearBounded (init:TimeSpan) (increment:TimeSpan) (attempts:int) = 
+    linear init increment |> maxAttempts attempts
 
 
 /// A retry queue.
@@ -152,8 +174,8 @@ module RetryQueue =
     let k = q.key a
     let s =
       match q.items |> Map.tryFind k with
-      | None -> RetryPolicy.initState
-      | Some (s,_,_) -> RetryPolicy.nextState s
+      | None -> RetryState.init
+      | Some (s,_,_) -> RetryState.next s
     match RetryPolicy.delayAt s q.policy with
     | Some delay -> { q with items = q.items |> Map.add k (s, dt.Add delay, a) }
     | None -> q
@@ -239,20 +261,6 @@ module FlowMonitor =
     |> AsyncSeq.ofObservableBuffered
     |> overflows count period
     |> AsyncSeq.toObservable
-      
-  let escalateOnThreshold (count:int) (period:TimeSpan) (e:'a[] -> exn) =
-    let post,stream = sinkStream
-    let ivar = TaskCompletionSource<_>()
-    stream
-    |> overflows count period
-    |> AsyncSeq.tryFirst
-    |> Async.map (Option.iter ivar.SetResult)
-    |> Async.Start
-    let report a =
-      post a
-      if ivar.Task.IsCompleted then 
-        raise (e ivar.Task.Result)
-    report
 
 
 /// Fault tolerance.
@@ -290,8 +298,8 @@ module internal Faults =
           return Failure e
         | Some wait ->
           do! Async.Sleep wait
-          return! loop (RetryPolicy.nextState i) e }
-    loop RetryPolicy.initState m.Zero
+          return! loop (RetryState.next i) e }
+    loop RetryState.init m.Zero
 
   /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
   /// Returns None when shouldRetry returns false.

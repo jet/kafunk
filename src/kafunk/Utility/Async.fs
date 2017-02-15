@@ -219,7 +219,6 @@ type Async with
       tryComplete () |> ignore
       do! tcs.Task |> Async.AwaitTaskCancellationAsError
     with ex ->
-      printfn "Async.ParallelThrottledIgnore|error=%O" ex
       return raise ex }
 
   /// Creates an async computation which completes when any of the argument computations completes.
@@ -308,6 +307,7 @@ type Async with
         if i = 0 then return (Choice1Of2 (a.Result, b))
         elif i = 1 then return (Choice2Of2 (b.Result, a)) 
         else return! failwith (sprintf "unreachable, i = %d" i) }
+    
 
 
 /// Operations on functions of the form 'a -> Async<'b>.
@@ -391,8 +391,31 @@ module Mb =
 /// Operations on System.Threading.Tasks.Task<_>.
 module internal Task =
   
-  let join (t:Task<Task<'a>>) : Task<'a> =
+  let never<'a> : Task<'a> =
+    let ivar = IVar.create ()
+    ivar.Task
+
+  let inline create (a:'a) : Task<'a> =
+    Task.FromResult a
+
+  let inline join (t:Task<Task<'a>>) : Task<'a> =
     t.Unwrap()
 
-  let extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
+  let inline extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
     t.ContinueWith f
+
+  let inline map (f:'a -> 'b) (t:Task<'a>) : Task<'b> =
+    extend (fun t -> f t.Result) t
+
+  let inline bind (f:'a -> Task<'b>) (t:Task<'a>) : Task<'b> =
+    extend (fun t -> f t.Result) t |> join
+
+  /// Returns a Task that completes only if the argument Task faults.
+  let taskFault (t:Task<'a>) : Task<'b> =
+    t 
+    |> extend (fun t -> 
+      let ivar = IVar.create ()
+      if t.IsFaulted then
+        IVar.error t.Exception ivar
+      ivar.Task)
+    |> join

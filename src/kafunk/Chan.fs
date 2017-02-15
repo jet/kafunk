@@ -9,18 +9,16 @@ open System.Threading
 open System.Threading.Tasks
 
 
-/// Configuration for an individual TCP channel.
+/// Configuration for a TCP channel to an individual broker.
 type ChanConfig = {
   
   /// Specifies whether the socket should use Nagle's algorithm.
   useNagle : bool
   
   /// The socket receive buffer size.
-  /// Default: 65536
   receiveBufferSize : int
     
   /// The socket send buffer size.
-  /// Default: 65536
   sendBufferSize : int
         
   /// The connection timeout.
@@ -46,14 +44,14 @@ type ChanConfig = {
   /// The default TCP connection timeout = 10s.
   static member DefaultConnectTimeout = TimeSpan.FromSeconds 10
   
-  /// The default TCP connection retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
-  static member DefaultConnectRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  /// The default TCP connection retry policy = RetryPolicy.constantBoundedMs 3000 2.
+  static member DefaultConnectRetryPolicy = RetryPolicy.constantBoundedMs 3000 2
   
   /// The default TCP request timeout = 30s.
   static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
   
-  /// The default TCP request retry policy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantMs 2000 |> RetryPolicy.maxAttempts 50
+  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 2000 3.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 2000 3
   
   /// The default TCP Nagle setting = false.
   static member DefaultUseNagle = false
@@ -84,13 +82,15 @@ type internal EndPoint =
     member this.Display = this.ToString()
     override this.Equals (o:obj) = 
       match o with 
-      | :? EndPoint as ep -> (EndPoint.endpoint this).Equals(EndPoint.endpoint ep)
+      | :? EndPoint as ep -> this.Equals (ep)
       | _ -> false
+    member this.Equals (other:EndPoint) =
+      (EndPoint.endpoint this).Equals(EndPoint.endpoint other)
     override this.GetHashCode () = (EndPoint.endpoint this).GetHashCode()
     override this.ToString () = (EndPoint.endpoint this).ToString()
     interface IEquatable<EndPoint> with
       member this.Equals (other:EndPoint) =
-        (EndPoint.endpoint this).Equals(EndPoint.endpoint other)
+        this.Equals (other)
     interface IComparable with
       member this.CompareTo (other) =
         this.ToString().CompareTo(other.ToString())
@@ -104,8 +104,22 @@ and ChanError =
   | ChanFailure of exn
 
 /// A request/reply TCP channel to a Kafka broker.
-type internal Chan =
-  | Chan of ep:EndPoint * send:(RequestMessage -> Async<ChanResult>) * reconnect:Async<unit> * close:Async<unit>
+[<CustomEquality;NoComparison>]
+type internal Chan = private {
+  ep : EndPoint
+  send : RequestMessage -> Async<ChanResult>
+  task : Task<unit>
+}
+  with 
+    override this.GetHashCode () = this.ep.GetHashCode ()
+    member this.Equals (o:Chan) = this.ep.Equals (o.ep)
+    override this.Equals (o:obj) =
+      match o with
+      | :? Chan as o -> this.Equals o
+      | _ -> false
+    interface IEquatable<Chan> with
+      member this.Equals (o:Chan) = this.Equals o
+        
 
 /// API operations on a generic request/reply channel.
 [<Compile(Module)>]
@@ -114,32 +128,17 @@ module internal Chan =
   let private Log = Log.create "Kafunk.Chan"
 
   /// Sends a request.
-  let send (Chan(_,send,_,_)) req = send req
+  let send (ch:Chan) req = ch.send req
   
   /// Gets the endpoint.
-  let endpoint (Chan(ep,_,_,_)) = ep
+  let endpoint (ch:Chan) = ch.ep
 
-//  /// Re-established the connection to the socket.
-//  let reconnect (Chan(_,reconnect,_)) = reconnect
-
-  let metadata = AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
-  let fetch = AsyncFunc.dimap RequestMessage.Fetch ResponseMessage.toFetch
-  let produce = AsyncFunc.dimap RequestMessage.Produce ResponseMessage.toProduce
-  let offset = AsyncFunc.dimap RequestMessage.Offset ResponseMessage.toOffset
-  let groupCoordinator = AsyncFunc.dimap RequestMessage.GroupCoordinator ResponseMessage.toGroupCoordinator
-  let offsetCommit = AsyncFunc.dimap RequestMessage.OffsetCommit ResponseMessage.toOffsetCommit
-  let offsetFetch = AsyncFunc.dimap RequestMessage.OffsetFetch ResponseMessage.toOffsetFetch
-  let joinGroup = AsyncFunc.dimap RequestMessage.JoinGroup ResponseMessage.toJoinGroup
-  let syncGroup = AsyncFunc.dimap RequestMessage.SyncGroup ResponseMessage.toSyncGroup
-  let heartbeat = AsyncFunc.dimap RequestMessage.Heartbeat ResponseMessage.toHeartbeat
-  let leaveGroup = AsyncFunc.dimap RequestMessage.LeaveGroup ResponseMessage.toLeaveGroup
-  let listGroups = AsyncFunc.dimap RequestMessage.ListGroups ResponseMessage.toListGroups
-  let describeGroups = AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups
+  let internal task (ch:Chan) = ch.task
 
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
+  let connect (connId:string, version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
     
     let conn (ep:EndPoint) = async {
       let ipep = EndPoint.endpoint ep
@@ -159,21 +158,21 @@ module internal Chan =
       |> AsyncFunc.timeoutResult config.connectTimeout
       |> AsyncFunc.catchResult
       |> AsyncFunc.doBeforeAfter
-          (fun ep -> Log.info "tcp_connecting|client_id=%s remote_endpoint=%O" clientId (EndPoint.endpoint ep))
+          (fun ep -> Log.info "tcp_connecting|conn_id=%s remote_endpoint=%O" connId (EndPoint.endpoint ep))
           (fun (ep,res) ->
             let ipep = EndPoint.endpoint ep
             match res with
             | Success s ->
-              Log.info "tcp_connected|client_id=%s remote_endpoint=%O local_endpoint=%O" clientId s.RemoteEndPoint s.LocalEndPoint
+              Log.info "tcp_connected|conn_id=%s remote_endpoint=%O local_endpoint=%O" connId s.RemoteEndPoint s.LocalEndPoint
             | Failure (Choice1Of2 _) ->
-              Log.error "tcp_connection_timed_out|client_id=%s remote_endpoint=%O timeout=%O" clientId ipep config.connectTimeout
+              Log.warn "tcp_connection_timed_out|conn_id=%s remote_endpoint=%O timeout=%O" connId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
-              Log.error "tcp_connection_failed|client_id=%s remote_endpoint=%O error=%O" clientId ipep e)
+              Log.error "tcp_connection_failed|conn_id=%s remote_endpoint=%O error=%O" connId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
-      Log.warn "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i error=%O" clientId (EndPoint.endpoint ep) ver ex
+      Log.warn "recovering_tcp_connection|conn_id=%s remote_endpoint=%O version=%i error=%O" connId (EndPoint.endpoint ep) ver ex
       tryDispose s }
 
     let! socketAgent = 
@@ -190,12 +189,12 @@ module internal Chan =
         try
           let! received = Socket.receive s buf
           if received = 0 then 
-            Log.warn "received_empty_buffer|client_id=%s remote_endpoint=%O" clientId ep
+            Log.warn "received_empty_buffer|conn_id=%s remote_endpoint=%O" connId ep
             return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
+          Log.error "receive_failure|conn_id=%s remote_endpoint=%O error=%O" connId ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive
@@ -231,6 +230,7 @@ module internal Chan =
       send
       |> AsyncFunc.timeoutOption config.requestTimeout
       |> Resource.timeoutIndep socketAgent
+      //|> AsyncFunc.mapOut (snd >> Some)
       |> AsyncFunc.catch
       |> AsyncFunc.mapOut (fun (_,res) ->
         match res with
@@ -246,26 +246,11 @@ module internal Chan =
               ()
               //Log.trace "received_response|response=%s" (ResponseMessage.Print res)
             | Failure (Choice1Of2 ()) ->
-              Log.warn "request_timed_out|client_id=%s ep=%O request=%s timeout=%O" 
+              Log.warn "request_timed_out|conn_id=%s ep=%O request=%s timeout=%O" 
                 clientId ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
               Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)
       |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy
       |> AsyncFunc.mapOut (snd >> Result.mapError (List.map (Choice.fold (konst ChanTimeout) (ChanFailure))))
 
-    return Chan (ep, send, Async.empty, Async.empty) }
-
-  /// Discovers brokers via DNS and connects to the first IPv4.
-  let discoverConnect (version:System.Version, config:ChanConfig, clientId:ClientId) (host:Host, port:Port) = async {
-    let! ip = async {
-      match IPAddress.tryParse host with
-      | None ->
-        Log.info "discovering_dns|client_id=%s host=%s" clientId host
-        let! ips = Dns.IPv4.getAllAsync host
-        Log.info "discovered_dns|client_id=%s host=%s ips=[%s]" clientId host (Printers.stringsCsv ips)
-        let ip = ips.[0]
-        return ip
-      | Some ip ->
-        return ip }
-    let ep = EndPoint.ofIPAddressAndPort (ip, port)
-    return! connect (version, config, clientId) ep }
+    return  { ep = ep ; send = send ; task = session.Task } }
