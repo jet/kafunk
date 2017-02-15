@@ -9,16 +9,16 @@ open System.Text
 type ProducerMessage =
   struct
     /// The message payload.
-    val value : Binary.Segment
+    val value : ArraySegment<byte>
     /// The optional message key.
-    val key : Binary.Segment
-    new (value:Binary.Segment, key:Binary.Segment) = 
+    val key : ArraySegment<byte>
+    new (value:ArraySegment<byte>, key:ArraySegment<byte>) = 
       { value = value ; key = key }
   end
     with
 
       /// Creates a producer message.
-      static member ofBytes (value:Binary.Segment, ?key) =
+      static member ofBytes (value:ArraySegment<byte>, ?key) =
         ProducerMessage(value, defaultArg key Binary.empty)
 
       /// Creates a producer message.
@@ -141,9 +141,6 @@ type ProducerConfig = {
   /// If set to 0, no batching will be performed.
   batchLingerMs : int
 
-  /// The retry policy for produce requests.
-  retryPolicy : RetryPolicy
-
 } with
 
   /// The default required acks = RequiredAcks.AllInSync.
@@ -161,12 +158,9 @@ type ProducerConfig = {
   /// The default per-broker, produce request linger time in ms = 1.
   static member DefaultBatchLingerMs = 1
 
-  /// The default produce request retry policy = RetryPolicy.constantBoundedMs 1000 10.
-  static member DefaultRetryPolicy = RetryPolicy.constantBoundedMs 1000 10
-
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, 
-                        ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs, ?retryPolicy) =
+                        ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs) =
     {
       topic = topic
       partitioner = partition
@@ -176,7 +170,6 @@ type ProducerConfig = {
       bufferSizeBytes = defaultArg bufferSizeBytes ProducerConfig.DefaultBufferSizeBytes
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
-      retryPolicy = defaultArg retryPolicy ProducerConfig.DefaultRetryPolicy
     }
 
   static member internal messageVersion (connVersion:Version) = 
@@ -187,7 +180,6 @@ type ProducerConfig = {
 type Producer = private {
   conn : KafkaConn
   config : ProducerConfig
-  messageVersion : ApiVersion
   state : Resource<ProducerState>
   produceBatch : (PartitionCount -> Partition * ProducerMessage[]) -> Async<ProducerResult>
 }
@@ -243,7 +235,6 @@ module Producer =
     (messageVer:int16) 
     (ch:Chan) 
     (batch:ProducerMessageBatch seq) = async {
-    //Log.info "sending_batch|ep=%O batch_size_count=%i batch_size_bytes=%i" (Chan.endpoint ch) batch.Length (batchSizeBytes batch)
 
     let pms = 
       batch
@@ -311,6 +302,7 @@ module Producer =
           |> Option.iter (fun res -> IVar.put res b.rep)
           
     | Failure err ->
+      // TODO: delegate routing to connection
       let! _ = conn.RemoveBroker ch
       let err = Failure err
       for b in batch do
@@ -320,12 +312,11 @@ module Producer =
   /// Fetches cluster state and initializes a per-broker produce buffer.
   let private getState (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
     
-    Log.info "fetching_topic_metadata|topic=%s" cfg.topic
+    Log.info "fetching_producer_metadata|topic=%s" cfg.topic
     let! state = conn.GetMetadataState [|cfg.topic|]
 
     let partitions = 
       ConnState.topicPartitions state |> Map.find cfg.topic
-    
     Log.info "discovered_topic_partitions|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
 
     let brokerByPartition =
@@ -401,7 +392,6 @@ module Producer =
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
     Log.info "initializing_producer|topic=%s" config.topic
-    let messageVersion = Versions.produceReqMessage (Versions.byKey conn.Config.version ApiKey.Produce)
     let! resource = 
       Resource.recoverableRecreate 
         (getState conn config) 
@@ -410,8 +400,8 @@ module Producer =
             v config.topic (Printers.partitions s.partitions) ex
           return () })
     let! state = Resource.get resource
-    let produceBatch = Resource.injectWithRecovery resource config.retryPolicy (produceBatchInternal)
-    let p = { state = resource ; config = config ; conn = conn ; messageVersion = messageVersion ; produceBatch = produceBatch }
+    let produceBatch = Resource.injectWithRecovery resource conn.Config.requestRetryPolicy (produceBatchInternal)
+    let p = { state = resource ; config = config ; conn = conn ; produceBatch = produceBatch }
     Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.partitions)
     return p }
 
@@ -431,3 +421,7 @@ module Producer =
   /// produced by the entire batch.
   let produceBatch (p:Producer) =
     p.produceBatch
+
+  /// Gets the configuration for the producer.
+  let configuration (p:Producer) = 
+    p.config

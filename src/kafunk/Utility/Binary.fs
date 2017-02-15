@@ -20,9 +20,6 @@ module Binary =
   let inline zeros (count : int) : Segment =
     Segment(Array.zeroCreate count)
 
-  // TODO: Now is a perfect time to fix these functions up to make a little
-  // more sense. These should likely have better names or clearer semantics.
-
   /// Sets the size of the segment, leaving the offset the same.
   let inline resize (count : int) (a : Segment) =
     Segment(a.Array, a.Offset, count)

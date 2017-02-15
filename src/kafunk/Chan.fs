@@ -44,14 +44,14 @@ type ChanConfig = {
   /// The default TCP connection timeout = 10s.
   static member DefaultConnectTimeout = TimeSpan.FromSeconds 10
   
-  /// The default TCP connection retry policy = RetryPolicy.constantBoundedMs 2000 50.
-  static member DefaultConnectRetryPolicy = RetryPolicy.constantBoundedMs 2000 50
+  /// The default TCP connection retry policy = RetryPolicy.constantBoundedMs 3000 2.
+  static member DefaultConnectRetryPolicy = RetryPolicy.constantBoundedMs 3000 2
   
   /// The default TCP request timeout = 30s.
   static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
   
-  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 2000 50.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 2000 50
+  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 2000 3.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 2000 3
   
   /// The default TCP Nagle setting = false.
   static member DefaultUseNagle = false
@@ -138,7 +138,7 @@ module internal Chan =
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
+  let connect (connId:string, version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
     
     let conn (ep:EndPoint) = async {
       let ipep = EndPoint.endpoint ep
@@ -158,21 +158,21 @@ module internal Chan =
       |> AsyncFunc.timeoutResult config.connectTimeout
       |> AsyncFunc.catchResult
       |> AsyncFunc.doBeforeAfter
-          (fun ep -> Log.info "tcp_connecting|client_id=%s remote_endpoint=%O" clientId (EndPoint.endpoint ep))
+          (fun ep -> Log.info "tcp_connecting|conn_id=%s remote_endpoint=%O" connId (EndPoint.endpoint ep))
           (fun (ep,res) ->
             let ipep = EndPoint.endpoint ep
             match res with
             | Success s ->
-              Log.info "tcp_connected|client_id=%s remote_endpoint=%O local_endpoint=%O" clientId s.RemoteEndPoint s.LocalEndPoint
+              Log.info "tcp_connected|conn_id=%s remote_endpoint=%O local_endpoint=%O" connId s.RemoteEndPoint s.LocalEndPoint
             | Failure (Choice1Of2 _) ->
-              Log.warn "tcp_connection_timed_out|client_id=%s remote_endpoint=%O timeout=%O" clientId ipep config.connectTimeout
+              Log.warn "tcp_connection_timed_out|conn_id=%s remote_endpoint=%O timeout=%O" connId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
-              Log.error "tcp_connection_failed|client_id=%s remote_endpoint=%O error=%O" clientId ipep e)
+              Log.error "tcp_connection_failed|conn_id=%s remote_endpoint=%O error=%O" connId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
-      Log.warn "recovering_tcp_connection|client_id=%s remote_endpoint=%O version=%i error=%O" clientId (EndPoint.endpoint ep) ver ex
+      Log.warn "recovering_tcp_connection|conn_id=%s remote_endpoint=%O version=%i error=%O" connId (EndPoint.endpoint ep) ver ex
       tryDispose s }
 
     let! socketAgent = 
@@ -189,12 +189,12 @@ module internal Chan =
         try
           let! received = Socket.receive s buf
           if received = 0 then 
-            Log.warn "received_empty_buffer|client_id=%s remote_endpoint=%O" clientId ep
+            Log.warn "received_empty_buffer|conn_id=%s remote_endpoint=%O" connId ep
             return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|client_id=%s remote_endpoint=%O error=%O" clientId ep ex
+          Log.error "receive_failure|conn_id=%s remote_endpoint=%O error=%O" connId ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive
@@ -246,7 +246,7 @@ module internal Chan =
               ()
               //Log.trace "received_response|response=%s" (ResponseMessage.Print res)
             | Failure (Choice1Of2 ()) ->
-              Log.warn "request_timed_out|client_id=%s ep=%O request=%s timeout=%O" 
+              Log.warn "request_timed_out|conn_id=%s ep=%O request=%s timeout=%O" 
                 clientId ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
               Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)

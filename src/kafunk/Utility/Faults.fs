@@ -52,6 +52,7 @@ module Exn =
 [<StructuredFormatDisplay("RetryState({attempt})")>]
 type RetryState =
   struct
+    /// The attempt number.
     val attempt : int
     new (a) = { attempt = a }
   end
@@ -60,8 +61,8 @@ type RetryState =
 [<Compile(Module)>]
 module RetryState = 
 
-  /// The initial retry state.
-  let init = RetryState(0)
+  /// The initial retry state with attempt = 1.
+  let init = RetryState(1)
 
   /// Returns the next retry state.
   let next (s:RetryState) = RetryState (s.attempt + 1)
@@ -260,20 +261,6 @@ module FlowMonitor =
     |> AsyncSeq.ofObservableBuffered
     |> overflows count period
     |> AsyncSeq.toObservable
-      
-  let escalateOnThreshold (count:int) (period:TimeSpan) (e:'a[] -> exn) =
-    let post,stream = sinkStream
-    let ivar = TaskCompletionSource<_>()
-    stream
-    |> overflows count period
-    |> AsyncSeq.tryFirst
-    |> Async.map (Option.iter ivar.SetResult)
-    |> Async.Start
-    let report a =
-      post a
-      if ivar.Task.IsCompleted then 
-        raise (e ivar.Task.Result)
-    report
 
 
 /// Fault tolerance.

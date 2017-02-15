@@ -43,7 +43,8 @@ let connCfg =
   KafkaConfig.create (
     [KafkaUri.parse host], 
     tcpConfig = chanConfig,
-    requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy)
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 5000 5,
+    bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
     //requestRetryPolicy = RetryPolicy.none)
 
 let conn = Kafka.conn connCfg
@@ -56,9 +57,7 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
-    batchLingerMs = 1000,
-    retryPolicy = RetryPolicy.constantBoundedMs 5000 5
-    //retryPolicy = RetryPolicy.none
+    batchLingerMs = 1000
     )
 
 let producer =

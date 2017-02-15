@@ -2,6 +2,9 @@
 
 * Special Valentine's day edition.
 * Refined flow for handling escalated failures.
+* Fix error code MessageSizeTooLarge.
+* Default client.id = "" rather than Guid; new Guid for connection id.
+* Expose connection, producer, consumer config.
 
 ### 0.0.25-alpha001 - 10.02.2017
 

@@ -17,8 +17,6 @@ let group = argiDefault 3 "existential-group"
 let count = argiDefault 4 "1" |> Int32.Parse
 
 let go = async {
-  let clientId = Guid.NewGuid().ToString("N")
-
   let! conn = 
     let connConfig = 
       let chanConfig = 
@@ -31,8 +29,7 @@ let go = async {
 //          requestRetryPolicy = RetryPolicy.none)
       KafkaConfig.create (
         [KafkaUri.parse host], 
-        tcpConfig = chanConfig, 
-        clientId = clientId,
+        tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy)
     Kafka.connAsync connConfig
   let consumerConfig = 
@@ -55,7 +52,7 @@ let go = async {
         info.partitions
         |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.earliestOffset)
         |> String.concat " ; "
-      Log.info "consumer_progress|client_id=%s topic=%s total_lag=%i partitions=%s" clientId info.topic info.totalLag str
+      Log.info "consumer_progress|conn_id=%s topic=%s total_lag=%i partitions=%s" conn.Config.connId info.topic info.totalLag str
       return () })
 
   let! _ = Async.StartChild showProgress
@@ -79,8 +76,8 @@ let go = async {
     handle
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
-  //do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
-  do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
+  do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
+  //do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
 
 }
 

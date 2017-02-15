@@ -114,15 +114,15 @@ module Group =
         match action with
         | GroupLeaveAction.LeaveAndRejoin ec ->
           if IVar.tryPut action state.closed then
-            Log.warn "leaving_group_to_rejoin|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i"
-              gm.conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId ec
+            Log.warn "leaving_group_to_rejoin|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i"
+              gm.conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId ec
             return true
           else
             return false
         | GroupLeaveAction.LeaveGroup ->
           if IVar.tryPut action state.closed then
-            Log.warn "leaving_group|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
-              gm.conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
+            Log.warn "leaving_group|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
+              gm.conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
             return false
@@ -141,8 +141,8 @@ module Group =
     | ErrorCode.NoError | ErrorCode.UnknownMemberIdCode | ErrorCode.GroupLoadInProgressCode -> 
       return ()
     | ec -> 
-      Log.error "group_leave_error|client_id=%s group_id=%s member_id=%s error_code=%i" 
-        gm.conn.Config.clientId gm.config.groupId state.state.memberId ec
+      Log.error "group_leave_error|conn_id=%s group_id=%s member_id=%s error_code=%i" 
+        gm.conn.Config.connId gm.config.groupId state.state.memberId ec
       return () }
 
   /// Leaves a group, sending a leave group request to Kafka.
@@ -219,8 +219,8 @@ module Group =
 
       let heartbeatSleepMs = cfg.sessionTimeout / cfg.heartbeatFrequency
 
-      Log.info "starting_heartbeat_process|client_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
-        conn.Config.clientId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs
+      Log.info "starting_heartbeat_process|conn_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
+        conn.Config.connId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs
 
       let state =
         let closed = IVar.create ()
@@ -239,8 +239,8 @@ module Group =
         }
           
       conn.CancellationToken.Register (fun () ->
-        Log.info "leaving_group_on_connection_close|client_id=%s group_id=%s member_id=%s generation_id=%i" 
-          conn.Config.clientId gm.config.groupId state.state.memberId state.state.generationId 
+        Log.info "leaving_group_on_connection_close|conn_id=%s group_id=%s member_id=%s generation_id=%i" 
+          conn.Config.connId gm.config.groupId state.state.memberId state.state.generationId 
         Async.Start (leave gm)) |> ignore
       
       /// Sends a heartbeat.
@@ -258,16 +258,16 @@ module Group =
                 return true
               | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode 
               | ErrorCode.NotCoordinatorForGroupCode ->
-                Log.warn "heartbeat_error|client_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i heartbeat_count=%i" 
-                  conn.Config.clientId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count
+                Log.warn "heartbeat_error|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i heartbeat_count=%i" 
+                  conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count
                 do! leaveAndRejoin gm state res.errorCode
                 return false
               | ec ->
-                return failwithf "unknown_heartbeat_error|client_id=%s error_code=%i" 
-                  conn.Config.clientId ec
+                return failwithf "unknown_heartbeat_error|conn_id=%s error_code=%i" 
+                  conn.Config.connId ec
             | Failure ex ->
-              Log.warn "heartbeat_exception|client_id=%s group_id=%s generation_id=%i error=%O" 
-                conn.Config.clientId gm.config.groupId state.state.generationId ex
+              Log.warn "heartbeat_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
+                conn.Config.connId gm.config.groupId state.state.generationId ex
               do! leaveInternal gm state
               return false })
 
@@ -291,17 +291,17 @@ module Group =
       
       match prevMemberId with
       | None -> 
-        Log.info "joining_group|client_id=%s group_id=%s protocol_type=%s protocol_names=%A" 
-          conn.Config.clientId groupId protocolType protocolNames
+        Log.info "joining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A" 
+          conn.Config.connId groupId protocolType protocolNames
       | Some prevMemberId -> 
-        Log.info "rejoining_group|client_id=%s group_id=%s protocol_type=%s protocol_names=%A member_id=%s"
-          conn.Config.clientId groupId protocolType protocolNames prevMemberId
+        Log.info "rejoining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A member_id=%s"
+          conn.Config.connId groupId protocolType protocolNames prevMemberId
 
       let prevMemberId = 
         match prevErrorCode with
         | Some ec when ec = ErrorCode.UnknownMemberIdCode -> 
-          Log.warn "resetting_member_id|client_id=%s group_id=%s error_code=%i prev_member_id=%A"
-            conn.Config.clientId groupId ec prevMemberId
+          Log.warn "resetting_member_id|conn_id=%s group_id=%s error_code=%i prev_member_id=%A"
+            conn.Config.connId groupId ec prevMemberId
           None
         | _ -> prevMemberId
 
@@ -310,8 +310,8 @@ module Group =
       | Success joinGroupRes ->
                 
         if joinGroupRes.members.members.Length > 0 then
-          Log.info "joined_group_as_leader|client_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
-            conn.Config.clientId
+          Log.info "joined_group_as_leader|conn_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+            conn.Config.connId
             groupId 
             joinGroupRes.memberId 
             joinGroupRes.generationId 
@@ -323,14 +323,14 @@ module Group =
             return! hearbeat (joinGroupRes,syncGroupRes)
           
           | Failure ec ->
-            Log.warn "sync_group_error|client_id=%s group_id=%s error_code=%i" 
-              conn.Config.clientId groupId ec
+            Log.warn "sync_group_error|conn_id=%s group_id=%s error_code=%i" 
+              conn.Config.connId groupId ec
             do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
             return! joinSyncHeartbeat (prevMemberId, Some ec)
         
         else
-          Log.info "joined_group_as_follower|client_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
-            conn.Config.clientId
+          Log.info "joined_group_as_follower|conn_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
+            conn.Config.connId
             groupId 
             joinGroupRes.memberId 
             joinGroupRes.generationId 
@@ -342,14 +342,14 @@ module Group =
             return! hearbeat (joinGroupRes,syncGroupRes)
           
           | Failure ec ->
-            Log.warn "sync_group_error|client_id=%s group_id=%s error_code=%i" 
-              conn.Config.clientId groupId ec
+            Log.warn "sync_group_error|conn_id=%s group_id=%s error_code=%i" 
+              conn.Config.connId groupId ec
             do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
             return! joinSyncHeartbeat (prevMemberId, Some ec)
 
       | Failure joinGroupErr ->
-        Log.warn "join_group_error|client_id=%s group_id=%s error_code=%i prev_member_id=%A" 
-          conn.Config.clientId groupId joinGroupErr prevMemberId
+        Log.warn "join_group_error|conn_id=%s group_id=%s error_code=%i prev_member_id=%A" 
+          conn.Config.connId groupId joinGroupErr prevMemberId
         do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
         return! joinSyncHeartbeat (prevMemberId, Some joinGroupErr)  }
 

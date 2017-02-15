@@ -33,14 +33,6 @@ type internal ConnState = {
       version = 0
     }
 
-//  static member topicPartitions (s:ConnState) =
-//    s.brokersByTopicPartition 
-//    |> Map.toSeq 
-//    |> Seq.map fst 
-//    |> Seq.groupBy fst
-//    |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
-//    |> Map.ofSeq
-
   static member topicPartitions (s:ConnState) =
     s.topics
     |> Seq.map (fun kvp -> kvp.Key)
@@ -104,6 +96,12 @@ type internal ConnState = {
         let ep' = Chan.endpoint kvp.Value
         if ep' = ep then Some kvp.Key
         else None)
+    let nodeIds =
+      s.brokers
+      |> Seq.choose (fun kvp ->
+        let ep' = Chan.endpoint kvp.Value
+        if ep' = ep then Some kvp.Key
+        else None)
     {
       s with
         bootstrapBroker = 
@@ -113,6 +111,7 @@ type internal ConnState = {
         brokersByEndPoint = s.brokersByEndPoint |> Map.remove ep
         brokersByGroup = s.brokersByGroup |> Map.removeAll groupKeys
         brokersByTopicPartition = s.brokersByTopicPartition |> Map.removeAll topicKeys
+        brokers = s.brokers |> Map.removeAll nodeIds
         version = s.version + 1
     }
 
@@ -443,11 +442,15 @@ type KafkaConfig = {
   /// The retry policy for broker requests.
   requestRetryPolicy : RetryPolicy
 
-  /// The client id.
+  /// A logical application name to pass to the server along with requests.
+  /// The purpose of this is to be able to track the source of requests beyond just ip/port.
   clientId : ClientId
   
   /// TCP connection configuration.
   tcpConfig : ChanConfig 
+
+  /// A unique connection id.
+  connId : string
 
 } with
 
@@ -457,14 +460,14 @@ type KafkaConfig = {
   /// The default broker channel configuration.
   static member DefaultChanConfig = ChanConfig.create ()
 
-  /// The default client id = Guid.NewGuid().
-  static member DefaultClientId = Guid.NewGuid().ToString("N")
+  /// The default client id = "".
+  static member DefaultClientId = ""
 
-  /// The default bootstrap broker connection retry policy = RetryPolicy.constantBoundedMs 5000 3.
-  static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 5000 3
+  /// The default bootstrap broker connection retry policy = RetryPolicy.constantBoundedMs 5000 10.
+  static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 5000 10
 
-  /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 10.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10
+  /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 1000.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 1000
 
   /// Creates a Kafka configuration object.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, ?version) =
@@ -473,7 +476,8 @@ type KafkaConfig = {
       bootstrapConnectRetryPolicy = defaultArg bootstrapConnectRetryPolicy KafkaConfig.DefaultBootstrapConnectRetryPolicy
       requestRetryPolicy = defaultArg requestRetryPolicy KafkaConfig.DefaultRequestRetryPolicy
       clientId = match clientId with Some clientId -> clientId | None -> KafkaConfig.DefaultClientId
-      tcpConfig = defaultArg tcpConfig KafkaConfig.DefaultChanConfig }
+      tcpConfig = defaultArg tcpConfig KafkaConfig.DefaultChanConfig
+      connId = Guid.NewGuid().ToString("N") }
 
 
 /// An exception used to wrap failures which are to be escalated.
@@ -491,7 +495,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   let cts = new CancellationTokenSource()
 
   // NB: The presence of the critical boolean flag is unfortunate but required to
-  // address reentrancy issues. railures are recovered inside of a critical region
+  // address reentrancy issues. Fsailures are recovered inside of a critical region
   // to prevent a thundering herd problem where many concurrent requests are failing
   // and attempting to reover. This works well, except in cases where the recovery may
   // itself need recovery (such as when a metadata refresh requires a bootstrap rediscovery).
@@ -508,7 +512,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return [|ip|]
       | None ->
         let! ips = Dns.IPv4.getAllAsync host
-        Log.info "discovered_dns|client_id=%s host=%s ips=[%s]" cfg.clientId host (Printers.stringsCsv ips)
+        Log.info "discovered_dns|conn_id=%s host=%s ips=[%s]" cfg.connId host (Printers.stringsCsv ips)
         return ips }
     return!
       ips
@@ -520,14 +524,14 @@ type KafkaConn internal (cfg:KafkaConfig) =
           return Success ch
         | _ ->
           try
-            let! ch = Chan.connect (cfg.version, cfg.tcpConfig, cfg.clientId) ep
+            let! ch = Chan.connect (cfg.connId, cfg.version, cfg.tcpConfig, cfg.clientId) ep
             return Success ch
           with ex ->
             return Failure ex }) }
   
   /// Removes a broker from the cluster view.
   and removeBroker (state:ConnState) (ch:Chan) = async {
-    Log.warn "removing_broker|client_id=%s ep=%O" cfg.clientId (Chan.endpoint ch)
+    Log.warn "removing_broker_channel|conn_id=%s ep=%O" cfg.connId (Chan.endpoint ch)
     return state |> ConnState.removeBroker ch }
 
   /// Removes a broker from the cluster view.
@@ -538,8 +542,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   /// Connects to the first available bootstrap broker.
   and bootstrap =
-    let update (prevState:ConnState option) = async { 
-      Log.info "connecting_to_bootstrap_brokers|client_id=%s brokers=%A" cfg.clientId cfg.bootstrapServers
+    let connect (prevState:ConnState option) = async { 
+      Log.info "connecting_to_bootstrap_brokers|conn_id=%s brokers=%A" cfg.connId cfg.bootstrapServers
       return!
         cfg.bootstrapServers
         |> AsyncSeq.ofSeq
@@ -554,12 +558,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
             return Success state
           | Failure e ->
             return Failure e }) }
-    let update =
-      update
-      |> Faults.AsyncFunc.retryResultThrowList 
-          (fun errs -> exn("Failed to connect to a bootstrap broker.", Exn.ofSeq errs)) 
-          cfg.bootstrapConnectRetryPolicy
-    update
+    connect
+    |> Faults.AsyncFunc.retryResultThrowList 
+        (fun errs -> exn("Failed to connect to a bootstrap broker.", Exn.ofSeq errs)) 
+        cfg.bootstrapConnectRetryPolicy
     
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
@@ -571,7 +573,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// Fetches metadata and returns an updated connection state.
   and metadata (state:ConnState) (topics:TopicName[]) = async {
     let send =
-      (fun req -> routeSendInternal true RetryState.init state req)
+      (fun req -> routeSendRecover true RetryState.init state req)
       |> AsyncFunc.dimap RequestMessage.Metadata (ResponseMessage.toMetadata)
     let! metadata = send (Metadata.Request(topics))
     Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
@@ -618,18 +620,18 @@ type KafkaConn internal (cfg:KafkaConfig) =
       ConnState.topicPartitions callerState
       |> Seq.map (fun kvp -> kvp.Key)
       |> Seq.toArray
-    Log.info "refreshing_metadata|client_id=%s topics=%A" cfg.clientId topics
+    Log.info "refreshing_metadata|conn_id=%s topics=%A" cfg.connId topics
     if critical then metadata callerState topics
     else getAndApplyMetadata callerState topics
 
   /// Fetches group coordinator metadata.
   and groupCoordinator (state:ConnState) (groupId:GroupId) = async {
     let send = 
-      routeSendInternal true RetryState.init state
+      routeSendRecover true RetryState.init state
       |> AsyncFunc.dimap RequestMessage.GroupCoordinator (ResponseMessage.toGroupCoordinator)
     let! res = send (GroupCoordinatorRequest(groupId))
-    Log.info "received_group_coordinator|client_id=%s group_id=%s %s" 
-      cfg.clientId groupId (GroupCoordinatorResponse.Print res)
+    Log.info "received_group_coordinator|conn_id=%s group_id=%s %s" 
+      cfg.connId groupId (GroupCoordinatorResponse.Print res)
     let! ch = connBroker (Some state) (res.coordinatorHost, res.coordinatorPort) |> Async.map Result.throw
     return 
       state 
@@ -647,17 +649,17 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return state' })
 
   /// Sends the request based on discovered routes.
-  and routeSendInternal (critical:bool) (rs:RetryState) (state:ConnState) (req:RequestMessage) = async {
+  and routeSendRecover (critical:bool) (rs:RetryState) (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state req with
     | Success routes ->
       let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
         if routes.Length = 1 then
           let req,ch = routes.[0]
-          return! sendInternal critical rs state ch req
+          return! sendRecover critical rs state ch req
         else
           return!
             routes
-            |> Seq.map (fun (req,ch) -> sendInternal critical rs state ch req)
+            |> Seq.map (fun (req,ch) -> sendRecover critical rs state ch req)
             |> Async.Parallel
             |> Async.map gather } 
       match req with
@@ -669,7 +671,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! scatterGather Routing.concatProduceResponseMessages
       | _ ->
         let req,ch = routes.[0]
-        return! sendInternal critical rs state ch req
+        return! sendRecover critical rs state ch req
 
     | Failure rt ->
       Log.trace "missing_route|route_type=%A request=%s" rt (RequestMessage.Print req)
@@ -687,12 +689,12 @@ type KafkaConn internal (cfg:KafkaConfig) =
           | RouteType.TopicRoute tns ->
             if critical then return! metadata state tns
             else return! getAndApplyMetadata state tns }
-        return! routeSendInternal critical rs state' req
+        return! routeSendRecover critical rs state' req
       | None ->
         return failwithf "missng_route|attempts=%i route_type=%A" rs.attempt rt }
 
   /// Sends a request to a specific broker and handles failures.
-  and sendInternal (critical:bool) (rs:RetryState) (state:ConnState) (ch:Chan) (req:RequestMessage) = async {
+  and sendRecover (critical:bool) (rs:RetryState) (state:ConnState) (ch:Chan) (req:RequestMessage) = async {
     return!
       req
       |> Chan.send ch
@@ -703,8 +705,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
           | None -> 
             return res
           | Some (errorCode,action) ->
-            Log.error "channel_response_errored|client_id=%s endpoint=%O error_code=%i retry_action=%A req=%s res=%s" 
-              cfg.clientId (Chan.endpoint ch) errorCode action (RequestMessage.Print req) (ResponseMessage.Print res)
+            Log.error "channel_response_errored|conn_id=%s endpoint=%O error_code=%i retry_action=%A req=%s res=%s" 
+              cfg.connId (Chan.endpoint ch) errorCode action (RequestMessage.Print req) (ResponseMessage.Print res)
             match action with
             | RetryAction.PassThru ->
               return res
@@ -717,7 +719,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 let! state' = 
                   if critical then metadata state topics
                   else getAndApplyMetadata state topics
-                return! routeSendInternal critical rs state' req
+                return! routeSendRecover critical rs state' req
               | None ->
                 return failwithf "request_failure|attempt=%i request=%s response=%s" 
                   rs.attempt (RequestMessage.Print req) (ResponseMessage.Print res)
@@ -725,7 +727,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
               let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
               match rs' with
               | Some rs ->
-                return! routeSendInternal critical rs state req
+                return! routeSendRecover critical rs state req
               | None ->
                 return failwithf "request_failure|attempt=%i request=%s response=%s" 
                   rs.attempt (RequestMessage.Print req) (ResponseMessage.Print res)
@@ -733,20 +735,20 @@ type KafkaConn internal (cfg:KafkaConfig) =
           let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
           match rs' with
           | Some rs ->
-            let! state' = handleChannelError critical state (ch, req, chanErr)
-            return! routeSendInternal critical rs state' req 
+            let! state' = recoverRequestError critical state (ch, req, chanErr)
+            return! routeSendRecover critical rs state' req 
           | None ->
             return failwithf 
               "channel_failure|attempt=%i ep=%O request=%s" rs.attempt (Chan.endpoint ch) (RequestMessage.Print req) })
       |> Async.tryWith (fun ex -> async {
-        Log.error "channel_exception|client_id=%s endpoint=%O request=%s error=%O" 
-          cfg.clientId (Chan.endpoint ch) (RequestMessage.Print req) ex
+        Log.error "channel_exception|conn_id=%s endpoint=%O request=%s error=%O" 
+          cfg.connId (Chan.endpoint ch) (RequestMessage.Print req) ex
         return raise ex }) }
 
   /// Handles a failure to communicate with a broker.
-  and handleChannelError (critical:bool) (state:ConnState) (ch:Chan, req:RequestMessage, chanErrs:ChanError list) = async {
-    Log.error "recovering_channel_error|client_id=%s endpoint=%O request=%s error=%A" 
-      cfg.clientId (Chan.endpoint ch) (RequestMessage.Print req) chanErrs
+  and recoverRequestError (critical:bool) (state:ConnState) (ch:Chan, req:RequestMessage, chanErrs:ChanError list) = async {
+    Log.warn "recovering_channel_error|conn_id=%s endpoint=%O request=%s errors=%A" 
+      cfg.connId (Chan.endpoint ch) (RequestMessage.Print req) chanErrs
     let isBootstrapRequest =
       match RouteType.ofRequest req with
       | RouteType.BootstrapRoute -> true
@@ -765,7 +767,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// Gets the cancellation token triggered when the connection is closed.
   member internal __.CancellationToken = cts.Token
 
-  member internal __.Config = cfg
+  /// Gets the configuration for the connection.
+  member __.Config = cfg
 
   member private __.GetState () =
     let state = MVar.getFastUnsafe stateCell
@@ -776,7 +779,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   member internal __.Send (req:RequestMessage) : Async<ResponseMessage> = async {
     let state = __.GetState ()
-    return! routeSendInternal false RetryState.init state req }
+    return! routeSendRecover false RetryState.init state req }
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
@@ -799,7 +802,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
     removeBrokerAndApply ch
 
   member __.Close () =
-    Log.info "closing_connection|client_id=%s" cfg.clientId
+    Log.info "closing_connection|conn_id=%s" cfg.connId
     cts.Cancel()
     (stateCell :> IDisposable).Dispose()
     

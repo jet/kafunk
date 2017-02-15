@@ -101,11 +101,11 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         | Some (_,rs) ->
           return! go rs a
       | Failure (Retry) ->
-        let! rs = RetryPolicy.awaitNext rp rs
+        let! rs = RetryPolicy.awaitNextState rp rs
         match rs with
         | None ->
           return raise (exn())
-        | Some (_,rs) ->
+        | Some rs ->
           return! go rs a }
     go RetryState.init
         
