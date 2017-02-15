@@ -834,19 +834,44 @@ module Consumer =
 
 /// Progress information for a consumer in a group.
 type ConsumerProgressInfo = {
+  
+  /// The consumer group id.
   group : GroupId
+
+  /// The topic.
   topic : TopicName
+
+  /// Progress info for each partition.
   partitions : ConsumerPartitionProgressInfo[]
+  
+  /// The total lag across all partitions.
   totalLag : int64
+  
+  /// The minimum lead across all partitions.
+  minLead : int64
 }
 
 /// Progress information for a consumer in a group, for a specific topic-partition.
 and ConsumerPartitionProgressInfo = {
+  
+  /// The partition.
   partition : Partition
+  
+  /// The consumer's current offset.
   consumerOffset : Offset
+
+  /// The offset at the current start of the topic.
   earliestOffset : Offset
+
+  /// The offset at the current end of the topic.
   highWatermarkOffset : Offset
+  
+  /// The distance between the high watermark offset and the consumer offset.
   lag : int64
+  
+  /// The distance between the consumer offset and the earliest offset.
+  lead : int64
+
 }
 
 /// Operations for providing consumer progress information.
@@ -868,13 +893,16 @@ module ConsumerInfo =
       (topicOffsets, consumerOffsets)
       ||> Map.mergeChoice (fun p -> function
         | Choice1Of3 ((e,l),o) -> 
-          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o }
+          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e }
         | _ -> failwith "invalid state")
       |> Seq.map (fun kvp -> kvp.Value)
       |> Seq.toArray
     return { 
       topic = topic ; group = groupId ; partitions = partitions ; 
-      totalLag = partitions |> Seq.sumBy (fun p -> p.lag) } }
+      totalLag = partitions |> Seq.sumBy (fun p -> p.lag)
+      minLead = 
+        if partitions.Length > 0 then partitions |> Seq.map (fun p -> p.lead) |> Seq.min
+        else -1L } }
 
   /// Returns consumer progress information for the partitions currently assigned to the consumer.
   let consumerProgress (c:Consumer) = async {

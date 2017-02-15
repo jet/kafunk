@@ -33,6 +33,8 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
     
   let cell : MVar<ResourceEpoch<'r>> = MVar.create ()
    
+  let name = typeof<'r>.Name
+
   let create (prevEpoch:ResourceEpoch<'r> option) = async {
     let closed = new CancellationTokenSource()
     let version = 
@@ -70,7 +72,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           let! ep2 = recover req ex callingEpoch
           return ep2
         with ex ->
-          Log.trace "recovery_failed|error=%O" ex
+          Log.trace "recovery_failed|type=%s error=%O" name ex
           return raise ex
       else
         Log.trace "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
@@ -83,7 +85,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       return! op ep.resource a |> Async.cancelWithToken ep.closed.Token }
 
   member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>), rp:RetryPolicy) : 'a -> Async<'b> =
-    let rec go rs a = async {
+    let rec go (rs:RetryState) a = async {
       let! ep = MVar.get cell
       let! b = op ep.resource a
       match b with
@@ -93,12 +95,13 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         let! _ = __.Recover (ep, a, ex)
         return b
       | Failure (RecoverRetry ex) ->
-        let! _ = __.Recover (ep, a, ex)
-        let! rs = RetryPolicy.awaitNext rp rs
+        Log.trace "retrying_after_failure|name=%s error=%O attempt=%i" name ex rs.attempt
+        let! rs = RetryPolicy.awaitNextState rp rs
         match rs with
         | None ->
           return raise ex
-        | Some (_,rs) ->
+        | Some rs ->
+          let! _ = __.Recover (ep, a, ex)
           return! go rs a
       | Failure (Retry) ->
         let! rs = RetryPolicy.awaitNextState rp rs
@@ -156,9 +159,9 @@ module Resource =
   let injectWithRecovery (r:Resource<'r>) (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) : 'a -> Async<'b> =
     r.InjectResult (op, rp)
 
-  let injectWithRecovery2 (r:Resource<'r>) (recovery:'b -> ResourceErrorAction<'b, exn> option) (rp:RetryPolicy) (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
-    let op r a = op r a |> Async.map (fun b -> match recovery b with Some r -> Failure r | None -> Success b)
-    r.InjectResult (op, rp)
+//  let injectWithRecovery2 (r:Resource<'r>) (recovery:'b -> ResourceErrorAction<'b, exn> option) (rp:RetryPolicy) (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
+//    let op r a = op r a |> Async.map (fun b -> match recovery b with Some r -> Failure r | None -> Success b)
+//    r.InjectResult (op, rp)
 
   let timeout (r:Resource<'r>) : ('r -> ('a -> Async<'b>)) -> ('a -> Async<'b option>) =
     r.Timeout

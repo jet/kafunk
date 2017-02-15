@@ -9,7 +9,7 @@ open System
 open System.Diagnostics
 open System.Threading
 
-//Log.MinLevel <- LogLevel.Trace
+Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -20,6 +20,7 @@ let N = argiDefault 3 "1000000" |> Int64.Parse
 let batchSize = argiDefault 4 "100" |> Int32.Parse
 let messageSize = argiDefault 5 "10" |> Int32.Parse
 let parallelism = argiDefault 6 "1" |> Int32.Parse
+let explicitBatch = argiDefault 7 "false" |> Boolean.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
 let payload = Array.zeroCreate messageSize
@@ -43,9 +44,11 @@ let connCfg =
   KafkaConfig.create (
     [KafkaUri.parse host], 
     tcpConfig = chanConfig,
-    requestRetryPolicy = RetryPolicy.constantBoundedMs 5000 5,
-    bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
-    //requestRetryPolicy = RetryPolicy.none)
+    //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2,
+    //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
+    bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 2
+    )
 
 let conn = Kafka.conn connCfg
 
@@ -67,11 +70,6 @@ let producer =
 let counter = Metrics.counter Log (1000 * 5)
 let timer = Metrics.timer Log (1000 * 5)
 
-let produceBatch = 
-  Producer.produceBatch producer
-  |> Metrics.throughputAsyncTo counter (fun _ -> batchSize)
-  |> Metrics.latencyAsyncTo timer
-
 let cts = new CancellationTokenSource()
 
 //Kafunk.Log.Event 
@@ -86,25 +84,57 @@ let mutable completed = 0L
 
 let go = async {
 
-  let! _ = Async.StartChild (async {
+  let monitor = async {
     while true do
       do! Async.Sleep (1000 * 5)
       let completed = completed
       let mb = (int64 completed * int64 messageSize) / int64 1000000
-      Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb })
+      Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb }
 
-  return!
-    Seq.init batchCount id
-    |> Seq.map (fun batchNo -> async {
-      try
-        let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-        let! prodRes = produceBatch (fun pc -> batchNo % pc, msgs)
-        Interlocked.Add(&completed, int64 batchSize) |> ignore
-        return ()
-      with ex ->
-        Log.error "produce_error|%O" ex
-        return raise ex })
-    |> Async.ParallelThrottledIgnore parallelism }
+  let! _ = Async.StartChild monitor
+
+  if explicitBatch then
+
+    let produceBatch = 
+      Producer.produceBatch producer
+      |> Metrics.throughputAsyncTo counter (fun _ -> batchSize)
+      |> Metrics.latencyAsyncTo timer
+
+    return!
+      Seq.init batchCount id
+      |> Seq.map (fun batchNo -> async {
+        try
+          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
+          let! prodRes = produceBatch (fun pc -> batchNo % pc, msgs)
+          Interlocked.Add(&completed, int64 batchSize) |> ignore
+          return ()
+        with ex ->
+          Log.error "produce_error|%O" ex
+          return raise ex })
+      |> Async.ParallelThrottledIgnore parallelism
+
+  else
+
+    let produce = 
+      Producer.produce producer
+      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
+      |> Metrics.latencyAsyncTo timer
+
+    return!
+      Seq.init batchCount id
+      |> Seq.map (fun batchNo -> async {
+        try
+          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
+          let! res =
+            msgs
+            |> Seq.map produce
+            |> Async.Parallel
+          Interlocked.Add(&completed, int64 batchSize) |> ignore
+          return ()
+        with ex ->
+          Log.error "produce_error|%O" ex
+          return raise ex })
+      |> Async.ParallelThrottledIgnore parallelism }
 
 try 
   Async.RunSynchronously (go, cancellationToken = cts.Token)

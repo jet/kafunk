@@ -50,9 +50,9 @@ let go = async {
       let! info = ConsumerInfo.consumerProgress consumer
       let str = 
         info.partitions
-        |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.earliestOffset)
+        |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i lead=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.lead p.earliestOffset)
         |> String.concat " ; "
-      Log.info "consumer_progress|conn_id=%s topic=%s total_lag=%i partitions=%s" conn.Config.connId info.topic info.totalLag str
+      Log.info "consumer_progress|conn_id=%s topic=%s total_lag=%i min_lead=%i partitions=%s" conn.Config.connId info.topic info.totalLag info.minLead str
       return () })
 
   let! _ = Async.StartChild showProgress

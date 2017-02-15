@@ -245,10 +245,10 @@ module Producer =
           |> Seq.collect (fun bs -> bs.messages |> Seq.map (fun pm -> Message.create pm.value pm.key None))
           |> MessageSet.ofMessages
           |> Compression.compress messageVer cfg.compression
-        p,ms)
+        p, MessageSet.size ms, ms)
       |> Seq.toArray
 
-    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| (cfg.topic, pms |> Array.map (fun (p,ms) -> (p, MessageSet.size ms, ms))) |])
+    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| cfg.topic,pms |])
     let! res = Chan.send ch (RequestMessage.Produce req) |> Async.map (Result.map ResponseMessage.toProduce)
     match res with
     | Success res ->
@@ -276,7 +276,6 @@ module Producer =
             | _ -> Choice3Of3 (p,o,ec)))
         |> Seq.partitionChoices3
       
-      // TODO: error only by partition
       if fatalErrors.Length > 0 then
         let msg = sprintf "produce_fatal_errors|ep=%O errors=%A request=%s response=%s" (Chan.endpoint ch) fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         Log.error "%s" msg
@@ -419,8 +418,8 @@ module Producer =
   /// currently configured for the topic.
   /// The messages will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
-  let produceBatch (p:Producer) =
-    p.produceBatch
+  let produceBatch (p:Producer) (f:PartitionCount -> Partition * ProducerMessage[]) =
+    p.produceBatch f
 
   /// Gets the configuration for the producer.
   let configuration (p:Producer) = 
