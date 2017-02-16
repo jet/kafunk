@@ -2,10 +2,8 @@ namespace Kafunk
 
 open System
 open System.Text
-open Prelude
 
-// big-endian
-
+/// Big-endian operations on binary data.
 module Binary =
 
   type Segment = ArraySegment<byte>

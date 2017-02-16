@@ -74,6 +74,7 @@
     <Compile Include="AsyncTests.fs" />
     <Compile Include="FaultsTests.fs" />
     <Compile Include="AssignmentStrategyTests.fs" />
+    <None Include="Refs.fsx" />
     <Compile Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
     <Compile Include="Fetch.fsx" />

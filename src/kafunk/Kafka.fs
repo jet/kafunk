@@ -741,7 +741,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
             return failwithf 
               "channel_failure|attempt=%i ep=%O request=%s" rs.attempt (Chan.endpoint ch) (RequestMessage.Print req) })
       |> Async.tryWith (fun ex -> async {
-        Log.error "channel_exception|conn_id=%s endpoint=%O request=%s error=%O" 
+        Log.error "broker_channel_exception|conn_id=%s endpoint=%O request=%s error=%O" 
           cfg.connId (Chan.endpoint ch) (RequestMessage.Print req) ex
         return raise ex }) }
 
@@ -960,7 +960,7 @@ module Offsets =
     let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
   
     let rec commitLoop = async {
-      do! Async.Sleep interval
+      do! Async.sleep interval
       mbp.Post (Commit None)
       return! commitLoop }
 

@@ -1,50 +1,42 @@
-namespace Kafunk
+[<AutoOpen>]
+module internal Kafunk.Prelude
 
 [<assembly: System.Runtime.CompilerServices.InternalsVisibleToAttribute("Kafunk.Tests")>]
 do ()
 
-[<AutoOpen>]
-module Prelude =
+open System
 
-  /// Determines whether the argument is a null reference.
-  let inline isNull a = obj.ReferenceEquals(null, a)
+/// Determines whether the argument is a null reference.
+let inline isNull a = obj.ReferenceEquals(null, a)
 
-  /// Given a value, creates a function with one ignored argument which returns the value.
-  let inline konst x _ = x
+/// Given a value, creates a function with one ignored argument which returns the value.
+let inline konst x _ = x
 
-  let inline flip f a b = f b a
+let inline flip f a b = f b a
 
-  let inline diag a = a,a
+let inline diag a = a,a
 
-//  /// Active pattern for matching Result<'a, 'e>.
-//  let (|Success|Failure|) = function Choice1Of2 a -> Success a | Choice2Of2 b -> Failure b
+let tryDispose (d:#System.IDisposable) = 
+  try d.Dispose() finally ()
 
-  let tryDispose (d:#System.IDisposable) = 
-    try d.Dispose() finally ()
-
-  /// CompilationRepresentationAttribute
-  type Compile = CompilationRepresentationAttribute
+/// CompilationRepresentationAttribute
+type Compile = CompilationRepresentationAttribute
   
-  /// CompilationRepresentationFlags.ModuleSuffix
-  let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
+/// CompilationRepresentationFlags.ModuleSuffix
+let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
 
 
 
-[<AutoOpen>]
-module internal TimeSpanEx =
-  
-  open System
-
-  type TimeSpan with
-    static member FromMilliseconds (ms:int) =
-      TimeSpan.FromMilliseconds (float ms)
-    static member FromSeconds (sec:int) =
-      TimeSpan.FromSeconds (float sec)
-    static member Mutiply (s:TimeSpan) (x:int) =
-      let mutable s = s
-      for _ in [1..x] do
-        s <- s.Add s
-      s
+type TimeSpan with
+  static member FromMilliseconds (ms:int) =
+    TimeSpan.FromMilliseconds (float ms)
+  static member FromSeconds (sec:int) =
+    TimeSpan.FromSeconds (float sec)
+  static member Mutiply (s:TimeSpan) (x:int) =
+    let mutable s = s
+    for _ in [1..x] do
+      s <- s.Add s
+    s
 
 
 module Option =
@@ -162,12 +154,12 @@ module Monoid =
 
 open System.Collections.Generic
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module List =
   
   let inline singleton a = [a]
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Array =
 
   let inline item i a = Array.get a i
@@ -179,7 +171,7 @@ module Array =
       System.Array.Copy(array, sub, count)
       sub
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Seq =
   
   let rec tryItem index (s:seq<_>) =
@@ -242,7 +234,7 @@ module Seq =
 
 
 /// Basic operations on dictionaries.
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Dict =
 
   let tryGet k (d:#IDictionary<_,_>) =
@@ -251,7 +243,7 @@ module Dict =
     else None
     
     
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<Compile(Module)>]
 module Map =
 
   let mergeChoice (f:'a -> Choice<'b * 'c, 'b, 'c> -> 'd) (a:Map<'a, 'b>) (b:Map<'a, 'c>) : Map<'a, 'd> =
@@ -297,9 +289,9 @@ module ResultEx =
 
   let (|Success|Failure|) r : Result<'a, 'e> = r
 
-  let inline Success a : Result<'a, 'e> = Choice1Of2 a
+  let Success a : Result<'a, 'e> = Choice1Of2 a
 
-  let inline Failure e : Result<'a, 'e> = Choice2Of2 e
+  let Failure e : Result<'a, 'e> = Choice2Of2 e
 
 [<Compile(Module)>]
 module Result =
@@ -311,10 +303,10 @@ module Result =
   let inline map f (r:Result<'a, 'e>) : Result<'b, 'e> = 
     Choice.mapLeft f r
 
-  let inline mapError (f:'e -> 'e2) (r:Result<'a, 'e>) : Result<'a, 'e2> =
+  let mapError (f:'e -> 'e2) (r:Result<'a, 'e>) : Result<'a, 'e2> =
      Choice.mapRight f r
 
-  let inline tapError (f:'e -> unit) (r:Result<'a, 'e>) : Result<'a, 'e> =
+  let tapError (f:'e -> unit) (r:Result<'a, 'e>) : Result<'a, 'e> =
     mapError (fun e -> f e |> ignore ; e) r
 
   let map2 (g:'e -> 'e -> 'e) (f:'a -> 'b -> 'c) (r1:Result<'a, 'e>) (r2:Result<'b, 'e>) : Result<'c, 'e> =

@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module Kafunk.BoundedMb
+module internal Kafunk.BoundedMb
 
 // TODO: https://github.com/fsprojects/FSharpx.Async
 

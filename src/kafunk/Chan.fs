@@ -96,10 +96,10 @@ type internal EndPoint =
         this.ToString().CompareTo(other.ToString())
 
 /// The result of a request on a channel.
-type ChanResult = Result<ResponseMessage, ChanError list>
+type internal ChanResult = Result<ResponseMessage, ChanError list>
 
 /// A channel error result.
-and ChanError =
+and internal ChanError =
   | ChanTimeout
   | ChanFailure of exn
 
@@ -120,7 +120,6 @@ type internal Chan = private {
     interface IEquatable<Chan> with
       member this.Equals (o:Chan) = this.Equals o
         
-
 /// API operations on a generic request/reply channel.
 [<Compile(Module)>]
 module internal Chan =
@@ -247,9 +246,10 @@ module internal Chan =
               //Log.trace "received_response|response=%s" (ResponseMessage.Print res)
             | Failure (Choice1Of2 ()) ->
               Log.warn "request_timed_out|conn_id=%s ep=%O request=%s timeout=%O" 
-                clientId ep (RequestMessage.Print req) config.requestTimeout
+                connId ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
-              Log.warn "request_exception|ep=%O request=%s error=%O" ep (RequestMessage.Print req) e)
+              Log.warn "request_exception|conn_id=%s ep=%O request=%s error=%O" 
+                connId ep (RequestMessage.Print req) e)
       |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy
       |> AsyncFunc.mapOut (snd >> Result.mapError (List.map (Choice.fold (konst ChanTimeout) (ChanFailure))))
 

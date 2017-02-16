@@ -370,7 +370,7 @@ type ReqRepSession<'a, 'b, 's> internal
     //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
     let! _sent = send sessionData
     //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
-    return! rep.Task |> Async.AwaitTaskCancellationAsError }
+    return! rep.Task |> Async.awaitTaskCancellationAsError }
 
   interface IDisposable with
     member x.Dispose() = cts.Dispose()

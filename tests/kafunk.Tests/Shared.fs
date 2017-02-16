@@ -16,7 +16,7 @@ module Testing =
   /// Time after which uncompleted async computations are considered equal.
   let NEVER_TIMEOUT_MS = 2000
 
-  let shouldEqual (expected:'a) (actual:'a) (msg:string option) =    
+  let shouldEqual (expected:'a) (actual:'a) (msg:string option) =
     if expected <> actual then
       let msg = 
         match msg with
@@ -24,8 +24,8 @@ module Testing =
         | None -> sprintf "expected=%A\nactual=%A" expected actual
       Assert.Fail msg
 
-  type Async with
-    static member timeoutMs (timeoutMs:int) (a:Async<'a>) = async {
+  module AsyncEx =
+    let timeoutMs (timeoutMs:int) (a:Async<'a>) = async {
       let! a = Async.StartChild(a, timeoutMs)
       return! a }
 
@@ -38,8 +38,8 @@ module Testing =
       Assert.AreEqual (expected, actual, defaultArg message null, NEVER_TIMEOUT_MS)
 
     static member AreEqual (expected:Async<'a>, actual:Async<'a>, ?message, ?timeout) =
-      let expected = Async.RunSynchronously (expected |> Async.timeoutMs (defaultArg timeout NEVER_TIMEOUT_MS) |> Async.Catch)
-      let actual = Async.RunSynchronously (actual |> Async.timeoutMs (defaultArg timeout NEVER_TIMEOUT_MS) |> Async.Catch)
+      let expected = Async.RunSynchronously (expected |> AsyncEx.timeoutMs (defaultArg timeout NEVER_TIMEOUT_MS) |> Async.Catch)
+      let actual = Async.RunSynchronously (actual |> AsyncEx.timeoutMs (defaultArg timeout NEVER_TIMEOUT_MS) |> Async.Catch)
       match expected,actual with
       | Choice2Of2 e1, Choice2Of2 e2 -> 
         if IsCancellationExn e1 && IsCancellationExn e2 then ()

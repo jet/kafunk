@@ -7,7 +7,7 @@ open System.IO
 
 /// An asynchronous implementation of IEvent<_>.
 /// Triggers are placed into a buffer, and published on a separate thread.
-type AsyncEvent<'a> (bufferSize:int) =
+type internal AsyncEvent<'a> (bufferSize:int) =
   let mutable st = 0
   let buf = new BlockingCollection<'a> (bufferSize)
   let evt = new Event<'a>()

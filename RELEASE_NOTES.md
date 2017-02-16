@@ -1,3 +1,8 @@
+### 0.0.27-alpha001 - 16.02.2017
+
+* Hide internal members, including Async
+* Refine fault tolerance defaults.
+
 ### 0.0.26-alpha001 - 14.02.2017
 
 * Special Valentine's day edition.
