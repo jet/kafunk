@@ -1,6 +1,4 @@
-﻿#r "bin/release/fsharp.control.asyncseq.dll"
-#r "bin/Release/kafunk.dll"
-#r "bin/Release/kafunk.Tests.dll"
+﻿#load "Refs.fsx"
 #time "on"
 
 open FSharp.Control
@@ -111,7 +109,7 @@ let go = async {
         with ex ->
           Log.error "produce_error|%O" ex
           return raise ex })
-      |> Async.ParallelThrottledIgnore parallelism
+      |> Async.parallelThrottledIgnore parallelism
 
   else
 
@@ -128,13 +126,14 @@ let go = async {
           let! res =
             msgs
             |> Seq.map produce
-            |> Async.Parallel
+            //|> Async.Parallel
+            |> Async.parallelThrottledIgnore 2
           Interlocked.Add(&completed, int64 batchSize) |> ignore
           return ()
         with ex ->
           Log.error "produce_error|%O" ex
           return raise ex })
-      |> Async.ParallelThrottledIgnore parallelism }
+      |> Async.parallelThrottledIgnore parallelism }
 
 try 
   Async.RunSynchronously (go, cancellationToken = cts.Token)

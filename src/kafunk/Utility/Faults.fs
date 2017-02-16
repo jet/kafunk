@@ -7,7 +7,7 @@ open System.Threading.Tasks
 
 /// Operations on System.Exception.
 [<Compile(Module)>]
-module Exn =
+module internal Exn =
   
   open System
   open System.Runtime.ExceptionServices
@@ -102,7 +102,7 @@ module RetryPolicy =
     | None -> 
       return None
     | Some delay -> 
-      do! Async.Sleep delay
+      do! Async.sleep delay
       return Some ((delay, RetryState.next s)) }
 
   /// Returns an async computation which waits for the delay at the specified retry state and returns
@@ -208,7 +208,7 @@ module RetryQueue =
     if now >= latestDue then 
       return dueAt q now
     else
-      do! Async.Sleep (latestDue - now)
+      do! Async.sleep (latestDue - now)
       return dueAt q now }
 
   /// Removes an item from the queue, resetting its retry state.
@@ -297,7 +297,7 @@ module internal Faults =
         | None -> 
           return Failure e
         | Some wait ->
-          do! Async.Sleep wait
+          do! Async.sleep wait
           return! loop (RetryState.next i) e }
     loop RetryState.init m.Zero
 

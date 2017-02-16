@@ -21,18 +21,19 @@ and ResourceErrorAction<'a, 'e> =
   /// Retry the operation.
   | Retry
 
+
+/// A generation of a resource lifecycle.
 type internal ResourceEpoch<'r> = {
   resource : 'r
   closed : CancellationTokenSource
   version : int
 }
 
+/// A recoverable resource, supporting resource-dependant operations.
 type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, handle:('r * int * obj * exn) -> Async<unit>) =
       
   let Log = Log.create "Resource"
-    
   let cell : MVar<ResourceEpoch<'r>> = MVar.create ()
-   
   let name = typeof<'r>.Name
 
   let create (prevEpoch:ResourceEpoch<'r> option) = async {
@@ -40,7 +41,6 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
     let version = 
       match prevEpoch with
       | Some prev ->
-        prev.closed.Cancel()
         prev.version + 1
       | None ->
         0
@@ -52,6 +52,10 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       return raise e }
 
   let recover (req:obj) (ex:exn) (callingEpoch:ResourceEpoch<'r>) = async {
+    if callingEpoch.closed.IsCancellationRequested then
+      return failwith "resource_recovery_failed"
+    else
+      callingEpoch.closed.Cancel ()
     do! handle (callingEpoch.resource, callingEpoch.version, req, ex)
     let! ep' = create (Some callingEpoch)
     return ep' }
@@ -75,7 +79,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           Log.trace "recovery_failed|type=%s error=%O" name ex
           return raise ex
       else
-        Log.trace "resource_recovery_already_requested|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
+        Log.trace "resource_already_recovered|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
         return currentEpoch }
     cell |> MVar.updateAsync update
     
@@ -84,8 +88,8 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       let! ep = MVar.get cell
       return! op ep.resource a |> Async.cancelWithToken ep.closed.Token }
 
-  member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>), rp:RetryPolicy) : 'a -> Async<'b> =
-    let rec go (rs:RetryState) a = async {
+  member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>), rp:RetryPolicy, a:'a) : Async<'b> =
+    let rec go (rs:RetryState) = async {
       let! ep = MVar.get cell
       let! b = op ep.resource a
       match b with
@@ -95,21 +99,21 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         let! _ = __.Recover (ep, a, ex)
         return b
       | Failure (RecoverRetry ex) ->
-        Log.trace "retrying_after_failure|name=%s error=%O attempt=%i" name ex rs.attempt
+        //Log.trace "retrying_after_failure|name=%s error=%O attempt=%i" name ex rs.attempt
         let! rs = RetryPolicy.awaitNextState rp rs
         match rs with
         | None ->
           return raise ex
         | Some rs ->
           let! _ = __.Recover (ep, a, ex)
-          return! go rs a
+          return! go rs
       | Failure (Retry) ->
         let! rs = RetryPolicy.awaitNextState rp rs
         match rs with
         | None ->
-          return raise (exn())
+          return raise (exn("Escalating after retry."))
         | Some rs ->
-          return! go rs a }
+          return! go rs }
     go RetryState.init
         
   member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) : Async<'a -> Async<'b>> = async {
@@ -142,7 +146,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   interface IDisposable with
     member __.Dispose () = ()
 
-// operations on resource monitors.
+/// Operations on resources.
 module Resource =
     
   let recoverableRecreate (create:CancellationToken -> 'r option -> Async<'r>) (handleError:('r * int * obj * exn) -> Async<unit>) = async {
@@ -156,15 +160,11 @@ module Resource =
   let injectResult (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.InjectResult op
 
-  let injectWithRecovery (r:Resource<'r>) (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) : 'a -> Async<'b> =
-    r.InjectResult (op, rp)
+  let injectWithRecovery (r:Resource<'r>) (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) (a:'a) : Async<'b> =
+    r.InjectResult (op, rp, a)
 
-//  let injectWithRecovery2 (r:Resource<'r>) (recovery:'b -> ResourceErrorAction<'b, exn> option) (rp:RetryPolicy) (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b> =
-//    let op r a = op r a |> Async.map (fun b -> match recovery b with Some r -> Failure r | None -> Success b)
-//    r.InjectResult (op, rp)
-
-  let timeout (r:Resource<'r>) : ('r -> ('a -> Async<'b>)) -> ('a -> Async<'b option>) =
-    r.Timeout
+//  let timeout (r:Resource<'r>) : ('r -> ('a -> Async<'b>)) -> ('a -> Async<'b option>) =
+//    r.Timeout
 
   let timeoutIndep (r:Resource<'r>) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
     r.Timeout (fun _ -> f)

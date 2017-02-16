@@ -181,7 +181,6 @@ type Producer = private {
   conn : KafkaConn
   config : ProducerConfig
   state : Resource<ProducerState>
-  produceBatch : (PartitionCount -> Partition * ProducerMessage[]) -> Async<ProducerResult>
 }
 
 /// Producer state corresponding to the state of a cluster.
@@ -249,7 +248,11 @@ module Producer =
       |> Seq.toArray
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| cfg.topic,pms |])
-    let! res = Chan.send ch (RequestMessage.Produce req) |> Async.map (Result.map ResponseMessage.toProduce)
+    let! res = 
+      Chan.send ch (RequestMessage.Produce req) 
+      |> Async.map (Result.map ResponseMessage.toProduce)
+      |> Async.Catch
+      |> Async.map (Result.join)
     match res with
     | Success res ->
       
@@ -300,12 +303,21 @@ module Producer =
           Map.tryFind b.partition oks 
           |> Option.iter (fun res -> IVar.put res b.rep)
           
-    | Failure err ->
+    | Failure (Choice1Of2 err) ->
+      Log.warn "broker_channel_error|ep=%O error=%A" (Chan.endpoint ch) err
       // TODO: delegate routing to connection
       let! _ = conn.RemoveBroker ch
       let err = Failure err
       for b in batch do
         IVar.put err b.rep
+      return ()
+
+    | Failure (Choice2Of2 ex) ->
+      Log.warn "broker_channel_exception|ep=%O error=%O" (Chan.endpoint ch) ex
+      // TODO: delegate routing to connection
+      let! _ = conn.RemoveBroker ch
+      for b in batch do
+        IVar.error ex b.rep
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
@@ -399,8 +411,7 @@ module Producer =
             v config.topic (Printers.partitions s.partitions) ex
           return () })
     let! state = Resource.get resource
-    let produceBatch = Resource.injectWithRecovery resource conn.Config.requestRetryPolicy (produceBatchInternal)
-    let p = { state = resource ; config = config ; conn = conn ; produceBatch = produceBatch }
+    let p = { state = resource ; config = config ; conn = conn }
     Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.partitions)
     return p }
 
@@ -408,18 +419,18 @@ module Producer =
   let create (conn:KafkaConn) (cfg:ProducerConfig) : Producer =
     createAsync conn cfg |> Async.RunSynchronously
 
-  /// Produces a message. 
-  /// The message will be sent as part of a batch and the result will correspond to the offset
-  /// produced by the entire batch.
-  let produce (p:Producer) (m:ProducerMessage) =
-    p.produceBatch (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
-
   /// Produces a batch of messages using the specified function which creates messages given a set of partitions
   /// currently configured for the topic.
   /// The messages will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
-  let produceBatch (p:Producer) (f:PartitionCount -> Partition * ProducerMessage[]) =
-    p.produceBatch f
+  let produceBatch (p:Producer) (createBatch:PartitionCount -> Partition * ProducerMessage[]) =
+    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy produceBatchInternal createBatch
+
+  /// Produces a message. 
+  /// The message will be sent as part of a batch and the result will correspond to the offset
+  /// produced by the entire batch.
+  let produce (p:Producer) (m:ProducerMessage) =
+    produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
 
   /// Gets the configuration for the producer.
   let configuration (p:Producer) = 

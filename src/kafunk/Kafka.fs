@@ -960,7 +960,7 @@ module Offsets =
     let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
   
     let rec commitLoop = async {
-      do! Async.Sleep interval
+      do! Async.sleep interval
       mbp.Post (Commit None)
       return! commitLoop }
 

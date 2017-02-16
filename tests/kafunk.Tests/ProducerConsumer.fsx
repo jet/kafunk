@@ -1,5 +1,4 @@
-﻿#r "bin/release/fsharp.control.asyncseq.dll"
-#r "bin/Release/kafunk.dll"
+﻿#load "Refs.fsx"
 #time "on"
 
 open FSharp.Control
@@ -235,7 +234,7 @@ let producer = async {
         Reporter.produced reporter (batch,res.partition,res.offset)
       with ex ->
         Log.error "produce_error|error=%O" ex })
-    |> Async.ParallelThrottledIgnore producerThreads
+    |> Async.parallelThrottledIgnore producerThreads
 
   return! Async.choose (IVar.get completed) produceProcess
 

@@ -96,10 +96,10 @@ type internal EndPoint =
         this.ToString().CompareTo(other.ToString())
 
 /// The result of a request on a channel.
-type ChanResult = Result<ResponseMessage, ChanError list>
+type internal ChanResult = Result<ResponseMessage, ChanError list>
 
 /// A channel error result.
-and ChanError =
+and internal ChanError =
   | ChanTimeout
   | ChanFailure of exn
 
@@ -120,7 +120,6 @@ type internal Chan = private {
     interface IEquatable<Chan> with
       member this.Equals (o:Chan) = this.Equals o
         
-
 /// API operations on a generic request/reply channel.
 [<Compile(Module)>]
 module internal Chan =

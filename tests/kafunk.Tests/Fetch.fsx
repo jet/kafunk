@@ -1,5 +1,4 @@
-﻿#r "bin/release/fsharp.control.asyncseq.dll"
-#r "bin/release/kafunk.dll"
+﻿#load "Refs.fsx"
 #time "on"
 
 open FSharp.Control

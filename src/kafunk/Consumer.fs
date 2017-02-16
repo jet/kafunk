@@ -882,7 +882,7 @@ module ConsumerInfo =
   /// Passing empty set of partitions returns information for all partitions.
   let progress (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) (ps:Partition[]) = async {
     let! topicOffsets,consumerOffsets = 
-      Async.Parallel (
+      Async.parallel2 (
         Offsets.offsetRange conn topic ps,
         Consumer.fetchOffsets conn groupId [|topic,ps|])
     let consumerOffsets = 

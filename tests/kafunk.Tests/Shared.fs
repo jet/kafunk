@@ -16,7 +16,7 @@ module Testing =
   /// Time after which uncompleted async computations are considered equal.
   let NEVER_TIMEOUT_MS = 2000
 
-  let shouldEqual (expected:'a) (actual:'a) (msg:string option) =    
+  let shouldEqual (expected:'a) (actual:'a) (msg:string option) =
     if expected <> actual then
       let msg = 
         match msg with
