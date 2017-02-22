@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerInfo - Kafunk</title>
+    <title>RetryState - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,12 +35,12 @@
 
 
 
-<h1>ConsumerInfo</h1>
+<h1>RetryState</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>Operations for providing consumer progress information.</p>
+<p>Operations on retry states.</p>
 
 </div>
 
@@ -55,19 +55,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '67', 67)" onmouseover="showTip(event, '67', 67)">
-            consumerProgress c
+          <code onmouseout="hideTip(event, '202', 202)" onmouseover="showTip(event, '202', 202)">
+            init 
           </code>
-          <div class="tip" id="67">
-            <strong>Signature:</strong> c:Consumer -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
+          <div class="tip" id="202">
+            <strong>Signature:</strong> RetryState<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L925-925" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L65-65" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns consumer progress information for the partitions currently assigned to the consumer.</p>
+          <p>The initial retry state with attempt = 1.</p>
 
 
         </td>
@@ -75,20 +75,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '68', 68)" onmouseover="showTip(event, '68', 68)">
-            progress conn groupId topic ps
+          <code onmouseout="hideTip(event, '203', 203)" onmouseover="showTip(event, '203', 203)">
+            next s
           </code>
-          <div class="tip" id="68">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topic:TopicName -&gt; ps:Partition [] -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
+          <div class="tip" id="203">
+            <strong>Signature:</strong> s:RetryState -&gt; RetryState<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L900-900" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L68-68" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns consumer progress information.
-Passing empty set of partitions returns information for all partitions.</p>
+          <p>Returns the next retry state.</p>
 
 
         </td>

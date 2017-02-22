@@ -45,10 +45,10 @@
     <tbody>
         <tr>
           <td class="type-name">
-            <a href="kafunk-asyncevent-1.html">AsyncEvent<'a></a>
+            <a href="kafunk-autooffsetreset.html">AutoOffsetReset</a>
           </td>
-          <td class="xmldoc"><p>An asynchronous implementation of IEvent<_>.
-Triggers are placed into a buffer, and published on a separate thread.</p>
+          <td class="xmldoc"><p>The action to take when the consumer attempts to fetch an offset which is out of range or
+if the group coordinator does not have offsets for the assigned partitions.</p>
 
 </td>
         </tr>
@@ -56,23 +56,7 @@ Triggers are placed into a buffer, and published on a separate thread.</p>
           <td class="type-name">
             <a href="kafunk-chanconfig.html">ChanConfig</a>
           </td>
-          <td class="xmldoc"><p>Configuration for an individual TCP channel.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-chanerror.html">ChanError</a>
-          </td>
-          <td class="xmldoc"><p>A channel error result.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-chanresult.html">ChanResult</a>
-          </td>
-          <td class="xmldoc"><p>The result of a request on a channel.</p>
+          <td class="xmldoc"><p>Configuration for a TCP channel to an individual broker.</p>
 
 </td>
         </tr>
@@ -97,17 +81,6 @@ Triggers are placed into a buffer, and published on a separate thread.</p>
             <a href="kafunk-consumermessageset.html">ConsumerMessageSet</a>
           </td>
           <td class="xmldoc"><p>A set of messages for a consumer from an individual topic-partition.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-consumeroffsetoutofrangeaction.html">ConsumerOffsetOutOfRangeAction</a>
-          </td>
-          <td class="xmldoc"><p>The action to take when the consumer attempts to fetch an offset which is out of range.
-This can happen if a) messages are produced faster than they are consumed or
-b) a lagging broker becomes the leader for a partition.
-The default action is to halt consumption.</p>
 
 </td>
         </tr>
@@ -219,18 +192,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-monoid-1.html">Monoid<'a></a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-objectpool-1.html">ObjectPool<'a></a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
             <a href="kafunk-partitioncount.html">PartitionCount</a>
           </td>
           <td class="xmldoc"><p>The number of partitions of a topic.</p>
@@ -279,18 +240,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="type-name">
-            <a href="kafunk-result-2.html">Result<'a, 'e></a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-resultwarn-2.html">ResultWarn<'a, 'e></a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="type-name">
             <a href="kafunk-retrypolicy.html">RetryPolicy</a>
           </td>
           <td class="xmldoc"><p>Retry policy.</p>
@@ -313,12 +262,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
 
 </td>
         </tr>
-        <tr>
-          <td class="type-name">
-            <a href="kafunk-semigroup-1.html">Semigroup<'a></a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
     </tbody>
   </table>
   <table class="table table-bordered module-list">
@@ -328,39 +271,11 @@ It acts as a context for API operations, providing filtering and fault tolerance
     <tbody>
         <tr>
           <td class="module-name">
-            <a href="kafunk-arraymodule.html">Array</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-async.html">Async</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-asyncseq.html">AsyncSeq</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-binary.html">Binary</a>
           </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-boundedmb.html">BoundedMb</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-choice.html">Choice</a>
-          </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>Big-endian operations on binary data.</p>
+
+</td>
         </tr>
         <tr>
           <td class="module-name">
@@ -383,22 +298,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
             <a href="kafunk-consumerinfomodule.html">ConsumerInfo</a>
           </td>
           <td class="xmldoc"><p>Operations for providing consumer progress information.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-dictmodule.html">Dict</a>
-          </td>
-          <td class="xmldoc"><p>Basic operations on dictionaries.</p>
-
-</td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-exnmodule.html">Exn</a>
-          </td>
-          <td class="xmldoc"><p>Operations on System.Exception.</p>
 
 </td>
         </tr>
@@ -434,12 +333,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-listmodule.html">List</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-logmodule.html">Log</a>
           </td>
           <td class="xmldoc"><p>Logging operations.</p>
@@ -454,24 +347,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-mapmodule.html">Map</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-monoid.html">Monoid</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-observablemodule.html">Observable</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-offsets.html">Offsets</a>
           </td>
           <td class="xmldoc"><p>Operations on offsets.</p>
@@ -480,23 +355,11 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-option.html">Option</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-partitionermodule.html">Partitioner</a>
           </td>
           <td class="xmldoc"><p>Partition functions.</p>
 
 </td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-prelude.html">Prelude</a>
-          </td>
-          <td class="xmldoc"></td>
         </tr>
         <tr>
           <td class="module-name">
@@ -516,18 +379,6 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-resultmodule.html">Result</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-resultex.html">ResultEx</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
             <a href="kafunk-retrypolicymodule.html">RetryPolicy</a>
           </td>
           <td class="xmldoc"><p>Operations on retry policies.</p>
@@ -544,9 +395,11 @@ It acts as a context for API operations, providing filtering and fault tolerance
         </tr>
         <tr>
           <td class="module-name">
-            <a href="kafunk-seqmodule.html">Seq</a>
+            <a href="kafunk-retrystatemodule.html">RetryState</a>
           </td>
-          <td class="xmldoc"></td>
+          <td class="xmldoc"><p>Operations on retry states.</p>
+
+</td>
         </tr>
     </tbody>
   </table>

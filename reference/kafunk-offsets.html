@@ -74,15 +74,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '237', 237)" onmouseover="showTip(event, '237', 237)">
+          <code onmouseout="hideTip(event, '108', 108)" onmouseover="showTip(event, '108', 108)">
             createPeriodicCommitQueue (arg1, arg2)
           </code>
-          <div class="tip" id="237">
+          <div class="tip" id="108">
             <strong>Signature:</strong> (TimeSpan * ((Partition * Offset) [] -&gt; Async&lt;unit&gt;)) -&gt; PeriodicCommitQueue<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L870-870" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L981-981" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -94,15 +94,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '238', 238)" onmouseover="showTip(event, '238', 238)">
+          <code onmouseout="hideTip(event, '109', 109)" onmouseover="showTip(event, '109', 109)">
             enqueuePeriodicCommit q os
           </code>
-          <div class="tip" id="238">
+          <div class="tip" id="109">
             <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; os:seq&lt;Partition * Offset&gt; -&gt; unit<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L874-874" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L985-985" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -114,15 +114,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '239', 239)" onmouseover="showTip(event, '239', 239)">
+          <code onmouseout="hideTip(event, '110', 110)" onmouseover="showTip(event, '110', 110)">
             flushPeriodicCommit q
           </code>
-          <div class="tip" id="239">
+          <div class="tip" id="110">
             <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L878-878" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L989-989" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -134,15 +134,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '240', 240)" onmouseover="showTip(event, '240', 240)">
+          <code onmouseout="hideTip(event, '111', 111)" onmouseover="showTip(event, '111', 111)">
             offsetRange conn topic partitions
           </code>
-          <div class="tip" id="240">
+          <div class="tip" id="111">
             <strong>Signature:</strong> conn:KafkaConn -&gt; topic:TopicName -&gt; partitions:seq&lt;Partition&gt; -&gt; Async&lt;Map&lt;Partition,(Offset * Offset)&gt;&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L797-797" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L908-908" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -155,15 +155,15 @@ If empty is passed in for Partitions, will return information for all partitions
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '241', 241)" onmouseover="showTip(event, '241', 241)">
+          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
             offsets (...)
           </code>
-          <div class="tip" id="241">
+          <div class="tip" id="112">
             <strong>Signature:</strong> conn:KafkaConn -&gt; topic:TopicName -&gt; partitions:seq&lt;Partition&gt; -&gt; times:seq&lt;Time&gt; -&gt; maxOffsets:MaxNumberOfOffsets -&gt; Async&lt;Map&lt;Time,OffsetResponse&gt;&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L776-776" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L887-887" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

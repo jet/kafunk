@@ -32,6 +32,30 @@
       <div class="row">
         <div class="span9" id="main">
           
+<h3><a name="0-0-28-alpha001-22-02-2017" class="anchor" href="#0-0-28-alpha001-22-02-2017">0.0.28-alpha001 - 22.02.2017</a></h3>
+<ul>
+<li>Commit offsets even when unchanged to prevent loss due to retention.</li>
+<li>
+BREAKING:
+<ul>
+<li>Removed ConsumerConfig.initialFetchTime, consolidated into ConsumerConfig.autoOffsetReset</li>
+<li>Replaced offsetOutOfRangeAction with autoOffsetReset and new union type AutoOffsetReset</li>
+</ul>
+</li>
+</ul>
+<h3><a name="0-0-27-alpha001-16-02-2017" class="anchor" href="#0-0-27-alpha001-16-02-2017">0.0.27-alpha001 - 16.02.2017</a></h3>
+<ul>
+<li>Hide internal members, including Async</li>
+<li>Refine fault tolerance defaults.</li>
+</ul>
+<h3><a name="0-0-26-alpha001-14-02-2017" class="anchor" href="#0-0-26-alpha001-14-02-2017">0.0.26-alpha001 - 14.02.2017</a></h3>
+<ul>
+<li>Special Valentine's day edition.</li>
+<li>Refined flow for handling escalated failures.</li>
+<li>Fix error code MessageSizeTooLarge.</li>
+<li>Default client.id = "" rather than Guid; new Guid for connection id.</li>
+<li>Expose connection, producer, consumer config.</li>
+</ul>
 <h3><a name="0-0-25-alpha001-10-02-2017" class="anchor" href="#0-0-25-alpha001-10-02-2017">0.0.25-alpha001 - 10.02.2017</a></h3>
 <ul>
 <li>Default producer to RequiredAcks.AllInSync</li>

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerInfo - Kafunk</title>
+    <title>AutoOffsetReset - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,39 +35,37 @@
 
 
 
-<h1>ConsumerInfo</h1>
+<h1>AutoOffsetReset</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>Operations for providing consumer progress information.</p>
+<p>The action to take when the consumer attempts to fetch an offset which is out of range or
+if the group coordinator does not have offsets for the assigned partitions.</p>
 
 </div>
-
-<!-- Render nested types and modules, if there are any -->
-
-  <h3>Functions and values</h3>
+  <h3>Union Cases</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Function or value</td><td>Description</td></tr>
+      <tr><td>Union Case</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '67', 67)" onmouseover="showTip(event, '67', 67)">
-            consumerProgress c
+          <code onmouseout="hideTip(event, '505', 505)" onmouseover="showTip(event, '505', 505)">
+            StartFromTime(Time)
           </code>
-          <div class="tip" id="67">
-            <strong>Signature:</strong> c:Consumer -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
+          <div class="tip" id="505">
+            <strong>Signature:</strong> Time<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L925-925" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L291-291" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns consumer progress information for the partitions currently assigned to the consumer.</p>
+          <p>Starts from a specified Time value such as Time.EarliestOffset or Time.EarliestOffset.</p>
 
 
         </td>
@@ -75,20 +73,39 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '68', 68)" onmouseover="showTip(event, '68', 68)">
-            progress conn groupId topic ps
+          <code onmouseout="hideTip(event, '506', 506)" onmouseover="showTip(event, '506', 506)">
+            Stop
           </code>
-          <div class="tip" id="68">
-            <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topic:TopicName -&gt; ps:Partition [] -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
+          <div class="tip" id="506">
+            <strong>Signature:</strong> <br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L900-900" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L288-288" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns consumer progress information.
-Passing empty set of partitions returns information for all partitions.</p>
+          <p>Stop the consumer, raising an exception.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '507', 507)" onmouseover="showTip(event, '507', 507)">
+            TryStartFromCommittedOffsets
+          </code>
+          <div class="tip" id="507">
+            <strong>Signature:</strong> <br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L285-285" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>tries to start from the previously committed offsets, if available and within range, otherwises stops with an exception.</p>
 
 
         </td>
