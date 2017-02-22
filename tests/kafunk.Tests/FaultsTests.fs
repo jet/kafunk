@@ -59,7 +59,7 @@ let ``Faults.AsyncFunc.retryResultList should retry with reevaluation`` () =
 
   for attempts in [1..5] do
 
-    let mutable i = 0
+    let mutable i = 1
 
     let sleepEcho () = 
       if Interlocked.Increment &i > attempts then
@@ -103,10 +103,10 @@ let ``Faults.AsyncFunc.retryResultList should retry timeout with backoff and suc
 
       let policy = RetryPolicy.constantMs 10 |> RetryPolicy.maxAttempts attempts
 
-      let attempts = if fail then attempts + 2 else attempts
+      let attempts = if fail then attempts + 1 else attempts
 
       let sleepEcho =
-        let mutable i = 0
+        let mutable i = 1
         fun () -> async {
           if Interlocked.Increment &i > attempts then
             return ()
@@ -121,7 +121,7 @@ let ``Faults.AsyncFunc.retryResultList should retry timeout with backoff and suc
         |> Faults.AsyncFunc.retryResultList policy
 
       let expected = 
-        if fail then Failure (List.init attempts ignore)
+        if fail then Failure (List.init (attempts - 1) ignore)
         else Success ()
 
       let actual = sleepEcho () |> Async.RunSynchronously
