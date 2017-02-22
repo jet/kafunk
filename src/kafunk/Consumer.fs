@@ -199,14 +199,15 @@ type ConsumerConfig = {
   /// Offset retention time.
   offsetRetentionTime : RetentionTime
 
-  /// The time of offsets to fetch if no offsets are stored (usually for a new group).
-  initialFetchTime : Time
+//  /// The time of offsets to fetch if no offsets are stored (usually for a new group).
+//  initialFetchTime : Time
   
   /// The poll policy to employ when the end of the topic is reached.
   endOfTopicPollPolicy : RetryPolicy
   
-  /// The action to take when a consumer attempts to fetch an out of range offset.
-  outOfRangeAction : ConsumerOffsetOutOfRangeAction
+  /// The action to take when the consumer doesn't have offsets at the group coordinator, or
+  /// if out of range offsets are requested.
+  autoOffsetReset : AutoOffsetReset
 
   /// The size of the per-partition fetch buffer in terms of message set count.
   /// When at capacity, fetching stops until the buffer is drained.
@@ -240,14 +241,11 @@ type ConsumerConfig = {
     /// Gets the default offset retention time = -1.
     static member DefaultOffsetRetentionTime = -1L
 
-    /// Gets the default initial fetch time = Time.EarliestOffset.
-    static member DefaultInitialFetchTime = Time.EarliestOffset
-
     /// Gets the default end of topic poll policy = RetryPolicy.constantMs 10000.
     static member DefaultEndOfTopicPollPolicy = RetryPolicy.constantMs 10000
 
-    /// Gets the default out of range action = ConsumerOffsetOutOfRangeAction.HaltConsumer.
-    static member DefaultOutOfRangeAction = ConsumerOffsetOutOfRangeAction.HaltConsumer
+    /// Gets the default offset reset action = AutoOffsetResetAction.StartFromPreviousCommittedOffsets.
+    static member DefaultAutoOffsetReset = AutoOffsetReset.TryStartFromCommittedOffsets
 
     /// Gets the default fetch buffer size = 1.
     static member DefaultFetchBufferSize = 1
@@ -257,9 +255,9 @@ type ConsumerConfig = {
 
     /// Creates a consumer configuration.
     static member create 
-      (groupId:GroupId, topic:TopicName, ?initialFetchTime, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
-          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?outOfRangeAction, ?fetchBufferSize,
-          ?assignmentStrategies) =
+      (groupId:GroupId, topic:TopicName, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
+          ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?autoOffsetReset, 
+          ?fetchBufferSize, ?assignmentStrategies) =
       {
         groupId = groupId
         topic = topic
@@ -270,9 +268,8 @@ type ConsumerConfig = {
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs ConsumerConfig.DefaultFetchMaxWait
         fetchMaxBytes = defaultArg fetchMaxBytes ConsumerConfig.DefaultFetchMaxBytes
         offsetRetentionTime = defaultArg offsetRetentionTime ConsumerConfig.DefaultOffsetRetentionTime
-        initialFetchTime = defaultArg initialFetchTime ConsumerConfig.DefaultInitialFetchTime
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy ConsumerConfig.DefaultEndOfTopicPollPolicy
-        outOfRangeAction = defaultArg outOfRangeAction ConsumerConfig.DefaultOutOfRangeAction
+        autoOffsetReset = defaultArg autoOffsetReset ConsumerConfig.DefaultAutoOffsetReset
         fetchBufferSize = defaultArg fetchBufferSize ConsumerConfig.DefaultFetchBufferSize
         assignmentStrategies =
           match assignmentStrategies with
@@ -280,25 +277,20 @@ type ConsumerConfig = {
           | Some xs -> xs
       }
 
-/// The action to take when the consumer attempts to fetch an offset which is out of range.
-/// This can happen if a) messages are produced faster than they are consumed or
-/// b) a lagging broker becomes the leader for a partition.
-/// The default action is to halt consumption.
-and ConsumerOffsetOutOfRangeAction =
+/// The action to take when the consumer attempts to fetch an offset which is out of range or
+/// if the group coordinator does not have offsets for the assigned partitions.
+and AutoOffsetReset =
 
-  /// Halt the consumer, raising an exception.
-  | HaltConsumer
+  /// tries to start from the previously committed offsets, if available and within range, otherwises stops with an exception.
+  | TryStartFromCommittedOffsets
+
+  /// Stop the consumer, raising an exception.
+  | Stop
   
-  /// Halt the consumption of only the out of range partition.
-  | HaltPartition
+  /// Starts from a specified Time value such as Time.EarliestOffset or Time.EarliestOffset.
+  | StartFromTime of Time
 
-  /// Request a fresh set of offsets and resume consumption from the time
-  /// configured as the initial fetch time for the consumer (earliest, or latest).
-  /// If the attempted offset is greater than the latest offset of the topic, it will
-  /// resume from the latest offset.
-  | ResumeConsumerWithFreshInitialFetchTime
-
-
+  
 /// State corresponding to a single generation of the consumer group protocol.
 type ConsumerState = {
   
@@ -462,8 +454,9 @@ module Consumer =
         |> Seq.map (fun (p,o,_md,ec) ->
           match ec with
           | ErrorCode.NoError ->
-            if o = -1L then Choice1Of2 (t,p,o)
-            else Choice1Of2 (t,p,o)
+//            if o = -1L then Choice1Of2 (t,p,o)
+//            else 
+            Choice1Of2 (t,p,o)
           | _ ->
             Choice2Of2 (t,p,o,ec)))
         |> Seq.partitionChoices
@@ -505,18 +498,25 @@ module Consumer =
         return failwithf "fetch_offset_errors|errors=%A" errors
       
       if missing.Length > 0 then
-        Log.info "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" 
+        Log.warn "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" 
           cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
-        let offsetReq = OffsetRequest(-1, [| topic, missing |> Array.map (fun (p,_) -> p, cfg.initialFetchTime, 1) |])
-        let! offsetRes = Kafka.offset conn offsetReq
-        // TODO: error check
-        let oks' = 
-          offsetRes.topics
-          |> Seq.collect (fun (_tn,ps) -> ps)
-          |> Seq.map (fun p -> p.partition, p.offsets.[0])
-          |> Seq.distinct
-          |> Seq.toArray
-        return Array.append oks oks'
+        match cfg.autoOffsetReset with
+        | AutoOffsetReset.Stop | AutoOffsetReset.TryStartFromCommittedOffsets ->
+          return 
+            failwithf "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" 
+              cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
+
+        | AutoOffsetReset.StartFromTime t ->
+          let offsetReq = OffsetRequest(-1, [| topic, missing |> Array.map (fun (p,_) -> p, t, 1) |])
+          let! offsetRes = Kafka.offset conn offsetReq
+          // TODO: error check
+          let oks' = 
+            offsetRes.topics
+            |> Seq.collect (fun (_tn,ps) -> ps)
+            |> Seq.map (fun p -> p.partition, p.offsets.[0])
+            |> Seq.distinct
+            |> Seq.toArray
+          return Array.append oks oks'
       else
         return oks
 
@@ -659,14 +659,31 @@ module Consumer =
           |> Seq.map (fun (p,(e,l)) -> sprintf "[p=%i earliest=%i latest=%i]" p e l)
           |> String.concat " ; "
         Log.warn "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr
-        match cfg.outOfRangeAction with
-        | HaltConsumer ->
-          Log.error "halting_consumer|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
-          return raise (exn(sprintf "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr))
-        | HaltPartition -> 
-          Log.warn "halting_partition_fetch|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
-          return None
-        | ResumeConsumerWithFreshInitialFetchTime ->
+        match cfg.autoOffsetReset with
+        | AutoOffsetReset.Stop ->
+          Log.error "stopping_consumer|topic=%s offsets=%s" topic (Printers.partitionOffsetPairs attemptedOffsets)
+          do! Group.leaveInternal c.groupMember state
+          return failwithf "offsets_out_of_range|topic=%s offsets=%s topic_offsets=[%s]" topic (Printers.partitionOffsetPairs attemptedOffsets) offsetInfoStr
+        | AutoOffsetReset.TryStartFromCommittedOffsets ->
+          let! committedOffsets = fetchOffsets c.conn c.config.groupId [| cfg.topic, attemptedOffsets |> Array.map fst |]
+          let committedOffsets = committedOffsets |> Array.pick (fun (t,os) -> if t = cfg.topic then Some os else None)
+          let resolvedOffsets =
+            (committedOffsets |> Map.ofArray, topicOffsetRange)
+            ||> Map.mergeChoice (fun _ -> function
+              | Choice2Of3 _ | Choice3Of3 _ -> -1L
+              | Choice1Of3 (c,(e,l)) ->
+                if c >= e && c <= l then c
+                else -1L)
+            |> Map.toArray
+          let missingOffsets = resolvedOffsets |> Array.filter (fun (_,o) -> o = -1L)
+          if missingOffsets.Length = 0 then
+            Log.info "resuming_fetch_from_committed_offsets|topic=%s committed_offsets=%s" cfg.topic (Printers.partitionOffsetPairs resolvedOffsets)
+            return! tryFetch committedOffsets
+          else
+            Log.warn "stopping_consumer|topic=%s committed_offsets=%s" cfg.topic (Printers.partitionOffsetPairs resolvedOffsets)
+            do! Group.leaveInternal c.groupMember state
+            return failwithf "stopping_consumer|topic=%s committed_offsets=%s" cfg.topic (Printers.partitionOffsetPairs resolvedOffsets)
+        | AutoOffsetReset.StartFromTime t ->
           let resetOffsets =
             (attemptedOffsets |> Map.ofArray, topicOffsetRange)
             ||> Map.mergeChoice (fun _ -> function
@@ -674,10 +691,10 @@ module Consumer =
               | Choice1Of3 (a,(e,l)) -> 
                 if a > l then l
                 elif a < e then
-                  match cfg.initialFetchTime with
+                  match t with
                   | Time.EarliestOffset -> e
                   | Time.LatestOffset -> l
-                  | _ -> failwith "invalid state: expected valid initial fetch time"
+                  | _ -> failwith "invalid state: expected valid start time"
                 else
                   a)
             |> Map.toArray
