@@ -34,10 +34,10 @@ let go = async {
     ConsumerConfig.create (
       groupId = group, 
       topic = topic, 
-      initialFetchTime = Time.EarliestOffset, 
+      autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
+      //autoOffsetReset = AutoOffsetResetAction.TryStartFromCommittedOffsets,
       fetchMaxBytes = 200000,
-      fetchBufferSize= 1,
-      outOfRangeAction = ConsumerOffsetOutOfRangeAction.ResumeConsumerWithFreshInitialFetchTime,
+      fetchBufferSize = 1,
       sessionTimeout = 30000)
   let! consumer = 
     Consumer.createAsync conn consumerConfig

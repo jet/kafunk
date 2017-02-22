@@ -25,8 +25,9 @@ let ``Binary.writeInt32 should encode int32 negative``() =
 
 [<Test>]
 let ``Crc.crc32 message``() =
-  let m = Message.ofBytes "hello world"B None
-  let bytes = toArraySeg Message.size (Message.write 0s) m
+  let messageVer = 0s
+  let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
+  let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
   let crc32 = Crc.crc32 bytes.Array (bytes.Offset + 4) (bytes.Count - 4)
   let expected = 1940715388u
   Assert.AreEqual(expected, crc32)
@@ -52,12 +53,12 @@ let ``MessageSet.write should encode MessageSet``() =
     ]
   let ms =
     [
-      Message.ofString "0" "1"
-      Message.ofString "1" "1"
-      Message.ofString "2" "1"
+      Message.create (Binary.ofArray "0"B) (Binary.ofArray "1"B) None
+      Message.create (Binary.ofArray "1"B) (Binary.ofArray "1"B) None
+      Message.create (Binary.ofArray "2"B) (Binary.ofArray "1"B) None
     ]
-    |> MessageSet.ofMessages
-  let data = toArraySeg MessageSet.size (MessageSet.write 0s) ms
+    |> MessageSet.ofMessages 0s
+  let data = toArraySeg (MessageSet.size 0s) (MessageSet.write 0s) ms
   let encoded = data |> Binary.toArray |> Array.toList
   Assert.True ((expected = encoded))
 
@@ -123,15 +124,16 @@ let ``ProduceResponse.read should decode ProduceResponse``() =
   Assert.AreEqual(8L, off)
 
 //[<Test>]
-let ``ProduceRequest.write should encode ProduceRequest``() =
-  let req = 
-    ProduceRequest.ofMessageSetTopics 
-      [| "test", [| 0, (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) |] |] RequiredAcks.Local 0
-  let data = toArraySeg ProduceRequest.size (fun x -> ProduceRequest.write (1s,x)) req |> Binary.toArray |> Array.toList
-  let expected = [
-    0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;
-    0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;
-    0uy;0uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;
-    255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;
-    114uy;108uy;100uy; ]
-  Assert.True((expected = data))
+//let ``ProduceRequest.write should encode ProduceRequest``() =
+//  let req = 
+//    ProduceRequest(RequiredAcks.Local)
+//    ProduceRequest.ofMessageSetTopics 
+//      [| "test", [| 0, (MessageSet.ofMessage (Message.ofBytes "hello world"B None)) |] |] RequiredAcks.Local 0
+//  let data = toArraySeg ProduceRequest.size (fun x -> ProduceRequest.write (1s,x)) req |> Binary.toArray |> Array.toList
+//  let expected = [
+//    0uy;1uy;0uy;0uy;3uy;232uy;0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;
+//    0uy;0uy;0uy;1uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;37uy;0uy;0uy;0uy;0uy;0uy;0uy;
+//    0uy;0uy;0uy;0uy;0uy;25uy;115uy;172uy;247uy;124uy;0uy;0uy;255uy;255uy;255uy;
+//    255uy;0uy;0uy;0uy;11uy;104uy;101uy;108uy;108uy;111uy;32uy;119uy;111uy;
+//    114uy;108uy;100uy; ]
+//  Assert.True((expected = data))

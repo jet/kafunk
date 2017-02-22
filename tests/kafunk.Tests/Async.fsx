@@ -6,97 +6,132 @@ open Kafunk
 open System
 open System.Threading
 open System.Threading.Tasks
+open System.Diagnostics
 
-module Task =
+module Async =
   
-  let join (t:Task<Task<'a>>) : Task<'a> =
-    t.Unwrap()
+  let raceAsyncsAsTask (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a * Task<'b>, 'b * Task<'a>>> = async {
+    let! ct = Async.CancellationToken
+    return! Async.FromContinuations <| fun (ok,err,cnc) ->
+      let a = Async.StartAsTask (a, cancellationToken = ct)
+      let b = Async.StartAsTask (b, cancellationToken = ct)
+      a 
+      |> Task.extend (fun a -> 
+        if a.IsCanceled then cnc (OperationCanceledException())
+        elif a.IsFaulted then err (a.Exception :> exn)
+        else ok (Choice1Of2 (a.Result, b)) )
+      |> ignore
+      b 
+      |> Task.extend (fun b -> 
+        if b.IsCanceled then cnc (OperationCanceledException())
+        elif b.IsFaulted then err (b.Exception :> exn)
+        else ok (Choice2Of2 (b.Result, a)))
+      |> ignore }
 
-  let continueWith (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
-    t.ContinueWith f
+  let raceTasks (a:Task<'T>) (b:Task<'U>) =
+    Task.WhenAny [| a |> Task.map (fun a -> Choice1Of2 (a, b)) ; b |> Task.map (fun b -> Choice2Of2 (b, a))   |]
+    |> Task.join
+
+//  let raceTasksAsAsync (a:Task<'T>) (b:Task<'U>) =
+//    raceTasks a b |> Async.AwaitTask
+
+  let raceTasksAsAsync (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> =
+    async { 
+        let! ct = Async.CancellationToken
+        let i = Task.WaitAny( [| (a :> Task);(b :> Task) |],ct)
+        if i = 0 then return (Choice1Of2 (a.Result, b))
+        elif i = 1 then return (Choice2Of2 (b.Result, a)) 
+        else return! failwith (sprintf "unreachable, i = %d" i) }
+
+//  let chooseTasks (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> =
+//    async { 
+//        let! t = 
+//          Task.WhenAny [| (Task.map Choice1Of2 a) ; (Task.map Choice2Of2 b) |] 
+//          |> Task.join 
+//          |> Async.AwaitTask
+//        match t with
+//        | Choice1Of2 a -> 
+//          return Choice1Of2 (a, b)
+//        | Choice2Of2 b -> 
+//          return Choice2Of2 (b, a) }
 
 module AsyncSeq =
 
-  let tryWithPrint (tag:string) (a:Async<'a>) : Async<'a> =
-    async.TryWith (a, fun ex -> async { 
-      //printfn "%s%O" tag ex 
-      return raise ex })
+//  let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
+//    if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
+//    asyncSeq {
+//      let buffer = new ResizeArray<_>()
+//      use ie = source.GetEnumerator()
+//      let rec loop rem rt = asyncSeq {
+//        let move = 
+//          match rem with
+//          | Some rem -> rem |> Async.AwaitTask
+//          | None -> ie.MoveNext()
+//        let t = Stopwatch.GetTimestamp()
+//        let time = Async.Sleep (max 0 rt)
+//        let! moveOr = Async.chooseTasks move time
+//        let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
+//        match moveOr with
+//        | Choice1Of2 (None, _) -> 
+//          if buffer.Count > 0 then
+//            yield buffer.ToArray()
+//        | Choice1Of2 (Some v, _) ->
+//          buffer.Add v
+//          if f buffer then
+//            yield buffer.ToArray()
+//            buffer.Clear()
+//            yield! loop None timeoutMs
+//          else
+//            yield! loop None (rt - delta)
+//        | Choice2Of2 (_, rest) ->
+//          if buffer.Count > 0 then
+//            yield buffer.ToArray()
+//            buffer.Clear()
+//            yield! loop (Some rest) timeoutMs
+//          else
+//            yield! loop (Some rest) timeoutMs }
+//      yield! loop None timeoutMs }
 
-//  let private peekTaskError (t:Task<_>) (a:Async<'b>) : Async<'b> = async {
-//    if t.IsFaulted then 
-//      return raise t.Exception
-//    else return! a }
-
-  let private chooseTask (t:Task<'a>) (a:Async<'a>) : Async<'a> = async {
-    let! a = Async.StartChildAsTask a
-    return! Task.WhenAny (t, a) |> Task.join |> Async.AwaitTask }
-
-  /// Starts an async computation as a child.
-  /// Returns a Task which completes with error if the computation errors.
-  let private startWithError (a:Async<unit>) = async {
-    let err = IVar.create ()
-    let! _ =
-      a
-      |> Async.tryWith (fun ex -> async { IVar.error ex err })
-      |> Async.StartChild
-    return err }
-
-  let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = asyncSeq {
-    use mb = Mb.create ()
-    let! err =
-      s 
-      |> AsyncSeq.iterAsync (fun a -> async {
-        let! b = Async.StartChild (f a)
-        mb.Post (Some b) })
-      |> Async.map (fun _ -> mb.Post None)
-      |> startWithError
-    yield! 
-      AsyncSeq.replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
-      |> AsyncSeq.mapAsync id }
-
-  let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
-    use mb = Mb.create ()
-    let! err =
-      s 
-      |> AsyncSeq.iterAsync (fun a -> async {
-        let! b = Async.StartChild (f a)
-        mb.Post (Some b) })
-      |> Async.map (fun _ -> mb.Post None)
-      |> startWithError
-    return!
-      AsyncSeq.replicateUntilNoneAsync (chooseTask err.Task (Mb.take mb))
-      |> AsyncSeq.iterAsync id }
+  let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
+    if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
+    asyncSeq {
+      let buffer = new ResizeArray<_>()
+      use ie = source.GetEnumerator()
+      let rec loop rem rt = asyncSeq {
+        let! move = 
+          match rem with
+          | Some rem -> async.Return rem
+          | None -> Async.StartChildAsTask (ie.MoveNext())
+        let t = Stopwatch.GetTimestamp()
+        let! time = Async.StartChildAsTask (Async.Sleep (max 0 rt))
+        let! moveOr = Async.raceTasksAsAsync move time
+        let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
+        match moveOr with
+        | Choice1Of2 (None, _) -> 
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+        | Choice1Of2 (Some v, _) ->
+          buffer.Add v
+          if f buffer then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop None timeoutMs
+          else
+            yield! loop None (rt - delta)
+        | Choice2Of2 (_, rest) ->
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop (Some rest) timeoutMs
+          else
+            yield! loop (Some rest) timeoutMs }
+      yield! loop None timeoutMs }
 
 
-let N = 1000
-let fail = 50
+let N = 1000000
 
-
-let op i = async {
-  do! Async.SwitchToThreadPool ()
-  if i = fail then 
-    printfn "error"
-    return failwith "error"
-  do! Async.Sleep 1
-  return 1 }
-
-
-let res = 
-  Seq.init N id
-  |> AsyncSeq.ofSeq
-  |> AsyncSeq.mapAsyncParallel op
-  |> AsyncSeq.mapAsyncParallel (id >> async.Return)
-  |> AsyncSeq.mapAsyncParallel (id >> async.Return)
-  |> AsyncSeq.mapAsyncParallel (id >> async.Return)
-  //|> AsyncSeq.mapAsyncParallel (id >> async.Return)
-  //|> AsyncSeq.mapAsyncParallel (id >> async.Return)
-  //|> AsyncSeq.mapAsyncParallel (id >> async.Return)
-  //|> AsyncSeq.mapAsyncParallel op
-  //|> AsyncSeq.mapAsyncParallel op
-  //|> FSharp.Control.AsyncSeq.mapAsyncParallel op
-  //|> AsyncSeq.iter ignore
-  //|> AsyncSeq.iterAsyncParallel (id >> Async.Ignore)
-  |> AsyncSeq.iterAsyncParallel (async.Return >> Async.Ignore)
-  |> Async.Catch
-  |> Async.RunSynchronously
-
+AsyncSeq.init (int64 N) id
+//|> AsyncSeq.bufferByConditionAndTime (fun buf -> buf.Count > 1000) 100
+//|> AsyncSeq.bufferByCountAndTime 1000 100
+|> AsyncSeq.iter ignore
+|> Async.RunSynchronously

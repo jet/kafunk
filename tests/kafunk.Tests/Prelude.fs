@@ -27,11 +27,6 @@ let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
 
 
 
-let UnixEpoch = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-
-type DateTime with
-  static member UtcNowUnixMilliseconds = int64 (DateTime.UtcNow - UnixEpoch).TotalMilliseconds
-
 type TimeSpan with
   static member FromMilliseconds (ms:int) =
     TimeSpan.FromMilliseconds (float ms)

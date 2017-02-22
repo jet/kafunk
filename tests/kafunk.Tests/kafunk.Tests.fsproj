@@ -64,6 +64,8 @@
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
     <None Include="paket.references" />
+    <Compile Include="Prelude.fs" />
+    <Compile Include="Async.fs" />
     <Compile Include="Shared.fs" />
     <Compile Include="Metrics.fs" />
     <Compile Include="PreludeTests.fs" />

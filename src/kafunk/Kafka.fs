@@ -955,7 +955,7 @@ module Offsets =
         if offsets.Length > 0 then
           do! commit offsets
         rep |> Option.iter (fun r -> r.Reply())
-        return! enqueueLoop Map.empty mb }
+        return! enqueueLoop commits mb }
 
     let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
   

@@ -16,7 +16,7 @@ let ``Compression.GZip should work`` () =
     let message2 = Message.create (Binary.ofArray message2Bytes) (Binary.empty) None
     
     let inputMessage =
-        Compression.GZip.compress 0s (MessageSet.ofMessages [message; message2])
+        Compression.GZip.compress 0s (MessageSet.ofMessages 0s [message; message2])
 
     let outputMessageSet =
         Compression.GZip.decompress 0s inputMessage

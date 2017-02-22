@@ -11,7 +11,6 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open Kafunk
 
-
 /// A write-once concurrent variable.
 type IVar<'a> = TaskCompletionSource<'a>
 
@@ -59,42 +58,6 @@ module IVar =
     i.Task.ContinueWith (fun (t:Task<_>) -> cts.Cancel ()) |> ignore
     cts.Token
     
-
-
-/// Operations on System.Threading.Tasks.Task<_>.
-module Task =
-  
-  let never<'a> : Task<'a> =
-    let ivar = IVar.create ()
-    ivar.Task
-
-  let inline create (a:'a) : Task<'a> =
-    Task.FromResult a
-
-  let inline join (t:Task<Task<'a>>) : Task<'a> =
-    t.Unwrap()
-
-  let inline extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
-    t.ContinueWith f
-
-  let inline map (f:'a -> 'b) (t:Task<'a>) : Task<'b> =
-    extend (fun t -> f t.Result) t
-
-  let inline bind (f:'a -> Task<'b>) (t:Task<'a>) : Task<'b> =
-    extend (fun t -> f t.Result) t |> join
-
-  /// Returns a Task that completes only if the argument Task faults.
-  let taskFault (t:Task<'a>) : Task<'b> =
-    t 
-    |> extend (fun t -> 
-      let ivar = IVar.create ()
-      if t.IsFaulted then
-        IVar.error t.Exception ivar
-      ivar.Task)
-    |> join
-
-
-
 
 let private awaitTaskUnit (t:Task) =
   Async.FromContinuations <| fun (ok,err,cnc) ->
@@ -415,3 +378,36 @@ module Mb =
 
   /// Creates an async computation that completes when a message is available in a mailbox.
   let inline take (mb:Mb<'a>) = async.Delay mb.Receive
+
+
+/// Operations on System.Threading.Tasks.Task<_>.
+module Task =
+  
+  let never<'a> : Task<'a> =
+    let ivar = IVar.create ()
+    ivar.Task
+
+  let inline create (a:'a) : Task<'a> =
+    Task.FromResult a
+
+  let inline join (t:Task<Task<'a>>) : Task<'a> =
+    t.Unwrap()
+
+  let inline extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
+    t.ContinueWith f
+
+  let inline map (f:'a -> 'b) (t:Task<'a>) : Task<'b> =
+    extend (fun t -> f t.Result) t
+
+  let inline bind (f:'a -> Task<'b>) (t:Task<'a>) : Task<'b> =
+    extend (fun t -> f t.Result) t |> join
+
+  /// Returns a Task that completes only if the argument Task faults.
+  let taskFault (t:Task<'a>) : Task<'b> =
+    t 
+    |> extend (fun t -> 
+      let ivar = IVar.create ()
+      if t.IsFaulted then
+        IVar.error t.Exception ivar
+      ivar.Task)
+    |> join

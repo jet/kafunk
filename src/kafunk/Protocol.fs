@@ -360,10 +360,11 @@ module Protocol =
     end
   with
 
-    static member size (m:Message) =
+    static member size (ver:ApiVersion) (m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
+      (if ver >= 1s then Binary.sizeInt64 m.timestamp else 0) +
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
@@ -410,9 +411,9 @@ module Protocol =
     end
   with
 
-    static member size (x:MessageSet) =
+    static member size (ver:ApiVersion) (x:MessageSet) =
       x.messages |> Array.sumBy (fun (offset, messageSize, message) ->
-        Binary.sizeInt64 offset + Binary.sizeInt32 messageSize + Message.size message)
+        Binary.sizeInt64 offset + Binary.sizeInt32 messageSize + Message.size ver message)
 
     static member write (messageVer:ApiVersion) (ms:MessageSet) buf =
       Binary.writeArrayNoSize buf ms.messages (

@@ -273,8 +273,7 @@ let consumer = async {
     ConsumerConfig.create (
       consumerGroup, 
       topic = topicName, 
-      initialFetchTime = Time.LatestOffset, 
-      outOfRangeAction = ConsumerOffsetOutOfRangeAction.HaltConsumer,
+      autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
       endOfTopicPollPolicy = RetryPolicy.constantMs 1000)
 
   let! consumer = Consumer.createAsync conn consumerCfg

@@ -1,3 +1,10 @@
+### 0.0.28-alpha001 - 22.02.2017
+
+* Commit offsets even when unchanged to prevent loss due to retention.
+* BREAKING:
+	- Removed ConsumerConfig.initialFetchTime, consolidated into ConsumerConfig.autoOffsetReset
+	- Replaced offsetOutOfRangeAction with autoOffsetReset and new union type AutoOffsetReset
+
 ### 0.0.27-alpha001 - 16.02.2017
 
 * Hide internal members, including Async
