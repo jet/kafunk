@@ -8,30 +8,16 @@ open System.Text
 module Message =
 
   let create value key attrs =
-    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
-
-  let ofBuffer data key =
-    Message(0, 0y, 0y, 0L, (defaultArg  key (Binary.empty)), data)
-
-  let ofBytes value key =
-    let key =
-      match key with
-      | Some key -> Binary.ofArray key
-      | None -> Binary.empty
-    Message(0, 0y, 0y, 0L, key, Binary.ofArray value)
-
-  let ofString (value:string) (key:string) =
-    let value = Encoding.UTF8.GetBytes value |> Binary.ofArray
-    let key = Encoding.UTF8.GetBytes key |> Binary.ofArray
-    Message(0, 0y, 0y, 0L, key, value)
+    // NB: the CRC is computed by the Protocol module during encoding
+    Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
 
 module MessageSet =
 
-  let ofMessage (m:Message) =
-    MessageSet([| 0L, Message.size m, m |])
+  let ofMessage (messageVer:ApiVersion) (m:Message) =
+    MessageSet([| 0L, Message.size messageVer m, m |])
 
-  let ofMessages ms =
-    MessageSet(ms |> Seq.map (fun m -> 0L, Message.size m, m) |> Seq.toArray)
+  let ofMessages (messageVer:ApiVersion) ms =
+    MessageSet(ms |> Seq.map (fun m -> 0L, Message.size messageVer m, m) |> Seq.toArray)
 
   /// Returns the frist offset in the message set.
   let firstOffset (ms:MessageSet) =
@@ -58,12 +44,6 @@ module MessageSet =
     else 
       failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
       
-module ProduceRequest =
-
-  let ofMessageSetTopics ms requiredAcks timeout =
-    ProduceRequest(requiredAcks, timeout,
-      ms |> Array.map (fun (t, ms) -> (t, ms |> Array.map (fun (p, ms) -> (p, MessageSet.size ms, ms)))))
-
 
 // -------------------------------------------------------------------------------------------------------------------------------------
 

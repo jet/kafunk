@@ -19,7 +19,7 @@ module GZip =
     use outputStream = new MemoryStream()
     use gZipStream = new GZipStream(outputStream, CompressionMode.Compress)
     do
-      let inputBytes = ms |> MessageSet.size |> Array.zeroCreate
+      let inputBytes = ms |> MessageSet.size messageVer |> Array.zeroCreate
       let buf = Binary.ofArray inputBytes
       MessageSet.write messageVer ms buf |> ignore
       try
@@ -54,7 +54,7 @@ module GZip =
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with
   | CompressionCodec.None -> ms
-  | CompressionCodec.GZIP -> MessageSet.ofMessage (GZip.compress messageVer ms)
+  | CompressionCodec.GZIP -> MessageSet.ofMessage messageVer (GZip.compress messageVer ms)
   | _ -> failwithf "Incorrect compression codec %A" compression
 
 let decompress (messageVer:int16) (ms:MessageSet) =

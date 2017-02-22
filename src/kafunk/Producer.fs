@@ -155,8 +155,8 @@ type ProducerConfig = {
   /// The default in-memory, per-broker buffer size = 33554432.
   static member DefaultBufferSizeBytes = 33554432
 
-  /// The default per-broker, produce request linger time in ms = 1.
-  static member DefaultBatchLingerMs = 1
+  /// The default per-broker, produce request linger time in ms = 1000.
+  static member DefaultBatchLingerMs = 1000
 
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, 
@@ -242,9 +242,9 @@ module Producer =
         let ms = 
           pms 
           |> Seq.collect (fun bs -> bs.messages |> Seq.map (fun pm -> Message.create pm.value pm.key None))
-          |> MessageSet.ofMessages
+          |> MessageSet.ofMessages messageVer
           |> Compression.compress messageVer cfg.compression
-        p, MessageSet.size ms, ms)
+        p, MessageSet.size messageVer ms, ms)
       |> Seq.toArray
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| cfg.topic,pms |])
