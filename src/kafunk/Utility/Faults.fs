@@ -65,7 +65,7 @@ module RetryState =
   let init = RetryState(1)
 
   /// Returns the next retry state.
-  let next (s:RetryState) = RetryState (s.attempt + 1)
+  let internal next (s:RetryState) = RetryState (s.attempt + 1)
 
 
 /// Retry policy.
@@ -91,8 +91,9 @@ module RetryPolicy =
   let maxDelay (maxDelay:TimeSpan) (b:RetryPolicy) : RetryPolicy =
     create <| fun s -> delayAt s b |> Option.map (max maxDelay)
 
-  /// Returns a backoff strategy which attempts at most a specified number of times.
+  /// Returns a backoff strategy which attempts the operation at most a specified number of times.
   let maxAttempts (maxAttempts:int) (p:RetryPolicy) : RetryPolicy =
+    if maxAttempts < 1 then invalidArg "maxAttempts" "must be greater than or equal to 1"
     create <| fun s -> if s.attempt < maxAttempts then delayAt s p else None
 
   /// Returns an async computation which waits for the delay at the specified retry state and returns

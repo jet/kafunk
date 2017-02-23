@@ -236,7 +236,8 @@ module AsyncSeq =
       replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
       |> AsyncSeq.iterAsync id }
 
-  let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
+  // TODO: refactor to a more generic condition
+  let bufferByConditionAndTime (cond:IBoundedMbCond<'T>) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
     if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
     asyncSeq {
       let buffer = new ResizeArray<_>()
@@ -256,9 +257,11 @@ module AsyncSeq =
             yield buffer.ToArray()
         | Choice1Of2 (Some v, _) ->
           buffer.Add v
-          if f buffer then
+          cond.Add v
+          if cond.Satisfied then
             yield buffer.ToArray()
             buffer.Clear()
+            cond.Reset ()
             yield! loop None timeoutMs
           else
             yield! loop None (rt - delta)
@@ -266,6 +269,7 @@ module AsyncSeq =
           if buffer.Count > 0 then
             yield buffer.ToArray()
             buffer.Clear()
+            cond.Reset ()
             yield! loop (Some rest) timeoutMs
           else
             yield! loop (Some rest) timeoutMs }

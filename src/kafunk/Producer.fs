@@ -196,11 +196,19 @@ and private ProducerState = {
   brokerQueues : Map<EndPoint, ProducerMessageBatch -> Async<unit>>
 }
 
+/// A producer-specific error.
+and ProducerError = {
+  partition : Partition
+  offset : Offset
+  errorCode : ErrorCode
+} with
+  static member create p o ec = { partition = p ; offset = o ; errorCode = ec }
+
 and private ProducerMessageBatch =
   struct
     val partition : Partition
     val messages : ProducerMessage[]
-    val rep : IVar<Result<ProducerResult, ChanError list>>
+    val rep : IVar<Result<ProducerResult, Choice<ChanError list, ProducerError>>>
     val size : int
     new (p,ms,rep,size) = { partition = p ; messages = ms ; rep = rep ; size = size }
   end
@@ -227,6 +235,12 @@ module Producer =
       size <- size + b.size
     size
 
+  let private batchCount (batch:ProducerMessageBatch seq) =
+    let mutable count = 0
+    for b in batch do
+      count <- count + b.messages.Length
+    count
+
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
   let private sendBatch 
     (conn:KafkaConn)
@@ -234,6 +248,7 @@ module Producer =
     (messageVer:int16) 
     (ch:Chan) 
     (batch:ProducerMessageBatch seq) = async {
+    Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
 
     let pms = 
       batch
@@ -256,7 +271,7 @@ module Producer =
     match res with
     | Success res ->
       
-      let oks,retryErrors,fatalErrors =
+      let oks,transientErrors,fatalErrors =
         res.topics
         |> Seq.collect (fun (_t,os) ->
           os
@@ -280,7 +295,7 @@ module Producer =
         |> Seq.partitionChoices3
       
       if fatalErrors.Length > 0 then
-        let msg = sprintf "produce_fatal_errors|ep=%O errors=%A request=%s response=%s" (Chan.endpoint ch) fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        let msg = sprintf "fatal_errors|ep=%O errors=%A request=%s response=%s" (Chan.endpoint ch) fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
         Log.error "%s" msg
         let ex = exn(msg)
         let eps = fatalErrors |> Seq.map (fun (p,_,_) -> p,ex) |> Map.ofSeq
@@ -288,11 +303,13 @@ module Producer =
           Map.tryFind b.partition eps
           |> Option.iter (fun ex -> IVar.error ex b.rep)
       
-      if retryErrors.Length > 0 then
-        Log.error "produce_transient_errors|ep=%O errors=%A request=%s response=%s" 
-          (Chan.endpoint ch) retryErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
-        let res = Failure [] // TODO: specific error
-        let eps = retryErrors |> Seq.map (fun (p,_,_) -> p,res) |> Map.ofSeq
+      if transientErrors.Length > 0 then
+        Log.warn "transient_errors|ep=%O errors=%A request=%s response=%s" 
+          (Chan.endpoint ch) transientErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        let eps = 
+          transientErrors 
+          |> Seq.map (fun (p,o,ec) -> p, Failure (Choice2Of2 (ProducerError.create p o ec))) 
+          |> Map.ofSeq
         for b in batch do
           Map.tryFind b.partition eps
           |> Option.iter (fun res -> IVar.put res b.rep)
@@ -307,7 +324,7 @@ module Producer =
       Log.warn "broker_channel_error|ep=%O error=%A" (Chan.endpoint ch) err
       // TODO: delegate routing to connection
       let! _ = conn.RemoveBroker ch
-      let err = Failure err
+      let err = Failure (Choice1Of2 err)
       for b in batch do
         IVar.put err b.rep
       return ()
@@ -343,27 +360,29 @@ module Producer =
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
-    let batchSizeCondition (buf:ResizeArray<ProducerMessageBatch>) =
-      (batchSizeBytes buf) >= cfg.batchSizeBytes
 
     let brokerQueue (ch:Chan) =
       let sendBatch = sendBatch conn cfg messageVer ch
-      let buf = BoundedMb.createByCondition (fun buf -> batchSizeBytes buf >= cfg.bufferSizeBytes)
+      let bufferCond = 
+        BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
+      let batchCond =
+        BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.batchSizeBytes)
+      let buffer = BoundedMb.createByCondition bufferCond
       let produceStream = 
-        AsyncSeq.replicateInfiniteAsync (BoundedMb.take buf)
+        AsyncSeq.replicateInfiniteAsync (BoundedMb.take buffer)
       let sendProcess =
         if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then
           produceStream
           |> AsyncSeq.iterAsync (Array.singleton >> sendBatch)
         else
           produceStream
-          |> AsyncSeq.bufferByConditionAndTime batchSizeCondition cfg.batchLingerMs
+          |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
           |> AsyncSeq.iterAsync sendBatch
       sendProcess
       |> Async.tryWith (fun ex -> async {
         Log.error "producer_broker_queue_exception|ep=%O error=%O" (Chan.endpoint ch) ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
-      (flip BoundedMb.put buf)
+      (flip BoundedMb.put buffer)
    
     let brokerQueues =
       brokerByPartition

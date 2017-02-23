@@ -43,7 +43,7 @@ let connCfg =
     [KafkaUri.parse host], 
     tcpConfig = chanConfig,
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2,
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 100,
     //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
     bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 2
     )
@@ -69,13 +69,6 @@ let counter = Metrics.counter Log (1000 * 5)
 let timer = Metrics.timer Log (1000 * 5)
 
 let cts = new CancellationTokenSource()
-
-//Kafunk.Log.Event 
-//|> Observable.filter (fun e -> e.level = LogLevel.Error || e.level = LogLevel.Warn)
-//|> FlowMonitor.overflowEvent 10 (TimeSpan.FromSeconds 1.0)
-//|> Observable.add (fun es ->
-//  cts.Cancel ()
-//  printfn "ERROR_OVERFLOW|count=%i" es.Length)
 
 let sw = Stopwatch.StartNew()
 let mutable completed = 0L
@@ -127,7 +120,7 @@ let go = async {
             msgs
             |> Seq.map produce
             //|> Async.Parallel
-            |> Async.parallelThrottledIgnore 2
+            |> Async.parallelThrottledIgnore batchSize
           Interlocked.Add(&completed, int64 batchSize) |> ignore
           return ()
         with ex ->
