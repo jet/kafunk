@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>State - Kafunk</title>
+    <title>ProducerError - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,44 +35,97 @@
 
 
 
-<h1>State</h1>
+<h1>ProducerError</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
+<p>A producer-specific error.</p>
+
 </div>
-  <h3>Instance members</h3>
+  <h3>Record Fields</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Instance member</td><td>Description</td></tr>
+      <tr><td>Record Field</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '465', 465)" onmouseover="showTip(event, '465', 465)">
-            Chars(arg1)
+          <code onmouseout="hideTip(event, '645', 645)" onmouseover="showTip(event, '645', 645)">
+            errorCode
           </code>
-          <div class="tip" id="465">
-            <strong>Signature:</strong> int -&gt; char<br />
+          <div class="tip" id="645">
+            <strong>Signature:</strong> ErrorCode<br />
                       </div>
         </td>
         <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L203-203" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
           
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '466', 466)" onmouseover="showTip(event, '466', 466)">
-            Length
+          <code onmouseout="hideTip(event, '646', 646)" onmouseover="showTip(event, '646', 646)">
+            offset
           </code>
-          <div class="tip" id="466">
-            <strong>Signature:</strong> int<br />
+          <div class="tip" id="646">
+            <strong>Signature:</strong> Offset<br />
                       </div>
         </td>
         <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L202-202" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '647', 647)" onmouseover="showTip(event, '647', 647)">
+            partition
+          </code>
+          <div class="tip" id="647">
+            <strong>Signature:</strong> Partition<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L201-201" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <h3>Static members</h3>
+  <table class="table table-bordered member-list">
+    <thead>
+      <tr><td>Static member</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '648', 648)" onmouseover="showTip(event, '648', 648)">
+            create(p o ec)
+          </code>
+          <div class="tip" id="648">
+            <strong>Signature:</strong> p:Partition -&gt; o:Offset -&gt; ec:ErrorCode -&gt; ProducerError<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L205-205" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
           
         </td>
       </tr>
