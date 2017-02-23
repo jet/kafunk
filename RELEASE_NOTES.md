@@ -1,3 +1,8 @@
+### 0.0.29-alpha001 - 23.02.2017
+
+* Improve producer performance
+* Improve producer error messaging
+
 ### 0.0.28-alpha001 - 22.02.2017
 
 * Commit offsets even when unchanged to prevent loss due to retention.

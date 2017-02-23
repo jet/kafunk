@@ -12,13 +12,13 @@ type ResourceResult<'a, 'e> = Result<'a, ResourceErrorAction<'a, 'e>>
 /// The action to take when a resource-dependent operation fails.
 and ResourceErrorAction<'a, 'e> =
   
-  /// Recover the resource and return the specified result.
+  /// Recover the resource and return the specified result without retrying.
   | RecoverResume of 'e * 'a
     
   /// Recover the resource and retry the operation.
   | RecoverRetry of 'e
 
-  /// Retry the operation.
+  /// Retry the operation without recovery.
   | Retry
 
 
@@ -53,7 +53,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
 
   let recover (req:obj) (ex:exn) (callingEpoch:ResourceEpoch<'r>) = async {
     if callingEpoch.closed.IsCancellationRequested then
-      return failwith "resource_recovery_failed"
+      return failwithf "resource_recovery_failed|version=%i" callingEpoch.version
     else
       callingEpoch.closed.Cancel ()
     do! handle (callingEpoch.resource, callingEpoch.version, req, ex)
@@ -99,21 +99,24 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         let! _ = __.Recover (ep, a, ex)
         return b
       | Failure (RecoverRetry ex) ->
-        //Log.trace "retrying_after_failure|name=%s error=%O attempt=%i" name ex rs.attempt
-        let! rs = RetryPolicy.awaitNextState rp rs
-        match rs with
+        Log.trace "recovering_and_retrying_after_failure|name=%s attempt=%i error=%O" name rs.attempt ex
+        let! rs' = RetryPolicy.awaitNextState rp rs
+        match rs' with
         | None ->
+          Log.trace "escalating_after_retry_attempts_depleted|name=%s attempt=%i error=%O" name rs.attempt ex
           return raise ex
-        | Some rs ->
+        | Some rs' ->
           let! _ = __.Recover (ep, a, ex)
-          return! go rs
+          return! go rs'
       | Failure (Retry) ->
-        let! rs = RetryPolicy.awaitNextState rp rs
-        match rs with
+        Log.trace "retrying|name=%s attempt=%i" name rs.attempt
+        let! rs' = RetryPolicy.awaitNextState rp rs
+        match rs' with
         | None ->
+          Log.trace "escalating_after_retry_attempts_depleted|name=%s attempt=%i" name rs.attempt
           return raise (exn("Escalating after retry."))
-        | Some rs ->
-          return! go rs }
+        | Some rs' ->
+          return! go rs' }
     go RetryState.init
         
   member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) : Async<'a -> Async<'b>> = async {
@@ -154,6 +157,9 @@ module Resource =
     let! _ = r.Create()
     return r }
   
+  let get (r:Resource<'r>) : Async<'r> =
+    r.Get ()
+
   let inject (op:'r -> ('a -> Async<'b>)) (r:Resource<'r>) : Async<'a -> Async<'b>> =
     r.Inject op
 
@@ -163,11 +169,5 @@ module Resource =
   let injectWithRecovery (r:Resource<'r>) (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) (a:'a) : Async<'b> =
     r.InjectResult (op, rp, a)
 
-//  let timeout (r:Resource<'r>) : ('r -> ('a -> Async<'b>)) -> ('a -> Async<'b option>) =
-//    r.Timeout
-
   let timeoutIndep (r:Resource<'r>) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
     r.Timeout (fun _ -> f)
-
-  let get (r:Resource<'r>) : Async<'r> =
-    r.Get ()

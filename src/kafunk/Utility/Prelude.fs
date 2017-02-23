@@ -76,13 +76,21 @@ module Choice =
 
 // --------------------------------------------------------------------------------------------------
 
+/// A semigroup (+).
 type Semigroup<'a> =
   abstract Merge : 'a * 'a -> 'a
 
+/// A monoid (e,+).
 type Monoid<'a> =
   inherit Semigroup<'a>
   abstract Zero : 'a
 
+/// A group (e,+,-).
+type Group<'a> =
+  inherit Monoid<'a>
+  abstract Inverse : 'a -> 'a
+
+/// Operations on monoids.
 module Monoid =
   
   let inline zero (m:Monoid<_>) = m.Zero
@@ -146,6 +154,30 @@ module Monoid =
   let intSum : Monoid<int> =
     monoid 0 ((+))
     
+/// Operations on groups.
+module Group =
+  
+  /// Creates a group.
+  let group (z:'a) (add:'a -> 'a -> 'a) (inverse:'a -> 'a) =
+    { new Group<'a> with
+        member __.Zero = z
+        member __.Merge (a,b) = add a b
+        member __.Inverse a = inverse a }
+
+  let inline zero (g:Group<'a>) = g.Zero
+
+  let inline add (g:Group<'a>) a b = g.Merge (a,b)
+
+  let inline inverse (g:Group<'a>) a = g.Inverse a
+
+  let inline subtract (g:Group<'a>) a b = g.Merge (a, g.Inverse b)
+
+  /// Creates an additive group based on statically resolved members.
+  let inline additive () =
+    group LanguagePrimitives.GenericZero (+) (fun x -> -x)
+
+  /// The group formed by integers with (0,+,-).
+  let intAdd : Group<int> = additive ()
 
 // --------------------------------------------------------------------------------------------------
 

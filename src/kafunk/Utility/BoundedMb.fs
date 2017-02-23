@@ -7,38 +7,47 @@ open System
 open System.Threading
 open System.Collections.Generic
 
-type internal BoundedMbReq<'a> =
+type BoundedMbReq<'a> =
   | Put of 'a * AsyncReplyChannel<unit>
   | Take of AsyncReplyChannel<'a>
 
-type internal BoundedMbCapacity<'a> =
-  | Count of int
-  | Condition of (seq<'a> -> bool)
+type IBoundedMbCond<'a> =
+  abstract member Add : 'a -> unit
+  abstract member Remove : 'a -> unit
+  abstract member Reset : unit -> unit
+  abstract member Satisfied : bool
 
-type BoundedMb<'a> internal (capacity:BoundedMbCapacity<'a>) =
+[<Compile(Module)>]
+module BoundedMbCond =
+
+  /// Creates a condition based on a value the type of which forms a group (e,+,-).
+  let group (G:Group<'g>) (f:'a -> 'g) (bound:'g -> bool) =
+    let mutable value = Group.zero G
+    { new IBoundedMbCond<'a> with
+        member __.Add (a:'a) = value <- Group.add G value (f a)
+        member __.Remove (a:'a) = value <- Group.subtract G value (f a)
+        member __.Satisfied = bound value
+        member __.Reset () = value <- Group.zero G }
+
+  /// Creates a condition based on count.
+  let count (capacity:int) = 
+    group Group.intAdd (fun _ -> 1) (fun c -> c >= capacity)
+
+/// A mailbox bounded by a condition.
+type BoundedMb<'a> internal (cond:IBoundedMbCond<'a>) =
 
   let agent = MailboxProcessor.Start <| fun agent ->
 
-    let queue =
-      match capacity with
-      | Count count -> Queue<_>(count)
-      | Condition _ -> Queue<_>()
+    let queue = Queue<_>()
 
     let rec loop () = async {
       match queue.Count with
       | 0 -> do! tryReceive ()
-      | n -> 
-        match capacity with
-        | Count count ->
-          if count = n then
-            do! trySend ()
-          else
-            do! trySendOrReceive () 
-        | Condition cond ->
-          if cond queue then
-            do! trySend ()
-          else
-            do! trySendOrReceive ()
+      | _ ->
+        if cond.Satisfied then
+          do! trySend ()
+        else
+          do! trySendOrReceive ()
       return! loop () }
 
     and tryReceive () = 
@@ -48,6 +57,7 @@ type BoundedMb<'a> internal (capacity:BoundedMbCapacity<'a>) =
 
     and receive (a:'a, rep:AsyncReplyChannel<unit>) = async {
       queue.Enqueue a
+      cond.Add a
       rep.Reply () }
 
     and trySend () = 
@@ -57,6 +67,7 @@ type BoundedMb<'a> internal (capacity:BoundedMbCapacity<'a>) =
 
     and send (rep:AsyncReplyChannel<'a>) = async {
       let a = queue.Dequeue ()
+      cond.Remove a
       rep.Reply a }
 
     and trySendOrReceive () = async {
@@ -84,13 +95,13 @@ module BoundedMb =
 
   /// Creates a bounded mailbox with the specified capacity.
   let create (capacity:int) : BoundedMb<'a> =
-    let mq = new BoundedMb<'a>(Count capacity)
+    let mq = new BoundedMb<'a>(BoundedMbCond.count capacity)
     mq
 
   /// Creates a bounded mailbox bounded by the specified condition.
   /// If the condition return true, the mailbox blocks puts, otherwise accepts them.
-  let createByCondition (condition:seq<'a> -> bool) : BoundedMb<'a> =
-    let mq = new BoundedMb<'a>(Condition condition)
+  let createByCondition (condition:IBoundedMbCond<'a>) : BoundedMb<'a> =
+    let mq = new BoundedMb<'a>(condition)
     mq
 
   /// Puts a message into the mailbox.
