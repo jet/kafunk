@@ -63,7 +63,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L847-847" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L876-876" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -84,7 +84,7 @@ This causes all underlying streams to complete.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L387-387" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L393-393" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -105,7 +105,7 @@ Note that consumers only fetch these offsets when first joining a group or when 
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L435-435" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L441-441" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -126,7 +126,7 @@ Note that consumers only fetch these offsets when first joining a group or when 
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L382-382" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L388-388" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -142,11 +142,11 @@ Note that consumers only fetch these offsets when first joining a group or when 
             consume c handler
           </code>
           <div class="tip" id="57">
-            <strong>Signature:</strong> c:Consumer -&gt; handler:(GroupMemberState -&gt; ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; Async&lt;unit&gt;<br />
+            <strong>Signature:</strong> c:Consumer -&gt; handler:(ConsumerState -&gt; ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L801-801" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L822-822" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -164,11 +164,11 @@ The handler accepts the topic, partition, message set and an async computation w
             consumePeriodicCommit (...)
           </code>
           <div class="tip" id="58">
-            <strong>Signature:</strong> c:Consumer -&gt; commitInterval:TimeSpan -&gt; handler:(GroupMemberState -&gt; ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; Async&lt;unit&gt;<br />
+            <strong>Signature:</strong> c:Consumer -&gt; commitInterval:TimeSpan -&gt; handler:(ConsumerState -&gt; ConsumerMessageSet -&gt; Async&lt;unit&gt;) -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L817-817" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L838-838" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -191,7 +191,7 @@ the specified interval.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L541-541" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L545-545" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -211,7 +211,7 @@ the specified interval.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L528-528" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L532-532" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -231,7 +231,7 @@ the specified interval.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L447-447" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L453-453" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -249,11 +249,11 @@ Passing a topic and an empty array of partitions returns all partitions for that
             generations c
           </code>
           <div class="tip" id="62">
-            <strong>Signature:</strong> c:Consumer -&gt; AsyncSeq&lt;GroupMemberState * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
+            <strong>Signature:</strong> c:Consumer -&gt; AsyncSeq&lt;ConsumerState * (Partition * AsyncSeq&lt;ConsumerMessageSet&gt;) []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L546-546" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L566-566" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -274,7 +274,7 @@ is paired with the set of assigned fetch streams.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L834-834" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L560-560" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -290,11 +290,11 @@ is paired with the set of assigned fetch streams.</p>
             stream c
           </code>
           <div class="tip" id="64">
-            <strong>Signature:</strong> c:Consumer -&gt; AsyncSeq&lt;GroupMemberState * ConsumerMessageSet&gt;<br />
+            <strong>Signature:</strong> c:Consumer -&gt; AsyncSeq&lt;ConsumerState * ConsumerMessageSet&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L829-829" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L870-870" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
