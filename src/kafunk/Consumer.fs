@@ -460,8 +460,6 @@ module Consumer =
         |> Seq.map (fun (p,o,_md,ec) ->
           match ec with
           | ErrorCode.NoError ->
-//            if o = -1L then Choice1Of2 (t,p,o)
-//            else 
             Choice1Of2 (t,p,o)
           | _ ->
             Choice2Of2 (t,p,o,ec)))
@@ -841,12 +839,31 @@ module Consumer =
     (c:Consumer)
     (commitInterval:TimeSpan)
     (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
+
       let assignedPartitions = state c |> Async.map (fun s -> s.assignments)
+
       use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)
+            
+      let! currentOffsets = async {
+        let! assignedPartitions = assignedPartitions
+        let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, assignedPartitions |]
+        return
+          currentOffsets 
+          |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
+          |> Seq.concat
+          |> Seq.where (fun (_,o) -> o <> -1L)
+          |> Seq.toArray }
+      
+      // commit current offets so that they're in-memory, and will be committed periodically
+      // even if no messages are consumed
+      Offsets.enqueuePeriodicCommit commitQueue currentOffsets
+
       let handler s ms = async {
         do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
+
       do! consume c handler
+
       do! Offsets.flushPeriodicCommit commitQueue }
 
   /// Returns a stream of message sets across all partitions assigned to the consumer.
@@ -878,6 +895,7 @@ type ConsumerProgressInfo = {
   
   /// The minimum lead across all partitions.
   minLead : int64
+
 }
 
 /// Progress information for a consumer in a group, for a specific topic-partition.

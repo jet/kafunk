@@ -55,7 +55,7 @@ let go = async {
 
   let! _ = Async.StartChild showProgress
 
-  let handle (s:GroupMemberState) (ms:ConsumerMessageSet) = async {
+  let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     //do! Async.Sleep 30000
     Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
