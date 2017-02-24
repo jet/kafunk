@@ -66,7 +66,7 @@ let producer =
   |> Async.RunSynchronously
 
 let counter = Metrics.counter Log (1000 * 5)
-let timer = Metrics.timer Log (1000 * 5)
+//let timer = Metrics.timer Log (1000 * 5)
 
 let cts = new CancellationTokenSource()
 
@@ -89,7 +89,7 @@ let go = async {
     let produceBatch = 
       Producer.produceBatch producer
       |> Metrics.throughputAsyncTo counter (fun _ -> batchSize)
-      |> Metrics.latencyAsyncTo timer
+      //|> Metrics.latencyAsyncTo timer
 
     return!
       Seq.init batchCount id
@@ -109,7 +109,7 @@ let go = async {
     let produce = 
       Producer.produce producer
       |> Metrics.throughputAsyncTo counter (fun _ -> 1)
-      |> Metrics.latencyAsyncTo timer
+      //|> Metrics.latencyAsyncTo timer
 
     return!
       Seq.init batchCount id

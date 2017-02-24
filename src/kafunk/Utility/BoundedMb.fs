@@ -11,12 +11,6 @@ type BoundedMbReq<'a> =
   | Put of 'a * AsyncReplyChannel<unit>
   | Take of AsyncReplyChannel<'a>
 
-type IBoundedMbCond<'a> =
-  abstract member Add : 'a -> unit
-  abstract member Remove : 'a -> unit
-  abstract member Reset : unit -> unit
-  abstract member Satisfied : bool
-
 [<Compile(Module)>]
 module BoundedMbCond =
 
@@ -84,9 +78,6 @@ type BoundedMb<'a> internal (cond:IBoundedMbCond<'a>) =
   member __.Take () =
     agent.PostAndAsyncReply (fun ch -> Take ch)
 
-  member __.TryTake (timeout:int option) =
-    agent.PostAndTryAsyncReply ((fun ch -> Take ch), defaultArg timeout Timeout.Infinite)
-
   interface IDisposable with
     member __.Dispose () = (agent :> IDisposable).Dispose()
 
@@ -113,3 +104,82 @@ module BoundedMb =
   /// Takes a message from
   let inline take (mb:BoundedMb<'a>) : Async<'a> =
     async.Delay mb.Take
+
+
+//type BoundedMb2<'a> internal (cond:IBoundedMbCond<'a>) =
+//  
+//  let queue = new Queue<'a>()
+//  let canTake = new ManualResetEventSlim(false)
+//  let canPut = new ManualResetEventSlim(true)
+//
+//  let tryPut a =
+//    lock cond (fun () ->
+//      if not cond.Satisfied then
+//        queue.Enqueue a
+//        cond.Add a
+//        canTake.Set () |> ignore
+//        true
+//      else
+//        canPut.Reset () |> ignore
+//        false)
+//
+//  let tryTake () =
+//    lock cond (fun () ->
+//      if queue.Count > 0 then
+//        let a = queue.Dequeue ()
+//        cond.Remove a
+//        if queue.Count = 0 then
+//          canTake.Reset () |> ignore
+//        if not (cond.Satisfied) then
+//          canPut.Set () |> ignore
+//        Some a
+//      else
+//        None)
+//
+//  member __.Put (a:'a) = async {
+//    if tryPut a then
+//      return ()
+//    else
+//      let! ct = Async.CancellationToken
+//      let rec loop () = async {
+//        //let! _ = Async.AwaitWaitHandle canPut
+//        canPut.Wait ct
+//        if tryPut a then
+//          return ()
+//        else
+//          return! loop () }
+//      return! loop () }
+//
+//  member __.Take () = async {
+//    match tryTake () with
+//    | Some a -> return a
+//    | None ->
+//      let! ct = Async.CancellationToken
+//      let rec loop () = async {
+//        //let! _ = Async.AwaitWaitHandle canTake
+//        canTake.Wait ct
+//        match tryTake () with
+//        | Some a -> return a 
+//        | None -> return! loop () }
+//      return! loop () }
+//
+///// Operations on bounded mailboxes.
+//module BoundedMb2 =
+//
+//  /// Creates a bounded mailbox bounded by the specified condition.
+//  /// If the condition return true, the mailbox blocks puts, otherwise accepts them.
+//  let createByCondition (condition:IBoundedMbCond<'a>) : BoundedMb2<'a> =
+//    let mq = new BoundedMb2<'a>(condition)
+//    mq
+//
+//  /// Puts a message into the mailbox.
+//  /// If the mailbox is full, wait until it has room available.
+//  /// If the mailbox has vacancy, add the message to the buffer and return immediately.
+//  let inline put (a:'a) (mb:BoundedMb2<'a>) : Async<unit> =
+//    mb.Put a
+//
+//  /// Takes a message from
+//  let inline take (mb:BoundedMb2<'a>) : Async<'a> =
+//    async.Delay mb.Take
+  
+
