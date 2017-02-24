@@ -376,8 +376,13 @@ module Producer =
           |> AsyncSeq.iterAsync (Array.singleton >> sendBatch)
         else
           produceStream
-          |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
+          |> AsyncSeq.toObservable
+          |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
+          |> AsyncSeq.ofObservableBuffered
           |> AsyncSeq.iterAsync sendBatch
+//          produceStream
+//          |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
+//          |> AsyncSeq.iterAsync sendBatch
       sendProcess
       |> Async.tryWith (fun ex -> async {
         Log.error "producer_broker_queue_exception|ep=%O error=%O" (Chan.endpoint ch) ex })

@@ -447,6 +447,13 @@ type ObjectPool<'a>(initial:int, create:unit -> 'a) =
 // --------------------------------------------------------------------------------------------------
 
 
+type IBoundedMbCond<'a> =
+  abstract member Add : 'a -> unit
+  abstract member Remove : 'a -> unit
+  abstract member Reset : unit -> unit
+  abstract member Satisfied : bool
+
+
 [<Compile(Module)>]
 module Observable =
 
@@ -499,7 +506,7 @@ module Observable =
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
 
-  let bufferByTimeAndCount (timeSpan:TimeSpan) (count:int) (source:IObservable<'a>) =
+  let bufferByTimeAndCount (timeSpan:TimeSpan) (bufferSize:int) (source:IObservable<'a>) =
 
     let takeAny (queue:BlockingCollection<'a>) (count:int) =
       let batch = new ResizeArray<_>(count)
@@ -509,13 +516,13 @@ module Observable =
 
     create (fun (observer:IObserver<'a[]>) ->
 
-      let batchQueue = new BlockingCollection<'a>(count)
+      let batchQueue = new BlockingCollection<'a>(bufferSize)
       let batchEvent = new Event<unit>()
 
       let batches =
         Observable.merge (interval timeSpan) batchEvent.Publish
         |> Observable.choose (fun () ->
-          let batch = takeAny batchQueue count
+          let batch = takeAny batchQueue bufferSize
           if batch.Length > 0 then Some batch
           else None)
 
@@ -523,7 +530,7 @@ module Observable =
         source.Subscribe <| { new IObserver<_> with
           member __.OnNext(a) =
             batchQueue.Add a
-            if batchQueue.Count >= count then
+            if batchQueue.Count >= bufferSize then
               batchEvent.Trigger()
           member __.OnError(e) = 
             observer.OnError(e)
@@ -534,5 +541,43 @@ module Observable =
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
   
+  let bufferByTimeAndCondition (timeSpan:TimeSpan) (cond:IBoundedMbCond<'a>) (source:IObservable<'a>) =
+
+    let takeAny (queue:BlockingCollection<'a>) =
+      let batch = new ResizeArray<_>()
+      let mutable item : 'a = Unchecked.defaultof<'a>
+      while (queue.TryTake(&item)) do 
+        batch.Add(item)
+      batch.ToArray()
+
+    create (fun (observer:IObserver<'a[]>) ->
+
+      let batchQueue = new BlockingCollection<'a>()
+      let batchEvent = new Event<unit>()
+
+      let batches =
+        Observable.merge (interval timeSpan) batchEvent.Publish
+        |> Observable.choose (fun () ->
+          let batch = takeAny batchQueue
+          if batch.Length > 0 then Some batch
+          else None)
+
+      let sourceSubs =
+        source.Subscribe <| { new IObserver<_> with
+          member __.OnNext(a) =
+            batchQueue.Add a
+            cond.Add a
+            if cond.Satisfied then
+              cond.Reset ()
+              batchEvent.Trigger()
+          member __.OnError(e) = 
+            observer.OnError(e)
+          member __.OnCompleted() = 
+            observer.OnCompleted() }
+
+      let batchSubs = batches.Subscribe(observer.OnNext)
+
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+
 
   

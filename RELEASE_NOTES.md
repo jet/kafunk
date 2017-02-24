@@ -1,3 +1,8 @@
+### 0.0.30-alpha001 - 24.02.2017
+
+* Improve producer batching performance
+* Fix all offset commit
+
 ### 0.0.29-alpha001 - 23.02.2017
 
 * Improve producer performance

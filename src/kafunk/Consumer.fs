@@ -310,8 +310,14 @@ type ConsumerState = {
   /// The assignment strategy selected by the group coordinator.
   assignmentStrategy : AssignmentStrategyName
 
+  /// The selected protocol.
+  protocolName : ProtocolName
+
   /// The partitions assigned to this consumer.
   assignments : Partition[]
+
+  /// Cancelled when the generation is closed.
+  closed : CancellationToken
 
 }
 
@@ -540,6 +546,22 @@ module Consumer =
   /// Creates a consumer.
   let create (conn:KafkaConn) (cfg:ConsumerConfig) =
     createAsync conn cfg |> Async.RunSynchronously
+
+  let private consumerStateFromGroupMemberState (state:GroupMemberState) = 
+    let _,assignments = ConsumerGroup.decodeMemberAssignment state.memberAssignment
+    { ConsumerState.assignments = assignments
+      memberId = state.memberId
+      leaderId = state.leaderId
+      members = state.members
+      generationId = state.generationId
+      assignmentStrategy = state.protocolName
+      closed = state.closed
+      protocolName = state.protocolName }
+
+  /// Returns the current consumer state.
+  let state (c:Consumer) : Async<ConsumerState> = async {
+    let! state = Group.stateInternal c.groupMember
+    return consumerStateFromGroupMemberState state.state }
 
   /// Returns an async sequence corresponding to generations, where each generation
   /// is paired with the set of assigned fetch streams.
@@ -793,22 +815,23 @@ module Consumer =
     Group.generationsInternal c.groupMember
     |> AsyncSeq.mapAsyncParallel (fun state -> async {
       let! partitionStreams = consume state
-      return state.state,partitionStreams })
+      let consumerState = consumerStateFromGroupMemberState state.state
+      return consumerState,partitionStreams })
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The handler accepts the topic, partition, message set and an async computation which commits offsets corresponding to the message set.
   let consume 
     (c:Consumer)
-    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> =
+    (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> =
       c
       |> generations
-      |> AsyncSeq.iterAsync (fun (groupMemberState,partitionStreams) ->
+      |> AsyncSeq.iterAsync (fun (consumerState,partitionStreams) ->
         partitionStreams
-        |> Seq.map (fun (_,stream) -> stream |> AsyncSeq.iterAsync (handler groupMemberState))
+        |> Seq.map (fun (_,stream) -> stream |> AsyncSeq.iterAsync (handler consumerState))
         |> Async.Parallel
         |> Async.Ignore
-        |> Async.cancelTokenWith groupMemberState.closed id)
+        |> Async.cancelTokenWith consumerState.closed id)
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
@@ -817,8 +840,9 @@ module Consumer =
   let consumePeriodicCommit 
     (c:Consumer)
     (commitInterval:TimeSpan)
-    (handler:GroupMemberState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
-      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, commitOffsets c)
+    (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
+      let assignedPartitions = state c |> Async.map (fun s -> s.assignments)
+      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)
       let handler s ms = async {
         do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
@@ -829,18 +853,6 @@ module Consumer =
   let stream (c:Consumer) =
     generations c
     |> AsyncSeq.collect (fun (s,ps) -> AsyncSeq.mergeAll (ps |> Seq.map snd |> Seq.toList) |> AsyncSeq.map (fun ms -> s,ms))
-
-  /// Returns the current consumer state.
-  let state (c:Consumer) : Async<ConsumerState> = async {
-    let! state = Group.stateInternal c.groupMember
-    let _,assignments = ConsumerGroup.decodeMemberAssignment state.state.memberAssignment
-    return 
-      { ConsumerState.assignments = assignments
-        memberId = state.state.memberId
-        leaderId = state.state.leaderId
-        members = state.state.members
-        generationId = state.state.generationId
-        assignmentStrategy = state.state.protocolName } }
 
   /// Closes the consumer and leaves the consumer group.
   /// This causes all underlying streams to complete.

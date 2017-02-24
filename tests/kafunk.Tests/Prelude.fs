@@ -27,6 +27,11 @@ let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
 
 
 
+let UnixEpoch = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+
+type DateTime with
+  static member UtcNowUnixMilliseconds = int64 (DateTime.UtcNow - UnixEpoch).TotalMilliseconds
+
 type TimeSpan with
   static member FromMilliseconds (ms:int) =
     TimeSpan.FromMilliseconds (float ms)
@@ -71,13 +76,21 @@ module Choice =
 
 // --------------------------------------------------------------------------------------------------
 
+/// A semigroup (+).
 type Semigroup<'a> =
   abstract Merge : 'a * 'a -> 'a
 
+/// A monoid (e,+).
 type Monoid<'a> =
   inherit Semigroup<'a>
   abstract Zero : 'a
 
+/// A group (e,+,-).
+type Group<'a> =
+  inherit Monoid<'a>
+  abstract Inverse : 'a -> 'a
+
+/// Operations on monoids.
 module Monoid =
   
   let inline zero (m:Monoid<_>) = m.Zero
@@ -141,6 +154,30 @@ module Monoid =
   let intSum : Monoid<int> =
     monoid 0 ((+))
     
+/// Operations on groups.
+module Group =
+  
+  /// Creates a group.
+  let group (z:'a) (add:'a -> 'a -> 'a) (inverse:'a -> 'a) =
+    { new Group<'a> with
+        member __.Zero = z
+        member __.Merge (a,b) = add a b
+        member __.Inverse a = inverse a }
+
+  let inline zero (g:Group<'a>) = g.Zero
+
+  let inline add (g:Group<'a>) a b = g.Merge (a,b)
+
+  let inline inverse (g:Group<'a>) a = g.Inverse a
+
+  let inline subtract (g:Group<'a>) a b = g.Merge (a, g.Inverse b)
+
+  /// Creates an additive group based on statically resolved members.
+  let inline additive () =
+    group LanguagePrimitives.GenericZero (+) (fun x -> -x)
+
+  /// The group formed by integers with (0,+,-).
+  let intAdd : Group<int> = additive ()
 
 // --------------------------------------------------------------------------------------------------
 
@@ -410,6 +447,13 @@ type ObjectPool<'a>(initial:int, create:unit -> 'a) =
 // --------------------------------------------------------------------------------------------------
 
 
+type IBoundedMbCond<'a> =
+  abstract member Add : 'a -> unit
+  abstract member Remove : 'a -> unit
+  abstract member Reset : unit -> unit
+  abstract member Satisfied : bool
+
+
 [<Compile(Module)>]
 module Observable =
 
@@ -462,7 +506,7 @@ module Observable =
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
 
-  let bufferByTimeAndCount (timeSpan:TimeSpan) (count:int) (source:IObservable<'a>) =
+  let bufferByTimeAndCount (timeSpan:TimeSpan) (bufferSize:int) (source:IObservable<'a>) =
 
     let takeAny (queue:BlockingCollection<'a>) (count:int) =
       let batch = new ResizeArray<_>(count)
@@ -472,13 +516,13 @@ module Observable =
 
     create (fun (observer:IObserver<'a[]>) ->
 
-      let batchQueue = new BlockingCollection<'a>(count)
+      let batchQueue = new BlockingCollection<'a>(bufferSize)
       let batchEvent = new Event<unit>()
 
       let batches =
         Observable.merge (interval timeSpan) batchEvent.Publish
         |> Observable.choose (fun () ->
-          let batch = takeAny batchQueue count
+          let batch = takeAny batchQueue bufferSize
           if batch.Length > 0 then Some batch
           else None)
 
@@ -486,7 +530,7 @@ module Observable =
         source.Subscribe <| { new IObserver<_> with
           member __.OnNext(a) =
             batchQueue.Add a
-            if batchQueue.Count >= count then
+            if batchQueue.Count >= bufferSize then
               batchEvent.Trigger()
           member __.OnError(e) = 
             observer.OnError(e)
@@ -497,5 +541,43 @@ module Observable =
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
   
+  let bufferByTimeAndCondition (timeSpan:TimeSpan) (cond:IBoundedMbCond<'a>) (source:IObservable<'a>) =
+
+    let takeAny (queue:BlockingCollection<'a>) =
+      let batch = new ResizeArray<_>()
+      let mutable item : 'a = Unchecked.defaultof<'a>
+      while (queue.TryTake(&item)) do 
+        batch.Add(item)
+      batch.ToArray()
+
+    create (fun (observer:IObserver<'a[]>) ->
+
+      let batchQueue = new BlockingCollection<'a>()
+      let batchEvent = new Event<unit>()
+
+      let batches =
+        Observable.merge (interval timeSpan) batchEvent.Publish
+        |> Observable.choose (fun () ->
+          let batch = takeAny batchQueue
+          if batch.Length > 0 then Some batch
+          else None)
+
+      let sourceSubs =
+        source.Subscribe <| { new IObserver<_> with
+          member __.OnNext(a) =
+            batchQueue.Add a
+            cond.Add a
+            if cond.Satisfied then
+              cond.Reset ()
+              batchEvent.Trigger()
+          member __.OnError(e) = 
+            observer.OnError(e)
+          member __.OnCompleted() = 
+            observer.OnCompleted() }
+
+      let batchSubs = batches.Subscribe(observer.OnNext)
+
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+
 
   

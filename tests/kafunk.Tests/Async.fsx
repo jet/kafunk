@@ -55,44 +55,9 @@ module Async =
 //        | Choice2Of2 b -> 
 //          return Choice2Of2 (b, a) }
 
-module AsyncSeq =
+module internal AsyncSeq =
 
-//  let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
-//    if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
-//    asyncSeq {
-//      let buffer = new ResizeArray<_>()
-//      use ie = source.GetEnumerator()
-//      let rec loop rem rt = asyncSeq {
-//        let move = 
-//          match rem with
-//          | Some rem -> rem |> Async.AwaitTask
-//          | None -> ie.MoveNext()
-//        let t = Stopwatch.GetTimestamp()
-//        let time = Async.Sleep (max 0 rt)
-//        let! moveOr = Async.chooseTasks move time
-//        let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
-//        match moveOr with
-//        | Choice1Of2 (None, _) -> 
-//          if buffer.Count > 0 then
-//            yield buffer.ToArray()
-//        | Choice1Of2 (Some v, _) ->
-//          buffer.Add v
-//          if f buffer then
-//            yield buffer.ToArray()
-//            buffer.Clear()
-//            yield! loop None timeoutMs
-//          else
-//            yield! loop None (rt - delta)
-//        | Choice2Of2 (_, rest) ->
-//          if buffer.Count > 0 then
-//            yield buffer.ToArray()
-//            buffer.Clear()
-//            yield! loop (Some rest) timeoutMs
-//          else
-//            yield! loop (Some rest) timeoutMs }
-//      yield! loop None timeoutMs }
-
-  let bufferByConditionAndTime (f:ResizeArray<'T> -> bool) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
+  let bufferByConditionAndTime (cond:IBoundedMbCond<'T>) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
     if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
     asyncSeq {
       let buffer = new ResizeArray<_>()
@@ -103,8 +68,9 @@ module AsyncSeq =
           | Some rem -> async.Return rem
           | None -> Async.StartChildAsTask (ie.MoveNext())
         let t = Stopwatch.GetTimestamp()
+        //let! time = Async.StartChildAsTask (Async.Sleep (max 0 rt))
         let! time = Async.StartChildAsTask (Async.Sleep (max 0 rt))
-        let! moveOr = Async.raceTasksAsAsync move time
+        let! moveOr = Async.chooseTasks move time
         let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
         match moveOr with
         | Choice1Of2 (None, _) -> 
@@ -112,9 +78,11 @@ module AsyncSeq =
             yield buffer.ToArray()
         | Choice1Of2 (Some v, _) ->
           buffer.Add v
-          if f buffer then
+          cond.Add v
+          if cond.Satisfied then
             yield buffer.ToArray()
             buffer.Clear()
+            cond.Reset ()
             yield! loop None timeoutMs
           else
             yield! loop None (rt - delta)
@@ -122,6 +90,7 @@ module AsyncSeq =
           if buffer.Count > 0 then
             yield buffer.ToArray()
             buffer.Clear()
+            cond.Reset ()
             yield! loop (Some rest) timeoutMs
           else
             yield! loop (Some rest) timeoutMs }
@@ -131,7 +100,13 @@ module AsyncSeq =
 let N = 1000000
 
 AsyncSeq.init (int64 N) id
-//|> AsyncSeq.bufferByConditionAndTime (fun buf -> buf.Count > 1000) 100
-//|> AsyncSeq.bufferByCountAndTime 1000 100
+
+|> AsyncSeq.toObservable
+|> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds 100.0) (BoundedMbCond.count 100)
+|> AsyncSeq.ofObservableBuffered
+
+//|> AsyncSeq.bufferByConditionAndTime (BoundedMbCond.count 100) 100
+//|> AsyncSeq.bufferByCountAndTime 100 100
+
 |> AsyncSeq.iter ignore
 |> Async.RunSynchronously
