@@ -73,7 +73,7 @@ let consumer =
 // commit on every message set
 
 Consumer.consume consumer 
-  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+  (fun (s:ConsumerState) (ms:ConsumerMessageSet) -> async {
     printfn "member_id=%s topic=%s partition=%i" s.memberId ms.topic ms.partition
     do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
 |> Async.RunSynchronously
@@ -84,7 +84,7 @@ Consumer.consume consumer
 
 Consumer.consumePeriodicCommit consumer
   (TimeSpan.FromSeconds 10.0) 
-  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+  (fun (s:ConsumerState) (ms:ConsumerMessageSet) -> async {
     printfn "member_id=%s topic=%s partition=%i" s.memberId ms.topic ms.partition })
 |> Async.RunSynchronously
 

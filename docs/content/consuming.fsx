@@ -79,7 +79,7 @@ receiving duplicate messages. Therefore, it is acceptable to commit offsets asyn
 
 
 Consumer.consume consumer 
-  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+  (fun (s:ConsumerState) (ms:ConsumerMessageSet) -> async {
     printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
       s.memberId s.protocolName ms.topic ms.partition
     do! Consumer.commitOffsets consumer (ConsumerMessageSet.commitPartitionOffsets ms) })
@@ -97,7 +97,7 @@ the critical path.
 
 Consumer.consumePeriodicCommit consumer
   (TimeSpan.FromSeconds 10.0) 
-  (fun (s:GroupMemberState) (ms:ConsumerMessageSet) -> async {
+  (fun (s:ConsumerState) (ms:ConsumerMessageSet) -> async {
     printfn "member_id=%s assignment_strategy=%s topic=%s partition=%i" 
       s.memberId s.protocolName ms.topic ms.partition })
 |> Async.RunSynchronously
@@ -114,7 +114,7 @@ Consumer.consumePeriodicCommit consumer
 
 
 /// Create a commit queue
-let commitQueue = Offsets.createPeriodicCommitQueue (TimeSpan.FromHours 1.0, Consumer.commitOffsets consumer)
+let commitQueue = Offsets.createPeriodicCommitQueue (TimeSpan.FromHours 1.0, async { return failwith "" }, Consumer.commitOffsets consumer)
 
 let ms : ConsumerMessageSet = failwith "some message set"
 

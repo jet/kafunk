@@ -930,23 +930,28 @@ module Offsets =
 
 
   type private PeriodicCommitQueueMsg =
-    | Enqueue of (Partition * Offset) seq
+    | Enqueue of offsets:(Partition * Offset) seq
     | Commit of AsyncReplyChannel<unit> option
 
   /// A queue for offsets to be periodically committed.
-  type PeriodicCommitQueue internal (interval:TimeSpan, commit:(Partition * Offset)[] -> Async<unit>) =
+  type PeriodicCommitQueue internal (interval:TimeSpan, assignedPartitions:Async<Partition[]>, commit:(Partition * Offset)[] -> Async<unit>) =
   
     let cts = new CancellationTokenSource()
 
     let rec enqueueLoop (commits:Map<Partition, Offset>) (mb:Mb<_>) = async {
       let! msg = mb.Receive ()
       match msg with
-      | Enqueue os ->
+      | Enqueue (os) ->
         let commits' =
           (commits,os) 
-          ||> Seq.fold (fun m (p,o) -> Map.add p o m) 
+          ||> Seq.fold (fun m (p,o) -> Map.add p o m)
         return! enqueueLoop commits' mb
       | Commit rep ->
+        // only commit currently assigned partitions
+        let! assignedPartitions = assignedPartitions
+        let commits = 
+          commits
+          |> Map.onlyKeys assignedPartitions
         let offsets =
           commits
           |> Map.toSeq
@@ -967,7 +972,7 @@ module Offsets =
     do Async.Start (commitLoop, cts.Token)
 
     member internal __.Enqueue (os:(Partition * Offset) seq) =
-      mbp.Post (Enqueue os)
+      mbp.Post (Enqueue (os))
 
     member internal __.Flush () =
       mbp.PostAndAsyncReply (fun ch -> Commit (Some ch))
@@ -983,7 +988,7 @@ module Offsets =
 
   /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.
   let enqueuePeriodicCommit (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
-    q.Enqueue os
+    q.Enqueue (os)
     
   /// Commits whatever remains in the queue.
   let flushPeriodicCommit (q:PeriodicCommitQueue) =
