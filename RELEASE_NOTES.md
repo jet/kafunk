@@ -1,3 +1,8 @@
+### 0.0.31-alpha001 - 24.02.2017
+
+* Allow disabling of Console logger
+* Ensure periodic offset committer commits offsets on start
+
 ### 0.0.30-alpha001 - 24.02.2017
 
 * Improve producer batching performance

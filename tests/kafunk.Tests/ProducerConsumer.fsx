@@ -247,7 +247,7 @@ let producer = async {
 
 let consumer = async {
 
-  let handle (_:GroupMemberState) (ms:ConsumerMessageSet) = async {
+  let handle (_:ConsumerState) (ms:ConsumerMessageSet) = async {
         
     let values = 
       ms.messageSet.messages

@@ -16,15 +16,27 @@ let inline flip f a b = f b a
 
 let inline diag a = a,a
 
-let tryDispose (d:#System.IDisposable) = 
-  try d.Dispose() finally ()
-
 /// CompilationRepresentationAttribute
 type Compile = CompilationRepresentationAttribute
   
 /// CompilationRepresentationFlags.ModuleSuffix
 let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
 
+
+/// Operations on IDisposable.
+module Disposable =
+  
+  let tryDispose (d:#System.IDisposable) = 
+    try d.Dispose() finally ()
+
+  let ofFun (f:unit -> unit) = 
+    { new IDisposable with member __.Dispose () = f () }
+
+  let ofFuns (fs:(unit -> unit) seq) =
+    ofFun (fun () -> for f in fs do f ())
+
+  let ofDisposables (ds:#IDisposable seq) =
+    ofFun (fun () -> for d in ds do d.Dispose())
 
 
 let UnixEpoch = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
