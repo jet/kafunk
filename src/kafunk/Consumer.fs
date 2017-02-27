@@ -934,14 +934,17 @@ module ConsumerInfo =
         Consumer.fetchOffsets conn groupId [|topic,ps|])
     let consumerOffsets = 
       consumerOffsets 
-      |> Array.pick (fun (t,os) -> if t = topic then Some os else None)
-      |> Map.ofArray
+      |> Seq.collect (fun (t,os) -> 
+        if t = topic then os
+        else [||])
+      |> Map.ofSeq
     let partitions =
       (topicOffsets, consumerOffsets)
       ||> Map.mergeChoice (fun p -> function
         | Choice1Of3 ((e,l),o) -> 
           { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e }
-        | _ -> failwith "invalid state")
+        | Choice2Of3 _ -> failwithf "unable to find consumer offset for topic=%s partition=%i" topic p
+        | Choice3Of3 o -> failwithf "unable to find topic offset for topic=%s partition=%i [consumer_offset=%i]" topic p o)
       |> Seq.map (fun kvp -> kvp.Value)
       |> Seq.toArray
     return { 

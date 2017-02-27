@@ -286,10 +286,22 @@ module Seq =
 [<Compile(Module)>]
 module Dict =
 
-  let tryGet k (d:#IDictionary<_,_>) =
+  let tryGet k (d:#IReadOnlyDictionary<_,_>) =
     let mutable v = Unchecked.defaultof<_>
     if d.TryGetValue(k, &v) then Some v
     else None
+
+  let ofSeq (xs:seq<'a * 'b>) : Dictionary<'a, 'b> =
+    let d = Dictionary<'a, 'b>()
+    for (a,b) in xs do
+      d.Add (a,b)
+    d
+  
+  let ofMap (m:Map<'a, 'b>) : Dictionary<'a, 'b> =
+    let d = Dictionary<'a, 'b>()
+    for kvp in m do
+      d.Add (kvp.Key, kvp.Value)
+    d
     
     
 [<Compile(Module)>]

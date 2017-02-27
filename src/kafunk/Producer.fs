@@ -4,6 +4,7 @@ open FSharp.Control
 open Kafunk
 open System
 open System.Text
+open System.Collections.Generic
 
 /// A producer message.
 type ProducerMessage =
@@ -189,11 +190,7 @@ and private ProducerState = {
   /// Current set of partitions for the topic.
   partitions : Partition[]
 
-  /// Brokers by partitions.
-  partitionBrokers : Map<Partition, Chan>
-    
-  /// Per-broker queues accepting a triple of partition, messages for the partition and a reply channel.
-  brokerQueues : Map<EndPoint, ProducerMessageBatch -> Async<unit>>
+  partitionQueues : Dictionary<Partition, ProducerMessageBatch -> Async<unit>>
 }
 
 /// A producer-specific error.
@@ -360,7 +357,6 @@ module Producer =
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
-
     let brokerQueue (ch:Chan) =
       let sendBatch = sendBatch conn cfg messageVer ch
       let bufferCond = 
@@ -394,18 +390,21 @@ module Producer =
         let q = brokerQueue ch
         ep,q)
       |> Map.ofSeq
-        
-    return { partitions = partitions ; partitionBrokers = brokerByPartition ; brokerQueues = brokerQueues } }
+
+    let partitionQueues = 
+      brokerByPartition
+      |> Map.toSeq
+      |> Seq.map (fun (p,ep) -> p, brokerQueues |> Map.find (Chan.endpoint ep))
+      |> Map.ofSeq
+
+    return { 
+      partitions = partitions ; 
+      partitionQueues = partitionQueues |> Dict.ofMap } }
 
   let private getBrokerQueueByPartition (state:ProducerState) (p:Partition) =
-    match state.partitionBrokers |> Map.tryFind p with
-    | Some ch ->
-      let ep = Chan.endpoint ch
-      match state.brokerQueues |> Map.tryFind ep with
-      | Some q -> q
-      | None -> failwithf "unable to find broker at endpoint=%O for partition=%i" ep p
-    | None -> 
-      failwithf "unable to find broker for partition=%i" p
+    match state.partitionQueues |> Dict.tryGet p with
+    | Some q -> q
+    | None -> failwithf "unable to find broker for partition=%i" p
 
   let private produceBatchInternal (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
