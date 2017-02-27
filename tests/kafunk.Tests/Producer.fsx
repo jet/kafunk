@@ -45,7 +45,7 @@ let connCfg =
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 100,
     //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
-    bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 2
+    bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3
     )
 
 let conn = Kafka.conn connCfg

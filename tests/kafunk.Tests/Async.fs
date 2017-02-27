@@ -11,6 +11,7 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open Kafunk
 
+
 /// A write-once concurrent variable.
 type IVar<'a> = TaskCompletionSource<'a>
 
@@ -58,6 +59,42 @@ module IVar =
     i.Task.ContinueWith (fun (t:Task<_>) -> cts.Cancel ()) |> ignore
     cts.Token
     
+
+
+/// Operations on System.Threading.Tasks.Task<_>.
+module Task =
+  
+  let never<'a> : Task<'a> =
+    let ivar = IVar.create ()
+    ivar.Task
+
+  let inline create (a:'a) : Task<'a> =
+    Task.FromResult a
+
+  let inline join (t:Task<Task<'a>>) : Task<'a> =
+    t.Unwrap()
+
+  let inline extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
+    t.ContinueWith f
+
+  let inline map (f:'a -> 'b) (t:Task<'a>) : Task<'b> =
+    extend (fun t -> f t.Result) t
+
+  let inline bind (f:'a -> Task<'b>) (t:Task<'a>) : Task<'b> =
+    extend (fun t -> f t.Result) t |> join
+
+  /// Returns a Task that completes only if the argument Task faults.
+  let taskFault (t:Task<'a>) : Task<'b> =
+    t 
+    |> extend (fun t -> 
+      let ivar = IVar.create ()
+      if t.IsFaulted then
+        IVar.error t.Exception ivar
+      ivar.Task)
+    |> join
+
+
+
 
 let private awaitTaskUnit (t:Task) =
   Async.FromContinuations <| fun (ok,err,cnc) ->
@@ -183,35 +220,27 @@ module Async =
   let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
     let! ct = Async.CancellationToken
     use sm = new SemaphoreSlim(parallelism)
-    use cde = new CountdownEvent(1)
-    let tcs = new TaskCompletionSource<unit>()
-    ct.Register(Action(fun () -> tcs.TrySetCanceled() |> ignore)) |> ignore
+    let count = ref 1
+    let res = IVar.create ()
     let tryComplete () =
-      if not (tcs.Task.IsCompleted) then
-        if cde.Signal() then
-          tcs.SetResult(())
-        true
-      else
-        false
+      if Interlocked.Decrement count = 0 then
+        IVar.tryPut () res |> ignore
     let ok _ =
-      if tryComplete () then
-        sm.Release() |> ignore
+      sm.Release() |> ignore
+      tryComplete()
     let err (ex:exn) =
-      if tcs.TrySetException ex then
-        sm.Release() |> ignore
+      sm.Release() |> ignore
+      IVar.tryError ex res |> ignore
     let cnc (_:OperationCanceledException) =
-      if tcs.TrySetCanceled () then
-        sm.Release() |> ignore
-    try
-      use en = xs.GetEnumerator()
-      while not (tcs.Task.IsCompleted) && en.MoveNext() do
-        sm.Wait()
-        cde.AddCount(1)
-        startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
-      tryComplete () |> ignore
-      do! tcs.Task |> awaitTaskCancellationAsError
-    with ex ->
-      return raise ex }
+      sm.Release() |> ignore
+      IVar.tryCancel res |> ignore
+    use en = xs.GetEnumerator()
+    while not (res.Task.IsCompleted) && en.MoveNext() do
+      sm.Wait()
+      Interlocked.Increment count |> ignore
+      startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
+    tryComplete() |> ignore
+    do! res.Task |> awaitTaskCancellationAsError }
 
   /// Creates an async computation which completes when any of the argument computations completes.
   /// The other computation is cancelled.
@@ -378,36 +407,3 @@ module Mb =
 
   /// Creates an async computation that completes when a message is available in a mailbox.
   let inline take (mb:Mb<'a>) = async.Delay mb.Receive
-
-
-/// Operations on System.Threading.Tasks.Task<_>.
-module Task =
-  
-  let never<'a> : Task<'a> =
-    let ivar = IVar.create ()
-    ivar.Task
-
-  let inline create (a:'a) : Task<'a> =
-    Task.FromResult a
-
-  let inline join (t:Task<Task<'a>>) : Task<'a> =
-    t.Unwrap()
-
-  let inline extend (f:Task<'a> -> 'b) (t:Task<'a>) : Task<'b> =
-    t.ContinueWith f
-
-  let inline map (f:'a -> 'b) (t:Task<'a>) : Task<'b> =
-    extend (fun t -> f t.Result) t
-
-  let inline bind (f:'a -> Task<'b>) (t:Task<'a>) : Task<'b> =
-    extend (fun t -> f t.Result) t |> join
-
-  /// Returns a Task that completes only if the argument Task faults.
-  let taskFault (t:Task<'a>) : Task<'b> =
-    t 
-    |> extend (fun t -> 
-      let ivar = IVar.create ()
-      if t.IsFaulted then
-        IVar.error t.Exception ivar
-      ivar.Task)
-    |> join
