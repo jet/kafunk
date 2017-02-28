@@ -83,7 +83,8 @@
     <None Include="Consumer.fsx" />
     <None Include="ProducerConsumer.fsx" />
     <None Include="Offsets.fsx" />
-    <None Include="Async.fsx" />
+    <None Include="ConsumerProgress.fsx" />
+    <None Include="AsyncTest.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>

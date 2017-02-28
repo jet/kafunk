@@ -220,35 +220,27 @@ module Async =
   let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
     let! ct = Async.CancellationToken
     use sm = new SemaphoreSlim(parallelism)
-    use cde = new CountdownEvent(1)
-    let tcs = new TaskCompletionSource<unit>()
-    ct.Register(Action(fun () -> tcs.TrySetCanceled() |> ignore)) |> ignore
+    let count = ref 1
+    let res = IVar.create ()
     let tryComplete () =
-      if not (tcs.Task.IsCompleted) then
-        if cde.Signal() then
-          tcs.SetResult(())
-        true
-      else
-        false
+      if Interlocked.Decrement count = 0 then
+        IVar.tryPut () res |> ignore
     let ok _ =
-      if tryComplete () then
-        sm.Release() |> ignore
+      sm.Release() |> ignore
+      tryComplete ()
     let err (ex:exn) =
-      if tcs.TrySetException ex then
-        sm.Release() |> ignore
+      sm.Release() |> ignore
+      IVar.tryError ex res |> ignore
     let cnc (_:OperationCanceledException) =
-      if tcs.TrySetCanceled () then
-        sm.Release() |> ignore
-    try
-      use en = xs.GetEnumerator()
-      while not (tcs.Task.IsCompleted) && en.MoveNext() do
-        sm.Wait()
-        cde.AddCount(1)
-        startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
-      tryComplete () |> ignore
-      do! tcs.Task |> awaitTaskCancellationAsError
-    with ex ->
-      return raise ex }
+      sm.Release() |> ignore
+      IVar.tryCancel res |> ignore
+    use en = xs.GetEnumerator()
+    while not (res.Task.IsCompleted) && en.MoveNext() do
+      sm.Wait()
+      Interlocked.Increment count |> ignore
+      startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
+    tryComplete () |> ignore
+    do! res.Task |> awaitTaskCancellationAsError }
 
   /// Creates an async computation which completes when any of the argument computations completes.
   /// The other computation is cancelled.
