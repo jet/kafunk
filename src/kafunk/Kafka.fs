@@ -604,10 +604,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
     return state |> ConnState.updateTopicPartitions (brokers, topicNodes) }
 
   /// Fetches and applies metadata to the current connection.
-  and getAndApplyMetadata (callerState:ConnState) (topics:TopicName[]) =
+  and getAndApplyMetadata (requireMatchingCaller:bool) (callerState:ConnState) (topics:TopicName[]) =
     stateCell
     |> MVar.updateAsync (fun (currentState:ConnState) -> async {
-      if currentState.version > callerState.version then 
+      if requireMatchingCaller && currentState.version > callerState.version then 
         Log.trace "skipping_metadata_update|current_version=%i caller_version=%i" currentState.version callerState.version
         return currentState 
       else
@@ -622,7 +622,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
       |> Seq.toArray
     Log.info "refreshing_metadata|conn_id=%s topics=%A" cfg.connId topics
     if critical then metadata callerState topics
-    else getAndApplyMetadata callerState topics
+    else getAndApplyMetadata true callerState topics
 
   /// Fetches group coordinator metadata.
   and groupCoordinator (state:ConnState) (groupId:GroupId) = async {
@@ -688,7 +688,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
             else return! getAndApplyGroupCoordinator state gid
           | RouteType.TopicRoute tns ->
             if critical then return! metadata state tns
-            else return! getAndApplyMetadata state tns }
+            else return! getAndApplyMetadata true state tns }
         return! routeSendRecover critical rs state' req
       | None ->
         return failwithf "missng_route|attempts=%i route_type=%A" rs.attempt rt }
@@ -718,7 +718,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
               | Some rs ->
                 let! state' = 
                   if critical then metadata state topics
-                  else getAndApplyMetadata state topics
+                  else getAndApplyMetadata true state topics
                 return! routeSendRecover critical rs state' req
               | None ->
                 return failwithf "request_failure|attempt=%i request=%s response=%s" 
@@ -792,7 +792,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   member internal __.GetMetadataState (topics:TopicName[]) = async {
     let! state = MVar.get stateCell
-    return! getAndApplyMetadata state topics }
+    return! getAndApplyMetadata false state topics }
 
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let! state' = __.GetMetadataState topics
@@ -880,7 +880,7 @@ module Kafka =
 
 /// Operations on offsets.
 module Offsets =
-
+  
   /// Gets available offsets for the specified topic, at the specified times.
   /// Returns a map of times to offset responses.
   /// If empty is passed in for Partitions, will return information for all partitions.

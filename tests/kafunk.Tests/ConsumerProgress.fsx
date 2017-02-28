@@ -26,7 +26,11 @@ let go (topicGroups:(TopicName * GroupId) seq) = async {
   let showProgress (t,g) = async {
     while true do
       let! info = ConsumerInfo.progress conn g t [||]
-      Log.info "topic=%s group_id=%s" t g
+      let str = 
+        info.partitions
+        |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i lead=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.lead p.earliestOffset)
+        |> String.concat " ; "
+      Log.info "consumer_progress|conn_id=%s topic=%s total_lag=%i min_lead=%i partitions=%s" conn.Config.connId info.topic info.totalLag info.minLead str
       do! Async.Sleep sleep }
   return!
     topicGroups

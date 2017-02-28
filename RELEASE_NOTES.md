@@ -1,6 +1,6 @@
-### 0.0.32-alpha001 - 24.02.2017
+### 0.0.32-alpha001 - 28.02.2017
 
-* Fix bug in ConsumerInfo module where offset information for all partitions wouldn't be combined and would throw during the merge.
+* Fix bug in ConsumerInfo module where offset information for all partitions wouldn't be retrieved and would throw during the merge.
 * Fix Async.parallel used internall for testing.
 
 ### 0.0.31-alpha001 - 24.02.2017
