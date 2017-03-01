@@ -273,6 +273,22 @@ module Async =
 
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.
+  let withCancellation (ct:CancellationToken) (a:Async<'a>) : Async<'a> = async {
+    let! ct2 = Async.CancellationToken
+    use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
+    let tcs = new TaskCompletionSource<'a>()
+    use _reg = cts.Token.Register (fun () -> tcs.SetCanceled())
+    let a = async {
+      try
+        let! a = a
+        tcs.SetResult a
+      with ex ->
+        tcs.SetException ex }
+    Async.Start (a, cts.Token)
+    return! tcs.Task |> Async.AwaitTask }
+
+  /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
+  /// computation completes.
   let cancelTokenWith (ct:CancellationToken) (f:unit -> 'a) (a:Async<'a>) : Async<'a> = async {
     let! ct2 = Async.CancellationToken
     use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)

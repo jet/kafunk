@@ -198,9 +198,6 @@ type ConsumerConfig = {
   
   /// Offset retention time.
   offsetRetentionTime : RetentionTime
-
-//  /// The time of offsets to fetch if no offsets are stored (usually for a new group).
-//  initialFetchTime : Time
   
   /// The poll policy to employ when the end of the topic is reached.
   endOfTopicPollPolicy : RetryPolicy
@@ -582,7 +579,7 @@ module Consumer =
         return failwithf "no partitions assigned!"
 
       let! ct = Async.CancellationToken
-      let fetchProcessCancellationToken = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
+      let fetchProcessCancellation = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
 
       // initialize per-partition messageset buffers
       let partitionBuffers =
@@ -639,7 +636,7 @@ module Consumer =
                 |> Seq.partitionChoices4
 
               let oksAndEnds = Some (oks,ends)
-
+              
               if staleMetadata.Length > 0 then
                 let staleOffsets = 
                   let offsets = Map.ofArray offsets
@@ -769,10 +766,8 @@ module Consumer =
         use! _cnc = Async.OnCancel (fun () -> 
           Log.warn "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
             cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
-
         Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
           cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
-
         return!
           Async.tryFinnallyWithAsync
             (async {
@@ -783,29 +778,29 @@ module Consumer =
                     mss
                     |> Seq.map (fun ms -> async {
                       let buf = partitionBuffers |> Map.find ms.partition
-                      do! buf |> BoundedMb.put (Some ms) })
+                      do! buf |> BoundedMb.put ms })
                     |> Async.Parallel
                   return () }) })
               (async {
                 Log.info "fetch_process_stopping|group_id=%s generation_id=%i member_id=%s topic=%s" 
                   cfg.groupId state.state.generationId state.state.memberId topic
-                do! Async.Sleep 1000 // flush logs
-                if not fetchProcessCancellationToken.IsCancellationRequested then
-                  fetchProcessCancellationToken.Cancel ()
                 return () })
-              (fun ex -> async { 
+              (fun ex -> async {
                 Log.error "fetch_process_errored|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i error=%O" 
                   cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length) ex
+                do! Group.leaveInternal c.groupMember state
                 return raise ex }) }
             
-      Async.Start (fetchProcess, fetchProcessCancellationToken.Token)
+      Async.Start (fetchProcess, fetchProcessCancellation.Token)
         
       let partitionStreams =
         partitionBuffers
         |> Map.toSeq
         |> Seq.map (fun (p,buf) -> 
-          let tryTake = BoundedMb.take buf |> Async.cancelTokenWith fetchProcessCancellationToken.Token (konst None)
-          p, AsyncSeq.replicateUntilNoneAsync tryTake)
+          let tryTake = 
+            BoundedMb.take buf 
+            |> Async.withCancellation fetchProcessCancellation.Token
+          p, AsyncSeq.replicateInfiniteAsync tryTake)
         |> Seq.toArray
 
       return partitionStreams }
@@ -816,14 +811,18 @@ module Consumer =
       let consumerState = consumerStateFromGroupMemberState state.state
       return consumerState,partitionStreams })
 
+  /// Returns a stream of message sets across all partitions assigned to the consumer.
+  let stream (c:Consumer) =
+    generations c
+    |> AsyncSeq.collect (fun (s,ps) -> AsyncSeq.mergeAll (ps |> Seq.map snd |> Seq.toList) |> AsyncSeq.map (fun ms -> s,ms))
+
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The handler accepts the topic, partition, message set and an async computation which commits offsets corresponding to the message set.
   let consume 
     (c:Consumer)
     (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> =
-      c
-      |> generations
+      generations c
       |> AsyncSeq.iterAsync (fun (consumerState,partitionStreams) ->
         partitionStreams
         |> Seq.map (fun (_,stream) -> stream |> AsyncSeq.iterAsync (handler consumerState))
@@ -865,11 +864,6 @@ module Consumer =
       do! consume c handler
 
       do! Offsets.flushPeriodicCommit commitQueue }
-
-  /// Returns a stream of message sets across all partitions assigned to the consumer.
-  let stream (c:Consumer) =
-    generations c
-    |> AsyncSeq.collect (fun (s,ps) -> AsyncSeq.mergeAll (ps |> Seq.map snd |> Seq.toList) |> AsyncSeq.map (fun ms -> s,ms))
 
   /// Closes the consumer and leaves the consumer group.
   /// This causes all underlying streams to complete.
