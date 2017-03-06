@@ -394,44 +394,44 @@ module Consumer =
     let cfg = c.config
     let topic = cfg.topic
     return!
-        Group.tryAsync
-          (state)
-          (ignore)
-          (async {
-            let req = 
-              OffsetCommitRequest(
-                cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
-            let! res = Kafka.offsetCommit conn req |> Async.Catch
-            match res with
-            | Success res ->
-              if res.topics.Length = 0 then
-                Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" 
-                  cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
-                return failwith "offset commit failed!"
-              let errors =
-                res.topics
-                |> Seq.collect (fun (_,ps) ->
-                  ps
-                  |> Seq.choose (fun (p,ec) ->
-                    match ec with
-                    | ErrorCode.NoError -> None
-                    | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode 
-                    | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
-                    | _ -> failwithf "unsupported commit offset error_code=%i" ec))
-              if not (Seq.isEmpty errors) then
-                Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
-                  cfg.groupId topic (Printers.partitionErrorCodePairs errors)
-                do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
-                return ()
-              else
-                Log.info "committed_offsets|conn_id=%s group_id=%s topic=%s offsets=%s" 
-                  c.conn.Config.connId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
-                return ()
-            | Failure ex ->
-              Log.warn "commit_offset_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
-                c.conn.Config.connId cfg.groupId state.state.generationId ex
-              do! Group.leaveInternal c.groupMember state
-              return () }) }
+      Group.tryAsync
+        (state)
+        (ignore)
+        (async {
+          let req = 
+            OffsetCommitRequest(
+              cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
+          let! res = Kafka.offsetCommit conn req |> Async.Catch
+          match res with
+          | Success res ->
+            if res.topics.Length = 0 then
+              Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" 
+                cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
+              return failwith "offset commit failed!"
+            let errors =
+              res.topics
+              |> Seq.collect (fun (_,ps) ->
+                ps
+                |> Seq.choose (fun (p,ec) ->
+                  match ec with
+                  | ErrorCode.NoError -> None
+                  | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode 
+                  | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
+                  | _ -> failwithf "unsupported commit offset error_code=%i" ec))
+            if not (Seq.isEmpty errors) then
+              Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
+                cfg.groupId topic (Printers.partitionErrorCodePairs errors)
+              do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
+              return ()
+            else
+              Log.info "committed_offsets|conn_id=%s group_id=%s topic=%s offsets=%s" 
+                c.conn.Config.connId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
+              return ()
+          | Failure ex ->
+            Log.warn "commit_offset_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
+              c.conn.Config.connId cfg.groupId state.state.generationId ex
+            do! Group.leaveInternal c.groupMember state
+            return () }) }
 
   /// Explicitly commits offsets to a consumer group, to a specific offset time.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
