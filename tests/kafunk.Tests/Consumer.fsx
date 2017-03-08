@@ -20,11 +20,10 @@ let go = async {
       let chanConfig = 
         ChanConfig.create (
           requestTimeout = TimeSpan.FromSeconds 30.0,
-          receiveBufferSize = 8192 * 10,
+          receiveBufferSize = 8192 * 20,
+          sendBufferSize = 8192 * 10,
           connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
           requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy)
-//          connectRetryPolicy = RetryPolicy.none,
-//          requestRetryPolicy = RetryPolicy.none)
       KafkaConfig.create (
         [KafkaUri.parse host], 
         tcpConfig = chanConfig,
@@ -35,10 +34,10 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      //autoOffsetReset = AutoOffsetResetAction.TryStartFromCommittedOffsets,
-      fetchMaxBytes = 200000,
-      fetchBufferSize = 1,
-      sessionTimeout = 30000)
+      fetchMaxBytes = 5000000,
+      fetchBufferSize = 2,
+      sessionTimeout = 30000,
+      checkCrc = false)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   
@@ -48,7 +47,7 @@ let go = async {
       let! info = ConsumerInfo.consumerProgress consumer
       let str = 
         info.partitions
-        |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i lead=%i eo=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.lead p.earliestOffset)
+        |> Seq.map (fun p -> sprintf "[p=%i o=%i hwo=%i lag=%i lead=%i eo=%i mc=%i]" p.partition p.consumerOffset p.highWatermarkOffset p.lag p.lead p.earliestOffset p.messageCount)
         |> String.concat " ; "
       Log.info "consumer_progress|conn_id=%s topic=%s total_lag=%i min_lead=%i partitions=%s" conn.Config.connId info.topic info.totalLag info.minLead str
       return () })

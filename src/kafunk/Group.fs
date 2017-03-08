@@ -100,6 +100,7 @@ module Group =
 
   /// Checks if the group state is closed, in which cases it evaluates f.
   /// Otherwise, evaluates the async computation.
+  /// NB: this does not handle scenarios when the group state is closed shortly after the async computation is invoked.
   let internal tryAsync (state:GroupMemberStateWrapper) (f:GroupLeaveAction -> 'a) (a:Async<'a>) : Async<'a> = async {
     let t = state.closed.Task
     if t.IsCompleted then return f t.Result

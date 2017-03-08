@@ -74,7 +74,8 @@ let FetchResponseBinary =
 [<Test>]
 let ``FetchResponse.read should decode FetchResponse``() =
   let data = FetchResponseBinary
-  let (res:FetchResponse), _ = FetchResponse.read (0s, data)
+  let data = BinaryZipper(data)
+  let (res:FetchResponse) = FetchResponse.Read (0s, data)
   let topicName, ps = res.topics.[0]
   let p, ec, _hwo, mss, ms = ps.[0]
   let o, _ms, m = ms.messages.[0]

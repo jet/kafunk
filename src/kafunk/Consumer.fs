@@ -215,6 +215,9 @@ type ConsumerConfig = {
   /// When multiple stratgies are supported by all members, the first one in the list is selected.
   assignmentStrategies : (AssignmentStrategyName * ConsumerGroup.AssignmentStrategy)[]
 
+  /// Specifies whether CRC of incoming messages is verified.
+  checkCrc : bool
+
 } with
     
     /// Gets the default session timeout = 10000.
@@ -250,11 +253,14 @@ type ConsumerConfig = {
     /// Gets the default fetch buffer size = [| "range", ConsumerGroup.AssignmentStratgies.Range |].
     static member DefaultAssignmentStrategies = [| "range", ConsumerGroup.AssignmentStratgies.Range |]
 
+    /// Gets the default value for check crc = true.
+    static member DefaultCheckCrc = true
+
     /// Creates a consumer configuration.
     static member create 
       (groupId:GroupId, topic:TopicName, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
           ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?autoOffsetReset, 
-          ?fetchBufferSize, ?assignmentStrategies) =
+          ?fetchBufferSize, ?assignmentStrategies, ?checkCrc) =
       {
         groupId = groupId
         topic = topic
@@ -272,6 +278,7 @@ type ConsumerConfig = {
           match assignmentStrategies with
           | None -> ConsumerConfig.DefaultAssignmentStrategies
           | Some xs -> xs
+        checkCrc = defaultArg checkCrc ConsumerConfig.DefaultCheckCrc
       }
 
 /// The action to take when the consumer attempts to fetch an offset which is out of range or
@@ -394,44 +401,44 @@ module Consumer =
     let cfg = c.config
     let topic = cfg.topic
     return!
-        Group.tryAsync
-          (state)
-          (ignore)
-          (async {
-            let req = 
-              OffsetCommitRequest(
-                cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
-            let! res = Kafka.offsetCommit conn req |> Async.Catch
-            match res with
-            | Success res ->
-              if res.topics.Length = 0 then
-                Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" 
-                  cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
-                return failwith "offset commit failed!"
-              let errors =
-                res.topics
-                |> Seq.collect (fun (_,ps) ->
-                  ps
-                  |> Seq.choose (fun (p,ec) ->
-                    match ec with
-                    | ErrorCode.NoError -> None
-                    | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode 
-                    | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
-                    | _ -> failwithf "unsupported commit offset error_code=%i" ec))
-              if not (Seq.isEmpty errors) then
-                Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
-                  cfg.groupId topic (Printers.partitionErrorCodePairs errors)
-                do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
-                return ()
-              else
-                Log.info "committed_offsets|conn_id=%s group_id=%s topic=%s offsets=%s" 
-                  c.conn.Config.connId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
-                return ()
-            | Failure ex ->
-              Log.warn "commit_offset_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
-                c.conn.Config.connId cfg.groupId state.state.generationId ex
-              do! Group.leaveInternal c.groupMember state
-              return () }) }
+      Group.tryAsync
+        (state)
+        (ignore)
+        (async {
+          let req = 
+            OffsetCommitRequest(
+              cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
+          let! res = Kafka.offsetCommit conn req |> Async.Catch
+          match res with
+          | Success res ->
+            if res.topics.Length = 0 then
+              Log.error "offset_committ_failed|group_id=%s member_id=%s generation_id=%i topic=%s offsets=%s" 
+                cfg.groupId state.state.memberId state.state.generationId topic (Printers.partitionOffsetPairs offsets)
+              return failwith "offset commit failed!"
+            let errors =
+              res.topics
+              |> Seq.collect (fun (_,ps) ->
+                ps
+                |> Seq.choose (fun (p,ec) ->
+                  match ec with
+                  | ErrorCode.NoError -> None
+                  | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode 
+                  | ErrorCode.RebalanceInProgressCode | ErrorCode.NotCoordinatorForGroupCode -> Some (p,ec)
+                  | _ -> failwithf "unsupported commit offset error_code=%i" ec))
+            if not (Seq.isEmpty errors) then
+              Log.warn "commit_offset_errors|group_id=%s topic=%s errors=%s" 
+                cfg.groupId topic (Printers.partitionErrorCodePairs errors)
+              do! Group.leaveAndRejoin c.groupMember state (Seq.nth 0 errors |> snd)
+              return ()
+            else
+              Log.info "committed_offsets|conn_id=%s group_id=%s topic=%s offsets=%s" 
+                c.conn.Config.connId c.config.groupId topic (Printers.partitionOffsetPairs offsets)
+              return ()
+          | Failure ex ->
+            Log.warn "commit_offset_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
+              c.conn.Config.connId cfg.groupId state.state.generationId ex
+            do! Group.leaveInternal c.groupMember state
+            return () }) }
 
   /// Explicitly commits offsets to a consumer group, to a specific offset time.
   /// Note that consumers only fetch these offsets when first joining a group or when rejoining.
@@ -625,6 +632,8 @@ module Consumer =
                       if mss = 0 then Choice2Of4 (p,hwmo)
                       else 
                         let ms = Compression.decompress messageVer ms
+                        if cfg.checkCrc then
+                          MessageSet.CheckCrc (messageVer, ms)
                         Choice1Of4 (ConsumerMessageSet(t, p, ms, hwmo))
                     | ErrorCode.OffsetOutOfRange -> 
                       Choice3Of4 (p,hwmo)
@@ -913,6 +922,9 @@ and ConsumerPartitionProgressInfo = {
   /// The distance between the consumer offset and the earliest offset.
   lead : int64
 
+  /// The number of messages in the partition.
+  messageCount : int64
+
 }
 
 /// Operations for providing consumer progress information.
@@ -936,7 +948,7 @@ module ConsumerInfo =
       (topicOffsets, consumerOffsets)
       ||> Map.mergeChoice (fun p -> function
         | Choice1Of3 ((e,l),o) -> 
-          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e }
+          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e ; messageCount = l - e }
         | Choice2Of3 _ -> failwithf "unable to find consumer offset for topic=%s partition=%i" topic p
         | Choice3Of3 o -> failwithf "unable to find topic offset for topic=%s partition=%i [consumer_offset=%i]" topic p o)
       |> Seq.map (fun kvp -> kvp.Value)

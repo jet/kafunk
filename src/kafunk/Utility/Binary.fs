@@ -42,30 +42,8 @@ module Binary =
     if isNull buf.Array then null
     else Encoding.UTF8.GetString(buf.Array, buf.Offset, buf.Count)
 
-  let append (a : Segment) (b : Segment) : Segment =
-    if a.Count = 0 then b
-    elif b.Count = 0 then a
-    else
-      let arr = Array.zeroCreate (a.Count + b.Count)
-      System.Buffer.BlockCopy(a.Array, a.Offset, arr, 0, a.Count)
-      System.Buffer.BlockCopy(b.Array, b.Offset, arr, a.Count, b.Count)
-      ofArray arr
-
-  let partitionAt i (a : Segment) : Segment * Segment =
-    let first = Segment(a.Array, a.Offset, a.Offset + i)
-    let rest = Segment(a.Array, (a.Offset + i), (a.Count - i))
-    first, rest
-
   let inline copy (src : Segment) (dest : Segment) (count : int) =
     System.Buffer.BlockCopy(src.Array, src.Offset, dest.Array, dest.Offset, count)
-
-  let inline peek (read : Segment -> 'a * Segment) (buf : Segment) =
-    let v, _ = read buf
-    v
-
-  let inline poke (write : 'a -> Segment -> Segment) (x : 'a) (buf : Segment) =
-    write x buf |> ignore
-    buf
 
   let inline sizeInt8 (_:int8) = 1
 
@@ -340,3 +318,100 @@ module Binary =
         consumed <- consumed + (buf'.Offset - buf.Offset)
         buf <- buf'
     (arr.ToArray(), buf)
+
+//[<Struct>]
+type BinaryZipper (buf:ArraySegment<byte>) =
+  
+  let mutable buf = buf
+
+  member __.Buffer 
+    with get () = buf 
+    and set b = buf <- b
+
+  member __.ShiftOffset (n) =
+    buf <- Binary.shiftOffset n buf
+
+  member __.ReadInt8 () : int8 =
+    let r = Binary.peekInt8 buf
+    __.ShiftOffset 1
+    r
+  
+  member __.WriteInt8 (x:int8) =
+    buf <- Binary.writeInt8 x buf
+
+  member __.PeekIn16 () = Binary.peekInt16 buf
+
+  member __.ReadInt16 () : int16 =
+    let r = Binary.peekInt16 buf
+    __.ShiftOffset 2
+    r
+
+  member __.WriteInt16 (x:int16) =
+    buf <- Binary.writeInt16 x buf
+
+  member __.PeekIn32 () : int32 = Binary.peekInt32 buf
+
+  member __.ReadInt32 () : int32 =
+    let r = Binary.peekInt32 buf
+    __.ShiftOffset 4
+    r
+
+  member __.WriteInt32 (x:int32) =
+    buf <- Binary.writeInt32 x buf
+
+  member __.PeekIn64 () : int64 = Binary.peekInt64 buf
+
+  member __.ReadInt64 () : int64 =
+    let r = Binary.peekInt64 buf
+    buf <- (buf |> Binary.shiftOffset 8)
+    r
+
+  member __.WriteInt64 (x:int64) =
+    buf <- Binary.writeInt64 x buf
+
+  member __.WriteBytes (bytes:ArraySegment<byte>) =
+    if isNull bytes.Array then
+      __.WriteInt32 -1
+    else
+      __.WriteInt32 bytes.Count |> ignore
+      System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
+      __.ShiftOffset bytes.Count
+
+  member __.ReadBytes () : ArraySegment<byte> =
+    let length = __.ReadInt32 ()
+    if length = -1 then
+      (Binary.empty)
+    else
+      let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
+      __.ShiftOffset length
+      arr
+
+  member __.ReadArrayByteSize (expectedSize:int, read:int -> 'a option) =
+    let mutable consumed = 0
+    let arr = ResizeArray<_>()
+    while consumed < expectedSize && buf.Count > 0 do
+      let o' = buf.Offset
+      match read consumed with
+      | Some a -> arr.Add a
+      | _ -> ()
+      consumed <- consumed + (buf.Offset - o')
+    arr.ToArray()
+
+  member __.ReadString () : string =
+    let length = __.ReadInt16 ()
+    let length = int length
+    if length = -1 then
+      null
+    else
+      let str = Encoding.UTF8.GetString (buf.Array, buf.Offset, length)
+      __.ShiftOffset length
+      str
+
+  member __.ReadArray (read : BinaryZipper -> 'a) : 'a[] =
+    let n = __.ReadInt32 ()
+    let arr = Array.zeroCreate n
+    for i = 0 to n - 1 do
+      let elem = read __
+      arr.[i] <- elem
+    arr
+

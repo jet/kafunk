@@ -368,6 +368,23 @@ module Protocol =
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
+//    static member Write (ver:ApiVersion, m:Message, buf:BinaryZipper) =
+//      //let crcBuf = buf
+//      //let buf = crcBuf |> Binary.shiftOffset 4
+//      //let offset = buf.Offset
+//
+//      buf.WriteInt8 m.magicByte
+//      buf.WriteInt8 m.attributes
+//      if ver >= 1s then 
+//        buf.WriteInt64 m.timestamp
+//      buf.WriteBytes m.key
+//      buf.WriteBytes m.value
+//
+//      let crc = Crc.crc32 buf.Array offset (buf.Offset - offset)
+//      // We're sharing the array backing both buffers here.
+//      crcBuf |> Binary.writeInt32 (int crc) |> ignore
+//      ()
+
     static member write (ver:ApiVersion) (m:Message) buf =
       let crcBuf = buf
       let buf = crcBuf |> Binary.shiftOffset 4
@@ -403,6 +420,39 @@ module Protocol =
         raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
       (Message(crc,magicByte,attrs,timestamp,key,value)), buf
 
+    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+      let crc = buf.ReadInt32 ()
+      //let offsetAfterCrc = buf.Buffer.Offset
+      let magicByte = buf.ReadInt8 ()
+      let attrs = buf.ReadInt8 ()
+      let timestamp = 
+        if ver >= 1s then 
+          buf.ReadInt64 ()
+        else 
+          0L
+      let key = buf.ReadBytes ()
+      let value = buf.ReadBytes ()
+//      if checkCrc then
+//        let offsetAtEnd = buf.Buffer.Offset
+//        let readMessageSize = offsetAtEnd - offsetAfterCrc
+//        let crc' = int32 <| Crc.crc32 buf.Buffer.Array offsetAfterCrc readMessageSize
+//        if crc <> crc' then
+//          raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
+      Message(crc,magicByte,attrs,timestamp,key,value)
+    
+    // NB: assumes that m.key and m.value use the same underlying array
+    static member CheckCrc (ver:ApiVersion, m:Message) =
+      let offsetAfterCrc =
+        m.key.Offset
+        - 1 // magicByte
+        - 1 // attrs
+        - (if ver >= 1s then 8 else 0) // timestamp
+      let offsetAtEnd = m.value.Offset + m.value.Count
+      let readMessageSize = offsetAtEnd - offsetAfterCrc
+      let crc' = int32 <| Crc.crc32 m.key.Array offsetAfterCrc readMessageSize
+      if m.crc <> crc' then
+        raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' m.crc (Binary.toString m.key)))
+
 
   type MessageSet =
     struct
@@ -421,27 +471,64 @@ module Protocol =
 
     /// Reads the messages from the buffer, returning the message and new state of buffer.
     /// If the buffer doesn't have sufficient space for the last message, skips it.
-    static member read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:Binary.Segment) =
-      let set, buf = 
-        Binary.readArrayByteSize 
-          messageSetSize 
-          buf 
-          (fun consumed buf ->
+//    static member read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:Binary.Segment) =
+//      let set, buf = 
+//        Binary.readArrayByteSize 
+//          messageSetSize 
+//          buf 
+//          (fun consumed buf ->
+//            let messageSetRemainder = messageSetSize - consumed
+//            if messageSetRemainder >= 12 && buf.Count >= 12 then
+//              let (offset:Offset),buf = Binary.readInt64 buf
+//              let (messageSize:MessageSize),buf = Binary.readInt32 buf
+//              let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
+//              if messageSize > messageSetSize then
+//                raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
+//              try
+//                if messageSetRemainder >= messageSize && buf.Count >= messageSize then
+//                  let message,buf = Message.read (messageVer,buf)
+//                  Choice1Of2 ((offset,messageSize,message),buf)
+//                else
+//                  let rem = min messageSetRemainder buf.Count
+//                  let buf = Binary.shiftOffset rem buf
+//                  Choice2Of2 buf
+//              with :? CorruptCrc32Exception as ex ->
+//                let msg =
+//                  sprintf "partition=%i offset=%i error_code=%i consumed=%i message_set_size=%i message_set_remainder=%i message_size=%i buffer_offset=%i buffer_size=%i"
+//                    partition
+//                    offset
+//                    ec
+//                    consumed 
+//                    messageSetSize
+//                    messageSetRemainder 
+//                    messageSize
+//                    buf.Offset
+//                    buf.Count
+//                raise (CorruptCrc32Exception(msg, ex))
+//            else
+//              Choice2Of2 (Binary.shiftOffset messageSetRemainder buf))
+//      (MessageSet(set), buf)
+
+    static member Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
+      let set = 
+        buf.ReadArrayByteSize (
+          messageSetSize,
+          (fun consumed ->
             let messageSetRemainder = messageSetSize - consumed
-            if messageSetRemainder >= 12 && buf.Count >= 12 then
-              let (offset:Offset),buf = Binary.readInt64 buf
-              let (messageSize:MessageSize),buf = Binary.readInt32 buf
+            if messageSetRemainder >= 12 && buf.Buffer.Count >= 12 then
+              let (offset:Offset) = buf.ReadInt64 ()
+              let (messageSize:MessageSize) = buf.ReadInt32 ()
               let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
               if messageSize > messageSetSize then
                 raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
               try
-                if messageSetRemainder >= messageSize && buf.Count >= messageSize then
-                  let message,buf = Message.read (messageVer,buf)
-                  Choice1Of2 ((offset,messageSize,message),buf)
+                if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
+                  let message = Message.Read (messageVer,buf)
+                  Some (offset,messageSize,message)
                 else
-                  let rem = min messageSetRemainder buf.Count
-                  let buf = Binary.shiftOffset rem buf
-                  Choice2Of2 buf
+                  let rem = min messageSetRemainder buf.Buffer.Count
+                  buf.ShiftOffset rem
+                  None
               with :? CorruptCrc32Exception as ex ->
                 let msg =
                   sprintf "partition=%i offset=%i error_code=%i consumed=%i message_set_size=%i message_set_remainder=%i message_size=%i buffer_offset=%i buffer_size=%i"
@@ -452,12 +539,19 @@ module Protocol =
                     messageSetSize
                     messageSetRemainder 
                     messageSize
-                    buf.Offset
-                    buf.Count
+                    buf.Buffer.Offset
+                    buf.Buffer.Count
                 raise (CorruptCrc32Exception(msg, ex))
             else
-              Choice2Of2 (Binary.shiftOffset messageSetRemainder buf))
-      (MessageSet(set), buf)
+              buf.ShiftOffset messageSetRemainder
+              None))
+      MessageSet(set)
+  
+    static member CheckCrc (ver:ApiVersion, ms:MessageSet) =
+      for (_,_,m) in ms.messages do
+        Message.CheckCrc (ver,m)
+
+
 
   // Metadata API
   module Metadata =
@@ -632,23 +726,43 @@ module Protocol =
     end
   with
 
-    static member read (ver:ApiVersion, buf:Binary.Segment) =
-      let readPartition buf =
-        let partition, buf = Binary.readInt32 buf
-        let errorCode, buf = Binary.readInt16 buf
-        let hwo, buf = Binary.readInt64 buf
-        let mss, buf = Binary.readInt32 buf
-        let ms, buf = MessageSet.read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
-        ((partition, errorCode, hwo, mss, ms), buf)
-      let readTopic =
-        Binary.read2 Binary.readString (Binary.readArray readPartition)
-      let throttleTime,buf =
+    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+      let readPartition (buf:BinaryZipper) =
+        let partition = buf.ReadInt32 ()
+        let errorCode = buf.ReadInt16 ()
+        let hwo = buf.ReadInt64 ()
+        let mss = buf.ReadInt32 ()
+        let ms = MessageSet.Read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
+        partition, errorCode, hwo, mss, ms
+      let readTopic (buf:BinaryZipper) =
+        let t = buf.ReadString ()
+        let ps = buf.ReadArray readPartition
+        t,ps
+      let throttleTime =
         match ver with
-        | v when v >= 1s -> Binary.readInt32 buf
-        | _ -> 0,buf
-      let topics, buf = buf |> Binary.readArray readTopic
+        | v when v >= 1s -> buf.ReadInt32 ()
+        | _ -> 0
+      let topics = buf.ReadArray (readTopic)
       let res = FetchResponse(throttleTime, topics)
-      res,buf
+      res
+
+//    static member read (ver:ApiVersion, buf:Binary.Segment) =
+//      let readPartition buf =
+//        let partition, buf = Binary.readInt32 buf
+//        let errorCode, buf = Binary.readInt16 buf
+//        let hwo, buf = Binary.readInt64 buf
+//        let mss, buf = Binary.readInt32 buf
+//        let ms, buf = MessageSet.read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
+//        ((partition, errorCode, hwo, mss, ms), buf)
+//      let readTopic =
+//        Binary.read2 Binary.readString (Binary.readArray readPartition)
+//      let throttleTime,buf =
+//        match ver with
+//        | v when v >= 1s -> Binary.readInt32 buf
+//        | _ -> 0,buf
+//      let topics, buf = buf |> Binary.readArray readTopic
+//      let res = FetchResponse(throttleTime, topics)
+//      res,buf
 
   // Offset API
 
@@ -1322,35 +1436,65 @@ module Protocol =
   with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
-    static member inline readApiKey (apiKey:ApiKey, apiVer:ApiVersion, buf:Binary.Segment) : ResponseMessage =
+    static member inline Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
       match apiKey with
       | ApiKey.Heartbeat ->
-        let x, _ = HeartbeatResponse.read buf in (ResponseMessage.HeartbeatResponse x)
+        let x, _ = HeartbeatResponse.read buf.Buffer in (ResponseMessage.HeartbeatResponse x)
       | ApiKey.Metadata ->
-        let x, _ = MetadataResponse.read buf in (ResponseMessage.MetadataResponse x)
-      | ApiKey.Fetch ->
-        let x, _ = FetchResponse.read (apiVer,buf) in (ResponseMessage.FetchResponse x)
+        let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
+      | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
       | ApiKey.Produce ->
-        let x, _ = ProduceResponse.read buf in (ResponseMessage.ProduceResponse x)
+        let x, _ = ProduceResponse.read buf.Buffer in (ResponseMessage.ProduceResponse x)
       | ApiKey.Offset ->
-        let x, _ = OffsetResponse.read buf in (ResponseMessage.OffsetResponse x)
+        let x, _ = OffsetResponse.read buf.Buffer in (ResponseMessage.OffsetResponse x)
       | ApiKey.GroupCoordinator ->
-        let x, _ = GroupCoordinatorResponse.read buf in (ResponseMessage.GroupCoordinatorResponse x)
+        let x, _ = GroupCoordinatorResponse.read buf.Buffer in (ResponseMessage.GroupCoordinatorResponse x)
       | ApiKey.OffsetCommit ->
-        let x, _ = OffsetCommitResponse.read buf in (ResponseMessage.OffsetCommitResponse x)
+        let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
       | ApiKey.OffsetFetch ->
-        let x, _ = OffsetFetchResponse.read buf in (ResponseMessage.OffsetFetchResponse x)
+        let x, _ = OffsetFetchResponse.read buf.Buffer in (ResponseMessage.OffsetFetchResponse x)
       | ApiKey.JoinGroup ->
-        let x, _ = JoinGroup.readResponse buf in (ResponseMessage.JoinGroupResponse x)
+        let x, _ = JoinGroup.readResponse buf.Buffer in (ResponseMessage.JoinGroupResponse x)
       | ApiKey.SyncGroup ->
-        let x, _ = SyncGroupResponse.read buf in (ResponseMessage.SyncGroupResponse x)
+        let x, _ = SyncGroupResponse.read buf.Buffer in (ResponseMessage.SyncGroupResponse x)
       | ApiKey.LeaveGroup ->
-        let x, _ = LeaveGroupResponse.read buf in (ResponseMessage.LeaveGroupResponse x)
+        let x, _ = LeaveGroupResponse.read buf.Buffer in (ResponseMessage.LeaveGroupResponse x)
       | ApiKey.ListGroups ->
-        let x, _ = ListGroupsResponse.read buf in (ResponseMessage.ListGroupsResponse x)
+        let x, _ = ListGroupsResponse.read buf.Buffer in (ResponseMessage.ListGroupsResponse x)
       | ApiKey.DescribeGroups ->
-        let x, _ = DescribeGroupsResponse.read buf in (ResponseMessage.DescribeGroupsResponse x)
+        let x, _ = DescribeGroupsResponse.read buf.Buffer in (ResponseMessage.DescribeGroupsResponse x)
       | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
+
+//    /// Decodes the response given the specified ApiKey corresponding to the request.
+//    static member inline readApiKey (apiKey:ApiKey, apiVer:ApiVersion, buf:Binary.Segment) : ResponseMessage =
+//      match apiKey with
+//      | ApiKey.Heartbeat ->
+//        let x, _ = HeartbeatResponse.read buf in (ResponseMessage.HeartbeatResponse x)
+//      | ApiKey.Metadata ->
+//        let x, _ = MetadataResponse.read buf in (ResponseMessage.MetadataResponse x)
+//      | ApiKey.Fetch ->
+//        let x, _ = FetchResponse.read (apiVer,buf) in (ResponseMessage.FetchResponse x)
+//      | ApiKey.Produce ->
+//        let x, _ = ProduceResponse.read buf in (ResponseMessage.ProduceResponse x)
+//      | ApiKey.Offset ->
+//        let x, _ = OffsetResponse.read buf in (ResponseMessage.OffsetResponse x)
+//      | ApiKey.GroupCoordinator ->
+//        let x, _ = GroupCoordinatorResponse.read buf in (ResponseMessage.GroupCoordinatorResponse x)
+//      | ApiKey.OffsetCommit ->
+//        let x, _ = OffsetCommitResponse.read buf in (ResponseMessage.OffsetCommitResponse x)
+//      | ApiKey.OffsetFetch ->
+//        let x, _ = OffsetFetchResponse.read buf in (ResponseMessage.OffsetFetchResponse x)
+//      | ApiKey.JoinGroup ->
+//        let x, _ = JoinGroup.readResponse buf in (ResponseMessage.JoinGroupResponse x)
+//      | ApiKey.SyncGroup ->
+//        let x, _ = SyncGroupResponse.read buf in (ResponseMessage.SyncGroupResponse x)
+//      | ApiKey.LeaveGroup ->
+//        let x, _ = LeaveGroupResponse.read buf in (ResponseMessage.LeaveGroupResponse x)
+//      | ApiKey.ListGroups ->
+//        let x, _ = ListGroupsResponse.read buf in (ResponseMessage.ListGroupsResponse x)
+//      | ApiKey.DescribeGroups ->
+//        let x, _ = DescribeGroupsResponse.read buf in (ResponseMessage.DescribeGroupsResponse x)
+//      | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
 
   /// A Kafka response envelope.
   type Response =
