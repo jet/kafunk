@@ -339,7 +339,8 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.WriteInt8 (x:int8) =
     buf <- Binary.writeInt8 x buf
 
-  member __.PeekIn16 () = Binary.peekInt16 buf
+  member __.PeekIn16 () = 
+    Binary.peekInt16 buf
 
   member __.ReadInt16 () : int16 =
     let r = Binary.peekInt16 buf
@@ -363,7 +364,7 @@ type BinaryZipper (buf:ArraySegment<byte>) =
 
   member __.ReadInt64 () : int64 =
     let r = Binary.peekInt64 buf
-    buf <- (buf |> Binary.shiftOffset 8)
+    buf <- Binary.shiftOffset 8 buf
     r
 
   member __.WriteInt64 (x:int64) =
@@ -380,7 +381,8 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.ReadBytes () : ArraySegment<byte> =
     let length = __.ReadInt32 ()
     if length = -1 then
-      (Binary.empty)
+      //Binary.empty
+      ArraySegment<byte>(buf.Array, buf.Offset, 0)
     else
       let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
       __.ShiftOffset length

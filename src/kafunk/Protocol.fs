@@ -368,23 +368,6 @@ module Protocol =
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-//    static member Write (ver:ApiVersion, m:Message, buf:BinaryZipper) =
-//      //let crcBuf = buf
-//      //let buf = crcBuf |> Binary.shiftOffset 4
-//      //let offset = buf.Offset
-//
-//      buf.WriteInt8 m.magicByte
-//      buf.WriteInt8 m.attributes
-//      if ver >= 1s then 
-//        buf.WriteInt64 m.timestamp
-//      buf.WriteBytes m.key
-//      buf.WriteBytes m.value
-//
-//      let crc = Crc.crc32 buf.Array offset (buf.Offset - offset)
-//      // We're sharing the array backing both buffers here.
-//      crcBuf |> Binary.writeInt32 (int crc) |> ignore
-//      ()
-
     static member write (ver:ApiVersion) (m:Message) buf =
       let crcBuf = buf
       let buf = crcBuf |> Binary.shiftOffset 4
@@ -402,27 +385,26 @@ module Protocol =
       buf
 
   
-    /// Reads the message from the buffer, returning the message and new state of buffer.
-    static member read (ver:ApiVersion, buf:Binary.Segment) =
-      let crc, buf = Binary.readInt32 buf
-      let offsetAfterCrc = buf.Offset
-      let magicByte, buf = Binary.readInt8 buf
-      let attrs, buf = Binary.readInt8 buf
-      let timestamp,buf = 
-        if ver >= 1s then Binary.readInt64 buf
-        else 0L,buf
-      let key, buf = Binary.readBytes buf
-      let value, buf = Binary.readBytes buf
-      let offsetAtEnd = buf.Offset
-      let readMessageSize = offsetAtEnd - offsetAfterCrc
-      let crc' = int32 <| Crc.crc32 buf.Array offsetAfterCrc readMessageSize
-      if crc <> crc' then
-        raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
-      (Message(crc,magicByte,attrs,timestamp,key,value)), buf
+//    /// Reads the message from the buffer, returning the message and new state of buffer.
+//    static member read (ver:ApiVersion, buf:Binary.Segment) =
+//      let crc, buf = Binary.readInt32 buf
+//      let offsetAfterCrc = buf.Offset
+//      let magicByte, buf = Binary.readInt8 buf
+//      let attrs, buf = Binary.readInt8 buf
+//      let timestamp,buf = 
+//        if ver >= 1s then Binary.readInt64 buf
+//        else 0L,buf
+//      let key, buf = Binary.readBytes buf
+//      let value, buf = Binary.readBytes buf
+//      let offsetAtEnd = buf.Offset
+//      let readMessageSize = offsetAtEnd - offsetAfterCrc
+//      let crc' = int32 <| Crc.crc32 buf.Array offsetAfterCrc readMessageSize
+//      if crc <> crc' then
+//        raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
+//      (Message(crc,magicByte,attrs,timestamp,key,value)), buf
 
     static member Read (ver:ApiVersion, buf:BinaryZipper) =
       let crc = buf.ReadInt32 ()
-      //let offsetAfterCrc = buf.Buffer.Offset
       let magicByte = buf.ReadInt8 ()
       let attrs = buf.ReadInt8 ()
       let timestamp = 
@@ -432,24 +414,28 @@ module Protocol =
           0L
       let key = buf.ReadBytes ()
       let value = buf.ReadBytes ()
-//      if checkCrc then
-//        let offsetAtEnd = buf.Buffer.Offset
-//        let readMessageSize = offsetAtEnd - offsetAfterCrc
-//        let crc' = int32 <| Crc.crc32 buf.Buffer.Array offsetAfterCrc readMessageSize
-//        if crc <> crc' then
-//          raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
       Message(crc,magicByte,attrs,timestamp,key,value)
-    
+
     // NB: assumes that m.key and m.value use the same underlying array
-    static member CheckCrc (ver:ApiVersion, m:Message) =
+    static member ComputeCrc (ver:ApiVersion, m:Message) =
+      let offsetAtKey =
+        m.value.Offset
+        - 4 // key length
+        - 4 // value length
+        - (if isNull m.key.Array then 0 else m.key.Count)
       let offsetAfterCrc =
-        m.key.Offset
+        offsetAtKey
         - 1 // magicByte
         - 1 // attrs
         - (if ver >= 1s then 8 else 0) // timestamp
       let offsetAtEnd = m.value.Offset + m.value.Count
       let readMessageSize = offsetAtEnd - offsetAfterCrc
-      let crc' = int32 <| Crc.crc32 m.key.Array offsetAfterCrc readMessageSize
+      let crc32 = Crc.crc32 m.value.Array offsetAfterCrc readMessageSize
+      int32 crc32
+    
+    // NB: assumes that m.key and m.value use the same underlying array
+    static member CheckCrc (ver:ApiVersion, m:Message) =
+      let crc' = Message.ComputeCrc (ver,m)
       if m.crc <> crc' then
         raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' m.crc (Binary.toString m.key)))
 

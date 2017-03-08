@@ -5,7 +5,6 @@ open NUnit.Framework
 open System.Text
 
 open Kafunk
-open Kafunk.Protocol
 
 let arraySegToFSharp (arr:Binary.Segment) =
   let sb = StringBuilder()
@@ -31,6 +30,18 @@ let ``Crc.crc32 message``() =
   let crc32 = Crc.crc32 bytes.Array (bytes.Offset + 4) (bytes.Count - 4)
   let expected = 1940715388u
   Assert.AreEqual(expected, crc32)
+
+[<Test>]
+let ``Message.ComputeCrc``() =
+  let messageVer = 0s
+  let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
+  let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
+  let m2 = Message.Read (0s, BinaryZipper(bytes))
+  let crc32 = Message.ComputeCrc (messageVer, m2)
+  let expected = int 1940715388u
+  Assert.AreEqual(expected, m2.crc)
+  Assert.AreEqual(expected, crc32)
+  
 
 [<Test>]
 let ``Crc.crc32 string``() =

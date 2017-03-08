@@ -118,7 +118,7 @@ module internal Printers =
     concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[p={0} o={1}]", p, o)) " ; "
 
   let partitionErrorCodePairs (os:seq<Partition * ErrorCode>) =
-    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[p={0} o={1}]", p, o)) " ; "
+    concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[p={0} ec={1}]", p, o)) " ; "
     
   let stringsCsv (ss:seq<#obj>) =
     concatMapSb ss (fun sb s -> sb.AppendFormat("{0}", s)) ","
