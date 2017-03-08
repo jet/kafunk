@@ -1,3 +1,8 @@
+### 0.0.34-alpha001 - 08.03.2017
+
+* Make fetch response decoding more efficient (eliminate intermediate tuple allocations).
+* Make CRC check on fetch response configurable (defaults to true).
+
 ### 0.0.33-alpha001 - 01.03.2017
 
 * Ensure fetch errors are escalated to the top-level consumer.

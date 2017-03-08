@@ -215,6 +215,9 @@ type ConsumerConfig = {
   /// When multiple stratgies are supported by all members, the first one in the list is selected.
   assignmentStrategies : (AssignmentStrategyName * ConsumerGroup.AssignmentStrategy)[]
 
+  /// Specifies whether CRC of incoming messages is verified.
+  checkCrc : bool
+
 } with
     
     /// Gets the default session timeout = 10000.
@@ -250,11 +253,14 @@ type ConsumerConfig = {
     /// Gets the default fetch buffer size = [| "range", ConsumerGroup.AssignmentStratgies.Range |].
     static member DefaultAssignmentStrategies = [| "range", ConsumerGroup.AssignmentStratgies.Range |]
 
+    /// Gets the default value for check crc = true.
+    static member DefaultCheckCrc = true
+
     /// Creates a consumer configuration.
     static member create 
       (groupId:GroupId, topic:TopicName, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
           ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?autoOffsetReset, 
-          ?fetchBufferSize, ?assignmentStrategies) =
+          ?fetchBufferSize, ?assignmentStrategies, ?checkCrc) =
       {
         groupId = groupId
         topic = topic
@@ -272,6 +278,7 @@ type ConsumerConfig = {
           match assignmentStrategies with
           | None -> ConsumerConfig.DefaultAssignmentStrategies
           | Some xs -> xs
+        checkCrc = defaultArg checkCrc ConsumerConfig.DefaultCheckCrc
       }
 
 /// The action to take when the consumer attempts to fetch an offset which is out of range or
@@ -625,6 +632,8 @@ module Consumer =
                       if mss = 0 then Choice2Of4 (p,hwmo)
                       else 
                         let ms = Compression.decompress messageVer ms
+                        if cfg.checkCrc then
+                          MessageSet.CheckCrc (messageVer, ms)
                         Choice1Of4 (ConsumerMessageSet(t, p, ms, hwmo))
                     | ErrorCode.OffsetOutOfRange -> 
                       Choice3Of4 (p,hwmo)
@@ -913,6 +922,9 @@ and ConsumerPartitionProgressInfo = {
   /// The distance between the consumer offset and the earliest offset.
   lead : int64
 
+  /// The number of messages in the partition.
+  messageCount : int64
+
 }
 
 /// Operations for providing consumer progress information.
@@ -936,7 +948,7 @@ module ConsumerInfo =
       (topicOffsets, consumerOffsets)
       ||> Map.mergeChoice (fun p -> function
         | Choice1Of3 ((e,l),o) -> 
-          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e }
+          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e ; messageCount = l - e }
         | Choice2Of3 _ -> failwithf "unable to find consumer offset for topic=%s partition=%i" topic p
         | Choice3Of3 o -> failwithf "unable to find topic offset for topic=%s partition=%i [consumer_offset=%i]" topic p o)
       |> Seq.map (fun kvp -> kvp.Value)

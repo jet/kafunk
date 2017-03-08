@@ -48,8 +48,8 @@ module GZip =
     outputStream.Position <- 0L
     let output = outputStream.ToArray()
     // size is output array size divided by message set element size
-    MessageSet.read (messageVer, 0, 0s, output.Length, (output |> Binary.ofArray))
-    |> fst
+    let bz = BinaryZipper(output |> Binary.ofArray)
+    MessageSet.Read (messageVer, 0, 0s, output.Length, bz)
 
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with

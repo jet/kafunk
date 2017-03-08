@@ -319,7 +319,8 @@ module Binary =
         buf <- buf'
     (arr.ToArray(), buf)
 
-type BinaryZipper (buf:ArraySegment<byte>) =  
+//[<Struct>]
+type BinaryZipper (buf:ArraySegment<byte>) =
   
   let mutable buf = buf
 
@@ -383,7 +384,7 @@ type BinaryZipper (buf:ArraySegment<byte>) =
     else
       let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
       __.ShiftOffset length
-      arr      
+      arr
 
   member __.ReadArrayByteSize (expectedSize:int, read:int -> 'a option) =
     let mutable consumed = 0
@@ -391,9 +392,8 @@ type BinaryZipper (buf:ArraySegment<byte>) =
     while consumed < expectedSize && buf.Count > 0 do
       let o' = buf.Offset
       match read consumed with
-      | Some elem ->
-        arr.Add elem
-      | _ ->
+      | Some a -> arr.Add a
+      | _ -> ()
       consumed <- consumed + (buf.Offset - o')
     arr.ToArray()
 

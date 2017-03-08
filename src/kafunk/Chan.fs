@@ -220,7 +220,7 @@ module internal Chan =
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
       //ResponseMessage.readApiKey (apiKey,apiVer,buf)
       bz.Buffer <- buf
-      let r = ResponseMessage.Read (apiKey,apiVer,false,bz)
+      let r = ResponseMessage.Read (apiKey,apiVer,bz)
       r
 
     let session =
