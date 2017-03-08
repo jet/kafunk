@@ -1,3 +1,7 @@
+### 0.0.35-alpha001 - 08.04.2017
+
+* Fix CRC32 check.
+
 ### 0.0.34-alpha001 - 08.03.2017
 
 * Make fetch response decoding more efficient (eliminate intermediate tuple allocations).

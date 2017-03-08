@@ -45,7 +45,7 @@ let private table = [|
   0x54DE5729u; 0x23D967BFu; 0xB3667A2Eu; 0xC4614AB8u; 0x5D681B02u; 0x2A6F2B94u
   0xB40BBE37u; 0xC30C8EA1u; 0x5A05DF1Bu; 0x2D02EF8Du |]
 
-let crc32 (buf : byte[]) offset length =
+let crc32 (buf:byte[]) (offset:int) (length:int) =
   let mutable c = (0u ^^^ 0xffffffffu)
   for i = 0 to length - 1 do
     c <- table.[int ((c ^^^ uint32 buf.[i + offset]) &&& 0xffu)] ^^^ (c >>> 8)

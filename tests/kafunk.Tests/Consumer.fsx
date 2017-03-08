@@ -37,7 +37,7 @@ let go = async {
       fetchMaxBytes = 5000000,
       fetchBufferSize = 2,
       sessionTimeout = 30000,
-      checkCrc = false)
+      checkCrc = true)
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   
