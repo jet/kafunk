@@ -214,9 +214,13 @@ module internal Chan =
       let sessionData = toArraySeg Request.size (fun a -> Request.write (apiVer,a)) req
       sessionData,(apiKey,apiVer)
 
+    let bz = BinaryZipper (Binary.empty)
+
     /// Decodes the session layer input and session state into a response.
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
-      ResponseMessage.readApiKey (apiKey,apiVer,buf)
+      //ResponseMessage.readApiKey (apiKey,apiVer,buf)
+      bz.Buffer <- buf
+      r
 
     let session =
       Session.requestReply
