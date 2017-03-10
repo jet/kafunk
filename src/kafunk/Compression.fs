@@ -19,9 +19,10 @@ module GZip =
     use outputStream = new MemoryStream()
     use gZipStream = new GZipStream(outputStream, CompressionMode.Compress)
     do
-      let inputBytes = ms |> MessageSet.size messageVer |> Array.zeroCreate
+      let inputBytes = MessageSet.Size (messageVer,ms) |> Array.zeroCreate
       let buf = Binary.ofArray inputBytes
-      MessageSet.write messageVer ms buf |> ignore
+      MessageSet.Write (messageVer,ms,BinaryZipper(buf))
+      //MessageSet.write messageVer ms buf |> ignore
       try
         gZipStream.Write(inputBytes, 0, inputBytes.Length)
         gZipStream.Close()

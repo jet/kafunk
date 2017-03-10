@@ -22,11 +22,18 @@ let ``Binary.writeInt32 should encode int32 negative``() =
   let x2 = Binary.readInt32 buf |> fst
   Assert.AreEqual(x, x2)
 
+let toArraySeg (size:'a -> int) (write:'a * BinaryZipper -> unit) (a:'a) =
+  let size = size a
+  let buf = Binary.zeros size
+  let bz = BinaryZipper (buf)
+  write (a,bz)
+  buf
+
 [<Test>]
 let ``Crc.crc32 message``() =
   let messageVer = 0s
   let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
-  let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
+  let bytes = toArraySeg (fun m -> Message.Size (messageVer,m)) (fun (m,buf) -> Message.Write (messageVer, m,buf)) m
   let crc32 = Crc.crc32 bytes.Array (bytes.Offset + 4) (bytes.Count - 4)
   let expected = 1940715388u
   Assert.AreEqual(expected, crc32)
@@ -35,7 +42,8 @@ let ``Crc.crc32 message``() =
 let ``Message.ComputeCrc``() =
   let messageVer = 0s
   let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
-  let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
+  //let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
+  let bytes = toArraySeg (fun m -> Message.Size (messageVer,m)) (fun (m,buf) -> Message.Write (messageVer, m,buf)) m
   let m2 = Message.Read (0s, BinaryZipper(bytes))
   let crc32 = Message.ComputeCrc (messageVer, m2)
   let expected = int 1940715388u
@@ -69,7 +77,11 @@ let ``MessageSet.write should encode MessageSet``() =
       Message.create (Binary.ofArray "2"B) (Binary.ofArray "1"B) None
     ]
     |> MessageSet.ofMessages 0s
-  let data = toArraySeg (MessageSet.size 0s) (MessageSet.write 0s) ms
+  let size = MessageSet.Size (0s,ms)
+  let data = Binary.zeros size
+  let bz = BinaryZipper (data)
+  MessageSet.Write (0s, ms, bz)
+  //let data = toArraySeg (MessageSet.size 0s) (MessageSet.write 0s) ms
   let encoded = data |> Binary.toArray |> Array.toList
   Assert.True ((expected = encoded))
 
@@ -127,7 +139,8 @@ let ``ProduceResponse.read should decode ProduceResponse``() =
     Binary.ofArray [|
       0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
       0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
-  let (res:ProduceResponse), _ = ProduceResponse.read data
+  let bz = BinaryZipper(data)
+  let (res:ProduceResponse) = ProduceResponse.Read bz
   let topicName, ps = res.topics.[0]
   let p, ec, off = ps.[0]
   Assert.AreEqual("test", topicName)

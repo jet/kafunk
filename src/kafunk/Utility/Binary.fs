@@ -409,11 +409,26 @@ type BinaryZipper (buf:ArraySegment<byte>) =
       __.ShiftOffset length
       str
 
-  member __.ReadArray (read : BinaryZipper -> 'a) : 'a[] =
+  member __.ReadArray (read:BinaryZipper -> 'a) : 'a[] =
     let n = __.ReadInt32 ()
     let arr = Array.zeroCreate n
     for i = 0 to n - 1 do
-      let elem = read __
-      arr.[i] <- elem
+      arr.[i] <- read __
     arr
+
+  member __.WriteArray (arr:'a[], write:BinaryZipper * 'a -> unit) =
+    if isNull arr then
+      __.WriteInt32 (-1)
+    else
+      __.WriteInt32 (-1)
+      for i = 0 to arr.Length - 1 do
+        write (__,arr.[i])
+
+  member __.WriteString (s:string) =
+    if isNull s then
+      __.WriteInt16 -1s
+    else
+      __.WriteInt16 (int16 s.Length)
+      let read = Encoding.UTF8.GetBytes(s, 0, s.Length, buf.Array, buf.Offset)
+      __.ShiftOffset read
 

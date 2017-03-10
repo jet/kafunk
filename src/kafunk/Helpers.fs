@@ -14,10 +14,10 @@ module Message =
 module MessageSet =
 
   let ofMessage (messageVer:ApiVersion) (m:Message) =
-    MessageSet([| 0L, Message.size messageVer m, m |])
+    MessageSet([| 0L, Message.Size (messageVer,m), m |])
 
   let ofMessages (messageVer:ApiVersion) ms =
-    MessageSet(ms |> Seq.map (fun m -> 0L, Message.size messageVer m, m) |> Seq.toArray)
+    MessageSet(ms |> Seq.map (fun m -> 0L, Message.Size (messageVer,m), m) |> Seq.toArray)
 
   /// Returns the frist offset in the message set.
   let firstOffset (ms:MessageSet) =

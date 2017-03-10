@@ -183,7 +183,6 @@ type ConsumerConfig = {
   rebalanceTimeout : RebalanceTimeout
 
   /// The number of times to send heartbeats within a session timeout period.
-  /// Default: 3
   heartbeatFrequency : int32
   
   /// The minimum bytes to buffer server side for a fetch request.
@@ -220,8 +219,8 @@ type ConsumerConfig = {
 
 } with
     
-    /// Gets the default session timeout = 10000.
-    static member DefaultSessionTimeout = 10000
+    /// Gets the default session timeout = 30000.
+    static member DefaultSessionTimeout = 30000
 
     /// Gets the default rebalance timeout = 10000.
     static member DefaultRebalanceTimeout = 10000
@@ -949,7 +948,10 @@ module ConsumerInfo =
       ||> Map.mergeChoice (fun p -> function
         | Choice1Of3 ((e,l),o) -> 
           { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e ; messageCount = l - e }
-        | Choice2Of3 _ -> failwithf "unable to find consumer offset for topic=%s partition=%i" topic p
+        | Choice2Of3 (e,l) -> 
+          let o = -1L
+          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e ; messageCount = l - e }
+          //failwithf "unable to find consumer offset for topic=%s partition=%i" topic p
         | Choice3Of3 o -> failwithf "unable to find topic offset for topic=%s partition=%i [consumer_offset=%i]" topic p o)
       |> Seq.map (fun kvp -> kvp.Value)
       |> Seq.toArray

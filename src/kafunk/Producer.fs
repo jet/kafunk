@@ -245,7 +245,7 @@ module Producer =
     (messageVer:int16) 
     (ch:Chan) 
     (batch:ProducerMessageBatch seq) = async {
-    Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
+    //Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
 
     let pms = 
       batch
@@ -256,7 +256,7 @@ module Producer =
           |> Seq.collect (fun bs -> bs.messages |> Seq.map (fun pm -> Message.create pm.value pm.key None))
           |> MessageSet.ofMessages messageVer
           |> Compression.compress messageVer cfg.compression
-        p, MessageSet.size messageVer ms, ms)
+        p, MessageSet.Size (messageVer,ms), ms)
       |> Seq.toArray
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| cfg.topic,pms |])
@@ -335,20 +335,22 @@ module Producer =
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
-  let private getState (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
+  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
     
     Log.info "fetching_producer_metadata|topic=%s" cfg.topic
     let! state = conn.GetMetadataState [|cfg.topic|]
 
-    let partitions = 
-      ConnState.topicPartitions state |> Map.find cfg.topic
+    let partitions = ConnState.topicPartitions state |> Map.find cfg.topic
     Log.info "discovered_topic_partitions|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
 
     let brokerByPartition =
       partitions
       |> Seq.map (fun p -> 
         match ConnState.tryFindTopicPartitionBroker (cfg.topic, p) state with
-        | Some ch -> p, ch
+        | Some ch -> 
+          if (Chan.task ch).IsCompleted then
+            failwith "invalid broker channel!"
+          p, ch
         | None -> failwith "invalid state: should have broker after metadata fetch!")
       |> Map.ofSeq
     
@@ -357,7 +359,9 @@ module Producer =
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
-    let brokerQueue (ch:Chan) =
+    queueCts.Token.Register (fun _ -> Log.info "cancelling_producer") |> ignore
+
+    let startBrokerQueue (ch:Chan) =
       let sendBatch = sendBatch conn cfg messageVer ch
       let bufferCond = 
         BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
@@ -376,25 +380,28 @@ module Producer =
           |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
           |> AsyncSeq.ofObservableBuffered
           |> AsyncSeq.iterAsync sendBatch
+      Log.info "produce_process_starting|topic=%s ep=%O buffer_size=%i batch_size=%i" 
+        cfg.topic (Chan.endpoint ch) cfg.bufferSizeBytes cfg.batchSizeBytes
       sendProcess
       |> Async.tryWith (fun ex -> async {
-        Log.error "producer_broker_queue_exception|ep=%O error=%O" (Chan.endpoint ch) ex })
+        Log.error "producer_broker_queue_exception|ep=%O topic=%s error=%O" (Chan.endpoint ch) cfg.topic ex })
+      |> Async.tryFinally (fun _ ->
+        Log.info "produce_process_stopping|topic=%s ep=%O" cfg.topic (Chan.endpoint ch))
       |> (fun x -> Async.Start (x, queueCts.Token))
       (flip BoundedMb.put buffer)
-   
-    let brokerQueues =
+       
+    let partitionQueues =
+      let qs = Dict.ofSeq []
       brokerByPartition
       |> Map.toSeq
-      |> Seq.map (fun (_,ch) ->
+      |> Seq.map (fun (p,ch) ->
         let ep = Chan.endpoint ch
-        let q = brokerQueue ch
-        ep,q)
-      |> Map.ofSeq
-
-    let partitionQueues = 
-      brokerByPartition
-      |> Map.toSeq
-      |> Seq.map (fun (p,ep) -> p, brokerQueues |> Map.find (Chan.endpoint ep))
+        match Dict.tryGet ep qs with
+        | Some q -> p,q
+        | None ->
+          let q = startBrokerQueue ch
+          qs.Add (ep,q)
+          p,q)
       |> Map.ofSeq
 
     return { 
@@ -425,7 +432,7 @@ module Producer =
     Log.info "initializing_producer|topic=%s" config.topic
     let! resource = 
       Resource.recoverableRecreate 
-        (getState conn config) 
+        (initProducer conn config) 
         (fun (s,v,_,ex) -> async {
           Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=%O" 
             v config.topic (Printers.partitions s.partitions) ex
