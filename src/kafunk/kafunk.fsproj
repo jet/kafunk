@@ -81,6 +81,7 @@
     <Compile Include="Producer.fs" />
     <Compile Include="Group.fs" />
     <Compile Include="Consumer.fs" />
+    <Compile Include="ConsumerInfo.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
