@@ -51,15 +51,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '349', 349)" onmouseover="showTip(event, '349', 349)">
+          <code onmouseout="hideTip(event, '347', 347)" onmouseover="showTip(event, '347', 347)">
             messages
           </code>
-          <div class="tip" id="349">
+          <div class="tip" id="347">
             <strong>Signature:</strong> (Offset * MessageSize * Message) []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L409-409" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L425-425" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -77,15 +77,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '350', 350)" onmouseover="showTip(event, '350', 350)">
+          <code onmouseout="hideTip(event, '348', 348)" onmouseover="showTip(event, '348', 348)">
             new(set)
           </code>
-          <div class="tip" id="350">
+          <div class="tip" id="348">
             <strong>Signature:</strong> (set:(Offset * MessageSize * Message) []) -&gt; MessageSet<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L410-410" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L426-426" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -104,36 +104,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '351', 351)" onmouseover="showTip(event, '351', 351)">
-            read(...)
+          <code onmouseout="hideTip(event, '349', 349)" onmouseover="showTip(event, '349', 349)">
+            CheckCrc(ver, ms)
           </code>
-          <div class="tip" id="351">
-            <strong>Signature:</strong> (messageVer:ApiVersion * partition:Partition * ec:ErrorCode * messageSetSize:int * buf:Segment) -&gt; MessageSet * Segment<br />
+          <div class="tip" id="349">
+            <strong>Signature:</strong> (ver:ApiVersion * ms:MessageSet) -&gt; unit<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L424-424" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Reads the messages from the buffer, returning the message and new state of buffer.
-If the buffer doesn't have sufficient space for the last message, skips it.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '352', 352)" onmouseover="showTip(event, '352', 352)">
-            size(ver x)
-          </code>
-          <div class="tip" id="352">
-            <strong>Signature:</strong> ver:ApiVersion -&gt; x:MessageSet -&gt; int<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L414-414" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L480-480" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -143,15 +122,51 @@ If the buffer doesn't have sufficient space for the last message, skips it.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '353', 353)" onmouseover="showTip(event, '353', 353)">
-            write(messageVer ms buf)
+          <code onmouseout="hideTip(event, '350', 350)" onmouseover="showTip(event, '350', 350)">
+            Read(...)
           </code>
-          <div class="tip" id="353">
-            <strong>Signature:</strong> messageVer:ApiVersion -&gt; ms:MessageSet -&gt; buf:Segment -&gt; Segment<br />
+          <div class="tip" id="350">
+            <strong>Signature:</strong> (messageVer:ApiVersion * partition:Partition * ec:ErrorCode * messageSetSize:int * buf:BinaryZipper) -&gt; MessageSet<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L418-418" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L443-443" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '351', 351)" onmouseover="showTip(event, '351', 351)">
+            Size(ver, x)
+          </code>
+          <div class="tip" id="351">
+            <strong>Signature:</strong> (ver:ApiVersion * x:MessageSet) -&gt; int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L430-430" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '352', 352)" onmouseover="showTip(event, '352', 352)">
+            Write(messageVer, ms, buf)
+          </code>
+          <div class="tip" id="352">
+            <strong>Signature:</strong> (messageVer:ApiVersion * ms:MessageSet * buf:BinaryZipper) -&gt; unit<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L437-437" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
