@@ -36,7 +36,8 @@ let go = async {
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
       fetchMaxBytes = 5000000,
       fetchBufferSize = 2,
-      sessionTimeout = 30000,
+      sessionTimeout = 10000,
+      heartbeatFrequency = 10,
       checkCrc = true)
   let! consumer = 
     Consumer.createAsync conn consumerConfig

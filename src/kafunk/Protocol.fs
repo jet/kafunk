@@ -347,6 +347,7 @@ module Protocol =
     new (msg) = new MessageTooBigException (msg, null)
 
   /// A Kafka message type used for producing and fetching.
+  [<NoEquality;NoComparison>]
   type Message =
     struct
       val crc : Crc
@@ -360,7 +361,7 @@ module Protocol =
     end
   with
 
-    static member size (ver:ApiVersion) (m:Message) =
+    static member Size (ver:ApiVersion, m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
@@ -368,40 +369,18 @@ module Protocol =
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-    static member write (ver:ApiVersion) (m:Message) buf =
-      let crcBuf = buf
-      let buf = crcBuf |> Binary.shiftOffset 4
-      let offset = buf.Offset
-      let buf = Binary.writeInt8 m.magicByte buf
-      let buf = Binary.writeInt8 m.attributes buf
-      let buf =
-        if ver >= 1s then Binary.writeInt64 m.timestamp buf
-        else buf
-      let buf = Binary.writeBytes m.key buf
-      let buf = Binary.writeBytes m.value buf
-      let crc = Crc.crc32 buf.Array offset (buf.Offset - offset)
-      // We're sharing the array backing both buffers here.
-      crcBuf |> Binary.writeInt32 (int crc) |> ignore
-      buf
-
-  
-//    /// Reads the message from the buffer, returning the message and new state of buffer.
-//    static member read (ver:ApiVersion, buf:Binary.Segment) =
-//      let crc, buf = Binary.readInt32 buf
-//      let offsetAfterCrc = buf.Offset
-//      let magicByte, buf = Binary.readInt8 buf
-//      let attrs, buf = Binary.readInt8 buf
-//      let timestamp,buf = 
-//        if ver >= 1s then Binary.readInt64 buf
-//        else 0L,buf
-//      let key, buf = Binary.readBytes buf
-//      let value, buf = Binary.readBytes buf
-//      let offsetAtEnd = buf.Offset
-//      let readMessageSize = offsetAtEnd - offsetAfterCrc
-//      let crc' = int32 <| Crc.crc32 buf.Array offsetAfterCrc readMessageSize
-//      if crc <> crc' then
-//        raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' crc (Binary.toString key)))
-//      (Message(crc,magicByte,attrs,timestamp,key,value)), buf
+    static member Write (ver:ApiVersion, m:Message, buf:BinaryZipper) =
+      buf.ShiftOffset 4 // CRC
+      let offsetAfterCrc = buf.Buffer.Offset
+      buf.WriteInt8 m.magicByte
+      buf.WriteInt8 m.attributes
+      if ver >= 1s then
+        buf.WriteInt64 m.timestamp
+      buf.WriteBytes m.key
+      buf.WriteBytes m.value
+      let crc = Crc.crc32 buf.Buffer.Array offsetAfterCrc (buf.Buffer.Offset - offsetAfterCrc)
+      let crcBuf = System.ArraySegment<_>(buf.Buffer.Array, offsetAfterCrc - 4, 4)
+      Binary.pokeInt32 (int crc) crcBuf |> ignore
 
     static member Read (ver:ApiVersion, buf:BinaryZipper) =
       let crc = buf.ReadInt32 ()
@@ -440,6 +419,7 @@ module Protocol =
         raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' m.crc (Binary.toString m.key)))
 
 
+  [<NoEquality;NoComparison>]
   type MessageSet =
     struct
       val messages : (Offset * MessageSize * Message)[]
@@ -447,91 +427,55 @@ module Protocol =
     end
   with
 
-    static member size (ver:ApiVersion) (x:MessageSet) =
-      x.messages |> Array.sumBy (fun (offset, messageSize, message) ->
-        Binary.sizeInt64 offset + Binary.sizeInt32 messageSize + Message.size ver message)
+    static member Size (ver:ApiVersion, x:MessageSet) =
+      let mutable size = 0
+      for i = 0 to x.messages.Length - 1 do
+        let (_,_,m) = x.messages.[i]
+        size <- size + 8 + 4 + (Message.Size (ver,m))
+      size
 
-    static member write (messageVer:ApiVersion) (ms:MessageSet) buf =
-      Binary.writeArrayNoSize buf ms.messages (
-        Binary.write3 Binary.writeInt64 Binary.writeInt32 (Message.write messageVer))
-
-    /// Reads the messages from the buffer, returning the message and new state of buffer.
-    /// If the buffer doesn't have sufficient space for the last message, skips it.
-//    static member read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:Binary.Segment) =
-//      let set, buf = 
-//        Binary.readArrayByteSize 
-//          messageSetSize 
-//          buf 
-//          (fun consumed buf ->
-//            let messageSetRemainder = messageSetSize - consumed
-//            if messageSetRemainder >= 12 && buf.Count >= 12 then
-//              let (offset:Offset),buf = Binary.readInt64 buf
-//              let (messageSize:MessageSize),buf = Binary.readInt32 buf
-//              let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
-//              if messageSize > messageSetSize then
-//                raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
-//              try
-//                if messageSetRemainder >= messageSize && buf.Count >= messageSize then
-//                  let message,buf = Message.read (messageVer,buf)
-//                  Choice1Of2 ((offset,messageSize,message),buf)
-//                else
-//                  let rem = min messageSetRemainder buf.Count
-//                  let buf = Binary.shiftOffset rem buf
-//                  Choice2Of2 buf
-//              with :? CorruptCrc32Exception as ex ->
-//                let msg =
-//                  sprintf "partition=%i offset=%i error_code=%i consumed=%i message_set_size=%i message_set_remainder=%i message_size=%i buffer_offset=%i buffer_size=%i"
-//                    partition
-//                    offset
-//                    ec
-//                    consumed 
-//                    messageSetSize
-//                    messageSetRemainder 
-//                    messageSize
-//                    buf.Offset
-//                    buf.Count
-//                raise (CorruptCrc32Exception(msg, ex))
-//            else
-//              Choice2Of2 (Binary.shiftOffset messageSetRemainder buf))
-//      (MessageSet(set), buf)
+    static member Write (messageVer:ApiVersion, ms:MessageSet, buf:BinaryZipper) =
+      for (o,ms,m) in ms.messages do
+        buf.WriteInt64 o
+        buf.WriteInt32 ms
+        Message.Write (messageVer, m, buf)
 
     static member Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
-      let set = 
-        buf.ReadArrayByteSize (
-          messageSetSize,
-          (fun consumed ->
-            let messageSetRemainder = messageSetSize - consumed
-            if messageSetRemainder >= 12 && buf.Buffer.Count >= 12 then
-              let (offset:Offset) = buf.ReadInt64 ()
-              let (messageSize:MessageSize) = buf.ReadInt32 ()
-              let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
-              if messageSize > messageSetSize then
-                raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
-              try
-                if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
-                  let message = Message.Read (messageVer,buf)
-                  Some (offset,messageSize,message)
-                else
-                  let rem = min messageSetRemainder buf.Buffer.Count
-                  buf.ShiftOffset rem
-                  None
-              with :? CorruptCrc32Exception as ex ->
-                let msg =
-                  sprintf "partition=%i offset=%i error_code=%i consumed=%i message_set_size=%i message_set_remainder=%i message_size=%i buffer_offset=%i buffer_size=%i"
-                    partition
-                    offset
-                    ec
-                    consumed 
-                    messageSetSize
-                    messageSetRemainder 
-                    messageSize
-                    buf.Buffer.Offset
-                    buf.Buffer.Count
-                raise (CorruptCrc32Exception(msg, ex))
+      let mutable consumed = 0
+      let arr = ResizeArray<_>()
+      while consumed < messageSetSize && buf.Buffer.Count > 0 do
+        let o' = buf.Buffer.Offset
+        let messageSetRemainder = messageSetSize - consumed
+        if messageSetRemainder >= 12 && buf.Buffer.Count >= 12 then
+          let (offset:Offset) = buf.ReadInt64 ()
+          let (messageSize:MessageSize) = buf.ReadInt32 ()
+          let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
+          if messageSize > messageSetSize then
+            raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
+          try
+            if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
+              let message = Message.Read (messageVer,buf)
+              arr.Add (offset,messageSize,message)
             else
-              buf.ShiftOffset messageSetRemainder
-              None))
-      MessageSet(set)
+              let rem = min messageSetRemainder buf.Buffer.Count
+              buf.ShiftOffset rem
+          with :? CorruptCrc32Exception as ex ->
+            let msg =
+              sprintf "partition=%i offset=%i error_code=%i consumed=%i message_set_size=%i message_set_remainder=%i message_size=%i buffer_offset=%i buffer_size=%i"
+                partition
+                offset
+                ec
+                consumed 
+                messageSetSize
+                messageSetRemainder 
+                messageSize
+                buf.Buffer.Offset
+                buf.Buffer.Count
+            raise (CorruptCrc32Exception(msg, ex))
+        else
+          buf.ShiftOffset messageSetRemainder
+        consumed <- consumed + (buf.Buffer.Offset - o')
+      MessageSet(arr.ToArray())
   
     static member CheckCrc (ver:ApiVersion, ms:MessageSet) =
       for (_,_,m) in ms.messages do
@@ -557,6 +501,7 @@ module Protocol =
         Binary.writeArray x.topicNames Binary.writeString
 
   /// A Kafka broker consists of a node id, host name and TCP port.
+  [<NoEquality;NoComparison>]
   type Broker =
     struct
       val nodeId : NodeId
@@ -570,6 +515,7 @@ module Protocol =
       let (nodeId, host, port), buf = Binary.read3 Binary.readInt32 Binary.readString Binary.readInt32 buf
       (Broker(nodeId, host, port), buf)
 
+  [<NoEquality;NoComparison>]
   type PartitionMetadata =
     struct
       val partitionErrorCode : PartitionErrorCode
@@ -592,6 +538,7 @@ module Protocol =
       (PartitionMetadata(partitionErrorCode, partitionId, leader, replicas, isr), buf)
 
   /// Metadata for a specific topic consisting of a set of partition-to-broker assignments.
+  [<NoEquality;NoComparison>]
   type TopicMetadata =
     struct
       val topicErrorCode : TopicErrorCode
@@ -610,6 +557,7 @@ module Protocol =
 
   /// Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
   /// The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
+  [<NoEquality;NoComparison>]
   type MetadataResponse =
     struct
       val brokers : Broker[]
@@ -625,6 +573,7 @@ module Protocol =
 
   // Produce API
 
+  [<NoEquality;NoComparison>]
   type ProduceRequest =
     struct
       val requiredAcks : RequiredAcks
@@ -635,25 +584,35 @@ module Protocol =
     end
   with
 
-    static member size (x:ProduceRequest) =
-      let sizePartition (p, mss, _ms) =
-        Binary.sizeInt32 p + 4 + mss
-      let sizeTopic (tn, ps) =
-        Binary.sizeString tn + Binary.sizeArray ps sizePartition
-      Binary.sizeInt16 x.requiredAcks + Binary.sizeInt32 x.timeout + Binary.sizeArray x.topics sizeTopic
+    static member Size (x:ProduceRequest) =
+      let mutable size = 0
+      size <- size + 2 // requiredAcks
+      size <- size + 4 // timeout
+      size <- size + 4 // topics array size
+      for i = 0 to x.topics.Length - 1 do
+        let t,ps = x.topics.[i]
+        size <- size + (Binary.sizeString t)
+        size <- size + 4 // partition array size
+        for (_,mss,_) in ps do
+          size <- size + 4 + 4 + mss
+      size
 
-    static member write (ver:ApiVersion, x:ProduceRequest) buf =
-      let writePartition =
-        Binary.write3 Binary.writeInt32 Binary.writeInt32 (MessageSet.write (Versions.produceReqMessage ver))
-      let writeTopic =
-        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
-      buf
-      |> Binary.writeInt16 x.requiredAcks
-      |> Binary.writeInt32 x.timeout
-      |> Binary.writeArray x.topics writeTopic
+    static member Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
+      let ver = Versions.produceReqMessage ver
+      buf.WriteInt16 x.requiredAcks
+      buf.WriteInt32 x.timeout
+      buf.WriteInt32 x.topics.Length
+      for i = 0 to x.topics.Length - 1 do
+        let t,ps = x.topics.[i]
+        buf.WriteString t
+        buf.WriteInt32 ps.Length
+        for (p,mss,ms) in ps do
+          buf.WriteInt32 p
+          buf.WriteInt32 mss
+          MessageSet.Write (ver, ms, buf)
 
   /// A reponse to a produce request.
-  and ProduceResponse =
+  and [<NoEquality;NoComparison>] ProduceResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode * Offset)[])[]
       val throttleTime : ThrottleTime
@@ -661,17 +620,25 @@ module Protocol =
     end
   with
 
-    static member read buf =
-      let readPartition =
-        Binary.read3 Binary.readInt32 Binary.readInt16 Binary.readInt64
-      let readTopic =
-        Binary.read2 Binary.readString (Binary.readArray readPartition)
-      let topics, buf = buf |> Binary.readArray readTopic
-      let throttleTime, buf = buf |> Binary.readInt32 
-      (ProduceResponse(topics,throttleTime), buf)
+    static member Read (buf:BinaryZipper) =
+      let tn = buf.ReadInt32 ()
+      let topics = Array.zeroCreate tn
+      for i = 0 to topics.Length - 1 do
+        let t = buf.ReadString ()
+        let psn = buf.ReadInt32 ()
+        let ps = Array.zeroCreate psn
+        for j = 0 to ps.Length - 1 do
+          let p = buf.ReadInt32 ()
+          let ec = buf.ReadInt16 ()
+          let o = buf.ReadInt64 ()
+          ps.[j] <- p,ec,o
+        topics.[i] <- t,ps
+      let throttleTime = buf.ReadInt32 ()
+      ProduceResponse(topics,throttleTime)
 
   // Fetch API
 
+  [<NoEquality;NoComparison>]
   type FetchRequest =
     struct
       val replicaId : ReplicaId
@@ -683,27 +650,38 @@ module Protocol =
     end
   with
 
-    static member size (x:FetchRequest) =
-      let partitionSize (partition, offset, maxBytes) =
-        Binary.sizeInt32 partition + Binary.sizeInt64 offset + Binary.sizeInt32 maxBytes
-      let topicSize (name, partitions) =
-        Binary.sizeString name + Binary.sizeArray partitions partitionSize
-      Binary.sizeInt32 x.replicaId +
-      Binary.sizeInt32 x.maxWaitTime +
-      Binary.sizeInt32 x.minBytes +
-      Binary.sizeArray x.topics topicSize
+    static member Size (x:FetchRequest) =
+      let mutable size = 0
+      size <- size + 4 // replicaId
+      size <- size + 4 // maxWaitTime
+      size <- size + 4 // minBytes
+      size <- size + 4 // topic array size
+      for i = 0 to x.topics.Length - 1 do
+        let (t,ps) = x.topics.[i]
+        size <- size + (Binary.sizeString t)
+        size <- size + 4 // partition array size
+        for (_,_,_) in ps do
+          size <- size + 4 // partition
+          size <- size + 8 // offset
+          size <- size + 4 // maxBytes
+      size
 
-    static member write (x:FetchRequest) buf =
-      let writePartition =
-        Binary.write3 Binary.writeInt32 Binary.writeInt64 Binary.writeInt32
-      let writeTopic =
-        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
-      buf
-      |> Binary.writeInt32 x.replicaId
-      |> Binary.writeInt32 x.maxWaitTime
-      |> Binary.writeInt32 x.minBytes
-      |> Binary.writeArray x.topics writeTopic
+    static member Write (x:FetchRequest, buf:BinaryZipper) =
+      buf.WriteInt32 x.replicaId
+      buf.WriteInt32 x.maxWaitTime
+      buf.WriteInt32 x.minBytes
+      buf.WriteInt32 x.topics.Length
+      for i = 0 to x.topics.Length - 1 do
+        let (t,ps) = x.topics.[i]
+        buf.WriteString t
+        buf.WriteInt32 ps.Length
+        for j = 0 to ps.Length - 1 do
+          let (p,o,mb) = ps.[j]
+          buf.WriteInt32 p
+          buf.WriteInt64 o
+          buf.WriteInt32 mb
 
+  [<NoEquality;NoComparison>]
   type FetchResponse =
     struct
       val throttleTime : ThrottleTime
@@ -713,45 +691,30 @@ module Protocol =
   with
 
     static member Read (ver:ApiVersion, buf:BinaryZipper) =
-      let readPartition (buf:BinaryZipper) =
-        let partition = buf.ReadInt32 ()
-        let errorCode = buf.ReadInt16 ()
-        let hwo = buf.ReadInt64 ()
-        let mss = buf.ReadInt32 ()
-        let ms = MessageSet.Read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
-        partition, errorCode, hwo, mss, ms
-      let readTopic (buf:BinaryZipper) =
-        let t = buf.ReadString ()
-        let ps = buf.ReadArray readPartition
-        t,ps
       let throttleTime =
         match ver with
         | v when v >= 1s -> buf.ReadInt32 ()
         | _ -> 0
-      let topics = buf.ReadArray (readTopic)
+      let nt = buf.ReadInt32()
+      let topics = Array.zeroCreate nt
+      for i = 0 to topics.Length - 1 do
+        let t = buf.ReadString ()
+        let nps = buf.ReadInt32 ()
+        let ps = Array.zeroCreate nps
+        for j = 0 to ps.Length - 1 do
+          let partition = buf.ReadInt32 ()
+          let errorCode = buf.ReadInt16 ()
+          let hwo = buf.ReadInt64 ()
+          let mss = buf.ReadInt32 ()
+          let ms = MessageSet.Read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
+          ps.[j] <-  partition, errorCode, hwo, mss, ms
+        topics.[i] <- (t,ps)
       let res = FetchResponse(throttleTime, topics)
       res
 
-//    static member read (ver:ApiVersion, buf:Binary.Segment) =
-//      let readPartition buf =
-//        let partition, buf = Binary.readInt32 buf
-//        let errorCode, buf = Binary.readInt16 buf
-//        let hwo, buf = Binary.readInt64 buf
-//        let mss, buf = Binary.readInt32 buf
-//        let ms, buf = MessageSet.read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
-//        ((partition, errorCode, hwo, mss, ms), buf)
-//      let readTopic =
-//        Binary.read2 Binary.readString (Binary.readArray readPartition)
-//      let throttleTime,buf =
-//        match ver with
-//        | v when v >= 1s -> Binary.readInt32 buf
-//        | _ -> 0,buf
-//      let topics, buf = buf |> Binary.readArray readTopic
-//      let res = FetchResponse(throttleTime, topics)
-//      res,buf
-
   // Offset API
 
+  [<NoEquality;NoComparison>]
   type PartitionOffsets =
     struct
       val partition : Partition
@@ -769,6 +732,7 @@ module Protocol =
       (PartitionOffsets(p, ec, offs), buf)
 
   /// A request to return offset information for a set of topics on a specific replica.
+  [<NoEquality;NoComparison>]
   type OffsetRequest =
     struct
       val replicaId : ReplicaId
@@ -793,6 +757,7 @@ module Protocol =
       |> Binary.writeInt32 x.replicaId
       |> Binary.writeArray x.topics writeTopic
 
+  [<NoEquality;NoComparison>]
   type OffsetResponse =
     struct
       val topics : (TopicName * PartitionOffsets[])[]
@@ -812,6 +777,7 @@ module Protocol =
 
   // Offset Commit/Fetch API
 
+  [<NoEquality;NoComparison>]
   type OffsetCommitRequest =
     struct
       val consumerGroup : ConsumerGroup
@@ -848,6 +814,7 @@ module Protocol =
       |> Binary.writeInt64 x.retentionTime
       |> Binary.writeArray x.topics writeTopic
 
+  [<NoEquality;NoComparison>]
   type OffsetCommitResponse =
     struct
       val topics : (TopicName * (Partition * ErrorCode)[])[]
@@ -883,6 +850,7 @@ module Protocol =
       |> Binary.writeString x.consumerGroup
       |> Binary.writeArray x.topics writeTopic
 
+  [<NoEquality;NoComparison>]
   type OffsetFetchResponse =
     struct
       val topics : (TopicName * (Partition * Offset * Meta * ErrorCode)[])[]
@@ -905,6 +873,7 @@ module Protocol =
   /// issue its offset commit and fetch requests to this specific broker.
   /// It can discover the current coordinator by issuing a group coordinator request.
   /// Can be routed to any node in the bootstrap list.
+  [<NoEquality;NoComparison>]
   type GroupCoordinatorRequest =
     struct
       val groupId : GroupId
@@ -943,6 +912,7 @@ module Protocol =
 
   type ProtocolType = string
 
+  [<NoEquality;NoComparison>]
   type GroupProtocols =
     struct
       val protocols : (ProtocolName * ProtocolMetadata)[]
@@ -958,6 +928,7 @@ module Protocol =
     static member write (x:GroupProtocols) buf =
       buf |> Binary.writeArray x.protocols (Binary.write2 Binary.writeString Binary.writeBytes)
 
+  [<NoEquality;NoComparison>]
   type Members =
     struct
       val members : (MemberId * MemberMetadata)[]
@@ -974,6 +945,7 @@ module Protocol =
   module JoinGroup =
 
     [<Struct>]
+    [<NoEquality;NoComparison>]
     type Request =
       val groupId : GroupId
       val sessionTimeout : SessionTimeout
@@ -986,6 +958,7 @@ module Protocol =
           protocolType = protocolType; groupProtocols = groupProtocols }
 
     [<Struct>]
+    [<NoEquality;NoComparison>]
     type Response =
       val errorCode : ErrorCode
       val generationId : GenerationId
@@ -1026,6 +999,7 @@ module Protocol =
           Members.read
       (Response(errorCode, gid, gp, lid, mid, ms), buf)
 
+  [<NoEquality;NoComparison>]
   type GroupAssignment =
     struct
       val members : (MemberId * MemberAssignment)[]
@@ -1043,6 +1017,7 @@ module Protocol =
   /// partition assignments) to all members of the current generation. All
   /// members send SyncGroup immediately after joining the group, but only the
   /// leader provides the group's assignment.
+  [<NoEquality;NoComparison>]
   type SyncGroupRequest =
     struct
       val groupId : GroupId
@@ -1068,6 +1043,7 @@ module Protocol =
         |> Binary.writeString x.memberId
       GroupAssignment.write x.groupAssignment buf
 
+  [<NoEquality;NoComparison>]
   type SyncGroupResponse =
     struct
       val errorCode : ErrorCode
@@ -1082,6 +1058,7 @@ module Protocol =
       (SyncGroupResponse(errorCode, ma), buf)
 
   /// Sent by a consumer to the group coordinator.
+  [<NoEquality;NoComparison>]
   type HeartbeatRequest =
     struct
       val groupId : GroupId
@@ -1102,6 +1079,7 @@ module Protocol =
       |> Binary.writeString x.memberId
 
   /// Heartbeat response from the group coordinator.
+  [<NoEquality;NoComparison>]
   type HeartbeatResponse =
     struct
       val errorCode : ErrorCode
@@ -1114,6 +1092,7 @@ module Protocol =
       (HeartbeatResponse(errorCode), buf)
 
   /// An explciti request to leave a group. Preferred over session timeout.
+  [<NoEquality;NoComparison>]
   type LeaveGroupRequest =
     struct
       val groupId : GroupId
@@ -1128,6 +1107,7 @@ module Protocol =
     static member write (x:LeaveGroupRequest) buf =
       buf |> Binary.writeString x.groupId |> Binary.writeString x.memberId
 
+  [<NoEquality;NoComparison>]
   type LeaveGroupResponse =
     struct
       val errorCode : ErrorCode
@@ -1152,6 +1132,7 @@ module Protocol =
   type ConsumerGroupProtocolMetadataVersion = int16
 
   /// ProtocolMetadata for the consumer group protocol.
+  [<NoEquality;NoComparison>]
   type ConsumerGroupProtocolMetadata =
     struct
       val version : ConsumerGroupProtocolMetadataVersion
@@ -1181,6 +1162,7 @@ module Protocol =
 
   type AssignmentStrategyName = string
 
+  [<NoEquality;NoComparison>]
   type PartitionAssignment =
     struct
       val assignments : (TopicName * Partition[])[]
@@ -1206,6 +1188,7 @@ module Protocol =
 
   /// MemberAssignment for the consumer group protocol.
   /// Each member in the group will receive the assignment from the leader in the sync group response.
+  [<NoEquality;NoComparison>]
   type ConsumerGroupMemberAssignment =
     struct
       val version : ConsumerGroupProtocolMetadataVersion
@@ -1233,6 +1216,7 @@ module Protocol =
 
   // Administrative API
 
+  [<NoEquality;NoComparison>]
   type ListGroupsRequest =
     struct
     end
@@ -1263,6 +1247,7 @@ module Protocol =
 
   type ClientHost = string
 
+  [<NoEquality;NoComparison>]
   type GroupMembers =
     struct
       val members : (MemberId * ClientId * ClientHost * MemberMetadata * MemberAssignment)[]
@@ -1276,6 +1261,7 @@ module Protocol =
       let xs, buf = buf |> Binary.readArray readGroupMember
       (GroupMembers(xs), buf)
 
+  [<NoEquality;NoComparison>]
   type DescribeGroupsRequest =
     struct
       val groupIds : GroupId[]
@@ -1290,6 +1276,7 @@ module Protocol =
       buf |> Binary.writeArray x.groupIds Binary.writeString
 
 
+  [<NoEquality;NoComparison>]
   type DescribeGroupsResponse =
     struct
       val groups : (ErrorCode * GroupId * State * ProtocolType * Protocol * GroupMembers)[]
@@ -1330,8 +1317,8 @@ module Protocol =
       match x with
       | Heartbeat x -> HeartbeatRequest.size x
       | Metadata x -> Metadata.sizeRequest x
-      | Fetch x -> FetchRequest.size x
-      | Produce x -> ProduceRequest.size x
+      | Fetch x -> FetchRequest.Size x
+      | Produce x -> ProduceRequest.Size x
       | Offset x -> OffsetRequest.size x
       | GroupCoordinator x -> GroupCoordinatorRequest.size x
       | OffsetCommit x -> OffsetCommitRequest.size x
@@ -1342,21 +1329,21 @@ module Protocol =
       | ListGroups x -> ListGroupsRequest.size x
       | DescribeGroups x -> DescribeGroupsRequest.size x
 
-    static member write (ver:ApiVersion, x:RequestMessage) buf =
+    static member Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
       match x with
-      | Heartbeat x -> HeartbeatRequest.write x buf
-      | Metadata x -> Metadata.writeRequest x buf
-      | Fetch x -> FetchRequest.write x buf
-      | Produce x -> ProduceRequest.write (ver,x) buf
-      | Offset x -> OffsetRequest.write x buf
-      | GroupCoordinator x -> GroupCoordinatorRequest.write x buf
-      | OffsetCommit x -> OffsetCommitRequest.write x buf
-      | OffsetFetch x -> OffsetFetchRequest.write x buf
-      | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf
-      | SyncGroup x -> SyncGroupRequest.write x buf
-      | LeaveGroup x -> LeaveGroupRequest.write x buf
-      | ListGroups x -> ListGroupsRequest.write x buf
-      | DescribeGroups x -> DescribeGroupsRequest.write x buf
+      | Heartbeat x -> HeartbeatRequest.write x buf.Buffer |> ignore
+      | Metadata x -> Metadata.writeRequest x buf.Buffer |> ignore
+      | Fetch x -> FetchRequest.Write (x, buf)
+      | Produce x -> ProduceRequest.Write (ver,x,buf)
+      | Offset x -> OffsetRequest.write x buf.Buffer |> ignore
+      | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
+      | OffsetCommit x -> OffsetCommitRequest.write x buf.Buffer |> ignore
+      | OffsetFetch x -> OffsetFetchRequest.write x buf.Buffer |> ignore
+      | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
+      | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
+      | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
+      | ListGroups x -> ListGroupsRequest.write x buf.Buffer |> ignore
+      | DescribeGroups x -> DescribeGroupsRequest.write x buf.Buffer |> ignore
 
     member x.ApiKey =
       match x with
@@ -1395,14 +1382,12 @@ module Protocol =
       Binary.sizeString x.clientId +
       RequestMessage.size x.message
 
-    static member inline write (ver:ApiVersion, x:Request) buf =
-      let buf =
-        buf
-        |> Binary.writeInt16 (int16 x.apiKey)
-        |> Binary.writeInt16 x.apiVersion
-        |> Binary.writeInt32 x.correlationId
-        |> Binary.writeString x.clientId
-      RequestMessage.write (ver, x.message) buf
+    static member inline Write (ver:ApiVersion, x:Request, buf:BinaryZipper) =
+      buf.WriteInt16 (int16 x.apiKey)
+      buf.WriteInt16 (x.apiVersion)
+      buf.WriteInt32 (x.correlationId)
+      buf.WriteString (x.clientId)
+      RequestMessage.Write (ver, x.message, buf)
 
   /// A Kafka response message.
   type ResponseMessage =
@@ -1429,8 +1414,7 @@ module Protocol =
       | ApiKey.Metadata ->
         let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
-      | ApiKey.Produce ->
-        let x, _ = ProduceResponse.read buf.Buffer in (ResponseMessage.ProduceResponse x)
+      | ApiKey.Produce -> ProduceResponse.Read buf |> ResponseMessage.ProduceResponse
       | ApiKey.Offset ->
         let x, _ = OffsetResponse.read buf.Buffer in (ResponseMessage.OffsetResponse x)
       | ApiKey.GroupCoordinator ->

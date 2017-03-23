@@ -82,7 +82,7 @@ module Log =
   open System.IO
   open System.Text
 
-  let private event = new AsyncEvent<LogEntry>(100000)
+  let private event = new AsyncEvent<LogEntry>(1000000)
   
   /// Publishes all log events.
   let Event = event.Publish

@@ -250,6 +250,8 @@ module Group =
           state
           (konst false)
           (async {
+            Log.trace "sending_heartbeat|conn_id=%s group_id=%s generation=%i member_id=%s n=%i"
+              conn.Config.connId cfg.groupId state.state.generationId state.state.memberId count
             let req = HeartbeatRequest(cfg.groupId, state.state.generationId, state.state.memberId)
             let! res = Kafka.heartbeat conn req |> Async.Catch
             match res with
@@ -272,12 +274,12 @@ module Group =
               do! leaveInternal gm state
               return false })
 
-      let heartbeatProcess =
-        AsyncSeq.intervalMs heartbeatSleepMs
-        |> AsyncSeq.skip 1
-        |> AsyncSeq.mapiAsync (fun i _ -> async.Return i)
-        |> AsyncSeq.mapAsyncParallel (fun i -> heartbeat (int i) state)
-        |> AsyncSeq.pick (fun cont -> if cont then None else Some ())
+      let heartbeatProcess = async {
+        let i = ref 0
+        while true do
+          Async.Start (heartbeat !i state |> Async.Ignore, state.state.closed)
+          incr i
+          do! Async.Sleep heartbeatSleepMs }
 
       let! ct = Async.CancellationToken
       let cts = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)

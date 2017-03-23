@@ -1,3 +1,8 @@
+### 0.0.36-alpha001 - 23.03.2017
+
+* Improve produce and fetch codec performance.
+* Fix possible deadlock with Async.AwaitTask usage.
+
 ### 0.0.35-alpha001 - 08.04.2017
 
 * Fix CRC32 check.

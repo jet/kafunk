@@ -274,3 +274,26 @@ module AsyncSeq =
           else
             yield! loop (Some rest) timeoutMs }
       yield! loop None timeoutMs }
+
+  let ofObservableBuffered (source : System.IObservable<_>) = 
+    asyncSeq {
+      let! ct = Async.CancellationToken
+      let cts = CancellationTokenSource.CreateLinkedTokenSource (ct)
+      try 
+        // The body of this agent returns immediately.  It turns out this is a valid use of an F# agent, and it
+        // leaves the agent available as a queue that supports an asynchronous receive.
+        //
+        // This makes the cancellation token is somewhat meaningless since the body has already returned.  However
+        // if we don't pass it in then the default cancellation token will be used, so we pass one in for completeness.
+        use agent = MailboxProcessor<_>.Start((fun _ -> async.Return() ), cancellationToken = cts.Token)
+        use _d = source |> Observable.asUpdates |> Observable.subscribe agent.Post
+        let fin = ref false
+        while not fin.Value do 
+          let! msg = agent.Receive()
+          match msg with
+          | Observable.ObservableUpdate.Error e -> e.Throw()
+          | Observable.Completed -> fin := true
+          | Observable.Next v -> yield v 
+      finally 
+         // Cancel on early exit 
+         cts.Cancel() }

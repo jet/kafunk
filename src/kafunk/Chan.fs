@@ -211,14 +211,15 @@ module internal Chan =
       let apiKey = req.ApiKey
       let apiVer = Versions.byKey version apiKey
       let req = Request(apiVer, correlationId, clientId, req)
-      let sessionData = toArraySeg Request.size (fun a -> Request.write (apiVer,a)) req
-      sessionData,(apiKey,apiVer)
+      let size = Request.size req
+      let buf = Binary.zeros size // TODO: pool
+      Request.Write (apiVer, req, BinaryZipper(buf))
+      buf,(apiKey,apiVer)
 
     let bz = BinaryZipper (Binary.empty)
 
     /// Decodes the session layer input and session state into a response.
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
-      //ResponseMessage.readApiKey (apiKey,apiVer,buf)
       bz.Buffer <- buf
       let r = ResponseMessage.Read (apiKey,apiVer,bz)
       r

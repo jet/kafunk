@@ -73,14 +73,23 @@ let cts = new CancellationTokenSource()
 let sw = Stopwatch.StartNew()
 let mutable completed = 0L
 
+
 let go = async {
+
+  let offsets = Collections.Concurrent.ConcurrentDictionary<Partition, Offset>()
 
   let monitor = async {
     while true do
       do! Async.Sleep (1000 * 5)
       let completed = completed
       let mb = (int64 completed * int64 messageSize) / int64 1000000
-      Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb }
+      let offsets = 
+        (offsets.ToArray())
+        |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
+        |> Seq.sortBy fst
+        |> Seq.map (fun (p,o) -> sprintf "[p=%i o=%i]" p o)        
+        |> String.concat " ; "
+      Log.info "completed=%i elapsed_sec=%f MB=%i offsets=[%s]" completed sw.Elapsed.TotalSeconds mb offsets }
 
   let! _ = Async.StartChild monitor
 
@@ -98,6 +107,7 @@ let go = async {
           let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
           let! prodRes = produceBatch (fun pc -> batchNo % pc, msgs)
           Interlocked.Add(&completed, int64 batchSize) |> ignore
+          offsets.[prodRes.partition] <- prodRes.offset
           return ()
         with ex ->
           Log.error "produce_error|%O" ex
@@ -118,8 +128,10 @@ let go = async {
           let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
           let! res =
             msgs
-            |> Seq.map produce
-            //|> Async.Parallel
+            |> Seq.map (fun m -> async {
+              let! prodRes = produce m
+              offsets.[prodRes.partition] <- prodRes.offset
+              return () })
             |> Async.parallelThrottledIgnore batchSize
           Interlocked.Add(&completed, int64 batchSize) |> ignore
           return ()

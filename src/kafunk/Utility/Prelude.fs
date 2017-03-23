@@ -484,6 +484,7 @@ module Observable =
   open System
   open System.Threading
   open System.Collections.Concurrent
+  open System.Runtime.ExceptionServices
 
   let private disposable dispose = 
     { new IDisposable with member __.Dispose () = dispose () }
@@ -602,6 +603,27 @@ module Observable =
       let batchSubs = batches.Subscribe(observer.OnNext)
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+
+  /// Union type that represents different messages that can be sent to the
+  /// IObserver interface. The IObserver type is equivalent to a type that has
+  /// just OnNext method that gets 'ObservableUpdate' as an argument.
+  type internal ObservableUpdate<'T> = 
+      | Next of 'T
+      | Error of ExceptionDispatchInfo
+      | Completed
+
+
+  /// Turns observable into an observable that only calls OnNext method of the
+  /// observer, but gives it a discriminated union that represents different
+  /// kinds of events (error, next, completed)
+  let asUpdates (source:IObservable<'T>) = 
+    { new IObservable<_> with
+        member x.Subscribe(observer) =
+          source.Subscribe
+            ({ new IObserver<_> with
+                member x.OnNext(v) = observer.OnNext(Next v)
+                member x.OnCompleted() = observer.OnNext(Completed) 
+                member x.OnError(e) = observer.OnNext(Error (ExceptionDispatchInfo.Capture e)) }) }
 
 
   

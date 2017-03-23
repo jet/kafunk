@@ -91,6 +91,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>), rp:RetryPolicy, a:'a) : Async<'b> =
     let rec go (rs:RetryState) = async {
       let! ep = MVar.get cell
+      //let ep = MVar.getFastUnsafe cell |> Option.get
       let! b = op ep.resource a
       match b with
       | Success b -> 
@@ -122,6 +123,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<ResourceResult<'b, exn>>)) : Async<'a -> Async<'b>> = async {
     let rec go a = async {
       let! ep = MVar.get cell
+      //let ep = MVar.getFastUnsafe cell |> Option.get
       let! res = op ep.resource a
       match res with
       | Success b -> 
@@ -139,6 +141,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   member internal __.Inject<'a, 'b> (op:'r -> ('a -> Async<'b>)) : Async<'a -> Async<'b>> = async {
     let rec go a = async {
       let! ep = MVar.get cell
+      //let ep = MVar.getFastUnsafe cell |> Option.get
       try
         return! op ep.resource a
       with ex ->
