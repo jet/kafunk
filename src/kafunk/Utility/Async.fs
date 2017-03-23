@@ -12,6 +12,31 @@ open System.Collections.Concurrent
 open Kafunk
 
 
+let private awaitTaskUnit (t:Task) =
+  Async.FromContinuations <| fun (ok,err,cnc) ->
+    t.ContinueWith(fun t ->
+      if t.IsFaulted then err(t.Exception)
+      elif t.IsCanceled then cnc(OperationCanceledException("Task wrapped with Async.AwaitTask has been cancelled.",  t.Exception))
+      elif t.IsCompleted then ok()
+      else failwith "invalid Task state!") |> ignore
+
+let private awaitTaskCancellationAsError (t:Task<'a>) : Async<'a> =
+  Async.FromContinuations <| fun (ok,err,_) ->
+    t.ContinueWith (fun (t:Task<'a>) ->
+      if t.IsFaulted then err t.Exception
+      elif t.IsCanceled then err (OperationCanceledException("Task wrapped with Async has been cancelled."))
+      elif t.IsCompleted then ok t.Result
+      else failwith "invalid Task state!") |> ignore
+
+let private awaitTaskUnitCancellationAsError (t:Task) : Async<unit> =
+  Async.FromContinuations <| fun (ok,err,_) ->
+    t.ContinueWith (fun (t:Task) ->
+      if t.IsFaulted then err t.Exception
+      elif t.IsCanceled then err (OperationCanceledException("Task wrapped with Async has been cancelled."))
+      elif t.IsCompleted then ok ()
+      else failwith "invalid Task state!") |> ignore
+
+
 /// A write-once concurrent variable.
 type IVar<'a> = TaskCompletionSource<'a>
 
@@ -51,7 +76,7 @@ module IVar =
 
   /// Creates an async computation which returns the value contained in an IVar.
   let inline get (i:IVar<'a>) : Async<'a> = 
-    i.Task |> Async.AwaitTask
+    i.Task |> awaitTaskCancellationAsError
 
   /// Returns a cancellation token which is cancelled when the IVar is set.
   let inline toCancellationToken (i:IVar<_>) =
@@ -92,33 +117,6 @@ module Task =
         IVar.error t.Exception ivar
       ivar.Task)
     |> join
-
-
-
-
-let private awaitTaskUnit (t:Task) =
-  Async.FromContinuations <| fun (ok,err,cnc) ->
-    t.ContinueWith(fun t ->
-      if t.IsFaulted then err(t.Exception)
-      elif t.IsCanceled then cnc(OperationCanceledException("Task wrapped with Async.AwaitTask has been cancelled.",  t.Exception))
-      elif t.IsCompleted then ok()
-      else failwith "invalid Task state!") |> ignore
-
-let private awaitTaskCancellationAsError (t:Task<'a>) : Async<'a> =
-  Async.FromContinuations <| fun (ok,err,_) ->
-    t.ContinueWith (fun (t:Task<'a>) ->
-      if t.IsFaulted then err t.Exception
-      elif t.IsCanceled then err (OperationCanceledException("Task wrapped with Async has been cancelled."))
-      elif t.IsCompleted then ok t.Result
-      else failwith "invalid Task state!") |> ignore
-
-let private awaitTaskUnitCancellationAsError (t:Task) : Async<unit> =
-  Async.FromContinuations <| fun (ok,err,_) ->
-    t.ContinueWith (fun (t:Task) ->
-      if t.IsFaulted then err t.Exception
-      elif t.IsCanceled then err (OperationCanceledException("Task wrapped with Async has been cancelled."))
-      elif t.IsCompleted then ok ()
-      else failwith "invalid Task state!") |> ignore
 
 [<Compile(Module)>]
 module Async =
