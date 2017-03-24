@@ -208,7 +208,7 @@ module AsyncSeq =
     return Task.WhenAny (t, a) |> Task.join }
 
   let private chooseTask (t:Task<'a>) (a:Async<'a>) : Async<'a> =
-    chooseTaskAsTask t a |> Async.bind Async.AwaitTask
+    chooseTaskAsTask t a |> Async.bind Async.awaitTaskCancellationAsError
 
   let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = asyncSeq {
     use mb = Mb.create ()

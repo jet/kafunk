@@ -87,11 +87,28 @@ let go = async {
         (offsets.ToArray())
         |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
         |> Seq.sortBy fst
-        |> Seq.map (fun (p,o) -> sprintf "[p=%i o=%i]" p o)        
+        |> Seq.map (fun (p,o) -> sprintf "[p=%i o=%i]" p o)
         |> String.concat " ; "
       Log.info "completed=%i elapsed_sec=%f MB=%i offsets=[%s]" completed sw.Elapsed.TotalSeconds mb offsets }
 
   let! _ = Async.StartChild monitor
+
+  let threadPoolMonitor = async {
+    while true do
+      do! Async.Sleep (1000 * 5)
+      let maxWorkerThreads = ref 0
+      let maxIoThreads = ref 0
+      let minWorkerThreads = ref 0
+      let minIoThreads = ref 0
+      let availWorkerThreads = ref 0
+      let availIoThreads = ref 0
+      ThreadPool.GetMaxThreads (maxWorkerThreads, maxIoThreads)
+      ThreadPool.GetMinThreads (minWorkerThreads, minIoThreads)
+      ThreadPool.GetAvailableThreads (availWorkerThreads, availIoThreads)
+      Log.info "thread_pool|max_worker=%i max_io=%i min_worker=%i min_io=%i avail_worker=%i avail_io=%i"
+        !maxWorkerThreads !maxIoThreads !minWorkerThreads !minIoThreads !availWorkerThreads !availIoThreads }
+
+  let! _ = Async.StartChild threadPoolMonitor
 
   if explicitBatch then
 

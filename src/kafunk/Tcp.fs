@@ -31,7 +31,7 @@ module Dns =
 
     let getAllAsync (hostOrAddress:string) =
       Dns.GetHostAddressesAsync(hostOrAddress)
-      |> Async.AwaitTask
+      |> Async.awaitTaskCancellationAsError
       |> Async.map (Array.filter (fun ip -> ip.AddressFamily = AddressFamily.InterNetwork))
 
     let getAsync (host:string) =
