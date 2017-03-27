@@ -57,15 +57,17 @@ module Socket =
     Async.FromContinuations <| fun (ok, error, _) ->
       try
         let args = alloc ()
+        //let args = new SocketAsyncEventArgs()
         config args
         let rec k (_:obj) (args:SocketAsyncEventArgs) =
-          args.remove_Completed(k')
           try
+            args.remove_Completed(k')
             match args.SocketError with
             | SocketError.Success -> ok (map args)
             | e -> error (SocketException(int e))
           finally
             free args
+            //args.Dispose ()
         and k' = EventHandler<SocketAsyncEventArgs>(k)
         args.add_Completed(k')
         if not (op args) then
@@ -78,9 +80,11 @@ module Socket =
     let pop = pool.Pop
     let push (args:SocketAsyncEventArgs) =
       args.AcceptSocket <- null
+      args.UserToken <- null
       args.RemoteEndPoint <- null
       args.SetBuffer(null, 0, 0) |> ignore
-      args.BufferList <- null
+      if not (isNull args.BufferList) then
+        args.BufferList <- null
       pool.Push(args)
     pop,push
 
@@ -322,7 +326,7 @@ type ReqRepSession<'a, 'b, 's> internal
         if not (reply.TrySetResult res) then
           Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
-        Log.error "response_decode_exception|correlation_id=%i error=%O payload=%s" correlationId ex (Binary.toString sessionData.payload)
+        Log.error "response_decode_exception|correlation_id=%i error=\"%O\" payload=%s" correlationId ex (Binary.toString sessionData.payload)
         reply.TrySetException ex |> ignore
     else
       Log.trace "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
@@ -355,7 +359,7 @@ type ReqRepSession<'a, 'b, 's> internal
       Log.warn "restarting_receive_loop"
       return! receiveProcess
     with ex ->
-      Log.error "receive_loop_faiure|error=%O" ex
+      Log.error "receive_loop_faiure|error=\"%O\"" ex
       return raise ex }
 
   let receiveTask : Task<unit> = 

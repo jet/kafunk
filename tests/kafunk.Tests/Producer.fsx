@@ -7,7 +7,7 @@ open System
 open System.Diagnostics
 open System.Threading
 
-Log.MinLevel <- LogLevel.Trace
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -43,7 +43,7 @@ let connCfg =
     [KafkaUri.parse host], 
     tcpConfig = chanConfig,
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 100,
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2,
     //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
     bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3
     )
@@ -93,22 +93,22 @@ let go = async {
 
   let! _ = Async.StartChild monitor
 
-  let threadPoolMonitor = async {
-    while true do
-      do! Async.Sleep (1000 * 5)
-      let maxWorkerThreads = ref 0
-      let maxIoThreads = ref 0
-      let minWorkerThreads = ref 0
-      let minIoThreads = ref 0
-      let availWorkerThreads = ref 0
-      let availIoThreads = ref 0
-      ThreadPool.GetMaxThreads (maxWorkerThreads, maxIoThreads)
-      ThreadPool.GetMinThreads (minWorkerThreads, minIoThreads)
-      ThreadPool.GetAvailableThreads (availWorkerThreads, availIoThreads)
-      Log.info "thread_pool|max_worker=%i max_io=%i min_worker=%i min_io=%i avail_worker=%i avail_io=%i"
-        !maxWorkerThreads !maxIoThreads !minWorkerThreads !minIoThreads !availWorkerThreads !availIoThreads }
-
-  let! _ = Async.StartChild threadPoolMonitor
+//  let threadPoolMonitor = async {
+//    while true do
+//      do! Async.Sleep (1000 * 5)
+//      let maxWorkerThreads = ref 0
+//      let maxIoThreads = ref 0
+//      let minWorkerThreads = ref 0
+//      let minIoThreads = ref 0
+//      let availWorkerThreads = ref 0
+//      let availIoThreads = ref 0
+//      ThreadPool.GetMaxThreads (maxWorkerThreads, maxIoThreads)
+//      ThreadPool.GetMinThreads (minWorkerThreads, minIoThreads)
+//      ThreadPool.GetAvailableThreads (availWorkerThreads, availIoThreads)
+//      Log.info "thread_pool|max_worker=%i max_io=%i min_worker=%i min_io=%i avail_worker=%i avail_io=%i"
+//        !maxWorkerThreads !maxIoThreads !minWorkerThreads !minIoThreads !availWorkerThreads !availIoThreads }
+//
+//  let! _ = Async.StartChild threadPoolMonitor
 
   if explicitBatch then
 

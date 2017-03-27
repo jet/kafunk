@@ -1,3 +1,7 @@
+### 0.0.36-alpha001 - 27.03.2017
+
+* Fix producer bug where during recovery, messages in flight would be lost and never timeout.
+
 ### 0.0.36-alpha001 - 23.03.2017
 
 * Improve produce and fetch codec performance.

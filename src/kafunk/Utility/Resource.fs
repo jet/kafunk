@@ -76,7 +76,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           let! ep2 = recover req ex callingEpoch
           return ep2
         with ex ->
-          Log.trace "recovery_failed|type=%s error=%O" name ex
+          Log.trace "recovery_failed|type=%s error=\"%O\"" name ex
           return raise ex
       else
         Log.trace "resource_already_recovered|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
@@ -88,7 +88,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       let! ep = MVar.get cell
       return! op ep.resource a |> Async.cancelWithToken ep.closed.Token }
 
-  member internal __.InjectResult<'a, 'b> (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>), rp:RetryPolicy, a:'a) : Async<'b> =
+  member internal __.InjectResult<'a, 'b> (op:'r -> 'a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>, rp:RetryPolicy, a:'a) : Async<'b> =
     let rec go (rs:RetryState) = async {
       let! ep = MVar.get cell
       //let ep = MVar.getFastUnsafe cell |> Option.get
@@ -100,11 +100,13 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         let! _ = __.Recover (ep, a, ex)
         return b
       | Failure (RecoverRetry ex) ->
-        Log.trace "recovering_and_retrying_after_failure|name=%s attempt=%i error=%O" name rs.attempt ex
+        Log.trace "recovering_and_retrying_after_failure|name=%s version=%i attempt=%i error=\"%O\"" 
+          name ep.version rs.attempt ex
         let! rs' = RetryPolicy.awaitNextState rp rs
         match rs' with
         | None ->
-          Log.trace "escalating_after_retry_attempts_depleted|name=%s attempt=%i error=%O" name rs.attempt ex
+          Log.trace "escalating_after_retry_attempts_depleted|name=%s version=%i attempt=%i error=\"%O\"" 
+            name ep.version rs.attempt ex
           return raise ex
         | Some rs' ->
           let! _ = __.Recover (ep, a, ex)
@@ -114,7 +116,8 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         let! rs' = RetryPolicy.awaitNextState rp rs
         match rs' with
         | None ->
-          Log.trace "escalating_after_retry_attempts_depleted|name=%s attempt=%i" name rs.attempt
+          Log.trace "escalating_after_retry_attempts_depleted|name=%s version=%i attempt=%i" 
+            name ep.version rs.attempt
           return raise (exn("Escalating after retry."))
         | Some rs' ->
           return! go rs' }

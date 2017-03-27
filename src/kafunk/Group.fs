@@ -234,7 +234,7 @@ module Group =
               memberAssignment = syncGroupRes.memberAssignment 
               protocolName = joinGroupRes.groupProtocol
               members = joinGroupRes.members.members
-              closed = IVar.toCancellationToken closed
+              closed = IVar.asCancellationToken closed
             }
           closed = closed
         }
@@ -269,7 +269,7 @@ module Group =
                 return failwithf "unknown_heartbeat_error|conn_id=%s error_code=%i" 
                   conn.Config.connId ec
             | Failure ex ->
-              Log.warn "heartbeat_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
+              Log.warn "heartbeat_exception|conn_id=%s group_id=%s generation_id=%i error=\"%O\"" 
                 conn.Config.connId gm.config.groupId state.state.generationId ex
               do! leaveInternal gm state
               return false })
