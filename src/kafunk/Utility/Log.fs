@@ -90,24 +90,23 @@ module Log =
   /// Creates a logger with the specified name.
   let create name = { name = name ; publisher = event }
 
+  /// Gets/sets the minimum logging level for the Console log event printer.
+  let mutable MinLevel = LogLevel.Info
 
   /// Creates and subscribes a Console log event printer.
-  let private consolePrinter (minLevel:LogLevel) (bufferSize:int) =
+  let private consolePrinter (bufferSize:int) =
     let stdout = Console.OpenStandardOutput (bufferSize)
     let sw = new StreamWriter(stdout, Encoding.Default, bufferSize)
     sw.AutoFlush <- true
     let dispose = Disposable.ofFun (fun () -> sw.Dispose () )
     let subs = Event.Subscribe (fun e -> 
-      if e.level >= minLevel then
+      if e.level >= MinLevel then
         LogEntry.Print (e, sw))
     Disposable.ofDisposables [ subs ; dispose ]
     
-  /// Gets/sets the minimum logging level for the Console log event printer.
-  let mutable MinLevel = LogLevel.Info
-
   /// When disposed, unsubscribes the Console log event printer.
   let ConsolePrinterSubscription = 
-    consolePrinter MinLevel 4096
+    consolePrinter 4096
 
 
 [<AutoOpen>]

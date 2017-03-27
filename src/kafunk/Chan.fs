@@ -166,12 +166,12 @@ module internal Chan =
             | Failure (Choice1Of2 _) ->
               Log.warn "tcp_connection_timed_out|conn_id=%s remote_endpoint=%O timeout=%O" connId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
-              Log.error "tcp_connection_failed|conn_id=%s remote_endpoint=%O error=%O" connId ipep e)
+              Log.error "tcp_connection_failed|conn_id=%s remote_endpoint=%O error=\"%O\"" connId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
     let recovery (s:Socket, ver:int, _req:obj, ex:exn) = async {
-      Log.warn "recovering_tcp_connection|conn_id=%s remote_endpoint=%O version=%i error=%O" connId (EndPoint.endpoint ep) ver ex
+      Log.warn "recovering_tcp_connection|conn_id=%s remote_endpoint=%O version=%i error=\"%O\"" connId (EndPoint.endpoint ep) ver ex
       Disposable.tryDispose s }
 
     let! socketAgent = 
@@ -193,7 +193,7 @@ module internal Chan =
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|conn_id=%s remote_endpoint=%O error=%O" connId ep ex
+          Log.error "receive_failure|conn_id=%s remote_endpoint=%O error=\"%O\"" connId ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive
@@ -254,7 +254,7 @@ module internal Chan =
               Log.warn "request_timed_out|conn_id=%s ep=%O request=%s timeout=%O" 
                 connId ep (RequestMessage.Print req) config.requestTimeout
             | Failure (Choice2Of2 e) ->
-              Log.warn "request_exception|conn_id=%s ep=%O request=%s error=%O" 
+              Log.warn "request_exception|conn_id=%s ep=%O request=%s error=\"%O\"" 
                 connId ep (RequestMessage.Print req) e)
       |> Faults.AsyncFunc.retryResultList config.requestRetryPolicy
       |> AsyncFunc.mapOut (snd >> Result.mapError (List.map (Choice.fold (konst ChanTimeout) (ChanFailure))))

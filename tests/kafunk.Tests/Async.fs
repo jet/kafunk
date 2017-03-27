@@ -283,7 +283,7 @@ module Async =
       with ex ->
         tcs.SetException ex }
     Async.Start (a, cts.Token)
-    return! tcs.Task |> Async.AwaitTask }
+    return! tcs.Task |> awaitTaskCancellationAsError }
 
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.
@@ -299,7 +299,7 @@ module Async =
       with ex ->
         tcs.SetException ex }
     Async.Start (a, cts.Token)
-    return! tcs.Task |> Async.AwaitTask }
+    return! tcs.Task |> awaitTaskCancellationAsError }
 
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.
@@ -315,7 +315,7 @@ module Async =
       with ex ->
         tcs.SetException ex }
     Async.Start (a, cts.Token)
-    return! tcs.Task |> Async.AwaitTask }
+    return! tcs.Task |> awaitTaskCancellationAsError }
         
   let sleep (s:TimeSpan) : Async<unit> =
     Async.Sleep (int s.TotalMilliseconds)

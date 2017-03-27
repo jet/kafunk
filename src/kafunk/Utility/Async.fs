@@ -11,7 +11,6 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open Kafunk
 
-
 let private awaitTaskUnit (t:Task) =
   Async.FromContinuations <| fun (ok,err,cnc) ->
     t.ContinueWith(fun t ->
@@ -78,13 +77,23 @@ module IVar =
   let inline get (i:IVar<'a>) : Async<'a> = 
     i.Task |> awaitTaskCancellationAsError
 
+  /// Creates an async computation which returns the value contained in an IVar.
+  let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
+    let! ct = Async.CancellationToken
+    (Task.Delay (timeout, ct)).ContinueWith (Func<_,_>(fun _ -> tryPut (timeoutResult ()) i))
+    |> ignore
+    return! i.Task |> awaitTaskCancellationAsError }
+
   /// Returns a cancellation token which is cancelled when the IVar is set.
-  let inline toCancellationToken (i:IVar<_>) =
-    let cts = new CancellationTokenSource ()
+  let inline intoCancellationToken (cts:CancellationTokenSource) (i:IVar<_>) =
     i.Task.ContinueWith (fun (t:Task<_>) -> cts.Cancel ()) |> ignore
+
+  /// Returns a cancellation token which is cancelled when the IVar is set.
+  let inline asCancellationToken (i:IVar<_>) =
+    let cts = new CancellationTokenSource ()
+    intoCancellationToken cts i
     cts.Token
     
-
 
 /// Operations on System.Threading.Tasks.Task<_>.
 module Task =
@@ -266,6 +275,18 @@ module Async =
         startThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
         startThreadPoolWithContinuations (b, ok, err, cnc, cts.Token) }
 
+  let choose2 (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {
+    let! ct = Async.CancellationToken
+    let cts = CancellationTokenSource.CreateLinkedTokenSource ct
+    let res = IVar.create ()
+    IVar.intoCancellationToken cts res
+    let inline ok a = IVar.tryPut a res |> ignore
+    let inline err e = IVar.tryError e res |> ignore
+    let inline cnc (_:OperationCanceledException) = IVar.tryCancel res |> ignore
+    startThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
+    startThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
+    return! IVar.get res }
+
   let chooseChoice (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a, 'b>> =
     choose (a |> map Choice1Of2) (b |> map Choice2Of2)
 
@@ -283,7 +304,7 @@ module Async =
       with ex ->
         tcs.SetException ex }
     Async.Start (a, cts.Token)
-    return! tcs.Task |> Async.AwaitTask }
+    return! tcs.Task |> awaitTaskCancellationAsError }
 
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.
@@ -299,7 +320,7 @@ module Async =
       with ex ->
         tcs.SetException ex }
     Async.Start (a, cts.Token)
-    return! tcs.Task |> Async.AwaitTask }
+    return! tcs.Task |> awaitTaskCancellationAsError }
 
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.
@@ -315,7 +336,7 @@ module Async =
       with ex ->
         tcs.SetException ex }
     Async.Start (a, cts.Token)
-    return! tcs.Task |> Async.AwaitTask }
+    return! tcs.Task |> awaitTaskCancellationAsError }
         
   let sleep (s:TimeSpan) : Async<unit> =
     Async.Sleep (int s.TotalMilliseconds)
@@ -399,11 +420,6 @@ module AsyncFunc =
 
   let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
     fun a -> Async.timeoutResult t (async.Delay (fun () -> f a))
-  
-
-
-
-
 
 
 /// A mailbox processor.
