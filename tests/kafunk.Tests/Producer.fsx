@@ -43,7 +43,7 @@ let connCfg =
     [KafkaUri.parse host], 
     tcpConfig = chanConfig,
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2,
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
     //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
     bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3
     )

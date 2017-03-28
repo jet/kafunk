@@ -300,7 +300,7 @@ module Producer =
         let eps = fatalErrors |> Seq.map (fun (p,_,_) -> p,ex) |> Map.ofSeq
         for b in batch do
           Map.tryFind b.partition eps
-          |> Option.iter (fun ex -> IVar.error ex b.rep)
+          |> Option.iter (fun ex -> IVar.tryError ex b.rep |> ignore)
       
       if transientErrors.Length > 0 then
         Log.warn "transient_errors|ep=%O errors=%A request=%s response=%s" 
@@ -311,13 +311,13 @@ module Producer =
           |> Map.ofSeq
         for b in batch do
           Map.tryFind b.partition eps
-          |> Option.iter (fun res -> IVar.put res b.rep)
+          |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
 
       if oks.Length > 0 then
         let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
         for b in batch do
           Map.tryFind b.partition oks 
-          |> Option.iter (fun res -> IVar.put res b.rep)
+          |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
           
     | Failure (Choice1Of2 err) ->
       Log.warn "broker_channel_error|ep=%O error=\"%A\"" (Chan.endpoint ch) err
@@ -325,7 +325,7 @@ module Producer =
       let! _ = conn.RemoveBroker ch
       let err = Failure (Choice1Of3 err)
       for b in batch do
-        IVar.put err b.rep
+        IVar.tryPut err b.rep |> ignore
       return ()
 
     | Failure (Choice2Of2 ex) ->
@@ -333,7 +333,7 @@ module Producer =
       // TODO: delegate routing to connection
       let! _ = conn.RemoveBroker ch
       for b in batch do
-        IVar.error ex b.rep
+        IVar.tryError ex b.rep |> ignore
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce buffer.
@@ -443,7 +443,7 @@ module Producer =
       let tcpReqTimeout = conn.Config.tcpConfig.requestTimeout
       let prodReqTimeout = TimeSpan.FromMilliseconds config.timeout
       let batchLinger = TimeSpan.FromMilliseconds config.batchLingerMs
-      let slack = TimeSpan.FromMilliseconds 2000 // TODO: configurable?
+      let slack = TimeSpan.FromMilliseconds 5000 // TODO: configurable?
       [ (tcpReqTimeout + batchLinger + slack) ; (prodReqTimeout + batchLinger + slack) ] |> List.max
     let! resource = 
       Resource.recoverableRecreate 
