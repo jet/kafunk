@@ -104,7 +104,7 @@ and internal ChanError =
   | ChanFailure of exn
 
 /// A request/reply TCP channel to a Kafka broker.
-[<CustomEquality;NoComparison>]
+[<CustomEquality;NoComparison;AutoSerializable(false)>]
 type internal Chan = private {
   ep : EndPoint
   send : RequestMessage -> Async<ChanResult>

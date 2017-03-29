@@ -487,6 +487,7 @@ type EscalationException (errorCode:ErrorCode, req:RequestMessage, res:ResponseM
 /// A connection to a Kafka cluster.
 /// This is a stateful object which maintains request/reply sessions with brokers.
 /// It acts as a context for API operations, providing filtering and fault tolerance.
+[<NoEquality;NoComparison;AutoSerializable(false)>]
 type KafkaConn internal (cfg:KafkaConfig) =
 
   static let Log = Log.create "Kafunk.Conn"

@@ -147,8 +147,8 @@ type ProducerConfig = {
   /// The default required acks = RequiredAcks.AllInSync.
   static member DefaultRequiredAcks = RequiredAcks.AllInSync
 
-  /// The default produce request timeout = 10000.
-  static member DefaultTimeoutMs = 10000
+  /// The default produce request timeout = 30000.
+  static member DefaultTimeoutMs = 30000
 
   /// The default per-broker, produce request batch size in bytes = 16384.
   static member DefaultBatchSizeBytes = 16384
@@ -177,18 +177,9 @@ type ProducerConfig = {
     Versions.produceReqMessage (Versions.byKey connVersion ApiKey.Produce)
 
 
-/// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
-type Producer = private {
-  conn : KafkaConn
-  config : ProducerConfig
-  state : Resource<ProducerState>
-  
-  /// Timeout for the internal produce batch function, which includes the request timeout
-  /// and the batch linger time.
-  batchTimeout : TimeSpan }
-
 /// Producer state corresponding to the state of a cluster.
-and private ProducerState = {
+[<NoEquality;NoComparison;AutoSerializable(false)>]
+type private ProducerState = {
 
   /// Current set of partitions for the topic.
   partitions : Partition[]
@@ -197,14 +188,14 @@ and private ProducerState = {
   partitionQueues : Dictionary<Partition, ProducerMessageBatch -> Async<unit>> }
 
 /// A producer-specific error.
-and ProducerError = {
+and [<NoEquality;NoComparison;AutoSerializable(false)>] ProducerError = {
   partition : Partition
   offset : Offset
   errorCode : ErrorCode
 } with
   static member create p o ec = { partition = p ; offset = o ; errorCode = ec }
 
-and private ProducerMessageBatch =
+and [<NoEquality;NoComparison;AutoSerializable(false)>] private ProducerMessageBatch =
   struct
     val partition : Partition
     val messages : ProducerMessage[]
@@ -213,6 +204,17 @@ and private ProducerMessageBatch =
     new (p,ms,rep,size) = { partition = p ; messages = ms ; rep = rep ; size = size }
   end
 
+
+/// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
+[<NoEquality;NoComparison;AutoSerializable(false)>]
+type Producer = private {
+  conn : KafkaConn
+  config : ProducerConfig
+  state : Resource<ProducerState>
+  
+  /// Timeout for the internal produce batch function, which includes the request timeout
+  /// and the batch linger time.
+  batchTimeout : TimeSpan }
 
 /// High-level producer API.
 [<Compile(Module)>]

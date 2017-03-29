@@ -184,6 +184,7 @@ module Framing =
       with ex -> raise (exn(sprintf "Error trying to allocate a buffer of size=%i" size, ex))
 
     [<Struct>]
+    [<NoEquality;NoComparison;AutoSerializable(false)>]
     type private ReadResult =
       val public remainder : Binary.Segment
       val public length : int
@@ -274,6 +275,7 @@ type CorrelationId = int32
 /// A client creates a session message, assigns a unique tx id and waits for a response from the server.
 /// A server receives a session message, and sends a response with the same tx id.
 [<Struct>]
+[<NoEquality;NoComparison;AutoSerializable(false)>]
 type SessionMessage =
   val public tx_id : CorrelationId
   val public payload : Binary.Segment
@@ -289,6 +291,7 @@ with
 /// A multiplexed request/reply session.
 /// Maintains state between requests and responses and contains a process reading the input stream.
 /// Send failures are propagated to the caller who is responsible for recreating the session.
+[<NoEquality;NoComparison;AutoSerializable(false)>]
 type ReqRepSession<'a, 'b, 's> internal
   (
     /// A correlation id generator.
