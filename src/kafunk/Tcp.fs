@@ -329,7 +329,7 @@ type ReqRepSession<'a, 'b, 's> internal
         if not (reply.TrySetResult res) then
           Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
-        Log.error "response_decode_exception|correlation_id=%i error=\"%O\" payload=%s" correlationId ex (Binary.toString sessionData.payload)
+        Log.error "response_decode_exception|correlation_id=%i error=\"%O\"" correlationId ex
         reply.TrySetException ex |> ignore
     else
       Log.trace "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
