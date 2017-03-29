@@ -1,3 +1,9 @@
+### 0.0.38-alpha001 - 29.03.2017
+
+* Fix use of IVar where concurrent puts are possible
+* Fix #124
+* Fix #126
+
 ### 0.0.37-alpha001 - 27.03.2017
 
 * Fix producer bug where during recovery, messages in flight would be lost and never timeout.

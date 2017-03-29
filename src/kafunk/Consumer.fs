@@ -806,9 +806,9 @@ module Consumer =
         |> Map.toSeq
         |> Seq.map (fun (p,buf) -> 
           let tryTake = 
-            BoundedMb.take buf 
-            |> Async.withCancellation fetchProcessCancellation.Token
-          p, AsyncSeq.replicateInfiniteAsync tryTake)
+            BoundedMb.take buf
+            |> Async.cancelWithToken fetchProcessCancellation.Token
+          p, AsyncSeq.replicateUntilNoneAsync tryTake)
         |> Seq.toArray
 
       return partitionStreams }
