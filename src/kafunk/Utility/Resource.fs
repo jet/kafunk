@@ -18,9 +18,6 @@ and ResourceErrorAction<'a, 'e> =
   /// Recover the resource and retry the operation.
   | RecoverRetry of 'e
 
-  /// Retry the operation without recovery.
-  | Retry
-
 
 /// A generation of a resource lifecycle.
 type internal ResourceEpoch<'r> = {
@@ -105,21 +102,11 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         let! rs' = RetryPolicy.awaitNextState rp rs
         match rs' with
         | None ->
-          Log.trace "escalating_after_retry_attempts_depleted|name=%s version=%i attempt=%i error=\"%O\"" 
-            name ep.version rs.attempt ex
-          return raise ex
+          let msg = sprintf "escalating_after_retry_attempts_depleted|name=%s version=%i attempt=%i error=\"%O\"" name ep.version rs.attempt ex
+          Log.trace "%s" msg
+          return raise (exn(msg, ex))
         | Some rs' ->
           let! _ = __.Recover (ep, a, ex)
-          return! go rs'
-      | Failure (Retry) ->
-        Log.trace "retrying|name=%s attempt=%i" name rs.attempt
-        let! rs' = RetryPolicy.awaitNextState rp rs
-        match rs' with
-        | None ->
-          Log.trace "escalating_after_retry_attempts_depleted|name=%s version=%i attempt=%i" 
-            name ep.version rs.attempt
-          return raise (exn("Escalating after retry."))
-        | Some rs' ->
           return! go rs' }
     go RetryState.init
         
@@ -136,8 +123,6 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         return b
       | Failure (RecoverRetry ex) ->
         let! _ = __.Recover (ep, a, ex)
-        return! go a
-      | Failure (Retry) ->
         return! go a }
     return go }
 

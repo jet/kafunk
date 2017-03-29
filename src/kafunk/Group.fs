@@ -7,6 +7,7 @@ open System.Threading.Tasks
 open Kafunk
 
 /// Internal state corresponding to a single generation of the group protocol.
+[<NoEquality;NoComparison;AutoSerializable(false)>]
 type GroupMemberState = {
   
   /// The group generation.
@@ -34,6 +35,7 @@ type GroupMemberState = {
 } 
 
 /// A group protocol.
+[<NoEquality;NoComparison;AutoSerializable(false)>]
 type GroupProtocol = {
 
   /// The group protocol type.
@@ -72,7 +74,7 @@ and GroupConfig = {
 }
 
 /// A member of a group.
-and GroupMember = internal {
+and [<NoEquality;NoComparison;AutoSerializable(false)>] GroupMember = internal {
   conn : KafkaConn
   config : GroupConfig
   state : MVar<GroupMemberStateWrapper>

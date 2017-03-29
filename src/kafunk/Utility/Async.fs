@@ -296,13 +296,13 @@ module Async =
     let! ct2 = Async.CancellationToken
     use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
     let tcs = new TaskCompletionSource<'a>()
-    use _reg = cts.Token.Register (fun () -> tcs.SetCanceled())
+    use _reg = cts.Token.Register (fun () -> tcs.TrySetCanceled() |> ignore)
     let a = async {
       try
         let! a = a
-        tcs.SetResult a
+        tcs.TrySetResult a |> ignore
       with ex ->
-        tcs.SetException ex }
+        tcs.TrySetException ex |> ignore }
     Async.Start (a, cts.Token)
     return! tcs.Task |> awaitTaskCancellationAsError }
 
@@ -312,13 +312,13 @@ module Async =
     let! ct2 = Async.CancellationToken
     use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
     let tcs = new TaskCompletionSource<'a>()
-    use _reg = cts.Token.Register (fun () -> tcs.SetResult (f ()))
+    use _reg = cts.Token.Register (fun () -> tcs.TrySetResult (f ()) |> ignore)
     let a = async {
       try
         let! a = a
-        tcs.SetResult a
+        tcs.TrySetResult a |> ignore
       with ex ->
-        tcs.SetException ex }
+        tcs.TrySetException ex |> ignore }
     Async.Start (a, cts.Token)
     return! tcs.Task |> awaitTaskCancellationAsError }
 
@@ -328,13 +328,13 @@ module Async =
     let! ct2 = Async.CancellationToken
     use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
     let tcs = new TaskCompletionSource<'a option>()
-    use _reg = cts.Token.Register (fun () -> tcs.SetResult None)
+    use _reg = cts.Token.Register (fun () -> tcs.TrySetResult None |> ignore)
     let a = async {
       try
         let! a = a
-        tcs.SetResult (Some a)
+        tcs.TrySetResult (Some a) |> ignore
       with ex ->
-        tcs.SetException ex }
+        tcs.TrySetException ex |> ignore }
     Async.Start (a, cts.Token)
     return! tcs.Task |> awaitTaskCancellationAsError }
         
