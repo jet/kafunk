@@ -286,6 +286,8 @@ module Seq =
 [<Compile(Module)>]
 module Dict =
 
+  let empty<'a, 'b when 'a : equality> : Dictionary<'a, 'b> = Dictionary<_,_>()
+
   let tryGet k (d:#IReadOnlyDictionary<_,_>) =
     let mutable v = Unchecked.defaultof<_>
     if d.TryGetValue(k, &v) then Some v
@@ -301,8 +303,8 @@ module Dict =
     let d = Dictionary<'a, 'b>()
     for kvp in m do
       d.Add (kvp.Key, kvp.Value)
-    d
-    
+    d   
+
     
 [<Compile(Module)>]
 module Map =

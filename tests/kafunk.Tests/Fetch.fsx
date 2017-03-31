@@ -33,6 +33,7 @@ let fetchRes =
 for (tn,pmds) in fetchRes.topics do
   for (p,ec,hmo,mss,ms) in pmds do
     printfn "topic=%s partition=%i error=%i hwm=%i message_set_size=%i messages=%i" tn p ec hmo mss ms.messages.Length
-    for (o,ms,m) in ms.messages do
+    for x in ms.messages do
+      let o,ms,m = x.offset, x.messageSize, x.message
       printfn "message offset=%i size=%i message=%s" o ms (m.value |> Binary.toString)
 

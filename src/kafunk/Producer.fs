@@ -242,6 +242,26 @@ module Producer =
       count <- count + b.messages.Length
     count
 
+  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) =
+    let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
+    for b in batch do
+      let mutable xs = Unchecked.defaultof<_>
+      if not (ps.TryGetValue(b.partition, &xs)) then
+        xs <- ResizeArray<_>()
+        ps.Add (b.partition, xs)
+      for pm in b.messages do
+        let m = Message.create pm.value pm.key None
+        let ms = Message.Size (messageVer,m)
+        xs.Add (MessageSetItem(0L, ms, m))
+    let arr = Array.zeroCreate ps.Count
+    let mutable i = 0
+    for p in ps do
+      let ms = MessageSet(p.Value.ToArray())
+      let ms = ms |> Compression.compress messageVer compression
+      arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, MessageSet.Size (messageVer,ms), ms)
+      i <- i + 1
+    arr
+
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
   let private sendBatch 
     (conn:KafkaConn)
@@ -251,19 +271,9 @@ module Producer =
     (batch:ProducerMessageBatch seq) = async {
     //Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
 
-    let pms = 
-      batch
-      |> Seq.groupBy (fun b -> b.partition)
-      |> Seq.map (fun (p,pms) ->
-        let ms = 
-          pms 
-          |> Seq.collect (fun bs -> bs.messages |> Seq.map (fun pm -> Message.create pm.value pm.key None))
-          |> MessageSet.ofMessages messageVer
-          |> Compression.compress messageVer cfg.compression
-        p, MessageSet.Size (messageVer,ms), ms)
-      |> Seq.toArray
+    let pms = toMessageSet messageVer cfg.compression batch
 
-    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| cfg.topic,pms |])
+    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
     let! res = 
       Chan.send ch (RequestMessage.Produce req) 
       |> Async.map (Result.map ResponseMessage.toProduce)

@@ -14,22 +14,24 @@ module Message =
 module MessageSet =
 
   let ofMessage (messageVer:ApiVersion) (m:Message) =
-    MessageSet([| 0L, Message.Size (messageVer,m), m |])
+    MessageSet([| MessageSetItem(0L, Message.Size (messageVer,m), m) |])
 
   let ofMessages (messageVer:ApiVersion) ms =
-    MessageSet(ms |> Seq.map (fun m -> 0L, Message.Size (messageVer,m), m) |> Seq.toArray)
+    MessageSet(ms |> Seq.map (fun m -> MessageSetItem (0L, Message.Size (messageVer,m), m)) |> Seq.toArray)
 
   /// Returns the frist offset in the message set.
   let firstOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      let (o,_,_) = ms.messages.[0] in o
+      //let (o,_,_) = ms.messages.[0] in o
+       ms.messages.[0].offset
     else
       0L
 
   /// Returns the last offset in the message set.
   let lastOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      let (o,_,_) = ms.messages.[ms.messages.Length - 1] in o
+      //let (o,_,_) = ms.messages.[ms.messages.Length - 1] in o
+      ms.messages.[ms.messages.Length - 1].offset
     else
       0L
 
@@ -144,12 +146,12 @@ module internal Printers =
     static member Print (x:ProduceRequest) =
       let ts =
         x.topics
-        |> Seq.map (fun (tn,ps) ->
+        |> Seq.map (fun x ->
           let ps =
-            ps
-            |> Seq.map (fun (p,mss,ms) -> sprintf "p=%i mss=%i mc=%i" p mss ms.messages.Length)
+            x.partitions
+            |> Seq.map (fun y -> sprintf "p=%i mss=%i mc=%i" y.partition y.messageSetSize y.messageSet.messages.Length)
             |> String.concat " ; "
-          sprintf "topic=%s partitions=[%s]" tn ps)
+          sprintf "topic=%s partitions=[%s]" x.topic ps)
         |> String.concat " ; "
       sprintf "ProduceRequest|required_acks=%i timeout=%i topics=[%s]" x.requiredAcks x.timeout ts
 
@@ -187,7 +189,8 @@ module internal Printers =
           let ps =
             ps
             |> Seq.map (fun (p,ec,hwmo,mss,ms) ->
-              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " o=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
+              //let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " o=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
+              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (hwmo - x.offset)) |> Option.getOr ""
               sprintf "(p=%i error_code=%i hwo=%i mss=%i%s)" p ec hwmo mss offsetInfo)
             |> String.concat ";"
           sprintf "topic=%s partitions=[%s]" tn ps)

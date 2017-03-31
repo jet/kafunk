@@ -101,7 +101,9 @@ let ``FetchResponse.read should decode FetchResponse``() =
   let (res:FetchResponse) = FetchResponse.Read (0s, data)
   let topicName, ps = res.topics.[0]
   let p, ec, _hwo, mss, ms = ps.[0]
-  let o, _ms, m = ms.messages.[0]
+  //let o, _ms, m = ms.messages.[0]
+  let x = ms.messages.[0]
+  let o, m = x.offset, x.message
   Assert.AreEqual("test", topicName)
   Assert.AreEqual(p, 0)
   Assert.AreEqual(ec, 0s)

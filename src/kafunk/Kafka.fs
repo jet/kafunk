@@ -134,7 +134,7 @@ type internal RouteType =
       | RequestMessage.Offset _ -> BootstrapRoute
       | RequestMessage.OffsetCommit r -> GroupRoute r.consumerGroup
       | RequestMessage.OffsetFetch r -> GroupRoute r.consumerGroup
-      | RequestMessage.Produce r -> TopicRoute (r.topics |> Array.map fst)
+      | RequestMessage.Produce r -> TopicRoute (r.topics |> Array.map (fun x -> x.topic))
       | RequestMessage.SyncGroup r -> GroupRoute r.groupId
 
 
@@ -165,13 +165,14 @@ module internal Routing =
   /// Partitions a produce request by topic/partition.
   let private partitionProduceReq (state:ConnState) (req:ProduceRequest) =
     req.topics
-    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, mss, ms) -> (t, p, mss, ms)))
+    //|> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, mss, ms) -> (t, p, mss, ms)))
+    |> Seq.collect (fun x -> x.partitions |> Array.map (fun y -> (x.topic, y.partition, y.messageSetSize, y.messageSet)))
     |> Seq.groupBy (fun (t, p, _, _) -> ConnState.tryFindTopicPartitionBroker (t, p) state |> Result.ofOptionMap (fun () -> t))
     |> Seq.map (fun (ep,reqs) ->
       let topics =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
+        |> Seq.map (fun (t, ps) -> ProduceRequestTopicMessageSet (t, (ps |> Seq.map (fun (_, p, mss, ms) -> ProduceRequestPartitionMessageSet (p, mss, ms)) |> Seq.toArray)))
         |> Seq.toArray
       let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
       (ep, RequestMessage.Produce req))

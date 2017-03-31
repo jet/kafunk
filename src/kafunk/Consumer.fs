@@ -374,11 +374,11 @@ type ConsumerMessageSet =
 
     /// Returns the sum of the sizes of all messages in the message set.
     static member size (ms:ConsumerMessageSet) =
-      ms.messageSet.messages |> Seq.sumBy (fun (_,s,_) -> s)
+      ms.messageSet.messages |> Seq.sumBy (fun x -> x.messageSize)
 
     /// Returns an array of all messages in the message set.
     static member messages (ms:ConsumerMessageSet) =
-      ms.messageSet.messages |> Array.map (fun (_,_,m) -> m)
+      ms.messageSet.messages |> Array.map (fun x -> x.message)
 
 
 /// High-level consumer API.

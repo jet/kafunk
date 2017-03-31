@@ -420,9 +420,18 @@ module Protocol =
 
 
   [<NoEquality;NoComparison>]
+  type MessageSetItem =
+    struct
+      val offset : Offset
+      val messageSize : MessageSize
+      val message : Message
+      new (o,ms,m) = { offset = o ; messageSize = ms ; message = m }
+    end
+    
+  [<NoEquality;NoComparison>]
   type MessageSet =
     struct
-      val messages : (Offset * MessageSize * Message)[]
+      val messages : MessageSetItem[]
       new (set) = { messages = set }
     end
   with
@@ -430,15 +439,17 @@ module Protocol =
     static member Size (ver:ApiVersion, x:MessageSet) =
       let mutable size = 0
       for i = 0 to x.messages.Length - 1 do
-        let (_,_,m) = x.messages.[i]
+        //let (_,_,m) = x.messages.[i]
+        let m = x.messages.[i].message
         size <- size + 8 + 4 + (Message.Size (ver,m))
       size
 
     static member Write (messageVer:ApiVersion, ms:MessageSet, buf:BinaryZipper) =
-      for (o,ms,m) in ms.messages do
-        buf.WriteInt64 o
-        buf.WriteInt32 ms
-        Message.Write (messageVer, m, buf)
+      //for (o,ms,m) in ms.messages do
+      for x in ms.messages do
+        buf.WriteInt64 x.offset
+        buf.WriteInt32 x.messageSize
+        Message.Write (messageVer, x.message, buf)
 
     static member Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
       let mutable consumed = 0
@@ -455,7 +466,7 @@ module Protocol =
           try
             if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
               let message = Message.Read (messageVer,buf)
-              arr.Add (offset,messageSize,message)
+              arr.Add (MessageSetItem(offset,messageSize,message))
             else
               let rem = min messageSetRemainder buf.Buffer.Count
               buf.ShiftOffset rem
@@ -478,8 +489,9 @@ module Protocol =
       MessageSet(arr.ToArray())
   
     static member CheckCrc (ver:ApiVersion, ms:MessageSet) =
-      for (_,_,m) in ms.messages do
-        Message.CheckCrc (ver,m)
+      //for (_,_,m) in ms.messages do
+      for x in ms.messages do
+        Message.CheckCrc (ver,x.message)
 
 
 
@@ -574,11 +586,28 @@ module Protocol =
   // Produce API
 
   [<NoEquality;NoComparison>]
+  type ProduceRequestPartitionMessageSet =
+    struct
+      val partition : Partition
+      val messageSetSize : MessageSetSize
+      val messageSet : MessageSet
+      new (p,mss,ms) = { partition = p ; messageSetSize = mss ; messageSet = ms }
+    end
+
+  [<NoEquality;NoComparison>]
+  type ProduceRequestTopicMessageSet =
+    struct
+      val topic : TopicName
+      val partitions : ProduceRequestPartitionMessageSet[]
+      new (t,ps) = { topic = t ; partitions = ps }
+    end
+
+  [<NoEquality;NoComparison>]
   type ProduceRequest =
     struct
       val requiredAcks : RequiredAcks
       val timeout : Timeout
-      val topics : (TopicName * (Partition * MessageSetSize * MessageSet)[])[]
+      val topics : ProduceRequestTopicMessageSet[]
       new (requiredAcks, timeout, topics) =
         { requiredAcks = requiredAcks; timeout = timeout; topics = topics }
     end
@@ -590,10 +619,11 @@ module Protocol =
       size <- size + 4 // timeout
       size <- size + 4 // topics array size
       for i = 0 to x.topics.Length - 1 do
-        let t,ps = x.topics.[i]
-        size <- size + (Binary.sizeString t)
+        let y = x.topics.[i]
+        size <- size + (Binary.sizeString y.topic)
         size <- size + 4 // partition array size
-        for (_,mss,_) in ps do
+        for z in y.partitions do
+          let mss = z.messageSetSize
           size <- size + 4 + 4 + mss
       size
 
@@ -603,13 +633,13 @@ module Protocol =
       buf.WriteInt32 x.timeout
       buf.WriteInt32 x.topics.Length
       for i = 0 to x.topics.Length - 1 do
-        let t,ps = x.topics.[i]
-        buf.WriteString t
-        buf.WriteInt32 ps.Length
-        for (p,mss,ms) in ps do
-          buf.WriteInt32 p
-          buf.WriteInt32 mss
-          MessageSet.Write (ver, ms, buf)
+        let y = x.topics.[i]
+        buf.WriteString y.topic
+        buf.WriteInt32 y.partitions.Length
+        for z in y.partitions do
+          buf.WriteInt32 z.partition
+          buf.WriteInt32 z.messageSetSize
+          MessageSet.Write (ver, z.messageSet, buf)
 
   /// A reponse to a produce request.
   and [<NoEquality;NoComparison>] ProduceResponse =
