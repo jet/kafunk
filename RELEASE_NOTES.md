@@ -1,3 +1,11 @@
+### 0.0.39-alpha001 - 29.03.2017
+
+* Unroll loop in producer to make more efficient
+* Request buffer pool
+* BREAKING:
+	- MessageSet tuples replaced with structs
+	- ProduceRequest tuples replaced with structs
+
 ### 0.0.38-alpha001 - 29.03.2017
 
 * Fix use of IVar where concurrent puts are possible
