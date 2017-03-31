@@ -34,9 +34,11 @@ let connCfg =
       requestTimeout = TimeSpan.FromSeconds 10.0,
       sendBufferSize = ChanConfig.DefaultSendBufferSize,
       connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
-      requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy
+      requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
+      //bufferPool = BufferPool.bufferManager 100000000L 1000000
+      bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (

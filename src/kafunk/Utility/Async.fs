@@ -421,6 +421,9 @@ module AsyncFunc =
   let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
     fun a -> Async.timeoutResult t (async.Delay (fun () -> f a))
 
+  let tryFinally (comp:'a -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async.TryFinally (f a, fun () -> comp a)
+
 
 /// A mailbox processor.
 type Mb<'a> = MailboxProcessor<'a>
