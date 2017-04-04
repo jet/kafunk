@@ -325,6 +325,8 @@ module Producer =
           Map.tryFind b.partition eps
           |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
 
+      //let resolve
+
       if oks.Length > 0 then
         let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
         for b in batch do
@@ -375,6 +377,7 @@ module Producer =
 
     let startBrokerQueue (ch:Chan) =
       let sendBatch = sendBatch conn cfg messageVer ch
+      if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then Array.singleton >> sendBatch else
       let bufferCond = 
         BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
       let batchCond =
@@ -383,15 +386,11 @@ module Producer =
       let produceStream = 
         AsyncSeq.replicateInfiniteAsync (BoundedMb.take buffer)
       let sendProcess =
-        if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then
-          produceStream
-          |> AsyncSeq.iterAsync (Array.singleton >> sendBatch)
-        else
-          produceStream
-          |> AsyncSeq.toObservable
-          |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
-          |> AsyncSeq.ofObservableBuffered
-          |> AsyncSeq.iterAsync sendBatch
+        produceStream
+        |> AsyncSeq.toObservable
+        |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
+        |> AsyncSeq.ofObservableBuffered
+        |> AsyncSeq.iterAsync sendBatch
       Log.info "produce_process_starting|topic=%s ep=%O buffer_size=%i batch_size=%i" 
         cfg.topic (Chan.endpoint ch) cfg.bufferSizeBytes cfg.batchSizeBytes
       sendProcess
