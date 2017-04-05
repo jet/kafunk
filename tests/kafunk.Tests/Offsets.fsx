@@ -8,8 +8,8 @@ let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
-let host = argiDefault 1 "guardians-kafka-cluster.qa.jet.com:9092"
-let topic = argiDefault 2 "marvel-pi-batman-cart-category-p16"
+let host = argiDefault 1 "localhost:9092"
+let topic = argiDefault 2 "absurd-topic"
 
 let conn = Kafka.connHost host
 

@@ -24,14 +24,18 @@ module Protocol =
   [<Compile(Module)>]
   module Versions =
     
-    let private V_0_9_0 = System.Version (0, 9, 0)
-    let private V_0_10_0 = System.Version (0, 10, 0)
-    let private V_0_10_1 = System.Version (0, 10, 1)
+    let V_0_8_2 = System.Version (0, 8, 2)
+    let V_0_9_0 = System.Version (0, 9, 0)
+    let V_0_10_0 = System.Version (0, 10, 0)
+    let V_0_10_1 = System.Version (0, 10, 1)
 
     /// Returns an ApiVersion given a system version and an ApiKey.
     let byKey (version:System.Version) (apiKey:ApiKey) : ApiVersion = 
       match apiKey with
-      | ApiKey.OffsetFetch -> 1s
+      | ApiKey.OffsetFetch -> 
+        if version >= V_0_9_0 then 1s
+        elif version >= V_0_8_2 then 0s
+        else failwith "not supported"
       | ApiKey.OffsetCommit -> 2s
       | ApiKey.Produce -> 
         if version >= V_0_10_0 then 2s
