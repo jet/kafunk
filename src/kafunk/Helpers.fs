@@ -159,12 +159,12 @@ module internal Printers =
     static member Print (x:ProduceResponse) =
       let ts =
         x.topics
-        |> Seq.map (fun (tn,ps) ->
+        |> Seq.map (fun x ->
           let ps =
-            ps
-            |> Seq.map (fun (p,ec,o) -> sprintf "p=%i o=%i error_code=%i" p o ec)
+            x.partitions
+            |> Seq.map (fun y -> sprintf "p=%i o=%i error_code=%i" y.partition y.offset y.errorCode)
             |> String.concat " ; "
-          sprintf "topic=%s partitions=[%s]" tn ps)
+          sprintf "topic=%s partitions=[%s]" x.topic ps)
         |> String.concat " ; "
       sprintf "ProduceResponse|topics=[%s]" ts
 

@@ -142,9 +142,9 @@ let ``ProduceResponse.read should decode ProduceResponse``() =
       0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
       0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
   let bz = BinaryZipper(data)
-  let (res:ProduceResponse) = ProduceResponse.Read bz
-  let topicName, ps = res.topics.[0]
-  let p, ec, off = ps.[0]
+  let (res:ProduceResponse) = ProduceResponse.Read (1s,bz)
+  let topicName, ps = let x = res.topics.[0] in x.topic, x.partitions
+  let p, ec, off, _ts = let x = ps.[0] in x.partition, x.errorCode, x.offset, x.timestamp
   Assert.AreEqual("test", topicName)
   Assert.AreEqual(0, p)
   Assert.AreEqual(0s, ec)

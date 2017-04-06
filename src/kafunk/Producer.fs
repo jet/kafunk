@@ -284,9 +284,12 @@ module Producer =
       
       let oks,transientErrors,fatalErrors =
         res.topics
-        |> Seq.collect (fun (_t,os) ->
-          os
-          |> Seq.map (fun (p,ec,o) ->
+        |> Seq.collect (fun x ->
+          x.partitions
+          |> Seq.map (fun y ->
+            let o = y.offset
+            let ec = y.errorCode
+            let p = y.partition
             match ec with
             | ErrorCode.NoError -> Choice1Of3 (p,o)
 
