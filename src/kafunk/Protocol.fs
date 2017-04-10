@@ -30,13 +30,16 @@ module Protocol =
     let V_0_10_1 = System.Version (0, 10, 1)
 
     /// Returns an ApiVersion given a system version and an ApiKey.
-    let byKey (version:System.Version) (apiKey:ApiKey) : ApiVersion = 
+    let internal byKey (version:System.Version) (apiKey:ApiKey) : ApiVersion = 
       match apiKey with
       | ApiKey.OffsetFetch -> 
         if version >= V_0_9_0 then 1s
         elif version >= V_0_8_2 then 0s
         else failwith "not supported"
-      | ApiKey.OffsetCommit -> 2s
+      | ApiKey.OffsetCommit -> 
+        if version >= V_0_9_0 then 2s
+        elif version >= V_0_8_2 then 1s
+        else 0s
       | ApiKey.Produce -> 
         if version >= V_0_10_0 then 2s
         elif version >= V_0_9_0 then 1s
@@ -55,12 +58,12 @@ module Protocol =
         0s
 
     /// Gets the version of Message for a ProduceRequest of the specified API version.
-    let produceReqMessage (apiVer:ApiVersion) =
+    let internal produceReqMessage (apiVer:ApiVersion) =
       if apiVer >= 2s then 1s
       else 0s
 
     /// Gets the version of Message for a FetchResponse of the specified API version.
-    let fetchResMessage (apiVer:ApiVersion) =
+    let internal fetchResMessage (apiVer:ApiVersion) =
       if apiVer >= 2s then 1s
       else 0s
 
@@ -370,7 +373,7 @@ module Protocol =
     end
   with
 
-    static member Size (ver:ApiVersion, m:Message) =
+    static member internal Size (ver:ApiVersion, m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
@@ -378,7 +381,7 @@ module Protocol =
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-    static member Write (ver:ApiVersion, m:Message, buf:BinaryZipper) =
+    static member internal Write (ver:ApiVersion, m:Message, buf:BinaryZipper) =
       buf.ShiftOffset 4 // CRC
       let offsetAfterCrc = buf.Buffer.Offset
       buf.WriteInt8 m.magicByte
@@ -391,7 +394,7 @@ module Protocol =
       let crcBuf = System.ArraySegment<_>(buf.Buffer.Array, offsetAfterCrc - 4, 4)
       Binary.pokeInt32 (int crc) crcBuf |> ignore
 
-    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let crc = buf.ReadInt32 ()
       let magicByte = buf.ReadInt8 ()
       let attrs = buf.ReadInt8 ()
@@ -405,7 +408,7 @@ module Protocol =
       Message(crc,magicByte,attrs,timestamp,key,value)
 
     // NB: assumes that m.key and m.value use the same underlying array
-    static member ComputeCrc (ver:ApiVersion, m:Message) =
+    static member internal ComputeCrc (ver:ApiVersion, m:Message) =
       let offsetAtKey =
         m.value.Offset
         - 4 // key length
@@ -422,7 +425,7 @@ module Protocol =
       int32 crc32
     
     // NB: assumes that m.key and m.value use the same underlying array
-    static member CheckCrc (ver:ApiVersion, m:Message) =
+    static member internal CheckCrc (ver:ApiVersion, m:Message) =
       let crc' = Message.ComputeCrc (ver,m)
       if m.crc <> crc' then
         raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' m.crc (Binary.toString m.key)))
@@ -445,21 +448,21 @@ module Protocol =
     end
   with
 
-    static member Size (ver:ApiVersion, x:MessageSet) =
+    static member internal Size (ver:ApiVersion, x:MessageSet) =
       let mutable size = 0
       for i = 0 to x.messages.Length - 1 do
         let m = x.messages.[i].message
         size <- size + 8 + 4 + (Message.Size (ver,m))
       size
 
-    static member Write (messageVer:ApiVersion, ms:MessageSet, buf:BinaryZipper) =
+    static member internal Write (messageVer:ApiVersion, ms:MessageSet, buf:BinaryZipper) =
       //for (o,ms,m) in ms.messages do
       for x in ms.messages do
         buf.WriteInt64 x.offset
         buf.WriteInt32 x.messageSize
         Message.Write (messageVer, x.message, buf)
 
-    static member Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
+    static member internal Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
       let mutable consumed = 0
       let arr = ResizeArray<_>()
       while consumed < messageSetSize && buf.Buffer.Count > 0 do
@@ -531,7 +534,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let (nodeId, host, port), buf = Binary.read3 Binary.readInt32 Binary.readString Binary.readInt32 buf
       (Broker(nodeId, host, port), buf)
 
@@ -549,7 +552,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let partitionErrorCode, buf = Binary.readInt16 buf
       let partitionId, buf = Binary.readInt32 buf
       let leader, buf = Binary.readInt32 buf
@@ -569,7 +572,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let errorCode, buf = Binary.readInt16 buf
       let topicName, buf = Binary.readString buf
       let partitionMetadata, buf = Binary.readArray PartitionMetadata.read buf
@@ -586,7 +589,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let brokers, buf = Binary.readArray Broker.read buf
       let topicMetadata, buf = Binary.readArray TopicMetadata.read buf
       (MetadataResponse(brokers, topicMetadata), buf)
@@ -621,7 +624,7 @@ module Protocol =
     end
   with
 
-    static member Size (x:ProduceRequest) =
+    static member internal Size (x:ProduceRequest) =
       let mutable size = 0
       size <- size + 2 // requiredAcks
       size <- size + 4 // timeout
@@ -635,7 +638,7 @@ module Protocol =
           size <- size + 4 + 4 + mss
       size
 
-    static member Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
+    static member internal Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
       let messageVer = Versions.produceReqMessage ver
       buf.WriteInt16 x.requiredAcks
       buf.WriteInt32 x.timeout
@@ -674,7 +677,7 @@ module Protocol =
     end
   with
 
-    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let tn = buf.ReadInt32 ()
       let topics = Array.zeroCreate tn
       for i = 0 to topics.Length - 1 do
@@ -709,7 +712,7 @@ module Protocol =
     end
   with
 
-    static member Size (x:FetchRequest) =
+    static member internal Size (x:FetchRequest) =
       let mutable size = 0
       size <- size + 4 // replicaId
       size <- size + 4 // maxWaitTime
@@ -725,7 +728,7 @@ module Protocol =
           size <- size + 4 // maxBytes
       size
 
-    static member Write (x:FetchRequest, buf:BinaryZipper) =
+    static member internal Write (x:FetchRequest, buf:BinaryZipper) =
       buf.WriteInt32 x.replicaId
       buf.WriteInt32 x.maxWaitTime
       buf.WriteInt32 x.minBytes
@@ -749,7 +752,7 @@ module Protocol =
     end
   with
 
-    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTime =
         match ver with
         | v when v >= 1s -> buf.ReadInt32 ()
@@ -794,18 +797,20 @@ module Protocol =
     end
   with
 
-    static member size (x:OffsetRequest) =
+    static member internal Size (ver:ApiVersion, x:OffsetRequest) =
       let partitionSize (part, time, maxNumOffsets) =
-        Binary.sizeInt32 part + Binary.sizeInt64 time + Binary.sizeInt32 maxNumOffsets
+        Binary.sizeInt32 part + 
+        Binary.sizeInt64 time + 
+        (if ver = 0s then Binary.sizeInt32 maxNumOffsets else 0)
       let topicSize (name, partitions) =
         Binary.sizeString name + Binary.sizeArray partitions partitionSize
       Binary.sizeInt32 x.replicaId + Binary.sizeArray x.topics topicSize
 
-    static member Write (apiVer:ApiVersion, x:OffsetRequest, buf:BinaryZipper) =
+    static member internal Write (apiVer:ApiVersion, x:OffsetRequest, buf:BinaryZipper) =
       let writePartition (buf:BinaryZipper,(p,t,mo)) =
         buf.WriteInt32 p
         buf.WriteInt64 t
-        if apiVer >= 1s then buf.WriteInt32 mo
+        if apiVer = 0s then buf.WriteInt32 mo
         else ()
       let writeTopic (buf:BinaryZipper, (t,ps)) =
         buf.WriteString t
@@ -821,7 +826,7 @@ module Protocol =
     end
   with
 
-    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let readPartition (buf:BinaryZipper) =
         let p = buf.ReadInt32 ()
         let ec = buf.ReadInt16 ()
@@ -835,7 +840,7 @@ module Protocol =
         let ps = buf.ReadArray readPartition
         t,ps
       let topics = buf.ReadArray (readTopic)
-      (OffsetResponse(topics), buf)
+      OffsetResponse(topics)
 
   // Offset Commit/Fetch API
 
@@ -846,16 +851,42 @@ module Protocol =
       val consumerGroupGenerationId : ConsumerGroupGenerationId
       val consumerId : ConsumerId
       val retentionTime : RetentionTime
-      val topics : (TopicName * (Partition * Offset * Meta)[])[]
+      val topics : (TopicName * (Partition * Offset * Timestamp * Meta)[])[]
       new (consumerGroup, consumerGroupGenerationId, consumerId, retentionTime, topics) =
         { consumerGroup = consumerGroup; consumerGroupGenerationId = consumerGroupGenerationId;
           consumerId = consumerId; retentionTime = retentionTime; topics = topics }
     end
   with
 
-    static member size (x:OffsetCommitRequest) =
-      let partitionSize (part, offset, metadata) =
-        Binary.sizeInt32 part + Binary.sizeInt64 offset + Binary.sizeString metadata
+//    static member internal size (x:OffsetCommitRequest) =
+//      let partitionSize (part, offset, ts, metadata) =
+//        Binary.sizeInt32 part + Binary.sizeInt64 offset + Binary.sizeString metadata
+//      let topicSize (name, partitions) =
+//        Binary.sizeString name + Binary.sizeArray partitions partitionSize
+//      Binary.sizeString x.consumerGroup +
+//      Binary.sizeInt32 x.consumerGroupGenerationId +
+//      Binary.sizeString x.consumerId +
+//      Binary.sizeInt64 x.retentionTime +
+//      Binary.sizeArray x.topics topicSize
+
+//    static member internal write (x:OffsetCommitRequest) buf =
+//      let writePartition =
+//        Binary.write3 Binary.writeInt32 Binary.writeInt64 Binary.writeString
+//      let writeTopic =
+//        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
+//      buf
+//      |> Binary.writeString x.consumerGroup
+//      |> Binary.writeInt32 x.consumerGroupGenerationId
+//      |> Binary.writeString x.consumerId
+//      |> Binary.writeInt64 x.retentionTime
+//      |> Binary.writeArray x.topics writeTopic
+
+    static member internal Size (ver:ApiVersion, x:OffsetCommitRequest) =
+      let partitionSize (part, offset, ts, metadata) =
+        Binary.sizeInt32 part + 
+        Binary.sizeInt64 offset + 
+        (if ver = 1s then Binary.sizeInt64 ts else 0) +
+        Binary.sizeString metadata
       let topicSize (name, partitions) =
         Binary.sizeString name + Binary.sizeArray partitions partitionSize
       Binary.sizeString x.consumerGroup +
@@ -864,17 +895,20 @@ module Protocol =
       Binary.sizeInt64 x.retentionTime +
       Binary.sizeArray x.topics topicSize
 
-    static member write (x:OffsetCommitRequest) buf =
-      let writePartition =
-        Binary.write3 Binary.writeInt32 Binary.writeInt64 Binary.writeString
-      let writeTopic =
-        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
-      buf
-      |> Binary.writeString x.consumerGroup
-      |> Binary.writeInt32 x.consumerGroupGenerationId
-      |> Binary.writeString x.consumerId
-      |> Binary.writeInt64 x.retentionTime
-      |> Binary.writeArray x.topics writeTopic
+    static member internal Write (ver:ApiVersion, x:OffsetCommitRequest, buf:BinaryZipper) =
+      let writePartition (buf:BinaryZipper, (p,o,ts,m)) =
+        buf.WriteInt32 p
+        buf.WriteInt64 o
+        if ver = 1s then buf.WriteInt64 ts
+        buf.WriteString m
+      let writeTopic (buf:BinaryZipper, (t,ps)) =
+        buf.WriteString t
+        buf.WriteArray (ps, writePartition)
+      buf.WriteString x.consumerGroup
+      buf.WriteInt32 x.consumerGroupGenerationId
+      buf.WriteString x.consumerId
+      buf.WriteInt64 x.retentionTime
+      buf.WriteArray (x.topics, writeTopic)
 
   [<NoEquality;NoComparison>]
   type OffsetCommitResponse =
@@ -884,7 +918,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let readPartition =
         Binary.read2 Binary.readInt32 Binary.readInt16
       let readTopic =
@@ -900,12 +934,12 @@ module Protocol =
     end
   with
 
-    static member size (x:OffsetFetchRequest) =
+    static member internal size (x:OffsetFetchRequest) =
       let topicSize (name, parts) =
         Binary.sizeString name + Binary.sizeArray parts Binary.sizeInt32
       Binary.sizeString x.consumerGroup + Binary.sizeArray x.topics topicSize
 
-    static member write (x:OffsetFetchRequest) buf =
+    static member internal write (x:OffsetFetchRequest) buf =
       let writeTopic =
         Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps Binary.writeInt32)
       buf
@@ -920,7 +954,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let readPartition =
         Binary.read4 Binary.readInt32 Binary.readInt64 Binary.readString Binary.readInt16
       let readTopic =
@@ -943,10 +977,10 @@ module Protocol =
     end
   with
 
-    static member size (x:GroupCoordinatorRequest) =
+    static member internal size (x:GroupCoordinatorRequest) =
       Binary.sizeString x.groupId
 
-    static member write (x:GroupCoordinatorRequest) buf =
+    static member internal write (x:GroupCoordinatorRequest) buf =
       Binary.writeString x.groupId buf
 
   type GroupCoordinatorResponse =
@@ -961,7 +995,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal  read buf =
       let ec, buf = Binary.readInt16 buf
       let cid, buf = Binary.readInt32 buf
       let ch, buf = Binary.readString buf
@@ -982,12 +1016,12 @@ module Protocol =
     end
   with
 
-    static member size (x:GroupProtocols) =
+    static member internal size (x:GroupProtocols) =
       let protocolSize (name, metadata) =
         Binary.sizeString name + Binary.sizeBytes metadata
       Binary.sizeArray x.protocols protocolSize
 
-    static member write (x:GroupProtocols) buf =
+    static member internal write (x:GroupProtocols) buf =
       buf |> Binary.writeArray x.protocols (Binary.write2 Binary.writeString Binary.writeBytes)
 
   [<NoEquality;NoComparison>]
@@ -998,7 +1032,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let readMember =
         Binary.read2 Binary.readString Binary.readBytes
       let xs, buf = buf |> Binary.readArray readMember
@@ -1032,14 +1066,14 @@ module Protocol =
         { errorCode = errorCode; generationId = generationId; groupProtocol = groupProtocol;
           leaderId = leaderId; memberId = memberId; members = members }
 
-    let sizeRequest (req:Request) =
+    let internal sizeRequest (req:Request) =
       Binary.sizeString req.groupId +
       Binary.sizeInt32 req.sessionTimeout +
       Binary.sizeString req.memberId +
       Binary.sizeString req.protocolType +
       GroupProtocols.size req.groupProtocols
 
-    let writeRequest (ver:ApiVersion, req:Request) buf =
+    let internal writeRequest (ver:ApiVersion, req:Request) buf =
       let buf = Binary.writeString req.groupId buf
       let buf = Binary.writeInt32 req.sessionTimeout buf
       let buf = 
@@ -1050,7 +1084,7 @@ module Protocol =
       let buf = GroupProtocols.write req.groupProtocols buf
       buf
 
-    let readResponse buf =
+    let internal readResponse buf =
       let (errorCode, gid, gp, lid, mid, ms), buf =
         buf |> Binary.read6
           Binary.readInt16
@@ -1069,10 +1103,10 @@ module Protocol =
     end
   with
 
-    static member size (x:GroupAssignment) =
+    static member internal size (x:GroupAssignment) =
       Binary.sizeArray x.members (fun (memId, memAssign) -> Binary.sizeString memId + Binary.sizeBytes memAssign)
 
-    static member write (x:GroupAssignment) buf =
+    static member internal write (x:GroupAssignment) buf =
       buf |> Binary.writeArray x.members (Binary.write2 Binary.writeString Binary.writeBytes)
 
   /// The sync group request is used by the group leader to assign state (e.g.
@@ -1091,13 +1125,13 @@ module Protocol =
     end
   with
 
-    static member size (x:SyncGroupRequest) =
+    static member internal size (x:SyncGroupRequest) =
       Binary.sizeString x.groupId +
       Binary.sizeInt32 x.generationId +
       Binary.sizeString x.memberId +
       GroupAssignment.size x.groupAssignment
 
-    static member write (x:SyncGroupRequest) buf =
+    static member internal write (x:SyncGroupRequest) buf =
       let buf =
         buf
         |> Binary.writeString x.groupId
@@ -1114,7 +1148,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let errorCode, buf = Binary.readInt16 buf
       let ma, buf = Binary.readBytes buf
       (SyncGroupResponse(errorCode, ma), buf)
@@ -1131,10 +1165,10 @@ module Protocol =
     end
   with
 
-    static member size (x:HeartbeatRequest) =
+    static member internal size (x:HeartbeatRequest) =
       Binary.sizeString x.groupId + Binary.sizeInt32 x.generationId + Binary.sizeString x.memberId
 
-    static member write (x:HeartbeatRequest) buf =
+    static member internal write (x:HeartbeatRequest) buf =
       buf
       |> Binary.writeString x.groupId
       |> Binary.writeInt32 x.generationId
@@ -1149,7 +1183,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let errorCode, buf = Binary.readInt16 buf
       (HeartbeatResponse(errorCode), buf)
 
@@ -1163,10 +1197,10 @@ module Protocol =
     end
   with
 
-    static member size (x:LeaveGroupRequest) =
+    static member internal size (x:LeaveGroupRequest) =
       Binary.sizeString x.groupId + Binary.sizeString x.memberId
 
-    static member write (x:LeaveGroupRequest) buf =
+    static member internal write (x:LeaveGroupRequest) buf =
       buf |> Binary.writeString x.groupId |> Binary.writeString x.memberId
 
   [<NoEquality;NoComparison>]
@@ -1177,7 +1211,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let errorCode, buf = Binary.readInt16 buf
       (LeaveGroupResponse(errorCode), buf)
 
@@ -1205,18 +1239,18 @@ module Protocol =
     end
   with
 
-    static member size (x:ConsumerGroupProtocolMetadata) =
+    static member internal size (x:ConsumerGroupProtocolMetadata) =
       Binary.sizeInt16 x.version +
       Binary.sizeArray x.subscription Binary.sizeString +
       Binary.sizeBytes x.userData
 
-    static member write (x:ConsumerGroupProtocolMetadata) buf =
+    static member internal write (x:ConsumerGroupProtocolMetadata) buf =
       buf
       |> Binary.writeInt16 x.version
       |> Binary.writeArray x.subscription Binary.writeString
       |> Binary.writeBytes x.userData
 
-    static member read buf =
+    static member internal read buf =
       let version,buf = Binary.readInt16 buf
       let subs,buf = Binary.readArray (Binary.readString) buf
       let userData,buf = Binary.readBytes buf
@@ -1232,16 +1266,16 @@ module Protocol =
     end
   with
 
-    static member size (x:PartitionAssignment) =
+    static member internal size (x:PartitionAssignment) =
       let topicSize (name, parts) =
         Binary.sizeString name + Binary.sizeArray parts Binary.sizeInt32
       Binary.sizeArray x.assignments topicSize
 
-    static member write (x:PartitionAssignment) buf =
+    static member internal write (x:PartitionAssignment) buf =
       let writePartitions partitions = Binary.writeArray partitions Binary.writeInt32
       buf |> Binary.writeArray x.assignments (Binary.write2 Binary.writeString writePartitions)
 
-    static member read buf =
+    static member internal read buf =
       let assignments, buf = buf |> Binary.readArray (fun buf ->
         let topicName, buf = Binary.readString buf
         let partitions, buf = buf |> Binary.readArray Binary.readInt32
@@ -1261,16 +1295,16 @@ module Protocol =
     end
   with
 
-    static member size (x:ConsumerGroupMemberAssignment) =
+    static member internal size (x:ConsumerGroupMemberAssignment) =
       Binary.sizeInt16 x.version + PartitionAssignment.size x.partitionAssignment + Binary.sizeBytes x.userData
 
-    static member write (x:ConsumerGroupMemberAssignment) buf =
+    static member internal write (x:ConsumerGroupMemberAssignment) buf =
       let buf = Binary.writeInt16 x.version buf
       let buf = PartitionAssignment.write x.partitionAssignment buf
       let buf = Binary.writeBytes x.userData buf
       buf
 
-    static member read buf =
+    static member internal read buf =
       let version, buf = Binary.readInt16 buf
       let assignments, buf = PartitionAssignment.read buf
       let userData, buf = Binary.readBytes buf
@@ -1296,7 +1330,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let readGroup =
         Binary.read2 Binary.readString Binary.readString
       let errorCode, buf = Binary.readInt16 buf
@@ -1317,7 +1351,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let readGroupMember =
         Binary.read5 Binary.readString Binary.readString Binary.readString Binary.readBytes Binary.readBytes
       let xs, buf = buf |> Binary.readArray readGroupMember
@@ -1331,10 +1365,10 @@ module Protocol =
     end
   with
 
-    static member size (x:DescribeGroupsRequest) =
+    static member internal size (x:DescribeGroupsRequest) =
       Binary.sizeArray x.groupIds Binary.sizeString
 
-    static member write (x:DescribeGroupsRequest) buf =
+    static member internal write (x:DescribeGroupsRequest) buf =
       buf |> Binary.writeArray x.groupIds Binary.writeString
 
 
@@ -1346,7 +1380,7 @@ module Protocol =
     end
   with
 
-    static member read buf =
+    static member internal read buf =
       let readGroup =
         Binary.read6
           Binary.readInt16
@@ -1375,15 +1409,15 @@ module Protocol =
     | DescribeGroups of DescribeGroupsRequest
   with
 
-    static member size (x:RequestMessage) =
+    static member internal size (ver:ApiVersion, x:RequestMessage) =
       match x with
       | Heartbeat x -> HeartbeatRequest.size x
       | Metadata x -> Metadata.sizeRequest x
       | Fetch x -> FetchRequest.Size x
       | Produce x -> ProduceRequest.Size x
-      | Offset x -> OffsetRequest.size x
+      | Offset x -> OffsetRequest.Size (ver,x)
       | GroupCoordinator x -> GroupCoordinatorRequest.size x
-      | OffsetCommit x -> OffsetCommitRequest.size x
+      | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
       | OffsetFetch x -> OffsetFetchRequest.size x
       | JoinGroup x -> JoinGroup.sizeRequest x
       | SyncGroup x -> SyncGroupRequest.size x
@@ -1391,7 +1425,7 @@ module Protocol =
       | ListGroups x -> ListGroupsRequest.size x
       | DescribeGroups x -> DescribeGroupsRequest.size x
 
-    static member Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
+    static member internal Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
       match x with
       | Heartbeat x -> HeartbeatRequest.write x buf.Buffer |> ignore
       | Metadata x -> Metadata.writeRequest x buf.Buffer |> ignore
@@ -1399,7 +1433,7 @@ module Protocol =
       | Produce x -> ProduceRequest.Write (ver,x,buf)
       | Offset x -> OffsetRequest.Write (ver,x,buf)
       | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
-      | OffsetCommit x -> OffsetCommitRequest.write x buf.Buffer |> ignore
+      | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
       | OffsetFetch x -> OffsetFetchRequest.write x buf.Buffer |> ignore
       | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
       | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
@@ -1437,14 +1471,14 @@ module Protocol =
     end
   with
 
-    static member size (x:Request) =
+    static member internal size (ver:ApiVersion, x:Request) =
       Binary.sizeInt16 (int16 x.apiKey) +
       Binary.sizeInt16 x.apiVersion +
       Binary.sizeInt32 x.correlationId +
       Binary.sizeString x.clientId +
-      RequestMessage.size x.message
+      RequestMessage.size (ver, x.message)
 
-    static member inline Write (ver:ApiVersion, x:Request, buf:BinaryZipper) =
+    static member internal Write (ver:ApiVersion, x:Request, buf:BinaryZipper) =
       buf.WriteInt16 (int16 x.apiKey)
       buf.WriteInt16 (x.apiVersion)
       buf.WriteInt32 (x.correlationId)
@@ -1469,7 +1503,7 @@ module Protocol =
   with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
-    static member inline Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
+    static member internal Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
       match apiKey with
       | ApiKey.Heartbeat ->
         let x, _ = HeartbeatResponse.read buf.Buffer in (ResponseMessage.HeartbeatResponse x)
@@ -1477,8 +1511,7 @@ module Protocol =
         let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
       | ApiKey.Produce -> ProduceResponse.Read (apiVer,buf) |> ResponseMessage.ProduceResponse
-      | ApiKey.Offset ->
-        let x, _ = OffsetResponse.Read (apiVer, buf) in (ResponseMessage.OffsetResponse x)
+      | ApiKey.Offset -> OffsetResponse.Read (apiVer, buf) |> ResponseMessage.OffsetResponse
       | ApiKey.GroupCoordinator ->
         let x, _ = GroupCoordinatorResponse.read buf.Buffer in (ResponseMessage.GroupCoordinatorResponse x)
       | ApiKey.OffsetCommit ->
@@ -1504,11 +1537,4 @@ module Protocol =
       val message : ResponseMessage
       new (correlationId, message) = { correlationId = correlationId; message = message }
     end
-
-  // TODO: provide generic version with static constraints
-  let inline toArraySeg size write x =
-    let size = size x
-    let buf = Binary.zeros size
-    buf |> write x |> ignore
-    buf
 

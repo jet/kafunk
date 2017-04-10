@@ -220,16 +220,6 @@ module Binary =
     : Segment =
     buf |> writeA a |> writeB b |> writeC c
 
-  let inline write4
-    (writeA : Writer<'a>)
-    (writeB : Writer<'b>)
-    (writeC : Writer<'c>)
-    (writeD : Writer<'d>)
-    ((a, b, c, d) : ('a * 'b * 'c * 'd))
-    (buf : Segment)
-    : Segment =
-    buf |> writeA a |> writeB b |> writeC c |> writeD d
-
   let inline sizeBytes (bytes:Segment) =
       sizeInt32 bytes.Count + bytes.Count
 
@@ -420,7 +410,7 @@ type BinaryZipper (buf:ArraySegment<byte>) =
     if isNull arr then
       __.WriteInt32 (-1)
     else
-      __.WriteInt32 (-1)
+      __.WriteInt32 (arr.Length)
       for i = 0 to arr.Length - 1 do
         write (__,arr.[i])
 
