@@ -1,4 +1,4 @@
-### 0.0.39-alpha001 - 29.03.2017
+### 0.0.39-alpha001 - 11.04.2017
 
 * Unroll loop in producer to make more efficient
 * Request buffer pool
@@ -8,6 +8,7 @@
 	- MessageSet tuples replaced with structs
 	- ProduceRequest tuples replaced with structs
 	- ProduceResponse tuples replaced with structs
+	- OffsetCommitRequest added support for v1 (in addition to v0 and v2)
 
 ### 0.0.38-alpha001 - 29.03.2017
 
