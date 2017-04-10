@@ -39,6 +39,12 @@ module ConsumerGroup =
     // TODO: consider support for multi-topic subscriptions
     let t,ps = assignments.[0]
     t,ps
+  
+  let private toArraySeg size write x =
+    let size = size x
+    let buf = Binary.zeros size
+    buf |> write x |> ignore
+    buf
 
   /// Creates an instances of the consumer groups protocol given the specified assignment strategies.
   let create (strategies:(AssignmentStrategyName * AssignmentStrategy)[]) (topicSubscription:TopicName[]) =
@@ -406,7 +412,7 @@ module Consumer =
         (async {
           let req = 
             OffsetCommitRequest(
-              cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,"") |])
+              cfg.groupId, state.state.generationId, state.state.memberId, cfg.offsetRetentionTime, [| topic, offsets |> Array.map (fun (p,o) -> p,o,0L,"") |])
           let! res = Kafka.offsetCommit conn req |> Async.Catch
           match res with
           | Success res ->

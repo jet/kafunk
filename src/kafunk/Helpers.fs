@@ -260,7 +260,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,o,_) -> sprintf "(p=%i o=%i)" p o)
+            |> Seq.map (fun (p,o,_,_) -> sprintf "(p=%i o=%i)" p o)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "

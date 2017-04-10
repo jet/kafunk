@@ -223,7 +223,7 @@ module internal Chan =
       let apiKey = req.ApiKey
       let apiVer = Versions.byKey version apiKey
       let req = Request(apiVer, correlationId, clientId, req)
-      let size = Request.size req
+      let size = Request.size (apiVer, req)
       let buf = bufferPool.Alloc size
       Request.Write (apiVer, req, BinaryZipper(buf))
       buf,(apiKey,apiVer)
