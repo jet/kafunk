@@ -35,10 +35,14 @@ let go = async {
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
       fetchMaxBytes = 5000000,
-      fetchBufferSize = 2,
+      fetchMinBytes = 1,
+      fetchMaxWaitMs = 1000,
+      fetchBufferSize = 1,
       sessionTimeout = 30000,
       heartbeatFrequency = 3,
-      checkCrc = true)
+      checkCrc = true,
+      endOfTopicPollPolicy = RetryPolicy.constantMs 1000
+    )
   let! consumer = 
     Consumer.createAsync conn consumerConfig
   
