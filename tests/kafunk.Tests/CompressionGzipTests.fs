@@ -23,8 +23,8 @@ let ``Compression.GZip should work`` () =
 
     let messages = outputMessageSet.messages
     Assert.IsTrue (messages.Length = 2)
-    let (offset, size, msg) = messages.[0]
-    let (offset2, size2, msg2) = messages.[1]
+    let (offset, size, msg) = let x = messages.[0] in x.offset, x.messageSize, x.message
+    let (offset2, size2, msg2) = let x = messages.[1] in x.offset, x.messageSize, x.message
     Assert.IsTrue (msg.value |> Binary.toArray = messageBytes)
     Assert.IsTrue (msg2.value |> Binary.toArray = message2Bytes)
 

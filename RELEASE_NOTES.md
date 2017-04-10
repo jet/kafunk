@@ -1,3 +1,14 @@
+### 0.0.39-alpha001 - 29.03.2017
+
+* Unroll loop in producer to make more efficient
+* Request buffer pool
+* Added ZK offset migration script in tests project
+* Support v10.0.1 for Offset API
+* BREAKING:
+	- MessageSet tuples replaced with structs
+	- ProduceRequest tuples replaced with structs
+	- ProduceResponse tuples replaced with structs
+
 ### 0.0.38-alpha001 - 29.03.2017
 
 * Fix use of IVar where concurrent puts are possible

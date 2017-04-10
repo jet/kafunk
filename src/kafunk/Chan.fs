@@ -33,6 +33,9 @@ type ChanConfig = {
   /// The request retry polify for timeouts and failures.
   requestRetryPolicy : RetryPolicy
 
+  /// The buffer pool to use for requests.
+  bufferPool : IBufferPool
+
 } with
   
   /// The default TCP receive buffer size = 65536.
@@ -56,8 +59,12 @@ type ChanConfig = {
   /// The default TCP Nagle setting = false.
   static member DefaultUseNagle = false
 
+  /// The default buffer pool = BufferPool.GC.
+  static member DefaultBufferPool = BufferPool.GC
+
   /// Creates a broker TCP channel configuration.
-  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy) =
+  static member create (?useNagle, ?receiveBufferSize, ?sendBufferSize, ?connectTimeout, 
+                        ?connectRetryPolicy, ?requestTimeout, ?requestRetryPolicy, ?bufferPool) =
     {
       useNagle = defaultArg useNagle ChanConfig.DefaultUseNagle
       receiveBufferSize = defaultArg receiveBufferSize ChanConfig.DefaultReceiveBufferSize
@@ -66,6 +73,7 @@ type ChanConfig = {
       connectRetryPolicy = defaultArg connectRetryPolicy ChanConfig.DefaultConnectRetryPolicy
       requestTimeout = defaultArg requestTimeout ChanConfig.DefaultRequestTimeout
       requestRetryPolicy = defaultArg requestRetryPolicy ChanConfig.DefaultRequestRetryPolicy
+      bufferPool = defaultArg bufferPool ChanConfig.DefaultBufferPool
     }
 
 
@@ -203,8 +211,12 @@ module internal Chan =
       Socket.receiveStreamFrom config.receiveBufferSize receive
       |> Framing.LengthPrefix.unframe
 
+    let bufferPool = config.bufferPool
+
     /// A framing sender.
-    let send = Framing.LengthPrefix.frame >> send
+    let send = 
+      Framing.LengthPrefix.frame >> send
+      |> AsyncFunc.tryFinally bufferPool.Free
 
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
@@ -212,15 +224,16 @@ module internal Chan =
       let apiVer = Versions.byKey version apiKey
       let req = Request(apiVer, correlationId, clientId, req)
       let size = Request.size req
-      let buf = Binary.zeros size // TODO: pool
+      let buf = bufferPool.Alloc size
       Request.Write (apiVer, req, BinaryZipper(buf))
       buf,(apiKey,apiVer)
 
-    let bz = BinaryZipper (Binary.empty)
+    //let bz = BinaryZipper (Binary.empty)
 
     /// Decodes the session layer input and session state into a response.
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
-      bz.Buffer <- buf
+      //bz.Buffer <- buf
+      let bz = BinaryZipper (buf)
       let r = ResponseMessage.Read (apiKey,apiVer,bz)
       r
 

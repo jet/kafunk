@@ -242,6 +242,26 @@ module Producer =
       count <- count + b.messages.Length
     count
 
+  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) =
+    let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
+    for b in batch do
+      let mutable xs = Unchecked.defaultof<_>
+      if not (ps.TryGetValue(b.partition, &xs)) then
+        xs <- ResizeArray<_>()
+        ps.Add (b.partition, xs)
+      for pm in b.messages do
+        let m = Message.create pm.value pm.key None
+        let ms = Message.Size (messageVer,m)
+        xs.Add (MessageSetItem(0L, ms, m))
+    let arr = Array.zeroCreate ps.Count
+    let mutable i = 0
+    for p in ps do
+      let ms = MessageSet(p.Value.ToArray())
+      let ms = ms |> Compression.compress messageVer compression
+      arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, MessageSet.Size (messageVer,ms), ms)
+      i <- i + 1
+    arr
+
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
   let private sendBatch 
     (conn:KafkaConn)
@@ -251,19 +271,9 @@ module Producer =
     (batch:ProducerMessageBatch seq) = async {
     //Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
 
-    let pms = 
-      batch
-      |> Seq.groupBy (fun b -> b.partition)
-      |> Seq.map (fun (p,pms) ->
-        let ms = 
-          pms 
-          |> Seq.collect (fun bs -> bs.messages |> Seq.map (fun pm -> Message.create pm.value pm.key None))
-          |> MessageSet.ofMessages messageVer
-          |> Compression.compress messageVer cfg.compression
-        p, MessageSet.Size (messageVer,ms), ms)
-      |> Seq.toArray
+    let pms = toMessageSet messageVer cfg.compression batch
 
-    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| cfg.topic,pms |])
+    let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
     let! res = 
       Chan.send ch (RequestMessage.Produce req) 
       |> Async.map (Result.map ResponseMessage.toProduce)
@@ -274,9 +284,12 @@ module Producer =
       
       let oks,transientErrors,fatalErrors =
         res.topics
-        |> Seq.collect (fun (_t,os) ->
-          os
-          |> Seq.map (fun (p,ec,o) ->
+        |> Seq.collect (fun x ->
+          x.partitions
+          |> Seq.map (fun y ->
+            let o = y.offset
+            let ec = y.errorCode
+            let p = y.partition
             match ec with
             | ErrorCode.NoError -> Choice1Of3 (p,o)
 
@@ -314,6 +327,8 @@ module Producer =
         for b in batch do
           Map.tryFind b.partition eps
           |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
+
+      //let resolve
 
       if oks.Length > 0 then
         let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
@@ -365,6 +380,7 @@ module Producer =
 
     let startBrokerQueue (ch:Chan) =
       let sendBatch = sendBatch conn cfg messageVer ch
+      if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then Array.singleton >> sendBatch else
       let bufferCond = 
         BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
       let batchCond =
@@ -373,15 +389,11 @@ module Producer =
       let produceStream = 
         AsyncSeq.replicateInfiniteAsync (BoundedMb.take buffer)
       let sendProcess =
-        if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then
-          produceStream
-          |> AsyncSeq.iterAsync (Array.singleton >> sendBatch)
-        else
-          produceStream
-          |> AsyncSeq.toObservable
-          |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
-          |> AsyncSeq.ofObservableBuffered
-          |> AsyncSeq.iterAsync sendBatch
+        produceStream
+        |> AsyncSeq.toObservable
+        |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
+        |> AsyncSeq.ofObservableBuffered
+        |> AsyncSeq.iterAsync sendBatch
       Log.info "produce_process_starting|topic=%s ep=%O buffer_size=%i batch_size=%i" 
         cfg.topic (Chan.endpoint ch) cfg.bufferSizeBytes cfg.batchSizeBytes
       sendProcess

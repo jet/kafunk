@@ -62,8 +62,8 @@ let decompress (messageVer:int16) (ms:MessageSet) =
   if ms.messages.Length = 0 then ms
   elif ms.messages.Length > 1 then ms
   else
-    let _,_,m = ms.messages.[0]
-    match (m.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
+    let x = ms.messages.[0]
+    match (x.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
     | CompressionCodec.None -> ms
-    | CompressionCodec.GZIP -> GZip.decompress messageVer m
+    | CompressionCodec.GZIP -> GZip.decompress messageVer x.message
     | c -> failwithf "compression_code=%i not supported" c 

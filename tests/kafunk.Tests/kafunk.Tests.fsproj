@@ -84,6 +84,7 @@
     <None Include="ProducerConsumer.fsx" />
     <None Include="Offsets.fsx" />
     <None Include="ConsumerProgress.fsx" />
+    <None Include="MigrateZkOffsets.fsx" />
     <None Include="AsyncTest.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
