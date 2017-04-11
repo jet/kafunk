@@ -579,31 +579,51 @@ type KafkaConn internal (cfg:KafkaConfig) =
       |> AsyncFunc.dimap RequestMessage.Metadata (ResponseMessage.toMetadata)
     let! metadata = send (Metadata.Request(topics))
     Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
-    let noLeader =
-      metadata.topicMetadata
-      |> Seq.collect (fun tmd -> 
-        tmd.partitionMetadata 
-        |> Seq.choose (fun p -> 
-          if p.leader = -1 then Some (tmd.topicName, p.partitionId)
-          else None))
-      |> Seq.toArray
-    if noLeader.Length > 0 then
-      Log.warn "leaderless_partitions_detected|partitions=%s" (Printers.topicPartitions noLeader)
-    let! brokers = 
+        
+    let! brokerConnections = 
       metadata.brokers 
       |> Seq.map (fun b -> async {
         let! ch = connBroker (Some state) (b.host, b.port)
-        return ch |> Result.map (fun ch -> b.nodeId, ch) })
+        return ch |> Result.map (fun ch -> b.nodeId, ch) |> Result.mapError (fun e -> b,e) })
       |> Async.Parallel
-      |> Async.map (Result.traverse id >> Result.throw)
+
+    let connectedBrokers,erroredBrokers =
+      brokerConnections
+      |> Seq.partitionChoices
+        
+    let erroredBrokers =
+      erroredBrokers
+      |> Seq.map (fun (b,e) -> b.nodeId, (b,e))
+      |> Map.ofSeq
+
+    for tmd in metadata.topicMetadata do
+      for pmd in tmd.partitionMetadata do
+        let t = tmd.topicName
+        let p = pmd.partitionId
+        let leaderId = pmd.leader
+        if pmd.leader = -1 then
+          Log.warn "leaderless_partition_detected|partition=%i error_code=%i" pmd.partitionId pmd.partitionErrorCode
+        else
+          match erroredBrokers |> Map.tryFind pmd.leader with
+          | Some (b,e) ->
+            Log.warn "partition_with_dead_broker_connection_detected|topic=%s partition=%i leader_id=%i host=%s port=%i error=\"%O\"" t p leaderId b.host b.port e
+          | None -> ()
+          for brokerId in pmd.isr do
+            match erroredBrokers |> Map.tryFind brokerId with
+            | Some (b,e) ->
+              Log.warn "partition_with_dead_broker_connection_detected|topic=%s partition=%i leader_id=%i host=%s port=%i error=\"%O\"" t p brokerId b.host b.port e
+            | None -> ()
+        
     let topicNodes =
       metadata.topicMetadata 
       |> Seq.collect (fun tmd -> 
         tmd.partitionMetadata 
         |> Seq.choose (fun pmd -> 
-          if pmd.leader >= 0 then Some (tmd.topicName, pmd.partitionId, pmd.leader) 
+          if pmd.leader >= 0 then Some (tmd.topicName, pmd.partitionId, pmd.leader)
           else None))
-    return state |> ConnState.updateTopicPartitions (brokers, topicNodes) }
+      |> Seq.toArray
+      
+    return state |> ConnState.updateTopicPartitions (connectedBrokers, topicNodes) }
 
   /// Fetches and applies metadata to the current connection.
   and getAndApplyMetadata (requireMatchingCaller:bool) (callerState:ConnState) (topics:TopicName[]) =
