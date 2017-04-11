@@ -204,10 +204,8 @@ and [<NoEquality;NoComparison;AutoSerializable(false)>] private ProducerMessageB
     new (p,ms,rep,size) = { partition = p ; messages = ms ; rep = rep ; size = size }
   end
 
-
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
-[<NoEquality;NoComparison;AutoSerializable(false)>]
-type Producer = private {
+and [<NoEquality;NoComparison;AutoSerializable(false)>] Producer = private {
   conn : KafkaConn
   config : ProducerConfig
   state : Resource<ProducerState>
@@ -381,13 +379,26 @@ module Producer =
     let startBrokerQueue (ch:Chan) =
       let sendBatch = sendBatch conn cfg messageVer ch
       if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then Array.singleton >> sendBatch else
-      let bufferCond = 
-        BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
+      let add,flush,produceStream =
+        if cfg.bufferSizeBytes > 0 then
+          let bufferCond = 
+            BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
+          let buffer = BoundedMb.createByCondition bufferCond
+          let produceStream = 
+            AsyncSeq.replicateInfiniteAsync (BoundedMb.take buffer)
+          (flip BoundedMb.put buffer),(BoundedMb.getAll buffer),produceStream
+        else
+          let buf = new Collections.Concurrent.BlockingCollection<_>()
+          let produceStream = buf.GetConsumingEnumerable() |> AsyncSeq.ofSeq
+          let flush = async {
+            let arr = ResizeArray<_>()
+            let mutable batch = Unchecked.defaultof<_>
+            while buf.TryTake(&batch) do
+              arr.Add batch
+            return arr.ToArray() }
+          (buf.Add >> async.Return, flush, produceStream)
       let batchCond =
         BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.batchSizeBytes)
-      let buffer = BoundedMb.createByCondition bufferCond
-      let produceStream = 
-        AsyncSeq.replicateInfiniteAsync (BoundedMb.take buffer)
       let sendProcess =
         produceStream
         |> AsyncSeq.toObservable
@@ -399,13 +410,13 @@ module Producer =
       sendProcess
       |> Async.tryFinally (fun _ ->
         Log.info "produce_process_stopping|topic=%s ep=%O" cfg.topic (Chan.endpoint ch)
-        let buffer = BoundedMb.getAll buffer |> Async.RunSynchronously
+        let buffer = flush |> Async.RunSynchronously
         for batch in buffer do
           IVar.tryPut (Failure (Choice3Of3 ())) batch.rep |> ignore)
       |> Async.tryWith (fun ex -> async {
         Log.error "producer_broker_queue_exception|ep=%O topic=%s error=\"%O\"" (Chan.endpoint ch) cfg.topic ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
-      (flip BoundedMb.put buffer)
+      add
        
     let partitionQueues =
       let qs = Dict.ofSeq []
@@ -421,7 +432,7 @@ module Producer =
           p,q)
       |> Map.ofSeq
 
-    return { 
+    return {
       partitions = partitions ; 
       partitionQueues = partitionQueues |> Dict.ofMap } }
 
@@ -435,6 +446,26 @@ module Producer =
       let p,ms = createBatch state.partitions.Length
       let rep = IVar.create ()
       ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
+    let q = getBrokerQueueByPartition state batch.partition
+    do! q batch
+    let! res = Async.choose (IVar.get batch.rep) (Async.sleep p.batchTimeout |> Async.map (fun _ -> Failure (Choice3Of3 ())))
+    //let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (Choice3Of3 ())) batch.rep
+    match res with
+    | Success res ->
+      return Success res
+    | Failure err ->
+      let errMsg = 
+        match err with
+        | Choice1Of3 errs -> sprintf "broker_channel_errors|errors=%A" errs
+        | Choice2Of3 e -> sprintf "producer_error|p=%i o=%i ec=%i" e.partition e.offset e.errorCode
+        | Choice3Of3 _ -> sprintf "batch_timeout|timeout=%O" p.batchTimeout
+      return Failure (Resource.ResourceErrorAction.RecoverRetry (exn errMsg)) }
+
+  let private produceInternal (p:Producer) (state:ProducerState) (m:ProducerMessage) = async {
+    let batch =
+      let p = Partitioner.partition p.config.partitioner p.config.topic state.partitions.Length m
+      let rep = IVar.create ()
+      ProducerMessageBatch(p,[|m|],rep,ProducerMessage.size m)
     let q = getBrokerQueueByPartition state batch.partition
     do! q batch
     //let! res = Async.choose (IVar.get batch.rep) (Async.sleep p.batchTimeout |> Async.map (fun _ -> Failure (Choice3Of3 ())))
@@ -486,7 +517,8 @@ module Producer =
   /// The message will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
   let produce (p:Producer) (m:ProducerMessage) =
-    produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
+    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceInternal p) m
+    //produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
 
   /// Gets the configuration for the producer.
   let configuration (p:Producer) = 
