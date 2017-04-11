@@ -77,11 +77,16 @@ module IVar =
   let inline get (i:IVar<'a>) : Async<'a> = 
     i.Task |> awaitTaskCancellationAsError
 
+//  /// Creates an async computation which returns the value contained in an IVar.
+//  let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
+//    let! ct = Async.CancellationToken
+//    (Task.Delay (timeout, ct)).ContinueWith (Func<_,_>(fun _ -> tryPut (timeoutResult ()) i))
+//    |> ignore
+//    return! i.Task |> awaitTaskCancellationAsError }
+
   /// Creates an async computation which returns the value contained in an IVar.
   let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
-    let! ct = Async.CancellationToken
-    (Task.Delay (timeout, ct)).ContinueWith (Func<_,_>(fun _ -> tryPut (timeoutResult ()) i))
-    |> ignore
+    use _timer = new Timer((fun _ -> tryPut (timeoutResult ()) i |> ignore), null, (int timeout.TotalMilliseconds), Timeout.Infinite)
     return! i.Task |> awaitTaskCancellationAsError }
 
   /// Returns a cancellation token which is cancelled when the IVar is set.
