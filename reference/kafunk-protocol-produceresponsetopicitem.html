@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerGroup - Kafunk</title>
+    <title>ProduceResponseTopicItem - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,47 +35,80 @@
 
 
 
-<h1>ConsumerGroup</h1>
+<h1>ProduceResponseTopicItem</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
   <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
-<p>The id of the consumer group (same as GroupId).</p>
-
 </div>
-  <h3>Instance members</h3>
+  <h3>Record Fields</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Instance member</td><td>Description</td></tr>
+      <tr><td>Record Field</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '226', 226)" onmouseover="showTip(event, '226', 226)">
-            Chars(arg1)
+          <code onmouseout="hideTip(event, '375', 375)" onmouseover="showTip(event, '375', 375)">
+            partitions
           </code>
-          <div class="tip" id="226">
-            <strong>Signature:</strong> int -&gt; char<br />
+          <div class="tip" id="375">
+            <strong>Signature:</strong> ProduceResponsePartitionItem []<br />
                       </div>
         </td>
         <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L667-667" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
           
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '227', 227)" onmouseover="showTip(event, '227', 227)">
-            Length
+          <code onmouseout="hideTip(event, '376', 376)" onmouseover="showTip(event, '376', 376)">
+            topic
           </code>
-          <div class="tip" id="227">
-            <strong>Signature:</strong> int<br />
+          <div class="tip" id="376">
+            <strong>Signature:</strong> TopicName<br />
                       </div>
         </td>
         <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L666-666" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
           
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <h3>Constructors</h3>
+  <table class="table table-bordered member-list">
+    <thead>
+      <tr><td>Constructor</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '377', 377)" onmouseover="showTip(event, '377', 377)">
+            new(t, ps)
+          </code>
+          <div class="tip" id="377">
+            <strong>Signature:</strong> (t:TopicName * ps:ProduceResponsePartitionItem []) -&gt; ProduceResponseTopicItem<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L668-668" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+              <p>CompiledName: <code>.ctor</code></p>
         </td>
       </tr>
     </tbody>

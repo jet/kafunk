@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerGroup - Kafunk</title>
+    <title>IBufferPool - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,13 +35,12 @@
 
 
 
-<h1>ConsumerGroup</h1>
+<h1>IBufferPool</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
-<p>The id of the consumer group (same as GroupId).</p>
+<p>A buffer pool used for scenarios where allocations are scoped to a well known region.</p>
 
 </div>
   <h3>Instance members</h3>
@@ -53,29 +52,43 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '226', 226)" onmouseover="showTip(event, '226', 226)">
-            Chars(arg1)
+          <code onmouseout="hideTip(event, '581', 581)" onmouseover="showTip(event, '581', 581)">
+            Alloc(arg1)
           </code>
-          <div class="tip" id="226">
-            <strong>Signature:</strong> int -&gt; char<br />
+          <div class="tip" id="581">
+            <strong>Signature:</strong> int -&gt; ArraySegment&lt;byte&gt;<br />
+              <strong>Modifiers:</strong> abstract<br />
                       </div>
         </td>
         <td class="xmldoc">
-          
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Pool.fs#L7-7" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Given a desired size, returns a buffer of that size.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '227', 227)" onmouseover="showTip(event, '227', 227)">
-            Length
+          <code onmouseout="hideTip(event, '582', 582)" onmouseover="showTip(event, '582', 582)">
+            Free(arg1)
           </code>
-          <div class="tip" id="227">
-            <strong>Signature:</strong> int<br />
+          <div class="tip" id="582">
+            <strong>Signature:</strong> ArraySegment&lt;byte&gt; -&gt; unit<br />
+              <strong>Modifiers:</strong> abstract<br />
                       </div>
         </td>
         <td class="xmldoc">
-          
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Pool.fs#L10-10" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Given a buffer, returns it to the pool.</p>
+
+
         </td>
       </tr>
     </tbody>

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerGroup - Kafunk</title>
+    <title>BufferPool - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,47 +35,61 @@
 
 
 
-<h1>ConsumerGroup</h1>
+<h1>BufferPool</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
-  <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
-<p>The id of the consumer group (same as GroupId).</p>
+<p>Operations on buffer pools.</p>
 
 </div>
-  <h3>Instance members</h3>
+
+<!-- Render nested types and modules, if there are any -->
+
+  <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Instance member</td><td>Description</td></tr>
+      <tr><td>Function or value</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '226', 226)" onmouseover="showTip(event, '226', 226)">
-            Chars(arg1)
+          <code onmouseout="hideTip(event, '48', 48)" onmouseover="showTip(event, '48', 48)">
+            bufferManager maxPoolSize maxBufferSize
           </code>
-          <div class="tip" id="226">
-            <strong>Signature:</strong> int -&gt; char<br />
+          <div class="tip" id="48">
+            <strong>Signature:</strong> maxPoolSize:int64 -&gt; maxBufferSize:int -&gt; IBufferPool<br />
                       </div>
         </td>
         <td class="xmldoc">
-          
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Pool.fs#L23-23" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>A buffer pool using System.ServiceModel.Channels.BufferManager.</p>
+
+
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '227', 227)" onmouseover="showTip(event, '227', 227)">
-            Length
+          <code onmouseout="hideTip(event, '49', 49)" onmouseover="showTip(event, '49', 49)">
+            GC 
           </code>
-          <div class="tip" id="227">
-            <strong>Signature:</strong> int<br />
+          <div class="tip" id="49">
+            <strong>Signature:</strong> IBufferPool<br />
                       </div>
         </td>
         <td class="xmldoc">
-          
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Pool.fs#L17-17" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>A buffer pool managed automatically by the GC.</p>
+
+
         </td>
       </tr>
     </tbody>

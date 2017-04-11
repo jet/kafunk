@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerGroup - Kafunk</title>
+    <title>ProduceRequestPartitionMessageSet - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,47 +35,98 @@
 
 
 
-<h1>ConsumerGroup</h1>
+<h1>ProduceRequestPartitionMessageSet</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
   <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
-<p>The id of the consumer group (same as GroupId).</p>
-
 </div>
-  <h3>Instance members</h3>
+  <h3>Record Fields</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Instance member</td><td>Description</td></tr>
+      <tr><td>Record Field</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '226', 226)" onmouseover="showTip(event, '226', 226)">
-            Chars(arg1)
+          <code onmouseout="hideTip(event, '360', 360)" onmouseover="showTip(event, '360', 360)">
+            messageSet
           </code>
-          <div class="tip" id="226">
-            <strong>Signature:</strong> int -&gt; char<br />
+          <div class="tip" id="360">
+            <strong>Signature:</strong> MessageSet<br />
                       </div>
         </td>
         <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L604-604" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
           
         </td>
       </tr>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '227', 227)" onmouseover="showTip(event, '227', 227)">
-            Length
+          <code onmouseout="hideTip(event, '361', 361)" onmouseover="showTip(event, '361', 361)">
+            messageSetSize
           </code>
-          <div class="tip" id="227">
-            <strong>Signature:</strong> int<br />
+          <div class="tip" id="361">
+            <strong>Signature:</strong> MessageSetSize<br />
                       </div>
         </td>
         <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L603-603" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
           
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '362', 362)" onmouseover="showTip(event, '362', 362)">
+            partition
+          </code>
+          <div class="tip" id="362">
+            <strong>Signature:</strong> Partition<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L602-602" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <h3>Constructors</h3>
+  <table class="table table-bordered member-list">
+    <thead>
+      <tr><td>Constructor</td><td>Description</td></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '363', 363)" onmouseover="showTip(event, '363', 363)">
+            new(p, mss, ms)
+          </code>
+          <div class="tip" id="363">
+            <strong>Signature:</strong> (p:Partition * mss:MessageSetSize * ms:MessageSet) -&gt; ProduceRequestPartitionMessageSet<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L605-605" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+              <p>CompiledName: <code>.ctor</code></p>
         </td>
       </tr>
     </tbody>
