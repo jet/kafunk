@@ -303,7 +303,7 @@ module Dict =
     let d = Dictionary<'a, 'b>()
     for kvp in m do
       d.Add (kvp.Key, kvp.Value)
-    d   
+    d
 
     
 [<Compile(Module)>]

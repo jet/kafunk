@@ -4,24 +4,22 @@ namespace Kafunk
 open FSharp.Control
 open System
 open System.Net
-open System.Net.Sockets
-open System.Text
 open System.Threading
-open System.Threading.Tasks
-open System.Collections.Generic
 open Kafunk
 
 /// Connection state.
 type internal ConnState = {
   bootstrapBroker : Chan option
   brokersByEndPoint : Map<EndPoint, Chan>
-  brokersByTopicPartition : Map<TopicName * Partition, Chan>
-  brokersByGroup : Map<GroupId, Chan>
+  //brokersByTopicPartition : Map<TopicName * Partition, Chan>
+  brokersByTopicPartition : Map<TopicName * Partition, Broker>
+  brokersByGroup : Map<GroupId, Broker>
   topics : Map<TopicName * Partition, NodeId>
   brokers : Map<NodeId, Chan>
   version : int
 } with
   
+  /// Initializes an instance of connection state with a bootstrap broker.
   static member bootstrap (bootstrapCh:Chan) =
     {
       bootstrapBroker = Some bootstrapCh
@@ -33,6 +31,7 @@ type internal ConnState = {
       version = 0
     }
 
+  /// Returns the set of topic-partitions in the cluster state.
   static member topicPartitions (s:ConnState) =
     s.topics
     |> Seq.map (fun kvp -> kvp.Key)
@@ -40,37 +39,62 @@ type internal ConnState = {
     |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
     |> Map.ofSeq
 
+  /// Returns the broker channel for the coordinator for the specified group.
   static member tryFindGroupCoordinatorBroker (groupId:GroupId) (s:ConnState) =
     s.brokersByGroup
     |> Map.tryFind groupId
 
-  static member tryFindTopicPartitionBroker (tn:TopicName, p:Partition) (s:ConnState) =
+//  /// Returns the broker channel for the specified topic-partition.
+//  static member tryFindTopicPartitionBrokerChan (tn:TopicName, p:Partition) (s:ConnState) : Chan option =
+//    failwith ""
+
+  /// Returns the broker channel for the specified topic-partition.
+  static member tryFindTopicPartitionBroker (tn:TopicName, p:Partition) (s:ConnState) : Broker option =
     s.brokersByTopicPartition
     |> Map.tryFind (tn,p)
 
+  /// Returns the broker channel for the specified endpoint.
   static member tryFindBrokerByEndPoint (ep:EndPoint) (s:ConnState) =
-    s.brokersByEndPoint
-    |> Map.tryFind ep
+    s.brokersByEndPoint |> Map.tryFind ep
+
+  /// Returns the broker channel for the node id.
+  static member tryFindBrokerById (nodeId:NodeId) (s:ConnState) =
+    s.brokers |> Map.tryFind nodeId
     
-  static member updateTopicPartitions (brokers:(NodeId * Chan) seq, topicNodes:seq<TopicName * Partition * NodeId>) (s:ConnState) =
-    let brokers = s.brokers |> Map.addMany brokers
+//  static member updateTopicPartitions (brokers:(NodeId * Chan) seq, topicNodes:seq<TopicName * Partition * NodeId>) (s:ConnState) =
+//    let brokers = s.brokers |> Map.addMany brokers
+//    {
+//      s with
+//          brokers = brokers
+//          topics = s.topics |> Map.addMany (topicNodes |> Seq.map (fun (t,p,n) -> (t,p),n))
+//          brokersByEndPoint = Map.addMany (brokers |> Seq.map (fun kvp -> Chan.endpoint kvp.Value, kvp.Value)) s.brokersByEndPoint
+//          brokersByTopicPartition = 
+//            s.brokersByTopicPartition
+//            |> Map.addMany (topicNodes|> Seq.map (fun (tn,p,leaderId) -> (tn, p), Map.find leaderId brokers))
+//          version = s.version + 1
+//    }
+
+  static member updateMetadata (brokers:Broker[], topicNodes:(TopicName * Partition * NodeId)[]) (s:ConnState) =
+    let brokersById = brokers |> Seq.map (fun b -> b.nodeId, b) |> Map.ofSeq
     {
       s with
-          brokers = brokers
           topics = s.topics |> Map.addMany (topicNodes |> Seq.map (fun (t,p,n) -> (t,p),n))
-          brokersByEndPoint = Map.addMany (brokers |> Seq.map (fun kvp -> Chan.endpoint kvp.Value, kvp.Value)) s.brokersByEndPoint
           brokersByTopicPartition = 
             s.brokersByTopicPartition
-            |> Map.addMany (topicNodes|> Seq.map (fun (tn,p,leaderId) -> (tn, p), Map.find leaderId brokers))
+            |> Map.addMany (topicNodes |> Seq.map (fun (t,p,nodeId) -> (t,p),Map.find nodeId brokersById))
+          //brokersByEndPoint = Map.addMany (brokers |> Seq.map (fun kvp -> Chan.endpoint kvp.Value, kvp.Value)) s.brokersByEndPoint
+//          brokersByTopicPartition = 
+//            s.brokersByTopicPartition
+//            |> Map.addMany (topicNodes|> Seq.map (fun (tn,p,leaderId) -> (tn, p), Map.find leaderId brokers))
           version = s.version + 1
     }
 
-  static member updateGroupCoordinator (gid:GroupId, nodeId:CoordinatorId, ch:Chan) (s:ConnState) =
+  static member updateGroupCoordinator (gid:GroupId, nodeId:CoordinatorId, host, port) (s:ConnState) =
     {
       s with
-        brokersByGroup = s.brokersByGroup |> Map.add gid ch
-        brokersByEndPoint = s.brokersByEndPoint |> Map.add (Chan.endpoint ch) ch
-        brokers = s.brokers |> Map.add nodeId ch
+        brokersByGroup = s.brokersByGroup |> Map.add gid (Broker(nodeId, host, port))
+        //brokersByEndPoint = s.brokersByEndPoint |> Map.add (Chan.endpoint ch) ch
+        //brokers = s.brokers |> Map.add nodeId ch
         version = s.version + 1
     }
 
@@ -82,20 +106,27 @@ type internal ConnState = {
         version = s.version + 1
     }
 
-  static member removeBroker (ch:Chan) (s:ConnState) =
+  static member addBrokerChan (s:ConnState) (b:Broker, ch:Chan) =
+    {
+      s with
+        brokers = s.brokers |> Map.add b.nodeId ch
+        version = s.version + 1
+    }
+
+  static member removeBrokerChan (ch:Chan) (s:ConnState) =
     let ep = Chan.endpoint ch
-    let topicKeys = 
-      s.brokersByTopicPartition
-      |> Seq.choose (fun kvp -> 
-        let ep' = Chan.endpoint kvp.Value
-        if ep' = ep then Some kvp.Key
-        else None)
-    let groupKeys = 
-      s.brokersByGroup
-      |> Seq.choose (fun kvp -> 
-        let ep' = Chan.endpoint kvp.Value
-        if ep' = ep then Some kvp.Key
-        else None)
+//    let topicKeys = 
+//      s.brokersByTopicPartition
+//      |> Seq.choose (fun kvp -> 
+//        let ep' = Chan.endpoint kvp.Value
+//        if ep' = ep then Some kvp.Key
+//        else None)
+//    let groupKeys = 
+//      s.brokersByGroup
+//      |> Seq.choose (fun kvp -> 
+//        let ep' = Chan.endpoint kvp.Value
+//        if ep' = ep then Some kvp.Key
+//        else None)
     let nodeIds =
       s.brokers
       |> Seq.choose (fun kvp ->
@@ -109,8 +140,8 @@ type internal ConnState = {
           | Some ch when Chan.endpoint ch = ep -> None
           | s -> s
         brokersByEndPoint = s.brokersByEndPoint |> Map.remove ep
-        brokersByGroup = s.brokersByGroup |> Map.removeAll groupKeys
-        brokersByTopicPartition = s.brokersByTopicPartition |> Map.removeAll topicKeys
+        //brokersByGroup = s.brokersByGroup |> Map.removeAll groupKeys
+        //brokersByTopicPartition = s.brokersByTopicPartition |> Map.removeAll topicKeys
         brokers = s.brokers |> Map.removeAll nodeIds
         version = s.version + 1
     }
@@ -147,51 +178,51 @@ type internal RouteResult = Result<(RequestMessage * Chan)[], RouteType>
 [<Compile(Module)>]
 module internal Routing =
 
-  /// Partitions a fetch request by topic/partition and wraps each one in a request.
-  let private partitionFetchReq (state:ConnState) (req:FetchRequest) =
-    req.topics
-    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> (tn, p, o, mb)))
-    |> Seq.groupBy (fun (tn, p, _, _) -> ConnState.tryFindTopicPartitionBroker (tn, p) state |> Result.ofOptionMap (fun () -> tn))
-    |> Seq.map (fun (ch,reqs) ->
-      let topics =
-        reqs
-        |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, mb)) |> Seq.toArray)
-        |> Seq.toArray
-      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
-      ch, RequestMessage.Fetch req)
-    |> Seq.toArray
-
-  /// Partitions a produce request by topic/partition.
-  let private partitionProduceReq (state:ConnState) (req:ProduceRequest) =
-    req.topics
-    //|> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, mss, ms) -> (t, p, mss, ms)))
-    |> Seq.collect (fun x -> x.partitions |> Array.map (fun y -> (x.topic, y.partition, y.messageSetSize, y.messageSet)))
-    |> Seq.groupBy (fun (t, p, _, _) -> ConnState.tryFindTopicPartitionBroker (t, p) state |> Result.ofOptionMap (fun () -> t))
-    |> Seq.map (fun (ep,reqs) ->
-      let topics =
-        reqs
-        |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> ProduceRequestTopicMessageSet (t, (ps |> Seq.map (fun (_, p, mss, ms) -> ProduceRequestPartitionMessageSet (p, mss, ms)) |> Seq.toArray)))
-        |> Seq.toArray
-      let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
-      (ep, RequestMessage.Produce req))
-    |> Seq.toArray
-
-  let private partitionOffsetReq (state:ConnState) (req:OffsetRequest) =
-    req.topics
-    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, tm, mo) -> (t, p, tm, mo)))
-    |> Seq.groupBy (fun (t, p, _, _) -> ConnState.tryFindTopicPartitionBroker (t, p) state |> Result.ofOptionMap (fun () -> t))
-    |> Seq.map (fun (ep,reqs) ->
-      let topics =
-        reqs
-        |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
-        |> Seq.toArray
-      let req = new OffsetRequest(req.replicaId, topics)
-      ep, RequestMessage.Offset req)
-    |> Seq.toArray
-
+//  /// Partitions a fetch request by topic/partition and wraps each one in a request.
+//  let private partitionFetchReq (state:ConnState) (req:FetchRequest) =
+//    req.topics
+//    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> (tn, p, o, mb)))
+//    |> Seq.groupBy (fun (tn, p, _, _) -> ConnState.tryFindTopicPartitionBrokerChan (tn, p) state |> Result.ofOptionMap (fun () -> tn))
+//    |> Seq.map (fun (ch,reqs) ->
+//      let topics =
+//        reqs
+//        |> Seq.groupBy (fun (t, _, _, _) -> t)
+//        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, mb)) |> Seq.toArray)
+//        |> Seq.toArray
+//      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
+//      ch, RequestMessage.Fetch req)
+//    |> Seq.toArray
+//
+//  /// Partitions a produce request by topic/partition.
+//  let private partitionProduceReq (state:ConnState) (req:ProduceRequest) =
+//    req.topics
+//    //|> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, mss, ms) -> (t, p, mss, ms)))
+//    |> Seq.collect (fun x -> x.partitions |> Array.map (fun y -> (x.topic, y.partition, y.messageSetSize, y.messageSet)))
+//    |> Seq.groupBy (fun (t, p, _, _) -> ConnState.tryFindTopicPartitionBrokerChan (t, p) state |> Result.ofOptionMap (fun () -> t))
+//    |> Seq.map (fun (ep,reqs) ->
+//      let topics =
+//        reqs
+//        |> Seq.groupBy (fun (t, _, _, _) -> t)
+//        |> Seq.map (fun (t, ps) -> ProduceRequestTopicMessageSet (t, (ps |> Seq.map (fun (_, p, mss, ms) -> ProduceRequestPartitionMessageSet (p, mss, ms)) |> Seq.toArray)))
+//        |> Seq.toArray
+//      let req = new ProduceRequest(req.requiredAcks, req.timeout, topics)
+//      (ep, RequestMessage.Produce req))
+//    |> Seq.toArray
+//
+//  let private partitionOffsetReq (state:ConnState) (req:OffsetRequest) =
+//    req.topics
+//    |> Seq.collect (fun (t, ps) -> ps |> Array.map (fun (p, tm, mo) -> (t, p, tm, mo)))
+//    |> Seq.groupBy (fun (t, p, _, _) -> ConnState.tryFindTopicPartitionBrokerChan (t, p) state |> Result.ofOptionMap (fun () -> t))
+//    |> Seq.map (fun (ep,reqs) ->
+//      let topics =
+//        reqs
+//        |> Seq.groupBy (fun (t, _, _, _) -> t)
+//        |> Seq.map (fun (t, ps) -> (t, (ps |> Seq.map (fun (_, p, mss, ms) -> (p, mss, ms)) |> Seq.toArray)))
+//        |> Seq.toArray
+//      let req = new OffsetRequest(req.replicaId, topics)
+//      ep, RequestMessage.Offset req)
+//    |> Seq.toArray
+//
   let concatFetchRes (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toFetch
@@ -204,22 +235,22 @@ module internal Routing =
           new FetchResponse(tt, rs |> Array.collect (fun r -> r.topics))
       ResponseMessage.FetchResponse res)
 
-  let concatProduceResponses (rs:ProduceResponse[]) =
-    let topics = rs |> Array.collect (fun r -> r.topics)
-    let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
-    new ProduceResponse(topics, tt)
-
-  let concatProduceResponseMessages (rs:ResponseMessage[]) =
-    rs
-    |> Array.map ResponseMessage.toProduce
-    |> concatProduceResponses
-    |> ResponseMessage.ProduceResponse
+//  let concatProduceResponses (rs:ProduceResponse[]) =
+//    let topics = rs |> Array.collect (fun r -> r.topics)
+//    let tt = rs |> Seq.map (fun r -> r.throttleTime) |> Seq.max
+//    new ProduceResponse(topics, tt)
+//
+//  let concatProduceResponseMessages (rs:ResponseMessage[]) =
+//    rs
+//    |> Array.map ResponseMessage.toProduce
+//    |> concatProduceResponses
+//    |> ResponseMessage.ProduceResponse
 
   let concatOffsetResponses (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toOffset
     |> (fun rs -> new OffsetResponse(rs |> Array.collect (fun r -> r.topics)) |> ResponseMessage.OffsetResponse)
-
+  
   let route (state:ConnState) : RequestMessage -> Result<(RequestMessage * Chan)[], RouteType> =
 
     let bootstrapRoute (req:RequestMessage) =
@@ -240,20 +271,21 @@ module internal Routing =
       | None -> Failure (RouteType.GroupRoute gid)
 
     fun (req:RequestMessage) ->
-      match req with
-      | Metadata _ -> bootstrapRoute req
-      | GroupCoordinator _ -> bootstrapRoute req
-      | DescribeGroups _ -> bootstrapRoute req
-      | ListGroups _req -> bootstrapRoute req
-      | Fetch req -> req |> partitionFetchReq state |> topicRoute
-      | Produce req -> req |> partitionProduceReq state |> topicRoute
-      | Offset req -> req |> partitionOffsetReq state |> topicRoute
-      | OffsetCommit r -> groupRoute req r.consumerGroup
-      | OffsetFetch r -> groupRoute req r.consumerGroup
-      | JoinGroup r -> groupRoute req r.groupId
-      | SyncGroup r -> groupRoute req r.groupId
-      | Heartbeat r -> groupRoute req r.groupId
-      | LeaveGroup r -> groupRoute req r.groupId
+      failwith ""
+//      match req with
+//      | Metadata _ -> bootstrapRoute req
+//      | GroupCoordinator _ -> bootstrapRoute req
+//      | DescribeGroups _ -> bootstrapRoute req
+//      | ListGroups _req -> bootstrapRoute req
+//      | Fetch req -> req |> partitionFetchReq state |> topicRoute
+//      | Produce req -> req |> partitionProduceReq state |> topicRoute
+//      | Offset req -> req |> partitionOffsetReq state |> topicRoute
+//      | OffsetCommit r -> groupRoute req r.consumerGroup
+//      | OffsetFetch r -> groupRoute req r.consumerGroup
+//      | JoinGroup r -> groupRoute req r.groupId
+//      | SyncGroup r -> groupRoute req r.groupId
+//      | Heartbeat r -> groupRoute req r.groupId
+//      | LeaveGroup r -> groupRoute req r.groupId
 
  
 
@@ -323,17 +355,17 @@ type private RetryAction =
               RetryAction.errorRetryAction ec
               |> Option.map (fun action -> ec, action)))
 
-      | ResponseMessage.ProduceResponse r ->
-        r.topics
-        |> Seq.tryPick (fun x ->
-          x.partitions
-          |> Seq.tryPick (fun y ->
-            match y.errorCode with
-            | ErrorCode.NoError -> None
-            | ErrorCode.NotLeaderForPartition -> Some (y.errorCode, RetryAction.RefreshMetadataAndRetry [|x.topic|])
-            | ec ->
-              RetryAction.errorRetryAction ec
-              |> Option.map (fun action -> ec,action)))
+//      | ResponseMessage.ProduceResponse r ->
+//        r.topics
+//        |> Seq.tryPick (fun x ->
+//          x.partitions
+//          |> Seq.tryPick (fun y ->
+//            match y.errorCode with
+//            | ErrorCode.NoError -> None
+//            //| ErrorCode.NotLeaderForPartition -> Some (y.errorCode, RetryAction.RefreshMetadataAndRetry [|x.topic|])
+//            | ec ->
+//              RetryAction.errorRetryAction ec
+//              |> Option.map (fun action -> ec,action)))
       
       | ResponseMessage.GroupCoordinatorResponse r ->
         RetryAction.errorRetryAction r.errorCode
@@ -400,7 +432,8 @@ type private RetryAction =
       | ResponseMessage.ListGroupsResponse r ->
         RetryAction.errorRetryAction r.errorCode
         |> Option.map (fun action -> r.errorCode,action)
-
+    
+      | ResponseMessage.ProduceResponse _ -> None
 
 
 
@@ -507,7 +540,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   // capabilities provided by the underlying connection.
 
   /// Connects to the broker at the specified host.
-  let rec connBroker (connState:ConnState option) (host:Host, port:Port) = async {
+  let rec connBroker (connState:ConnState option) (host:Host, port:Port) : Async<Result<Chan, exn>> = async {
     let! ips = async {
       match IPAddress.tryParse host with
       | Some ip ->
@@ -521,20 +554,36 @@ type KafkaConn internal (cfg:KafkaConfig) =
       |> Seq.map (fun ip -> EndPoint.ofIPAddressAndPort (ip, port))
       |> AsyncSeq.ofSeq
       |> AsyncSeq.traverseAsyncResult Exn.monoid (fun ep -> async {
-        match connState |> Option.bind (ConnState.tryFindBrokerByEndPoint ep) with
-        | Some ch when not ch.task.IsCompleted ->
-          return Success ch
-        | _ ->
-          try
-            let! ch = Chan.connect (cfg.connId, cfg.version, cfg.tcpConfig, cfg.clientId) ep
-            return Success ch
-          with ex ->
-            return Failure ex }) }
+        return! connBrokerEndPoint connState ep }) }
+
+  and connBrokerEndPoint (connState:ConnState option) (ep:EndPoint) : Async<Result<Chan, exn>> = async {
+    match connState |> Option.bind (ConnState.tryFindBrokerByEndPoint ep) with
+    | Some ch when not ch.task.IsCompleted ->
+      return Success ch
+    | _ ->
+      try
+        let! ch = Chan.connect (cfg.connId, cfg.version, cfg.tcpConfig, cfg.clientId) ep
+        return Success ch
+      with ex ->
+        return Failure ex }
+
+  and connBrokerAndApply (connState:ConnState option) (b:Broker) : Async<Result<ConnState, exn>> = async {
+    let! ch = connBroker connState (b.host, b.port)
+    match ch with
+    | Success ch ->
+      return!
+        stateCell
+        |> MVar.updateAsync (fun state -> async {
+          // TODO: herd
+          return ConnState.addBrokerChan state (b,ch) })
+        |> Async.map Success
+    | Failure ex ->
+      return Failure ex }
   
   /// Removes a broker from the cluster view.
   and removeBroker (state:ConnState) (ch:Chan) = async {
     Log.warn "removing_broker_channel|conn_id=%s ep=%O" cfg.connId (Chan.endpoint ch)
-    return state |> ConnState.removeBroker ch }
+    return state |> ConnState.removeBrokerChan ch }
 
   /// Removes a broker from the cluster view.
   and removeBrokerAndApply (ch:Chan) = async {
@@ -575,55 +624,68 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// Fetches metadata and returns an updated connection state.
   and metadata (state:ConnState) (topics:TopicName[]) = async {
     let send =
-      (fun req -> routeSendRecover true RetryState.init state req)
+      (fun req -> routeSendWithRecovery true RetryState.init state req)
       |> AsyncFunc.dimap RequestMessage.Metadata (ResponseMessage.toMetadata)
     let! metadata = send (Metadata.Request(topics))
     Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
         
-    let! brokerConnections = 
-      metadata.brokers 
-      |> Seq.map (fun b -> async {
-        let! ch = connBroker (Some state) (b.host, b.port)
-        return ch |> Result.map (fun ch -> b.nodeId, ch) |> Result.mapError (fun e -> b,e) })
-      |> Async.Parallel
+//    let! brokerConnections = 
+//      metadata.brokers 
+//      |> Seq.map (fun b -> async {
+//        let! ch = connBroker (Some state) (b.host, b.port)
+//        match ch with
+//        | Success ch -> 
+//          return Success (b.nodeId, ch)
+//        | Failure ex ->
+//          return Failure (b,ex) })
+//      |> Async.Parallel
 
-    let connectedBrokers,erroredBrokers =
-      brokerConnections
-      |> Seq.partitionChoices
-        
-    let erroredBrokers =
-      erroredBrokers
-      |> Seq.map (fun (b,e) -> b.nodeId, (b,e))
-      |> Map.ofSeq
+//    let connectedBrokers,erroredBrokers =
+//      brokerConnections
+//      |> Seq.partitionChoices
+//        
+//    let erroredBrokers =
+//      erroredBrokers
+//      |> Seq.map (fun (b,e) -> b.nodeId, (b,e))
+//      |> Map.ofSeq
 
     for tmd in metadata.topicMetadata do
       for pmd in tmd.partitionMetadata do
-        let t = tmd.topicName
-        let p = pmd.partitionId
-        let leaderId = pmd.leader
+        //let t = tmd.topicName
+        //let p = pmd.partitionId
+        //let leaderId = pmd.leader
         if pmd.leader = -1 then
           Log.warn "leaderless_partition_detected|partition=%i error_code=%i" pmd.partitionId pmd.partitionErrorCode
-        else
-          match erroredBrokers |> Map.tryFind pmd.leader with
-          | Some (b,e) ->
-            Log.warn "partition_with_dead_broker_connection_detected|topic=%s partition=%i leader_id=%i host=%s port=%i error=\"%O\"" t p leaderId b.host b.port e
-          | None -> ()
-          for brokerId in pmd.isr do
-            match erroredBrokers |> Map.tryFind brokerId with
-            | Some (b,e) ->
-              Log.warn "partition_with_dead_broker_connection_detected|topic=%s partition=%i leader_id=%i host=%s port=%i error=\"%O\"" t p brokerId b.host b.port e
-            | None -> ()
+//        else
+//          match erroredBrokers |> Map.tryFind pmd.leader with
+//          | Some (b,e) ->
+//            Log.warn "partition_with_dead_leader_broker_connection_detected|topic=%s partition=%i leader_id=%i host=%s port=%i error=\"%O\"" t p leaderId b.host b.port e
+//          | None -> ()
+//          for brokerId in pmd.isr do
+//            if brokerId <> leaderId then
+//              match erroredBrokers |> Map.tryFind brokerId with
+//              | Some (b,e) ->
+//                Log.warn "partition_with_dead_broker_connection_detected|topic=%s partition=%i leader_id=%i host=%s port=%i error=\"%O\"" t p brokerId b.host b.port e
+//              | None -> ()
         
+    
+//    let topicNodes =
+//      metadata.topicMetadata 
+//      |> Seq.collect (fun tmd -> 
+//        tmd.partitionMetadata 
+//        |> Seq.choose (fun pmd -> 
+//          if pmd.leader >= 0 then Some (tmd.topicName, pmd.partitionId, pmd.leader)
+//          else None))
+//      |> Seq.toArray
+      
     let topicNodes =
       metadata.topicMetadata 
       |> Seq.collect (fun tmd -> 
         tmd.partitionMetadata 
-        |> Seq.choose (fun pmd -> 
-          if pmd.leader >= 0 then Some (tmd.topicName, pmd.partitionId, pmd.leader)
-          else None))
+        |> Seq.map (fun pmd -> tmd.topicName, pmd.partitionId, pmd.leader))
       |> Seq.toArray
-      
-    return state |> ConnState.updateTopicPartitions (connectedBrokers, topicNodes) }
+
+    return state |> ConnState.updateMetadata (metadata.brokers, topicNodes) }
 
   /// Fetches and applies metadata to the current connection.
   and getAndApplyMetadata (requireMatchingCaller:bool) (callerState:ConnState) (topics:TopicName[]) =
@@ -649,15 +711,15 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// Fetches group coordinator metadata.
   and groupCoordinator (state:ConnState) (groupId:GroupId) = async {
     let send = 
-      routeSendRecover true RetryState.init state
+      routeSendWithRecovery true RetryState.init state
       |> AsyncFunc.dimap RequestMessage.GroupCoordinator (ResponseMessage.toGroupCoordinator)
     let! res = send (GroupCoordinatorRequest(groupId))
     Log.info "received_group_coordinator|conn_id=%s group_id=%s %s" 
       cfg.connId groupId (GroupCoordinatorResponse.Print res)
-    let! ch = connBroker (Some state) (res.coordinatorHost, res.coordinatorPort) |> Async.map Result.throw
+    //let! ch = connBroker (Some state) (res.coordinatorHost, res.coordinatorPort) |> Async.map Result.throw
     return 
       state 
-      |> ConnState.updateGroupCoordinator (groupId, res.coordinatorId, ch) }
+      |> ConnState.updateGroupCoordinator (groupId, res.coordinatorId, res.coordinatorHost, res.coordinatorPort) }
 
   /// Fetches the group coordinator and applies the state to the current connection.
   and getAndApplyGroupCoordinator (callerState:ConnState) (groupId:GroupId) =
@@ -671,17 +733,17 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return state' })
 
   /// Sends the request based on discovered routes.
-  and routeSendRecover (critical:bool) (rs:RetryState) (state:ConnState) (req:RequestMessage) = async {
+  and routeSendWithRecovery (critical:bool) (rs:RetryState) (state:ConnState) (req:RequestMessage) = async {
     match Routing.route state req with
     | Success routes ->
       let scatterGather (gather:ResponseMessage[] -> ResponseMessage) = async {
         if routes.Length = 1 then
           let req,ch = routes.[0]
-          return! sendRecover critical rs state ch req
+          return! sendWithRecovery critical rs state ch req
         else
           return!
             routes
-            |> Seq.map (fun (req,ch) -> sendRecover critical rs state ch req)
+            |> Seq.map (fun (req,ch) -> sendWithRecovery critical rs state ch req)
             |> Async.Parallel
             |> Async.map gather } 
       match req with
@@ -689,11 +751,11 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! scatterGather Routing.concatOffsetResponses
       | RequestMessage.Fetch _ ->
         return! scatterGather Routing.concatFetchRes
-      | RequestMessage.Produce _ ->
-        return! scatterGather Routing.concatProduceResponseMessages
+//      | RequestMessage.Produce _ ->
+//        return! scatterGather Routing.concatProduceResponseMessages
       | _ ->
         let req,ch = routes.[0]
-        return! sendRecover critical rs state ch req
+        return! sendWithRecovery critical rs state ch req
 
     | Failure rt ->
       Log.trace "missing_route|route_type=%A request=%s" rt (RequestMessage.Print req)
@@ -711,12 +773,34 @@ type KafkaConn internal (cfg:KafkaConfig) =
           | RouteType.TopicRoute tns ->
             if critical then return! metadata state tns
             else return! getAndApplyMetadata true state tns }
-        return! routeSendRecover critical rs state' req
+        return! routeSendWithRecovery critical rs state' req
       | None ->
         return failwithf "missng_route|attempts=%i route_type=%A" rs.attempt rt }
 
+  /// Sends a request to a specific broker.
+  and sendToBroker (critical:bool) (state:ConnState) (b:Broker) (req:RequestMessage) = async {
+    match ConnState.tryFindBrokerById b.nodeId state with
+    | Some ch ->
+      let! chanRes = Chan.send ch req
+      match chanRes with
+      | Success res -> 
+        return Success res
+      | Failure ex ->
+        // TODO: pass connstate?
+        let! _ = removeBrokerAndApply ch
+        return Failure (Choice1Of2 ex)
+    | None ->
+      // TODO: ensure serialization and state update
+      let! brokerConn = connBrokerAndApply (Some state) b
+      match brokerConn with
+      | Success _ ->
+        return! sendToBroker critical state b req
+      
+      | Failure ex ->
+        return Failure (Choice2Of2 ex) }
+
   /// Sends a request to a specific broker and handles failures.
-  and sendRecover (critical:bool) (rs:RetryState) (state:ConnState) (ch:Chan) (req:RequestMessage) = async {
+  and sendWithRecovery (critical:bool) (rs:RetryState) (state:ConnState) (ch:Chan) (req:RequestMessage) = async {
     return!
       req
       |> Chan.send ch
@@ -741,7 +825,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
                 let! state' = 
                   if critical then metadata state topics
                   else getAndApplyMetadata true state topics
-                return! routeSendRecover critical rs state' req
+                return! routeSendWithRecovery critical rs state' req
               | None ->
                 return failwithf "request_failure|attempt=%i request=%s response=%s" 
                   rs.attempt (RequestMessage.Print req) (ResponseMessage.Print res)
@@ -749,7 +833,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
               let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
               match rs' with
               | Some rs ->
-                return! routeSendRecover critical rs state req
+                return! routeSendWithRecovery critical rs state req
               | None ->
                 return failwithf "request_failure|attempt=%i request=%s response=%s" 
                   rs.attempt (RequestMessage.Print req) (ResponseMessage.Print res)
@@ -758,10 +842,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
           match rs' with
           | Some rs ->
             let! state' = recoverRequestError critical state (ch, req, chanErr)
-            return! routeSendRecover critical rs state' req 
+            return! routeSendWithRecovery critical rs state' req 
           | None ->
-            return failwithf 
-              "channel_failure|attempt=%i ep=%O request=%s" rs.attempt (Chan.endpoint ch) (RequestMessage.Print req) })
+            return failwithf "channel_failure|attempt=%i ep=%O request=%s" rs.attempt (Chan.endpoint ch) (RequestMessage.Print req) })
       |> Async.tryWith (fun ex -> async {
         Log.error "broker_channel_exception|conn_id=%s endpoint=%O request=%s error=\"%O\"" 
           cfg.connId (Chan.endpoint ch) (RequestMessage.Print req) ex
@@ -799,9 +882,13 @@ type KafkaConn internal (cfg:KafkaConfig) =
     else
       state.Value
 
+  member internal __.SendToBroker (b:Broker, req:RequestMessage) = async {
+    let state = __.GetState ()
+    return! sendToBroker false state b req }
+
   member internal __.Send (req:RequestMessage) : Async<ResponseMessage> = async {
     let state = __.GetState ()
-    return! routeSendRecover false RetryState.init state req }
+    return! routeSendWithRecovery false RetryState.init state req }
   
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
