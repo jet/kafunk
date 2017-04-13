@@ -188,18 +188,24 @@ type private ProducerState = {
   partitionQueues : Dictionary<Partition, ProducerMessageBatch -> Async<unit>> }
 
 /// A producer-specific error.
-and [<NoEquality;NoComparison;AutoSerializable(false)>] ProducerError = {
-  partition : Partition
-  offset : Offset
-  errorCode : ErrorCode
-} with
-  static member create p o ec = { partition = p ; offset = o ; errorCode = ec }
+and private ProducerError =
+  | BrokerChanError of Broker * ChanError list
+  | TransientError of Partition * Offset * ErrorCode
+  | RecoverableError of Partition * Offset * ErrorCode
+  | BatchError of ProducerMessageBatch
+  with
+    static member errorMessage (x:ProducerError) =
+      match x with
+      | BrokerChanError (b,errs) -> sprintf "broker_channel_errors|node_id=%i ep=%O errors=[%s]" b.nodeId (Broker.endpoint b) (ChanError.printErrors errs)
+      | TransientError (p,o,ec) -> sprintf "transient_producer_error|p=%i o=%i ec=%i" p o ec
+      | RecoverableError (p,o,ec) -> sprintf "recoverable_producer_error|p=%i o=%i ec=%i" p o ec
+      | BatchError batch -> sprintf "batch_timeout_error|partition=%i size=%i message_count=%i" batch.partition batch.size batch.messages.Length
 
 and [<NoEquality;NoComparison;AutoSerializable(false)>] private ProducerMessageBatch =
   struct
     val partition : Partition
     val messages : ProducerMessage[]
-    val rep : IVar<Result<ProducerResult, Choice<ChanError list, ProducerError, unit>>>
+    val rep : IVar<Result<ProducerResult, ProducerError>>
     val size : int
     new (p,ms,rep,size) = { partition = p ; messages = ms ; rep = rep ; size = size }
   end
@@ -269,21 +275,16 @@ module Producer =
     (batch:ProducerMessageBatch seq) = async {
     //Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
 
-    //let ep = Chan.endpoint ch
-    let ep = String.Concat(b.host,":",b.nodeId)
-
     let pms = toMessageSet messageVer cfg.compression batch
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
     let! res = 
       conn.SendToBroker (b, (RequestMessage.Produce req))
       |> Async.map (Result.map ResponseMessage.toProduce)
-      //|> Async.Catch
-      //|> Async.map (Result.join)
     match res with
     | Success res ->
       
-      let oks,transientErrors,fatalErrors =
+      let oks,transientErrors,recoverableErrors,fatalErrors =
         res.topics
         |> Seq.collect (fun x ->
           x.partitions
@@ -292,25 +293,26 @@ module Producer =
             let ec = y.errorCode
             let p = y.partition
             match ec with
-            | ErrorCode.NoError -> Choice1Of3 (p,o)
+            | ErrorCode.NoError -> Choice1Of4 (p,o)
 
             // timeout  (retry)
-            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable | ErrorCode.NotEnoughReplicasCode
-            | ErrorCode.NotEnoughReplicasAfterAppendCode -> Choice2Of3 (p,o,ec)
+            | ErrorCode.RequestTimedOut | ErrorCode.LeaderNotAvailable 
+            | ErrorCode.NotEnoughReplicasCode | ErrorCode.NotEnoughReplicasAfterAppendCode -> Choice2Of4 (p,o,ec)
 
             // topology change (retry)
-            | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice2Of3 (p,o,ec)
+            | ErrorCode.UnknownTopicOrPartition | ErrorCode.NotLeaderForPartition -> Choice3Of4 (p,o,ec)
 
             // 404
             | ErrorCode.InvalidMessage | ErrorCode.MessageSizeTooLarge
-            | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice3Of3 (p,o,ec)
+            | ErrorCode.InvalidTopicCode | ErrorCode.InvalidRequiredAcksCode -> Choice4Of4 (p,o,ec)
             
             // other
-            | _ -> Choice3Of3 (p,o,ec)))
-        |> Seq.partitionChoices3
+            | _ -> Choice4Of4 (p,o,ec)))
+        |> Seq.partitionChoices4
       
       if fatalErrors.Length > 0 then
-        let msg = sprintf "fatal_errors|ep=%O errors=%A request=%s response=%s" ep fatalErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        let msg = sprintf "fatal_errors|ep=%O errors=[%s] request=%s response=%s" 
+                    (Broker.endpoint b) (Printers.partitionOffsetErrorCodes fatalErrors) (ProduceRequest.Print req) (ProduceResponse.Print res) 
         Log.error "%s" msg
         let ex = exn(msg)
         let eps = fatalErrors |> Seq.map (fun (p,_,_) -> p,ex) |> Map.ofSeq
@@ -318,12 +320,23 @@ module Producer =
           Map.tryFind b.partition eps
           |> Option.iter (fun ex -> IVar.tryError ex b.rep |> ignore)
       
+      if recoverableErrors.Length > 0 then
+        Log.warn "recoverable_errors|ep=%O errors=[%s] request=%s response=%s" 
+          (Broker.endpoint b) (Printers.partitionOffsetErrorCodes recoverableErrors) (ProduceRequest.Print req) (ProduceResponse.Print res)
+        let eps = 
+          recoverableErrors 
+          |> Seq.map (fun (p,o,ec) -> p, Failure (ProducerError.RecoverableError (p,o,ec))) 
+          |> Map.ofSeq
+        for b in batch do
+          Map.tryFind b.partition eps
+          |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
+
       if transientErrors.Length > 0 then
-        Log.warn "transient_errors|ep=%O errors=%A request=%s response=%s" 
-          ep transientErrors (ProduceRequest.Print req) (ProduceResponse.Print res) 
+        Log.warn "transient_errors|ep=%O errors=[%s] request=%s response=%s" 
+          (Broker.endpoint b) (Printers.partitionOffsetErrorCodes transientErrors) (ProduceRequest.Print req) (ProduceResponse.Print res) 
         let eps = 
           transientErrors 
-          |> Seq.map (fun (p,o,ec) -> p, Failure (Choice2Of3 (ProducerError.create p o ec))) 
+          |> Seq.map (fun (p,o,ec) -> p, Failure (ProducerError.TransientError (p,o,ec))) 
           |> Map.ofSeq
         for b in batch do
           Map.tryFind b.partition eps
@@ -335,21 +348,12 @@ module Producer =
           Map.tryFind b.partition oks 
           |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
           
-    | Failure (Choice1Of2 err) ->
-      Log.warn "broker_channel_error|ep=%O error=\"%A\"" ep err
-      // TODO: delegate routing to connection
-      //let! _ = conn.RemoveBroker ch
-      let err = Failure (Choice1Of3 err)
+    | Failure errs ->
+      let err = ProducerError.BrokerChanError (b,errs)
+      Log.warn "%s" (ProducerError.errorMessage err)
+      let err = Failure err
       for b in batch do
         IVar.tryPut err b.rep |> ignore
-      return ()
-
-    | Failure (Choice2Of2 ex) ->
-      Log.warn "broker_channel_exception|ep=%O error=\"%O\"" ep ex
-      // TODO: delegate routing to connection
-      //let! _ = conn.RemoveBroker ch
-      for b in batch do
-        IVar.tryError ex b.rep |> ignore
       return () }
 
   /// Fetches cluster state and initializes a per-broker produce queue.
@@ -358,13 +362,13 @@ module Producer =
     Log.info "fetching_producer_metadata|topic=%s" cfg.topic
     let! state = conn.GetMetadataState [|cfg.topic|]
 
-    let partitions = ConnState.topicPartitions state |> Map.find cfg.topic
+    let partitions = ClusterState.topicPartitions state |> Map.find cfg.topic
     Log.info "discovered_topic_partitions|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
 
     let brokerByPartition =
       partitions
       |> Seq.map (fun p ->
-        match ConnState.tryFindTopicPartitionBroker (cfg.topic, p) state with
+        match ClusterState.tryFindTopicPartitionBroker (cfg.topic, p) state with
         | Some ch -> p, ch
         | None -> failwith "invalid state: should have broker after metadata fetch!")
       |> Map.ofSeq
@@ -375,8 +379,7 @@ module Producer =
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
     let startBrokerQueue (b:Broker) =
-      //let ep = Chan.endpoint ch
-      let ep = sprintf "%s:%i" b.host b.port
+      let ep = Broker.endpoint b
       let sendBatch = sendBatch conn cfg messageVer b
       if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then Array.singleton >> sendBatch else
       let add,flush,produceStream =
@@ -405,14 +408,14 @@ module Producer =
         |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
         |> AsyncSeq.ofObservableBuffered
         |> AsyncSeq.iterAsync sendBatch
-      Log.info "produce_process_starting|topic=%s ep=%O buffer_size=%i batch_size=%i" 
-        cfg.topic ep cfg.bufferSizeBytes cfg.batchSizeBytes
+      Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i" 
+        cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes
       sendProcess
       |> Async.tryFinally (fun _ ->
-        Log.info "produce_process_stopping|topic=%s ep=%O" cfg.topic ep
+        Log.info "produce_process_stopping|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
         let buffer = flush |> Async.RunSynchronously
         for batch in buffer do
-          IVar.tryPut (Failure (Choice3Of3 ())) batch.rep |> ignore)
+          IVar.tryPut (Failure (ProducerError.BatchError batch)) batch.rep |> ignore)
       |> Async.tryWith (fun ex -> async {
         Log.error "producer_broker_queue_exception|ep=%O topic=%s error=\"%O\"" ep cfg.topic ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
@@ -431,6 +434,14 @@ module Producer =
           p,q)
       |> Map.ofSeq
 
+//    let partitionQueues =
+//      brokerByPartition
+//      |> Map.toSeq
+//      |> Seq.map (fun (p,b) ->
+//        let q = startBrokerQueue b
+//        p,q)
+//      |> Map.ofSeq
+
     return {
       partitions = partitions ; 
       partitionQueues = partitionQueues |> Dict.ofMap } }
@@ -440,6 +451,7 @@ module Producer =
     if state.partitionQueues.TryGetValue(p, &q) then q
     else failwithf "unable to find broker for partition=%i" p
 
+  /// Produces a batch of messages created with the specified function.
   let private produceBatchInternal (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
       let p,ms = createBatch state.partitions.Length
@@ -447,38 +459,19 @@ module Producer =
       ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
     let q = getBrokerQueueByPartition state batch.partition
     do! q batch
-    let! res = Async.choose (IVar.get batch.rep) (Async.sleep p.batchTimeout |> Async.map (fun _ -> Failure (Choice3Of3 ())))
-    //let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (Choice3Of3 ())) batch.rep
-    match res with
-    | Success res ->
-      return Success res
-    | Failure err ->
-      let errMsg = 
-        match err with
-        | Choice1Of3 errs -> sprintf "broker_channel_errors|errors=%A" errs
-        | Choice2Of3 e -> sprintf "producer_error|p=%i o=%i ec=%i" e.partition e.offset e.errorCode
-        | Choice3Of3 _ -> sprintf "batch_timeout|timeout=%O" p.batchTimeout
-      return Failure (Resource.ResourceErrorAction.RecoverRetry (exn errMsg)) }
-
-  let private produceInternal (p:Producer) (state:ProducerState) (m:ProducerMessage) = async {
-    let batch =
-      let p = Partitioner.partition p.config.partitioner p.config.topic state.partitions.Length m
-      let rep = IVar.create ()
-      ProducerMessageBatch(p,[|m|],rep,ProducerMessage.size m)
-    let q = getBrokerQueueByPartition state batch.partition
-    do! q batch
     //let! res = Async.choose (IVar.get batch.rep) (Async.sleep p.batchTimeout |> Async.map (fun _ -> Failure (Choice3Of3 ())))
-    let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (Choice3Of3 ())) batch.rep
+    let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchError batch)) batch.rep
     match res with
     | Success res ->
       return Success res
     | Failure err ->
-      let errMsg = 
+      let ex = exn(ProducerError.errorMessage err)
+      let recovery =
         match err with
-        | Choice1Of3 errs -> sprintf "broker_channel_errors|errors=%A" errs
-        | Choice2Of3 e -> sprintf "producer_error|p=%i o=%i ec=%i" e.partition e.offset e.errorCode
-        | Choice3Of3 _ -> sprintf "batch_timeout|timeout=%O" p.batchTimeout
-      return Failure (Resource.ResourceErrorAction.RecoverRetry (exn errMsg)) }
+        | TransientError _ -> Resource.ResourceErrorAction.Retry ex
+        | BatchError _ -> Resource.ResourceErrorAction.Retry ex
+        | _ -> Resource.ResourceErrorAction.RecoverRetry ex
+      return Failure recovery }
 
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
@@ -516,9 +509,13 @@ module Producer =
   /// The message will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
   let produce (p:Producer) (m:ProducerMessage) =
-    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceInternal p) m
-    //produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
+    //Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceInternal p) m
+    produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
 
   /// Gets the configuration for the producer.
   let configuration (p:Producer) = 
     p.config
+  
+//  let state (p:Producer) : Async<ProducerState> =
+//    p.state |> Resource.get
+      

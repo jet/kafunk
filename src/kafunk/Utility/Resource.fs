@@ -3,7 +3,6 @@ module internal Kafunk.Resource
 
 open System
 open System.Threading
-open System.Threading.Tasks
 open Kafunk
 
 /// A result of a resource-dependent operation.
@@ -17,6 +16,9 @@ and ResourceErrorAction<'a, 'e> =
     
   /// Recover the resource and retry the operation.
   | RecoverRetry of 'e
+
+  /// Retry without recovery.
+  | Retry of 'e
 
 
 /// A generation of a resource lifecycle.
@@ -50,7 +52,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
 
   let recover (req:obj) (ex:exn) (callingEpoch:ResourceEpoch<'r>) = async {
     if callingEpoch.closed.IsCancellationRequested then
-      return failwithf "resource_recovery_failed|version=%i" callingEpoch.version
+      return failwithf "recovery_failed|type=%s version=%i" name callingEpoch.version
     else
       callingEpoch.closed.Cancel ()
     do! handle (callingEpoch.resource, callingEpoch.version, req, ex)
@@ -73,10 +75,12 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
           let! ep2 = recover req ex callingEpoch
           return ep2
         with ex ->
-          Log.trace "recovery_failed|type=%s error=\"%O\"" name ex
-          return raise ex
+          let errMsg = sprintf "recovery_failed|type=%s version=%i error=\"%O\"" name currentEpoch.version ex
+          Log.error "%s" errMsg
+          return raise (exn(errMsg, ex))
       else
-        Log.trace "resource_already_recovered|calling_version=%i current_version=%i" callingEpoch.version currentEpoch.version
+        Log.trace "resource_already_recovered|type=%s calling_version=%i current_version=%i" 
+          name callingEpoch.version currentEpoch.version
         return currentEpoch }
     cell |> MVar.updateAsync update
     
@@ -93,20 +97,31 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       match b with
       | Success b -> 
         return b
-      | Failure (RecoverResume (ex,b)) ->
-        let! _ = __.Recover (ep, a, ex)
-        return b
-      | Failure (RecoverRetry ex) ->
-        Log.trace "recovering_and_retrying_after_failure|name=%s version=%i attempt=%i error=\"%O\"" 
-          name ep.version rs.attempt ex
+      | Failure (Retry e) ->
+        Log.trace "retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
+          name ep.version rs.attempt e
         let! rs' = RetryPolicy.awaitNextState rp rs
         match rs' with
         | None ->
-          let msg = sprintf "escalating_after_retry_attempts_depleted|name=%s version=%i attempt=%i error=\"%O\"" name ep.version rs.attempt ex
+          let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s version=%i attempt=%i error=\"%O\"" name ep.version rs.attempt e
           Log.trace "%s" msg
-          return raise (exn(msg, ex))
+          return raise (exn(msg, e))
         | Some rs' ->
-          let! _ = __.Recover (ep, a, ex)
+          return! go rs'
+      | Failure (RecoverResume (ex,b)) ->
+        let! _ = __.Recover (ep, a, ex)
+        return b
+      | Failure (RecoverRetry e) ->
+        Log.trace "recovering_and_retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
+          name ep.version rs.attempt e
+        let! rs' = RetryPolicy.awaitNextState rp rs
+        match rs' with
+        | None ->
+          let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s version=%i attempt=%i error=\"%O\"" name ep.version rs.attempt e
+          Log.trace "%s" msg
+          return raise (exn(msg, e))
+        | Some rs' ->
+          let! _ = __.Recover (ep, a, e)
           return! go rs' }
     go RetryState.init
         
@@ -118,6 +133,8 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       match res with
       | Success b -> 
         return b
+      | Failure (Retry _) ->
+        return! go a
       | Failure (RecoverResume (ex,b)) ->
         let! _ = __.Recover (ep, a, ex)
         return b

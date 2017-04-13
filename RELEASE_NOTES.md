@@ -1,3 +1,7 @@
+### 0.0.44-alpha001 - 28.04.2017
+
+* Ensure recovery during broker restart (virtual broker routing).
+
 ### 0.0.43-alpha001 - 24.04.2017
 
 * Fix message set decompression (take 3)

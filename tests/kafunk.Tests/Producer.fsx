@@ -37,12 +37,13 @@ let connCfg =
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
-      //bufferPool = BufferPool.bufferManager 100000000L 1000000
-      bufferPool = BufferPool.GC
+      bufferPool = BufferPool.bufferManager 100000000L 1000000
+      //bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (
     [KafkaUri.parse host], 
+    //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
