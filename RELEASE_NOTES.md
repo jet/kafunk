@@ -1,3 +1,7 @@
+### 0.0.40-alpha001 - 21.04.2017
+
+* Fix message set decompression
+
 ### 0.0.39-alpha001 - 11.04.2017
 
 * Unroll loop in producer to make more efficient
