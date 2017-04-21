@@ -60,10 +60,11 @@ let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
 
 let decompress (messageVer:int16) (ms:MessageSet) =
   if ms.messages.Length = 0 then ms
-  elif ms.messages.Length > 1 then ms
+  // NB: Removing this condition until we test this case specifically
+  //elif ms.messages.Length > 1 then ms
   else
     let x = ms.messages.[0]
     match (x.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
     | CompressionCodec.None -> ms
     | CompressionCodec.GZIP -> GZip.decompress messageVer x.message
-    | c -> failwithf "compression_code=%i not supported" c 
+    | c -> failwithf "compression_code=%i not supported" c
