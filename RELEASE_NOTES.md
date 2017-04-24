@@ -1,3 +1,7 @@
+### 0.0.43-alpha001 - 24.04.2017
+
+* Fix message set decompression (take 3)
+
 ### 0.0.41-alpha001 - 24.04.2017
 
 * Fix message set decompression (take 2)

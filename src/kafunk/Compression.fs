@@ -58,20 +58,40 @@ let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   | CompressionCodec.GZIP -> MessageSet.ofMessage messageVer (GZip.compress messageVer ms)
   | _ -> failwithf "Incorrect compression codec %A" compression
 
+//let decompress (messageVer:int16) (ms:MessageSet) =
+//  if ms.messages.Length = 0 then ms
+//  // NB: Removing this condition until we test this case specifically
+//  //elif ms.messages.Length > 1 then ms
+//  else
+//    let mutable ms = ms
+//    for i = 0 to ms.messages.Length - 1 do
+//      let msi = ms.messages.[i]
+//      match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
+//      | CompressionCodec.None ->
+//        ()
+//      | CompressionCodec.GZIP ->
+//        let ms' = GZip.decompress messageVer msi.message
+//        let mss = ResizeArray<_>()
+//        for j = 0 to ms.messages.Length - 1 do
+//          if ms.messages.[j].offset <> msi.offset then
+//            mss.Add (ms.messages.[j])
+//        for j = 0 to ms'.messages.Length - 1 do
+//          mss.Add ms'.messages.[j]
+//        ms <- MessageSet(mss.ToArray())
+//      | c -> failwithf "compression_code=%i not supported" c
+//    ms
 let decompress (messageVer:int16) (ms:MessageSet) =
   if ms.messages.Length = 0 then ms
   // NB: Removing this condition until we test this case specifically
   //elif ms.messages.Length > 1 then ms
   else
-    let mutable ms = ms
-    for i = 0 to ms.messages.Length do
-      let msi = ms.messages.[i]
+    ms.messages
+    |> Array.Parallel.collect (fun msi -> 
       match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
-      | CompressionCodec.None ->
-        ()
+      | CompressionCodec.None -> [|msi|]
       | CompressionCodec.GZIP ->
         let ms' = GZip.decompress messageVer msi.message
-        ms <- MessageSet(Array.append ms.messages ms'.messages)
-      | c -> failwithf "compression_code=%i not supported" c
-    ms
+        ms'.messages
+      | c -> failwithf "compression_code=%i not supported" c)
+    |> MessageSet
     
