@@ -63,8 +63,15 @@ let decompress (messageVer:int16) (ms:MessageSet) =
   // NB: Removing this condition until we test this case specifically
   //elif ms.messages.Length > 1 then ms
   else
-    let x = ms.messages.[0]
-    match (x.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
-    | CompressionCodec.None -> ms
-    | CompressionCodec.GZIP -> GZip.decompress messageVer x.message
-    | c -> failwithf "compression_code=%i not supported" c
+    let mutable ms = ms
+    for i = 0 to ms.messages.Length do
+      let msi = ms.messages.[i]
+      match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
+      | CompressionCodec.None ->
+        ()
+      | CompressionCodec.GZIP ->
+        let ms' = GZip.decompress messageVer msi.message
+        ms <- MessageSet(Array.append ms.messages ms'.messages)
+      | c -> failwithf "compression_code=%i not supported" c
+    ms
+    
