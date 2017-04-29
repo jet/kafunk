@@ -181,11 +181,26 @@ type ProducerConfig = {
 [<NoEquality;NoComparison;AutoSerializable(false)>]
 type private ProducerState = {
 
-  /// Current set of partitions for the topic.
-  partitions : Partition[]
+  /// The current set of routes.
+  routes : ProducerRoutes
 
   /// Per-partition queues.
-  partitionQueues : Dictionary<Partition, ProducerMessageBatch -> Async<unit>> }
+  partitionQueues : Dictionary<Partition, ProducerMessageBatch -> Async<unit>>
+  
+  /// The partition function.
+  partition : ProducerMessage -> Partition }
+
+/// Routing info for a producer, for a topic.
+and ProducerRoutes = {
+  
+  /// The set of partitions for the topic.
+  partitions : Partition[]
+  
+  /// Brokers allocated to each partition.
+  borkerByPartition : Map<Partition, Broker>
+  
+  /// Partitions allocated to each broker.
+  partitionsByBroker : Map<Broker, Partition[]> }
 
 /// A producer-specific error.
 and private ProducerError =
@@ -212,8 +227,14 @@ and [<NoEquality;NoComparison;AutoSerializable(false)>] private ProducerMessageB
 
 /// A producer sends batches of topic and message set pairs to the appropriate Kafka brokers.
 and [<NoEquality;NoComparison;AutoSerializable(false)>] Producer = private {
+  
+  /// The connection.
   conn : KafkaConn
+
+  /// The configuration.
   config : ProducerConfig
+
+  /// The state.
   state : Resource<ProducerState>
   
   /// Timeout for the internal produce batch function, which includes the request timeout
@@ -267,7 +288,7 @@ module Producer =
     arr
 
   /// Sends a batch of messages to a broker, and replies to the respective reply channels.
-  let private sendBatch 
+  let private sendBatchToBroker 
     (conn:KafkaConn)
     (cfg:ProducerConfig) 
     (messageVer:int16) 
@@ -356,23 +377,41 @@ module Producer =
         IVar.tryPut err b.rep |> ignore
       return () }
 
-  /// Fetches cluster state and initializes a per-broker produce queue.
-  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
+  let private getProducerRoutes (conn:KafkaConn) (topic:TopicName) = async {
     
-    Log.info "fetching_producer_metadata|topic=%s" cfg.topic
-    let! state = conn.GetMetadataState [|cfg.topic|]
+    Log.info "fetching_producer_metadata|topic=%s" topic
+    let! state = conn.GetMetadataState [|topic|]
 
-    let partitions = ClusterState.topicPartitions state |> Map.find cfg.topic
-    Log.info "discovered_topic_partitions|topic=%s partitions=[%s]" cfg.topic (Printers.partitions partitions)
+    let partitions = ClusterState.topicPartitions state |> Map.find topic
 
     let brokerByPartition =
       partitions
       |> Seq.map (fun p ->
-        match ClusterState.tryFindTopicPartitionBroker (cfg.topic, p) state with
+        match ClusterState.tryFindTopicPartitionBroker (topic, p) state with
         | Some ch -> p, ch
         | None -> failwith "invalid state: should have broker after metadata fetch!")
       |> Map.ofSeq
+
+    let partitionsByBroker =
+      brokerByPartition
+      |> Map.toSeq
+      |> Seq.groupBy snd
+      |> Seq.map (fun (b,xs) -> b, xs |> Seq.map fst |> Seq.sort |> Seq.toArray)
+      |> Map.ofSeq
+
+    Log.info "discovered_topic_partitions|topic=%s partitions=[%s] allocs=[%s]" 
+      topic (Printers.partitions partitions) (partitionsByBroker |> Map.toSeq |> Seq.map (fun (b,ps) -> sprintf "[n=%i ep=%s ps=[%s]]" b.nodeId (Broker.endpoint b) (Printers.partitions ps)) |> String.concat " ; ")
+   
+    return { 
+      ProducerRoutes.borkerByPartition = brokerByPartition
+      partitionsByBroker = partitionsByBroker
+      partitions = partitions } }
+
+  /// Fetches cluster state and initializes a per-broker produce queue.
+  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
     
+    let! routes = getProducerRoutes conn cfg.topic
+    let partitions = routes.partitions
     let messageVer = ProducerConfig.messageVersion conn.Config.version
 
     let! ct' = Async.CancellationToken
@@ -380,7 +419,7 @@ module Producer =
 
     let startBrokerQueue (b:Broker) =
       let ep = Broker.endpoint b
-      let sendBatch = sendBatch conn cfg messageVer b
+      let sendBatch = sendBatchToBroker conn cfg messageVer b
       if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then Array.singleton >> sendBatch else
       let add,flush,produceStream =
         if cfg.bufferSizeBytes > 0 then
@@ -423,7 +462,7 @@ module Producer =
        
     let partitionQueues =
       let qs = Dict.ofSeq []
-      brokerByPartition
+      routes.borkerByPartition
       |> Map.toSeq
       |> Seq.map (fun (p,b) ->
         match Dict.tryGet b.nodeId qs with
@@ -442,36 +481,63 @@ module Producer =
 //        p,q)
 //      |> Map.ofSeq
 
+    let partition = Partitioner.partition cfg.partitioner cfg.topic partitions.Length
+
     return {
-      partitions = partitions ; 
-      partitionQueues = partitionQueues |> Dict.ofMap } }
+      routes = routes
+      partitionQueues = partitionQueues |> Dict.ofMap
+      partition = partition } }
 
   let private getBrokerQueueByPartition (state:ProducerState) (p:Partition) =
     let mutable q = Unchecked.defaultof<_>
     if state.partitionQueues.TryGetValue(p, &q) then q
     else failwithf "unable to find broker for partition=%i" p
 
-  /// Produces a batch of messages created with the specified function.
-  let private produceBatchInternal (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
-    let batch =
-      let p,ms = createBatch state.partitions.Length
-      let rep = IVar.create ()
-      ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
+  let private sendBatch (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
     let q = getBrokerQueueByPartition state batch.partition
     do! q batch
-    //let! res = Async.choose (IVar.get batch.rep) (Async.sleep p.batchTimeout |> Async.map (fun _ -> Failure (Choice3Of3 ())))
     let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchError batch)) batch.rep
     match res with
     | Success res ->
       return Success res
     | Failure err ->
-      let ex = exn(ProducerError.errorMessage err)
       let recovery =
+        let ex = exn(ProducerError.errorMessage err)
         match err with
         | TransientError _ -> Resource.ResourceErrorAction.Retry ex
         | BatchError _ -> Resource.ResourceErrorAction.Retry ex
         | _ -> Resource.ResourceErrorAction.RecoverRetry ex
       return Failure recovery }
+
+  /// Produces a batch of messages created with the specified function.
+  let private produceBatchInternal (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
+    let batch =
+      let p,ms = createBatch state.routes.partitions.Length
+      let rep = IVar.create ()
+      ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
+    return! sendBatch p state batch }
+
+//  let private produceBatchedInternal (producer:Producer) (state:ProducerState) (batch:ProducerMessage seq) =
+//    batch
+//    |> Seq.groupBy state.partition
+//    |> Seq.map (fun (p,ms) ->
+//      let rep = IVar.create ()
+//      let ms = ms |> Seq.toArray
+//      let batch = ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
+//      sendBatch producer state batch)
+//    |> Async.Parallel
+//    |> Async.map Result.sequence
+
+  let private produceBatchedInternal (p:Producer) (state:ProducerState) (batch:ProducerMessage seq) : Async<Result<ProducerResult[], ResourceErrorAction<ProducerResult[], exn>>> =
+    batch
+    |> Seq.groupBy state.partition
+    |> Seq.map (fun (pt,ms) ->
+      let rep = IVar.create ()
+      let ms = ms |> Seq.toArray
+      let batch = ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms)
+      Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (sendBatch p) batch)
+    |> Async.Parallel
+    |> Async.map Success
 
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
@@ -487,11 +553,11 @@ module Producer =
         (initProducer conn config) 
         (fun (s,v,_,ex) -> async {
           Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=\"%O\"" 
-            v config.topic (Printers.partitions s.partitions) ex
+            v config.topic (Printers.partitions s.routes.partitions) ex
           return () })
     let! state = Resource.get resource
     let p = { state = resource ; config = config ; conn = conn ; batchTimeout = batchTimeout }
-    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.partitions)
+    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.routes.partitions)
     return p }
 
   /// Creates a producer.
@@ -505,6 +571,11 @@ module Producer =
   let produceBatch (p:Producer) (createBatch:PartitionCount -> Partition * ProducerMessage[]) =
     Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchInternal p) createBatch
 
+  /// Produces a batch of messages, by assigning a partition to each message, grouping messages by partitions
+  /// and sending batches by partition in parallel and collecting the results.
+  let produceBatched (p:Producer) (batch:ProducerMessage seq) =
+    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchedInternal p) batch
+
   /// Produces a message. 
   /// The message will be sent as part of a batch and the result will correspond to the offset
   /// produced by the entire batch.
@@ -515,7 +586,4 @@ module Producer =
   /// Gets the configuration for the producer.
   let configuration (p:Producer) = 
     p.config
-  
-//  let state (p:Producer) : Async<ProducerState> =
-//    p.state |> Resource.get
       

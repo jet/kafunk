@@ -136,23 +136,28 @@ let go = async {
 
   else
 
+//    let produce = 
+//      Producer.produce producer
+//      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
+//      //|> Metrics.latencyAsyncTo timer
+
     let produce = 
-      Producer.produce producer
-      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
-      //|> Metrics.latencyAsyncTo timer
+      Producer.produceBatched producer
+      |> Metrics.throughputAsyncTo counter (fun (_,r) -> batchSize)
 
     return!
       Seq.init batchCount id
       |> Seq.map (fun batchNo -> async {
         try
           let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-          let! res =
-            msgs
-            |> Seq.map (fun m -> async {
-              let! prodRes = produce m
-              offsets.[prodRes.partition] <- prodRes.offset
-              return () })
-            |> Async.parallelThrottledIgnore batchSize
+          let! res = produce msgs
+//          let! res =
+//            msgs
+//            |> Seq.map (fun m -> async {
+//              let! prodRes = produce m
+//              offsets.[prodRes.partition] <- prodRes.offset
+//              return () })
+//            |> Async.parallelThrottledIgnore batchSize
           Interlocked.Add(&completed, int64 batchSize) |> ignore
           return ()
         with ex ->

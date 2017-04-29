@@ -417,6 +417,18 @@ module Result =
     | Some e -> Choice2Of2 e
     | None -> Choice1Of2 (oks.ToArray())
 
+  let sequence (xs:seq<Result<'b, 'e>>) : Result<'b[], 'e> =
+    use en = xs.GetEnumerator()
+    let oks = ResizeArray<_>()
+    let err = ref None
+    while en.MoveNext() && err.Value.IsNone do
+      match en.Current with
+      | Choice1Of2 b -> oks.Add b
+      | Choice2Of2 e -> err := Some e
+    match !err with
+    | Some e -> Choice2Of2 e
+    | None -> Choice1Of2 (oks.ToArray())
+
   /// Returns a succesful result or raises an exception in case of failure.
   let throw (r:Result<'a, #exn>) : 'a =
     match r with
