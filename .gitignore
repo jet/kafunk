@@ -11,6 +11,8 @@
 *.dll.mdb
 *.exe.mdb
 
+*.FSharpLint
+
 # Build results
 
 [Dd]ebug/
