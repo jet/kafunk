@@ -63,7 +63,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L524-524" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L581-581" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -83,7 +83,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L506-506" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L558-558" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -103,7 +103,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L485-485" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L537-537" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -123,7 +123,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L519-519" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L576-576" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -145,7 +145,7 @@ produced by the entire batch.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L513-513" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L565-565" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -153,6 +153,27 @@ produced by the entire batch.</p>
 currently configured for the topic.
 The messages will be sent as part of a batch and the result will correspond to the offset
 produced by the entire batch.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '123', 123)" onmouseover="showTip(event, '123', 123)">
+            produceBatched p batch
+          </code>
+          <div class="tip" id="123">
+            <strong>Signature:</strong> p:Producer -&gt; batch:seq&lt;ProducerMessage&gt; -&gt; Async&lt;ProducerResult []&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L570-570" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Produces a batch of messages, by assigning a partition to each message, grouping messages by partitions
+and sending batches by partition in parallel and collecting the results.</p>
 
 
         </td>
