@@ -509,7 +509,6 @@ module Producer =
         | _ -> Resource.ResourceErrorAction.RecoverRetry ex
       return Failure recovery }
 
-  /// Produces a batch of messages created with the specified function.
   let private produceBatchInternal (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
       let p,ms = createBatch state.routes.partitions.Length
@@ -517,16 +516,11 @@ module Producer =
       ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
     return! sendBatch p state batch }
 
-//  let private produceBatchedInternal (producer:Producer) (state:ProducerState) (batch:ProducerMessage seq) =
-//    batch
-//    |> Seq.groupBy state.partition
-//    |> Seq.map (fun (p,ms) ->
-//      let rep = IVar.create ()
-//      let ms = ms |> Seq.toArray
-//      let batch = ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
-//      sendBatch producer state batch)
-//    |> Async.Parallel
-//    |> Async.map Result.sequence
+//  let private produceInternal (p:Producer) (state:ProducerState) (m:ProducerMessage) : Async<ProducerResult> =
+//    let pt = state.partition m
+//    let rep = IVar.create ()
+//    let batch = ProducerMessageBatch(pt,[|m|],rep,ProducerMessage.size m)
+//    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (sendBatch p) batch
 
   let private produceBatchedInternal (p:Producer) (state:ProducerState) (batch:ProducerMessage seq) : Async<Result<ProducerResult[], ResourceErrorAction<ProducerResult[], exn>>> =
     batch

@@ -226,27 +226,36 @@ module Async =
   /// the sequence causes the resulting computation to error or cancel, respectively.
   let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
     let! ct = Async.CancellationToken
+    use cts = CancellationTokenSource.CreateLinkedTokenSource ct
     use sm = new SemaphoreSlim(parallelism)
     let count = ref 1
     let res = IVar.create ()
+    IVar.intoCancellationToken cts res
     let tryComplete () =
       if Interlocked.Decrement count = 0 then
         IVar.tryPut () res |> ignore
+      elif not res.Task.IsCompleted then
+        // NB: there is a small chance of a race where task completes immediately after the check
+        // in which case the following would throw an ObjectDisposedException
+        sm.Release () |> ignore
     let ok _ =
-      sm.Release() |> ignore
       tryComplete ()
     let err (ex:exn) =
-      sm.Release() |> ignore
-      IVar.tryError ex res |> ignore
+      if IVar.tryError ex res then
+        sm.Release() |> ignore
     let cnc (_:OperationCanceledException) =
-      sm.Release() |> ignore
-      IVar.tryCancel res |> ignore
-    use en = xs.GetEnumerator()
-    while not (res.Task.IsCompleted) && en.MoveNext() do
-      sm.Wait()
-      Interlocked.Increment count |> ignore
-      startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
-    tryComplete () |> ignore
+      if IVar.tryCancel res then
+        sm.Release() |> ignore
+    Async.Start (async {
+      try
+        use en = xs.GetEnumerator()
+        while not (cts.Token.IsCancellationRequested) && en.MoveNext() do
+          sm.Wait ()
+          Interlocked.Increment count |> ignore
+          startThreadPoolWithContinuations (en.Current, ok, err, cnc, cts.Token)
+        tryComplete () |> ignore
+      with ex ->
+        IVar.tryError ex res |> ignore }, cts.Token)
     do! res.Task |> awaitTaskCancellationAsError }
 
   /// Creates an async computation which completes when any of the argument computations completes.
