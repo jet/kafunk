@@ -14,6 +14,18 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 | 0.10.0    | Complete |
 | 0.10.1    | Complete |
 
+## Feature Support
+
+| Feature   | Status   |
+| ----------|----------|
+| GZip      | Complete |
+| Snappy    | https://github.com/jet/kafunk/issues/129 |
+| LZ4       | https://github.com/jet/kafunk/issues/125 |
+| TLS       | https://github.com/jet/kafunk/issues/66  |
+| SASL      | https://github.com/jet/kafunk/issues/139 |
+| ACL       | https://github.com/jet/kafunk/issues/140 |
+
+
 ## Hello World
 
 ```fsharp
