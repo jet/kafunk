@@ -85,6 +85,10 @@ module internal ResponseEx =
     static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()
 
+  type Broker with
+    static member endpoint (b:Broker) =
+      String.Concat(b.host, ":", b.port)
+
 // -------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -114,7 +118,7 @@ module internal Printers =
     concatMapSb os (fun sb (p) -> sb.AppendFormat("{0}", p)) ","
 
   let topicPartitions (os:seq<TopicName * Partition>) =
-    concatMapSb os (fun sb (t,p) -> sb.AppendFormat("[t={0} p={0}]", t, p)) ","
+    concatMapSb os (fun sb (t,p) -> sb.AppendFormat("[t={0} p={1}]", t, p)) ","
     
   let partitionOffsetPairs (os:seq<Partition * Offset>) =
     concatMapSb os (fun sb (p,o) -> sb.AppendFormat("[p={0} o={1}]", p, o)) " ; "
@@ -124,6 +128,10 @@ module internal Printers =
     
   let stringsCsv (ss:seq<#obj>) =
     concatMapSb ss (fun sb s -> sb.AppendFormat("{0}", s)) ","
+
+  let partitionOffsetErrorCodes (xs:seq<Partition * Offset * ErrorCode>) =
+    concatMapSb xs (fun sb (p,o,ec) -> sb.AppendFormat("[p={0} o={1} error_code={2}]", p, o, ec)) ","
+    
 
   type MetadataResponse with
     static member Print (x:MetadataResponse) =

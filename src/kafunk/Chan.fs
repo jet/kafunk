@@ -106,10 +106,15 @@ type internal EndPoint =
 /// The result of a request on a channel.
 type internal ChanResult = Result<ResponseMessage, ChanError list>
 
-/// A channel error result.
+/// A broker channel error.
 and internal ChanError =
   | ChanTimeout
   | ChanFailure of exn
+  with
+    static member internal printErrors (xs:ChanError seq) =
+      xs
+      |> Seq.map (function ChanError.ChanFailure ex -> sprintf "[chan_exn|error=\"%O\"]" ex | ChanError.ChanTimeout -> "[chan_timeout]")
+      |> String.concat " ; "
 
 /// A request/reply TCP channel to a Kafka broker.
 [<CustomEquality;NoComparison;AutoSerializable(false)>]
@@ -228,14 +233,9 @@ module internal Chan =
       Request.Write (apiVer, req, BinaryZipper(buf))
       buf,(apiKey,apiVer)
 
-    //let bz = BinaryZipper (Binary.empty)
-
     /// Decodes the session layer input and session state into a response.
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
-      //bz.Buffer <- buf
-      let bz = BinaryZipper (buf)
-      let r = ResponseMessage.Read (apiKey,apiVer,bz)
-      r
+      ResponseMessage.Read (apiKey,apiVer,BinaryZipper(buf))
 
     let session =
       Session.requestReply
@@ -248,7 +248,6 @@ module internal Chan =
       send
       |> AsyncFunc.timeoutOption config.requestTimeout
       |> Resource.timeoutIndep socketAgent
-      //|> AsyncFunc.mapOut (snd >> Some)
       |> AsyncFunc.catch
       |> AsyncFunc.mapOut (fun (_,res) ->
         match res with

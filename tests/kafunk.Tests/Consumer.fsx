@@ -5,6 +5,7 @@ open FSharp.Control
 open Kafunk
 open System
 
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -26,6 +27,7 @@ let go = async {
           requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy)
       KafkaConfig.create (
         [KafkaUri.parse host], 
+        //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy)
     Kafka.connAsync connConfig
@@ -34,7 +36,7 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 5000000,
+      fetchMaxBytes = 1000000,
       fetchMinBytes = 1,
       fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,

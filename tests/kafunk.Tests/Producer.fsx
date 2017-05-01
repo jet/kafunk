@@ -37,12 +37,13 @@ let connCfg =
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
-      //bufferPool = BufferPool.bufferManager 100000000L 1000000
-      bufferPool = BufferPool.GC
+      bufferPool = BufferPool.bufferManager 100000000L 1000000
+      //bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (
     [KafkaUri.parse host], 
+    //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
@@ -135,23 +136,28 @@ let go = async {
 
   else
 
+//    let produce = 
+//      Producer.produce producer
+//      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
+//      //|> Metrics.latencyAsyncTo timer
+
     let produce = 
-      Producer.produce producer
-      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
-      //|> Metrics.latencyAsyncTo timer
+      Producer.produceBatched producer
+      |> Metrics.throughputAsyncTo counter (fun (_,r) -> batchSize)
 
     return!
       Seq.init batchCount id
       |> Seq.map (fun batchNo -> async {
         try
           let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-          let! res =
-            msgs
-            |> Seq.map (fun m -> async {
-              let! prodRes = produce m
-              offsets.[prodRes.partition] <- prodRes.offset
-              return () })
-            |> Async.parallelThrottledIgnore batchSize
+          let! res = produce msgs
+//          let! res =
+//            msgs
+//            |> Seq.map (fun m -> async {
+//              let! prodRes = produce m
+//              offsets.[prodRes.partition] <- prodRes.offset
+//              return () })
+//            |> Async.parallelThrottledIgnore batchSize
           Interlocked.Add(&completed, int64 batchSize) |> ignore
           return ()
         with ex ->

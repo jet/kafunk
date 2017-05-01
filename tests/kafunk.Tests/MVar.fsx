@@ -1,8 +1,6 @@
-﻿[<AutoOpen>]
-module internal Kafunk.MVar
+﻿#load "Refs.fsx"
 
-// TODO: https://github.com/fsprojects/FSharpx.Async
-
+open Kafunk
 open System
 open System.Threading
 open System.Threading.Tasks
@@ -189,3 +187,116 @@ module MVar =
   /// Returns when an item is available to update.
   let updateAsync (update:'a -> Async<'a>) (c:MVar<'a>) : Async<'a> =
     async.Delay (fun () -> c.UpdateAsync update)
+
+type AsyncUpdate<'s, 'u, 'a> = AU of ('s -> Async<'u * 'a>)
+
+module AsyncUpdate =
+  
+  module Update =
+    
+    let inline unit< ^S when ^S : (static member Unit : ^S)> () : ^S = 
+      (^S : (static member Unit : ^S) ()) 
+
+    let inline merge< ^S when ^S : (static member Merge : ^S * ^S -> ^S )> a b : ^S =
+      (^S : (static member Merge : ^S * ^S -> ^S) (a, b)) 
+
+    let inline apply< ^S, ^U when ^U : (static member Apply : ^S * ^U -> ^S )> s a : ^S =
+      (^U : (static member Apply : ^S * ^U -> ^S) (s, a)) 
+
+  let run (AU(f)) a = f a
+
+  let inline unit (a:'a) : AsyncUpdate<'s, 'u, 'a> = 
+    AU (fun _ -> async.Return(Update.unit(), a))
+
+  let map (f:'a -> 'b) (u:AsyncUpdate<'s, 'u, 'a>) : AsyncUpdate<'s, 'u, 'b> =
+    AU <| fun s -> async {
+      let! (u,a) = run u s
+      return (u, f a) }
+
+  let inline bind (f:'a -> AsyncUpdate<'s, 'u, 'b>) (u:AsyncUpdate<'s, 'u, 'a>) : AsyncUpdate<'s, 'u, 'b> =
+    AU <| fun s -> async {
+      let! (u,a) = (run u) s
+      let s' = Update.apply s u
+      let! (u',b) = (run (f a)) s'
+      return (Update.merge u u', b) }
+
+  let inline bindAsync (f:'a -> AsyncUpdate<'s, 'u, 'b>) (a:Async<'a>) : AsyncUpdate<'s, 'u, 'b> =
+    AU <| fun s -> async {
+      let! a = a
+      let! (u,b) = run (f a) s
+      return u,b }
+
+  let inline zipWith (f:'a -> 'b -> 'c) (a:AsyncUpdate<'s, 'u, 'a>) (b:AsyncUpdate<'s, 'u, 'b>) : AsyncUpdate<'s, 'u, 'c> =
+    AU <| fun s -> async {
+      let! (u1,a) = (run a) s
+      let! (u2,b) = (run b) s
+      return (Update.merge u1 u2, f a b) }
+
+  let inline zip (a:AsyncUpdate<'s, 'u, 'a>) (b:AsyncUpdate<'s, 'u, 'b>) : AsyncUpdate<'s, 'u, 'a * 'b> =
+    zipWith (fun a b -> a,b) a b
+
+  let inline ap (f:AsyncUpdate<'s, 'u, 'a -> 'b>) (b:AsyncUpdate<'s, 'u, 'a>) : AsyncUpdate<'s, 'u, 'b> =
+    zipWith (fun f a -> f a) f b
+
+  type Builder () =
+    member inline __.Return a = unit a
+    member inline __.ReturnFrom a = a
+    member inline __.Bind (u,f) = bind f u
+    member inline __.Bind (u,f) = bindAsync f u
+
+let asyncUpdate = AsyncUpdate.Builder ()
+
+
+type MVarUpdate<'a> =
+  | NoUpdate
+  | Update of ('a -> 'a)
+  with
+    static member Unit = NoUpdate
+    static member Merge (u1, u2) =
+      match u1, u2 with
+      | NoUpdate, _ -> u2
+      | _, NoUpdate -> u1
+      | Update f, Update g -> Update (f >> g)
+    static member Apply (s,u) =
+      match u with
+      | NoUpdate -> s
+      | Update f -> f s
+
+module MVarUpdate =
+  
+  let update (f:'a -> 'a) : AsyncUpdate<'s, MVarUpdate<'a>, 's> =
+    AU (fun s -> async { return MVarUpdate.Update f, s })
+
+  let write (a:'a) : AsyncUpdate<'s, MVarUpdate<'a>, 's> =
+    update (fun _ -> a)
+
+  let read : AsyncUpdate<'s, MVarUpdate<'a>, 's> =
+    AU (fun s -> async { return MVarUpdate.NoUpdate, s })
+
+  let inline run (c:MVar<'a>) (u:AsyncUpdate<'a, 'u, 's>) =
+    c |> MVar.updateStateAsync (fun a -> async {
+      let! (u,s) = AsyncUpdate.run u a
+      let a' = AsyncUpdate.Update.apply a u
+      return a',s })
+  
+open MVarUpdate
+
+let testUpdate = asyncUpdate {
+  let! (x:int) = read
+  do! Async.Sleep x
+  let! _ = update (fun x -> x + 1)
+  let! z = update (fun x -> x + 2)
+  return z }
+
+let testRead<'a> : AsyncUpdate<'a, MVarUpdate<_>, 'a> = asyncUpdate {
+  return! read }
+
+let mvar = MVar.createFull 100
+
+MVarUpdate.run mvar testUpdate |> Async.RunSynchronously
+
+let x = MVar.get mvar |> Async.RunSynchronously 
+let y = MVarUpdate.run mvar testRead |> Async.RunSynchronously
+
+printfn "%A" x
+printfn "%A" y

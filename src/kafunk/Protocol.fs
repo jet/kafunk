@@ -524,7 +524,7 @@ module Protocol =
         Binary.writeArray x.topicNames Binary.writeString
 
   /// A Kafka broker consists of a node id, host name and TCP port.
-  [<NoEquality;NoComparison>]
+  [<AutoSerializable(false);StructuralEquality;StructuralComparison>]
   type Broker =
     struct
       val nodeId : NodeId
@@ -538,7 +538,7 @@ module Protocol =
       let (nodeId, host, port), buf = Binary.read3 Binary.readInt32 Binary.readString Binary.readInt32 buf
       (Broker(nodeId, host, port), buf)
 
-  [<NoEquality;NoComparison>]
+  [<NoEquality;NoComparison;AutoSerializable(false)>]
   type PartitionMetadata =
     struct
       val partitionErrorCode : PartitionErrorCode

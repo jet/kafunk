@@ -1,3 +1,10 @@
+### 0.1.0 - 01.05.2017
+
+* Ensure recovery during broker restart (virtual broker routing).
+* Add Producer.produceBatched with improved API and performance:
+	- Takes a batch of messages rather than a function returning a batch.
+	- Parallelizes requests across brokers.
+
 ### 0.0.43-alpha001 - 24.04.2017
 
 * Fix message set decompression (take 3)
