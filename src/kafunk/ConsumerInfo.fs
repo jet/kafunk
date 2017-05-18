@@ -67,7 +67,12 @@ module ConsumerInfo =
       (topicOffsets, consumerOffsets)
       ||> Map.mergeChoice (fun p -> function
         | Choice1Of3 ((e,l),o) ->
-          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = l - o ; lead = o - e ; messageCount = l - e }
+          // Consumer offset of -1 indicates that no consumer offset is present.  In this case, we should calculate lag as the high water mark minus earliest offset
+          let lag, lead =
+            match o with
+            | -1L -> l - e, 0L
+            | _ -> l - o, o - e
+          { partition = p ; consumerOffset = o ; earliestOffset = e ; highWatermarkOffset = l ; lag = lag ; lead = lead ; messageCount = l - e }
         | Choice2Of3 (e,l) ->
           // in the event there is no consumer offset present, lag should be calculated as high watermark minus earliest
           // this prevents artifically high lags for partitions with no consumer offsets
