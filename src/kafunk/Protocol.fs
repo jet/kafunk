@@ -84,6 +84,10 @@ module Protocol =
   /// The timestamp of a message.
   type Timestamp = int64
 
+  /// Byte flag indicating compression codec in use.
+  type CompressionCodec = byte
+
+  [<Compile(Module)>]
   module CompressionCodec =
 
     [<Literal>]
