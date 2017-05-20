@@ -146,7 +146,8 @@ Target "Build" (fun _ ->
 Target "RunTests" (fun _ ->
     !! testAssemblies
     |> NUnit3 (fun p ->
-        { p with TimeOut = TimeSpan.FromMinutes 20.})
+        { p with TimeOut = TimeSpan.FromMinutes 20.
+                 ProcessModel = NUnit3ProcessModel.SingleProcessModel })
 )
 
 #if MONO
