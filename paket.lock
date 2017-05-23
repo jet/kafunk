@@ -1,4 +1,8 @@
 NUGET
+  remote: https://api.nuget.org/v3/index.json
+    Crc32C.NET (1.0.5)
+    Snappy.NET (1.1.1.8)
+      Crc32C.NET (>= 1.0.5)
   remote: http://api.nuget.org/v3/index.json
     FSharp.Control.AsyncSeq (2.0.10)
 
@@ -23,8 +27,8 @@ NUGET
     SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
-    modules/Octokit/Octokit.fsx (a0841f44f03c7afbf1a3448ec20e55a75c9cf17f)
-      Octokit
+    modules/Octokit/Octokit.fsx (1d6610b1e593270db040fc30c9c06d15fb57388c)
+      Octokit (>= 0.20)
 GROUP Test
 NUGET
   remote: http://api.nuget.org/v3/index.json

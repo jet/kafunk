@@ -2,60 +2,102 @@
 module internal Kafunk.Compression
 
 open Kafunk
+open System.IO
+open System.IO.Compression
+
+let private Log = Log.create "Kafunk.Compression"
 
 let private createMessage (value:Value) (compression:byte) =
   let attrs = compression |> int8
   Message.create value Binary.empty (Some attrs)
 
+let private getMemoryStream () =
+  // TODO: pool MemoryStreams
+  new MemoryStream()   
+
+let private getInputBytes (messageVer:ApiVersion) (ms:MessageSet) = 
+  let inputBytes = MessageSet.Size (messageVer,ms) |> Array.zeroCreate
+  let buf = Binary.ofArray inputBytes
+  MessageSet.Write (messageVer,ms,BinaryZipper(buf))
+  inputBytes
+
+let private decompressMessage (messageVer:ApiVersion) (m:Message) (writeToOutputStream : byte[] -> MemoryStream -> unit) = 
+  let inputBytes = m.value |> Binary.toArray
+  use outputStream = getMemoryStream()
+  
+  writeToOutputStream inputBytes outputStream
+  
+  outputStream.Position <- 0L
+  let output = outputStream.ToArray()
+  // size is output array size divided by message set element size
+  let bz = BinaryZipper(output |> Binary.ofArray)
+  MessageSet.Read (messageVer, 0, 0s, output.Length, bz)
+
 [<Compile(Module)>]
 module GZip =
-
-  open System.IO
-  open System.IO.Compression
-
-  // The only thing that can be compressed is a MessageSet, not a single Message; this results in a message containing the compressed set
+  
   let compress (messageVer:ApiVersion) (ms:MessageSet) =
-    // TODO: pool MemoryStreams
-    use outputStream = new MemoryStream()
+    use outputStream = getMemoryStream()
     use gZipStream = new GZipStream(outputStream, CompressionMode.Compress)
     do
-      let inputBytes = MessageSet.Size (messageVer,ms) |> Array.zeroCreate
-      let buf = Binary.ofArray inputBytes
-      MessageSet.Write (messageVer,ms,BinaryZipper(buf))
-      //MessageSet.write messageVer ms buf |> ignore
+      let inputBytes = getInputBytes messageVer ms
       try
         gZipStream.Write(inputBytes, 0, inputBytes.Length)
         gZipStream.Close()
       with :? IOException as _ex ->
-        // TODO: log this
-        //printfn "Couldn't write to gzip stream: %A" ex
+        Log.error "Couldn't write to gzip stream: %A" _ex
         reraise()
     createMessage (outputStream.ToArray() |> Binary.ofArray) CompressionCodec.GZIP
 
   let decompress (messageVer:ApiVersion) (m:Message) =
-    let inputBytes = m.value |> Binary.toArray
-    // TODO: pool MemoryStreams
-    use outputStream = new MemoryStream()
-    do
-      use inputStream = new MemoryStream(inputBytes)
-      use gzipInputStream = new GZipStream(inputStream, CompressionMode.Decompress)
-      try
-        gzipInputStream.CopyTo(outputStream)
-        gzipInputStream.Close()
-      with :? IOException as _ex ->
-        // TODO: log this
-        //printfn "Couldn't read from gzip stream: %A" ex
-        reraise()
-    outputStream.Position <- 0L
-    let output = outputStream.ToArray()
-    // size is output array size divided by message set element size
-    let bz = BinaryZipper(output |> Binary.ofArray)
-    MessageSet.Read (messageVer, 0, 0s, output.Length, bz)
+    let writeToOutputStream (inputBytes: byte[]) (outputStream: MemoryStream) = 
+      do
+        use inputStream = new MemoryStream(inputBytes)
+        use gzipInputStream = new GZipStream(inputStream, CompressionMode.Decompress)
+        try
+          gzipInputStream.CopyTo(outputStream)
+          gzipInputStream.Close()
+        with :? IOException as _ex ->
+          Log.error "Couldn't read from gzip stream: %A" _ex
+          reraise()
+    decompressMessage messageVer m writeToOutputStream
 
+[<Compile(Module)>]
+module Snappy =
+
+  open Snappy
+
+  let compress (messageVer:ApiVersion) (ms:MessageSet) =
+    use outputStream = getMemoryStream()
+    use snappyStream = new SnappyStream(outputStream, CompressionMode.Compress)
+    do
+      let inputBytes = getInputBytes messageVer ms
+      try
+        snappyStream.Write(inputBytes, 0, inputBytes.Length)
+        snappyStream.Flush()
+      with :? IOException as _ex ->
+        Log.error "Couldn't write to snappy stream: %A" _ex
+        reraise()
+    createMessage (outputStream.ToArray() |> Binary.ofArray) CompressionCodec.Snappy
+
+  let decompress (messageVer:ApiVersion) (m:Message) =
+    let writeToOutputStream (inputBytes: byte[])  (outputStream: MemoryStream) = 
+      do
+          use inputStream = new MemoryStream(inputBytes)
+          use snappyInputStream = new SnappyStream(inputStream, CompressionMode.Decompress)
+          try
+          snappyInputStream.CopyTo(outputStream)
+          with :? IOException as _ex ->
+          Log.error "Couldn't read from snappy stream: %A" _ex
+          reraise()
+    decompressMessage messageVer m writeToOutputStream
+
+// The only thing that can be compressed is a MessageSet, not a single Message; this results in a message containing the compressed set
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with
   | CompressionCodec.None -> ms
   | CompressionCodec.GZIP -> MessageSet.ofMessage messageVer (GZip.compress messageVer ms)
+  | CompressionCodec.Snappy -> MessageSet.ofMessage messageVer (Snappy.compress messageVer ms)
   | _ -> failwithf "Incorrect compression codec %A" compression
 
 //let decompress (messageVer:int16) (ms:MessageSet) =
@@ -84,6 +126,9 @@ let decompress (messageVer:int16) (ms:MessageSet) =
       | CompressionCodec.None -> [|msi|]
       | CompressionCodec.GZIP ->
         let ms' = GZip.decompress messageVer msi.message
+        ms'.messages
+      | CompressionCodec.Snappy ->
+        let ms' = Snappy.decompress messageVer msi.message
         ms'.messages
       | c -> failwithf "compression_code=%i not supported" c)
     |> MessageSet
