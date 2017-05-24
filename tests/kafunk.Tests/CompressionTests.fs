@@ -96,4 +96,3 @@ let ``Compression.Snappy reads messages that are compatible with reference imple
     Encoding.ASCII.GetString(outputMsg.message.value |> Binary.toArray)
 
   Assert.AreEqual ("test", payload)
-    
