@@ -66,9 +66,6 @@ module GZip =
 module Snappy = 
   
   open System
-  open System.IO
-  open System.Text
-  open System.IO.Compression
   open Snappy
 
   module CompressedMessage = 
@@ -76,7 +73,7 @@ module Snappy =
     type BinaryZipper with
       
       member this.WriteBlock (bytes: ArraySegment<byte>) = 
-        System.Buffer.BlockCopy(bytes.Array, bytes.Offset, this.Buffer.Array, this.Buffer.Offset, bytes.Count)
+        Buffer.BlockCopy(bytes.Array, bytes.Offset, this.Buffer.Array, this.Buffer.Offset, bytes.Count)
         this.ShiftOffset bytes.Count
 
       member this.ReadBlock (length: int) =
