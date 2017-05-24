@@ -65,17 +65,86 @@ module GZip =
 [<Compile(Module)>]
 module Snappy = 
   
+  open System
   open System.IO
+  open System.Text
   open System.IO.Compression
   open Snappy
-    
-  let compress =
-    Stream.compress CompressionCodec.Snappy <| fun memStream -> 
-      upcast new SnappyStream(memStream, CompressionMode.Compress)
 
-  let decompress =
-    Stream.decompress <| fun memStream -> 
-      upcast new SnappyStream(memStream, CompressionMode.Decompress)
+  module CompressedMessage = 
+    
+    type BinaryZipper with
+      
+      member this.WriteBlock (bytes: ArraySegment<byte>) = 
+        System.Buffer.BlockCopy(bytes.Array, bytes.Offset, this.Buffer.Array, this.Buffer.Offset, bytes.Count)
+        this.ShiftOffset bytes.Count
+
+      member this.ReadBlock (length: int) =
+        let arr = ArraySegment<byte>(this.Buffer.Array, this.Buffer.Offset, length)
+        this.ShiftOffset length
+        arr
+
+    module private Header =     
+      // Combined size of header in bytes.  
+      let size = 16
+      // Magic string used by snappy-java.
+      let magic = [| byte -126; byte 'S'; byte 'N'; byte 'A'; byte 'P'; byte 'P'; byte 'Y'; byte 0 |]
+      // Current version number taken from snappy-java repo as of 22/05/2017.
+      let currentVer = 1
+      // Minimum compatible version number taken from snappy-java repo as of 22/05/2017.
+      let minimumVer = 1
+
+    let pack (bytes: byte []) =
+      let buf = Array.zeroCreate (Header.size + 4 + bytes.Length)
+      let bz = BinaryZipper(Binary.ofArray buf)
+      
+      // write header compatible with snappy-java
+      bz.WriteBlock(Binary.ofArray Header.magic)
+      bz.WriteInt32(Header.currentVer)
+      bz.WriteInt32(Header.minimumVer)
+
+      // write content
+      // NOTE: this will also write content length in the first 4 bytes, this is expected.
+      bz.WriteBytes(Binary.ofArray bytes)
+
+      buf
+
+    let unpack (bytes: byte []) =
+      let bz = BinaryZipper(Binary.ofArray bytes)
+      
+      // TODO: do we want to validate these?
+      let magic      = bz.ReadBlock(Header.magic.Length)
+      let currentVer = bz.ReadInt32()
+      let minimumVer = bz.ReadInt32()
+
+      let content = bz.ReadBytes()
+
+      let buf = Array.zeroCreate<byte> content.Count
+      Buffer.BlockCopy(content.Array, content.Offset, buf, 0, content.Count)
+      buf
+
+  let compress (messageVer:ApiVersion) (ms:MessageSet) =
+    let inputBytes = MessageSet.Size (messageVer,ms) |> Array.zeroCreate
+    let buf = Binary.ofArray inputBytes
+    MessageSet.Write (messageVer,ms,BinaryZipper(buf))
+    try
+      let compressed = SnappyCodec.Compress(inputBytes)
+      let output = CompressedMessage.pack compressed
+      createMessage (Binary.ofArray output) CompressionCodec.Snappy
+    with :? IOException as _ex ->
+      // TODO: log this
+      reraise()
+
+  let decompress (messageVer:ApiVersion) (m:Message) =
+    let inputBytes = m.value |> Binary.toArray
+    try        
+      let compressed = CompressedMessage.unpack inputBytes      
+      let output = SnappyCodec.Uncompress(compressed)
+      let bz = BinaryZipper(Binary.ofArray output)
+      MessageSet.Read (messageVer, 0, 0s, output.Length, bz)
+    with :? IOException as _ex ->
+      // TODO: log this
+      reraise()
   
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with
