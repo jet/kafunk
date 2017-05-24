@@ -70,9 +70,9 @@ module Snappy =
 
     let truncateIfSmaller actualLength maxLength (array: byte []) = 
       if actualLength < maxLength 
-        then Binary.toArray <| Binary.Segment(array, 0, actualLength)
-        else array
-
+        then Binary.Segment(array, 0, actualLength)
+        else Binary.ofArray array
+        
   type internal SnappyBinaryZipper (buf: Binary.Segment) = 
       
     let mutable buffer = buf
@@ -110,8 +110,8 @@ module Snappy =
       // Total size of the header (magic string + two version ints + content length int)
       let size = magic.Length + Binary.sizeInt32 currentVer + Binary.sizeInt32 minimumVer + Binary.sizeInt32 0
 
-    let compress (bytes: byte []) : byte [] =
-      let maxLength = SnappyCodec.GetMaxCompressedLength(bytes.Length)
+    let compress (bytes: Binary.Segment) : Binary.Segment =
+      let maxLength = SnappyCodec.GetMaxCompressedLength(bytes.Count)
 
       let buf = Array.zeroCreate (Header.size + maxLength)
       let bz = SnappyBinaryZipper(Binary.ofArray buf)
@@ -124,15 +124,15 @@ module Snappy =
       // move forward to write compressed content, then go back to write the actual compressed content length.
       bz.ShiftOffset (Binary.sizeInt32 0)
       
-      let length = SnappyCodec.Compress(bytes, 0, bytes.Length, bz.Buffer.Array, bz.Buffer.Offset)      
+      let length = SnappyCodec.Compress(bytes.Array, bytes.Offset, bytes.Count, bz.Buffer.Array, bz.Buffer.Offset)      
       
       bz.Seek (Header.size - Binary.sizeInt32 length)
       bz.WriteInt32 (length)
       
       Binary.truncateIfSmaller (Header.size + length) (Header.size + maxLength) buf    
 
-    let decompress (bytes: byte []) : byte [] =
-      let bz = SnappyBinaryZipper(Binary.ofArray bytes)
+    let decompress (bytes: Binary.Segment) : Binary.Segment =
+      let bz = SnappyBinaryZipper(bytes)
       
       // TODO: do we want to validate these?
       let magic      = bz.ReadBlock(Header.magic.Length)
@@ -154,17 +154,14 @@ module Snappy =
     let buf = Binary.ofArray inputBytes
     MessageSet.Write (messageVer,ms,BinaryZipper(buf))
 
-    let output = CompressedMessage.compress inputBytes 
+    let output = CompressedMessage.compress buf 
 
-    createMessage (Binary.ofArray output) CompressionCodec.Snappy
+    createMessage output CompressionCodec.Snappy
     
   let decompress (messageVer:ApiVersion) (m:Message) =
-    let inputBytes = m.value |> Binary.toArray
-   
-    let output = CompressedMessage.decompress inputBytes      
-   
-    let bz = BinaryZipper(Binary.ofArray output)
-    MessageSet.Read (messageVer, 0, 0s, output.Length, bz)
+    let output = CompressedMessage.decompress m.value 
+    let bz = BinaryZipper(output)
+    MessageSet.Read (messageVer, 0, 0s, output.Count, bz)
   
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with
