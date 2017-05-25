@@ -12,31 +12,26 @@ let private createMessage (value:Value) (compression:byte) =
 
 [<RequireQualifiedAccess>]
 module internal Stream = 
+
   // The only thing that can be compressed is a MessageSet, not a single Message; this results in a message containing the compressed set
-  let compress (codec: CompressionCodec) (makeStream: MemoryStream -> Stream) (messageVer:ApiVersion) (ms:MessageSet) =
-    // TODO: pool MemoryStreams
+  let compress (codec:CompressionCodec) (makeStream:MemoryStream -> Stream) (messageVer:ApiVersion) (ms:MessageSet) =
     use outputStream = new MemoryStream()
     do
-      let inputBytes = MessageSet.Size (messageVer,ms) |> Array.zeroCreate
-      let buf = Binary.ofArray inputBytes
+      let buf = MessageSet.Size (messageVer,ms) |> Binary.zeros
       MessageSet.Write (messageVer,ms,BinaryZipper(buf))
       use compStream = makeStream outputStream
-      compStream.Write(inputBytes, 0, inputBytes.Length)
-    createMessage (outputStream.ToArray() |> Binary.ofArray) codec
+      compStream.Write(buf.Array, buf.Offset, buf.Count)
+    let value = Binary.Segment(outputStream.GetBuffer(), 0, int outputStream.Length)
+    createMessage value codec
 
-  let decompress (makeStream: MemoryStream -> Stream) (messageVer:ApiVersion) (m:Message) =
-    let inputBytes = m.value |> Binary.toArray
-    // TODO: pool MemoryStreams
+  let decompress (makeStream:MemoryStream -> Stream) (messageVer:ApiVersion) (m:Message) =
     use outputStream = new MemoryStream()
     do
-      use inputStream = new MemoryStream(inputBytes)
+      use inputStream = new MemoryStream(m.value.Array, m.value.Offset, m.value.Count)
       use compStream = makeStream inputStream
       compStream.CopyTo(outputStream)
-    outputStream.Position <- 0L
-    let output = outputStream.ToArray()
-    // size is output array size divided by message set element size
-    let bz = BinaryZipper(output |> Binary.ofArray)
-    MessageSet.Read (messageVer, 0, 0s, output.Length, bz)
+    let buf = Binary.Segment(outputStream.GetBuffer(), 0, int outputStream.Length)
+    MessageSet.Read (messageVer, 0, 0s, buf.Count, BinaryZipper(buf))
 
 [<Compile(Module)>]
 module GZip =
@@ -44,13 +39,18 @@ module GZip =
   open System.IO
   open System.IO.Compression
 
-  let compress =
-    Stream.compress CompressionCodec.GZIP <| fun memStream -> 
-      upcast new GZipStream(memStream, CompressionMode.Compress)
+  let compress ver ms =
+    Stream.compress 
+      CompressionCodec.GZIP 
+      (fun memStream -> upcast new GZipStream(memStream, CompressionMode.Compress, true))
+      ver
+      ms
 
-  let decompress =
-    Stream.decompress <| fun memStream -> 
-      upcast new GZipStream(memStream, CompressionMode.Decompress)
+  let decompress ver m =
+    Stream.decompress 
+      (fun memStream -> upcast new GZipStream(memStream, CompressionMode.Decompress, true)) 
+      ver 
+      m
     
 [<Compile(Module)>]
 module Snappy = 
@@ -60,43 +60,39 @@ module Snappy =
     
   module internal Binary = 
 
-    let writeBlock (bytes: Binary.Segment) (buf : Binary.Segment) = 
-      Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
-      Binary.shiftOffset bytes.Count buf
-
-    let readBlock (length: int) (buf : Binary.Segment) = 
-      let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
-      arr, Binary.shiftOffset length buf
-
     let truncateIfSmaller actualLength maxLength (array: byte []) = 
       if actualLength < maxLength 
         then Binary.Segment(array, 0, actualLength)
         else Binary.ofArray array
         
-  type internal SnappyBinaryZipper (buf: Binary.Segment) = 
+  type internal SnappyBinaryZipper (buf:Binary.Segment) = 
       
-    let mutable buffer = buf
-
-    member this.Read<'a> (reader: Binary.Reader<'a>) = 
-      let res, updatedBuffer = reader buffer
-      buffer <- updatedBuffer
-      res  
-
-    member this.Write<'a> (writer: Binary.Segment -> Binary.Segment) = 
-      buffer <- writer buffer
+    let mutable buf = buf
     
-    member this.Buffer = buffer
+    member this.Buffer = buf
 
-    member this.ShiftOffset(by: int) = this.Write(Binary.shiftOffset by)
+    member __.ShiftOffset (n) =
+      buf <- Binary.shiftOffset n buf
 
     member this.Seek(offset: int) = 
-      buffer <- Binary.Segment(buffer.Array, offset, buffer.Count)
+      buf <- Binary.Segment(buf.Array, offset, buf.Count)
 
-    member this.WriteInt32(x)     = this.Write(Binary.writeInt32 x)
-    member this.WriteBlock(block) = this.Write(Binary.writeBlock block)
+    member __.WriteInt32 (x:int32) =
+      buf <- Binary.writeInt32 x buf
 
-    member this.ReadInt32()       = this.Read(Binary.readInt32)
-    member this.ReadBlock(length) = this.Read(Binary.readBlock length)
+    member __.WriteBytes (bytes:ArraySegment<byte>) =
+      System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
+      __.ShiftOffset bytes.Count
+
+    member __.ReadInt32 () : int32 =
+      let r = Binary.peekInt32 buf
+      __.ShiftOffset 4
+      r
+
+    member __.ReadBytes (length:int) : ArraySegment<byte> =
+      let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
+      __.ShiftOffset length
+      arr
 
   module internal CompressedMessage = 
 
@@ -117,12 +113,12 @@ module Snappy =
       let bz = SnappyBinaryZipper(Binary.ofArray buf)
       
       // write header compatible with snappy-java.
-      bz.WriteBlock (Binary.ofArray Header.magic)
+      bz.WriteBytes (Binary.ofArray Header.magic)
       bz.WriteInt32 (Header.currentVer)
       bz.WriteInt32 (Header.minimumVer)
       
       // move forward to write compressed content, then go back to write the actual compressed content length.
-      bz.ShiftOffset (Binary.sizeInt32 0)
+      bz.ShiftOffset 4
       
       let length = SnappyCodec.Compress(bytes.Array, bytes.Offset, bytes.Count, bz.Buffer.Array, bz.Buffer.Offset)      
       
@@ -135,33 +131,27 @@ module Snappy =
       let bz = SnappyBinaryZipper(bytes)
       
       // TODO: do we want to validate these?
-      let magic      = bz.ReadBlock(Header.magic.Length)
-      let currentVer = bz.ReadInt32()
-      let minimumVer = bz.ReadInt32()
+      let _magic      = bz.ReadBytes(Header.magic.Length)
+      let _currentVer = bz.ReadInt32()
+      let _minimumVer = bz.ReadInt32()
 
       let contentLength = bz.ReadInt32()
-      let content = bz.ReadBlock(contentLength)
+      let content = bz.ReadBytes(contentLength)
 
       let uncompressedLength = SnappyCodec.GetUncompressedLength(content.Array, content.Offset, content.Count) 
-
       let buf = Array.zeroCreate uncompressedLength
       let actualLength = SnappyCodec.Uncompress(content.Array, content.Offset, content.Count, buf, 0)
-
       Binary.truncateIfSmaller actualLength uncompressedLength buf
 
   let compress (messageVer:ApiVersion) (ms:MessageSet) =
-    let inputBytes = MessageSet.Size (messageVer,ms) |> Array.zeroCreate
-    let buf = Binary.ofArray inputBytes
+    let buf = MessageSet.Size (messageVer,ms) |> Binary.zeros
     MessageSet.Write (messageVer,ms,BinaryZipper(buf))
-
     let output = CompressedMessage.compress buf 
-
     createMessage output CompressionCodec.Snappy
     
   let decompress (messageVer:ApiVersion) (m:Message) =
-    let output = CompressedMessage.decompress m.value 
-    let bz = BinaryZipper(output)
-    MessageSet.Read (messageVer, 0, 0s, output.Count, bz)
+    let buf = CompressedMessage.decompress m.value 
+    MessageSet.Read (messageVer, 0, 0s, buf.Count, BinaryZipper(buf))
   
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with

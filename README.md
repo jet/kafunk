@@ -19,7 +19,7 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 | Feature   | Status   |
 | ----------|----------|
 | GZip      | Complete |
-| Snappy    | https://github.com/jet/kafunk/issues/129 |
+| Snappy    | Complete |
 | LZ4       | https://github.com/jet/kafunk/issues/125 |
 | TLS       | https://github.com/jet/kafunk/issues/66  |
 | SASL      | https://github.com/jet/kafunk/issues/139 |

@@ -128,7 +128,7 @@ type ProducerConfig = {
 
   /// The compression method to use.
   /// Default: None
-  compression : byte
+  compression : CompressionCodec
 
   /// The per-broker, in-memory buffer size in bytes.
   /// When the buffer reaches capacity, backpressure is exerted on incoming produce requests.
@@ -160,8 +160,8 @@ type ProducerConfig = {
   static member DefaultBatchLingerMs = 1000
 
   /// Creates a producer configuration.
-  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:byte, ?timeout:Timeout, 
-                        ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs) =
+  static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:CompressionCodec, 
+                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs) =
     {
       topic = topic
       partitioner = partition
