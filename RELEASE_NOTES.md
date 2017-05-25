@@ -1,3 +1,8 @@
+### 0.1.1-alpha - 25.05.2017
+
+* Snappy compression.
+* Fixed lag calculation bug in ConsumerInfo module.
+
 ### 0.1.0 - 01.05.2017
 
 * Ensure recovery during broker restart (virtual broker routing).

@@ -61,7 +61,8 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
-    batchLingerMs = 1000
+    batchLingerMs = 1000,
+    compression = CompressionCodec.None
     )
 
 let producer =
