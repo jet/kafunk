@@ -119,7 +119,7 @@ When the buffer reaches capacity, backpressure is exerted on incoming produce re
             compression
           </code>
           <div class="tip" id="621">
-            <strong>Signature:</strong> byte<br />
+            <strong>Signature:</strong> CompressionCodec<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -229,7 +229,7 @@ which the message should be written to.</p>
             create(...)
           </code>
           <div class="tip" id="626">
-            <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:byte option * timeout:Timeout option * bufferSizeBytes:int option * batchSizeBytes:int option * batchLingerMs:int option) -&gt; ProducerConfig<br />
+            <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:CompressionCodec option * timeout:Timeout option * bufferSizeBytes:int option * batchSizeBytes:int option * batchLingerMs:int option) -&gt; ProducerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">

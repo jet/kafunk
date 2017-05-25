@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>PartitionOffsets - Kafunk</title>
+    <title>CompressionCodec - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,31 +35,34 @@
 
 
 
-<h1>PartitionOffsets</h1>
+<h1>CompressionCodec</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
   <span>Parent Module: <a href="kafunk-protocol.html">Protocol</a></span>
 </p>
 <div class="xmldoc">
 </div>
-  <h3>Record Fields</h3>
+
+<!-- Render nested types and modules, if there are any -->
+
+  <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Record Field</td><td>Description</td></tr>
+      <tr><td>Function or value</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '352', 352)" onmouseover="showTip(event, '352', 352)">
-            errorCode
+          <code onmouseout="hideTip(event, '124', 124)" onmouseover="showTip(event, '124', 124)">
+            GZIP 
           </code>
-          <div class="tip" id="352">
-            <strong>Signature:</strong> ErrorCode<br />
+          <div class="tip" id="124">
+            <strong>Signature:</strong> byte<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L787-787" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L100-100" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -69,15 +72,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '353', 353)" onmouseover="showTip(event, '353', 353)">
-            offsets
+          <code onmouseout="hideTip(event, '125', 125)" onmouseover="showTip(event, '125', 125)">
+            Mask 
           </code>
-          <div class="tip" id="353">
-            <strong>Signature:</strong> Offset []<br />
+          <div class="tip" id="125">
+            <strong>Signature:</strong> byte<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L789-789" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L94-94" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -87,15 +90,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '354', 354)" onmouseover="showTip(event, '354', 354)">
-            partition
+          <code onmouseout="hideTip(event, '126', 126)" onmouseover="showTip(event, '126', 126)">
+            None 
           </code>
-          <div class="tip" id="354">
-            <strong>Signature:</strong> Partition<br />
+          <div class="tip" id="126">
+            <strong>Signature:</strong> byte<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L786-786" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L97-97" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -105,46 +108,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '355', 355)" onmouseover="showTip(event, '355', 355)">
-            timestamp
+          <code onmouseout="hideTip(event, '127', 127)" onmouseover="showTip(event, '127', 127)">
+            Snappy 
           </code>
-          <div class="tip" id="355">
-            <strong>Signature:</strong> Timestamp<br />
+          <div class="tip" id="127">
+            <strong>Signature:</strong> byte<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L788-788" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L103-103" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
           
-        </td>
-      </tr>
-    </tbody>
-  </table>
-  <h3>Constructors</h3>
-  <table class="table table-bordered member-list">
-    <thead>
-      <tr><td>Constructor</td><td>Description</td></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '356', 356)" onmouseover="showTip(event, '356', 356)">
-            new(partition, errorCode, ts, offsets)
-          </code>
-          <div class="tip" id="356">
-            <strong>Signature:</strong> (partition:Partition * errorCode:ErrorCode * ts:Timestamp * offsets:Offset []) -&gt; PartitionOffsets<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L790-790" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-              <p>CompiledName: <code>.ctor</code></p>
         </td>
       </tr>
     </tbody>
