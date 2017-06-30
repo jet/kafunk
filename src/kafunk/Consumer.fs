@@ -570,6 +570,10 @@ module Consumer =
     let! state = Group.stateInternal c.groupMember
     return consumerStateFromGroupMemberState state.state }
 
+  /// Returns the stream of consumer states as of the invocation, including the current state.
+  let states (c:Consumer) : AsyncSeq<ConsumerState> =
+    Group.states c.groupMember |> AsyncSeq.map (consumerStateFromGroupMemberState)
+
   let private combineFetchResponses 
     (r1:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) 
     (r2:(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option) =
@@ -862,32 +866,32 @@ module Consumer =
     (c:Consumer)
     (commitInterval:TimeSpan)
     (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
-
       let assignedPartitions = state c |> Async.map (fun s -> s.assignments)
-
-      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)
-            
-      let! currentOffsets = async {
-        let! assignedPartitions = assignedPartitions
-        let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, assignedPartitions |]
-        return
-          currentOffsets 
-          |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
-          |> Seq.concat
-          |> Seq.where (fun (_,o) -> o <> -1L)
-          |> Seq.toArray }
-      
-      // commit current offets so that they're in-memory, and will be committed periodically
-      // even if no messages are consumed
-      Offsets.enqueuePeriodicCommit commitQueue currentOffsets
-
+      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)            
+      // commit current offets on group rebalance, including first join,
+      // so that they're committed periodically even if no messages are consumed
+      let commitCurrentOffsetsOnGroupJoinProc =
+        states c
+        |> AsyncSeq.iterAsync (fun s -> async {
+          let! currentOffsets = async {
+            let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, s.assignments |]
+            return
+              currentOffsets 
+              |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
+              |> Seq.concat
+              |> Seq.where (fun (_,o) -> o <> -1L)
+              |> Seq.toArray }
+          Offsets.enqueuePeriodicCommit commitQueue currentOffsets })
       let handler s ms = async {
         do! handler s ms
-        Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
-
-      do! consume c handler
-
-      do! Offsets.flushPeriodicCommit commitQueue }
+        Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }      
+      do!
+        Async.parallel2
+          (async {
+            do! consume c handler
+            do! Offsets.flushPeriodicCommit commitQueue },
+          commitCurrentOffsetsOnGroupJoinProc)
+        |> Async.Ignore }
 
   /// Closes the consumer and leaves the consumer group.
   /// This causes all underlying streams to complete.

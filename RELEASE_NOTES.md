@@ -1,3 +1,9 @@
+### 0.1.2-alpha - 03.07.2017
+
+* Fixed consumer offset commit [bug](https://github.com/jet/kafunk/issues/152) wherein after a rebalance a consumer gets assigned a new partition
+  which doesn't receive any messages for longer than the offset retention period, the offsets would be lost.
+  This would only happen after a rebalance not after initial join.
+
 ### 0.1.1-alpha - 25.05.2017
 
 * Snappy compression.
