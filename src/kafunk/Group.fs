@@ -77,7 +77,7 @@ and GroupConfig = {
 and [<NoEquality;NoComparison;AutoSerializable(false)>] GroupMember = internal {
   conn : KafkaConn
   config : GroupConfig
-  state : MVar<GroupMemberStateWrapper>
+  state : SVar<GroupMemberStateWrapper>
 }
 
 /// The action to take upon leaving the group.
@@ -150,16 +150,22 @@ module Group =
 
   /// Leaves a group, sending a leave group request to Kafka.
   let leave (gm:GroupMember) = async {
-    let! state = MVar.get gm.state
+    let! state = SVar.get gm.state
     return! leaveInternal gm state }
 
   let internal stateInternal (gm:GroupMember) = 
-    gm.state |> MVar.get
+    gm.state |> SVar.get
 
   /// Returns the group member state.
   let state (gm:GroupMember) = async {
     let! state = stateInternal gm
     return state.state }
+
+  /// Returns a stream of group member states as of the invocation, including the current state.
+  let states (gm:GroupMember) =
+    gm.state
+    |> SVar.tap
+    |> AsyncSeq.map (fun s -> s.state)
 
   /// Joins a group.
   let join (gm:GroupMember) (prevState:GroupMemberState option, prevErrorCode:ErrorCode option) = async {
@@ -287,7 +293,7 @@ module Group =
       let cts = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
       Async.Start (heartbeatProcess, cts.Token)
 
-      let! _ = gm.state |> MVar.put state
+      let! _ = gm.state |> SVar.put state
       return () }
 
 
@@ -360,6 +366,9 @@ module Group =
 
     return! joinSyncHeartbeat (prevState |> Option.map (fun s -> s.memberId), prevErrorCode) }
 
+//  let internal generationsInternal (gm:GroupMember) =
+//    SVar.tap gm.state
+
   let internal generationsInternal (gm:GroupMember) =
     let rec loop () = asyncSeq {
       let! state = stateInternal gm
@@ -385,8 +394,22 @@ module Group =
   let createJoin (conn:KafkaConn) (config:GroupConfig) = async {
     let gm = 
       { GroupMember.conn = conn
-        state = MVar.create ()
+        state = SVar.create ()
         config = config }
+
     let! _ = join gm (None, None)
+    
+//    let rec rejoinProc () = async {
+//      let! state = stateInternal gm
+//      let! action = IVar.get state.closed
+//      match action with
+//      | GroupLeaveAction.LeaveAndRejoin ec ->
+//        let! _ = join gm (Some state.state, Some ec)
+//        return! rejoinProc ()
+//      | GroupLeaveAction.LeaveGroup -> 
+//        return () }
+//    
+//    let! _ = Async.StartChild (rejoinProc ())
+
     return gm }
 
