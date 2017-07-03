@@ -32,6 +32,14 @@
       <div class="row">
         <div class="span9" id="main">
           
+<h3><a name="0-1-2-alpha-03-07-2017" class="anchor" href="#0-1-2-alpha-03-07-2017">0.1.2-alpha - 03.07.2017</a></h3>
+<ul>
+<li>
+Fixed consumer offset commit <a href="https://github.com/jet/kafunk/issues/152">bug</a> wherein after a rebalance a consumer gets assigned a new partition
+which doesn't receive any messages for longer than the offset retention period, the offsets would be lost.
+This would only happen after a rebalance not after initial join.
+</li>
+</ul>
 <h3><a name="0-1-1-alpha-25-05-2017" class="anchor" href="#0-1-1-alpha-25-05-2017">0.1.1-alpha - 25.05.2017</a></h3>
 <ul>
 <li>Snappy compression.</li>

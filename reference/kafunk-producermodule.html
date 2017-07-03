@@ -55,15 +55,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '118', 118)" onmouseover="showTip(event, '118', 118)">
+          <code onmouseout="hideTip(event, '120', 120)" onmouseover="showTip(event, '120', 120)">
             configuration p
           </code>
-          <div class="tip" id="118">
+          <div class="tip" id="120">
             <strong>Signature:</strong> p:Producer -&gt; ProducerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L581-581" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L583-583" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -75,10 +75,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '119', 119)" onmouseover="showTip(event, '119', 119)">
+          <code onmouseout="hideTip(event, '121', 121)" onmouseover="showTip(event, '121', 121)">
             create conn cfg
           </code>
-          <div class="tip" id="119">
+          <div class="tip" id="121">
             <strong>Signature:</strong> conn:KafkaConn -&gt; cfg:ProducerConfig -&gt; Producer<br />
                       </div>
         </td>
@@ -95,10 +95,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '120', 120)" onmouseover="showTip(event, '120', 120)">
+          <code onmouseout="hideTip(event, '122', 122)" onmouseover="showTip(event, '122', 122)">
             createAsync conn config
           </code>
-          <div class="tip" id="120">
+          <div class="tip" id="122">
             <strong>Signature:</strong> conn:KafkaConn -&gt; config:ProducerConfig -&gt; Async&lt;Producer&gt;<br />
                       </div>
         </td>
@@ -115,21 +115,20 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '121', 121)" onmouseover="showTip(event, '121', 121)">
+          <code onmouseout="hideTip(event, '123', 123)" onmouseover="showTip(event, '123', 123)">
             produce p m
           </code>
-          <div class="tip" id="121">
+          <div class="tip" id="123">
             <strong>Signature:</strong> p:Producer -&gt; m:ProducerMessage -&gt; Async&lt;ProducerResult&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L576-576" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L578-578" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Produces a message.
-The message will be sent as part of a batch and the result will correspond to the offset
-produced by the entire batch.</p>
+          <p>Produces a message. The message will be sent as part of a batch and the
+result will correspond to the offset produced by the entire batch.</p>
 
 
         </td>
@@ -137,22 +136,24 @@ produced by the entire batch.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '122', 122)" onmouseover="showTip(event, '122', 122)">
+          <code onmouseout="hideTip(event, '124', 124)" onmouseover="showTip(event, '124', 124)">
             produceBatch p createBatch
           </code>
-          <div class="tip" id="122">
+          <div class="tip" id="124">
             <strong>Signature:</strong> p:Producer -&gt; createBatch:(PartitionCount -&gt; Partition * ProducerMessage []) -&gt; Async&lt;ProducerResult&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L565-565" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L567-567" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Produces a batch of messages using the specified function which creates messages given a set of partitions
-currently configured for the topic.
-The messages will be sent as part of a batch and the result will correspond to the offset
-produced by the entire batch.</p>
+          <p>Produces a batch of messages using the specified function which creates
+messages given a set of partitions currently configured for the topic.
+The messages will be sent as part of a batch and the result will
+correspond to the offset produced by the entire batch. The partition
+selected here will override the partition function that is configured
+in ProducerConfig value passed in when connecting to Kafka.</p>
 
 
         </td>
@@ -160,20 +161,21 @@ produced by the entire batch.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '123', 123)" onmouseover="showTip(event, '123', 123)">
+          <code onmouseout="hideTip(event, '125', 125)" onmouseover="showTip(event, '125', 125)">
             produceBatched p batch
           </code>
-          <div class="tip" id="123">
+          <div class="tip" id="125">
             <strong>Signature:</strong> p:Producer -&gt; batch:seq&lt;ProducerMessage&gt; -&gt; Async&lt;ProducerResult []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L570-570" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L573-573" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Produces a batch of messages, by assigning a partition to each message, grouping messages by partitions
-and sending batches by partition in parallel and collecting the results.</p>
+          <p>Produces a batch of messages, by assigning a partition to each message,
+grouping messages by partitions and sending batches by partition in
+parallel and collecting the results.</p>
 
 
         </td>
