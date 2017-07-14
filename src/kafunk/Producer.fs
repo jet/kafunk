@@ -367,15 +367,14 @@ module Producer =
           |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
 
       if oks.Length > 0 then
-        let oks = 
-          oks 
-          |> Seq.map (fun (p,o) -> 
-            let pmc = ps.[p].Count
-            p, Success (ProducerResult(p,o,pmc))) 
-          |> Dict.ofSeq
+        let oks' = Dict.empty
+        for i = 0 to oks.Length - 1 do
+          let p,o = oks.[i] in
+          let pmc = ps.[p].Count in
+          oks'.[p] <- Success (ProducerResult(p,o,pmc))
         for b in batch do
           let mutable res = Unchecked.defaultof<_>
-          if (oks.TryGetValue(b.partition, &res)) then
+          if (oks'.TryGetValue(b.partition, &res)) then
             IVar.tryPut res b.rep |> ignore
 
     | Failure errs ->
