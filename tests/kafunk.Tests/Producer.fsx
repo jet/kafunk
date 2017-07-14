@@ -137,28 +137,34 @@ let go = async {
 
   else
 
-//    let produce = 
-//      Producer.produce producer
-//      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
-//      //|> Metrics.latencyAsyncTo timer
-
     let produce = 
-      Producer.produceBatched producer
-      |> Metrics.throughputAsyncTo counter (fun (_,r) -> batchSize)
+      Producer.produce producer
+      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
+      //|> Metrics.latencyAsyncTo timer
+
+//    let produce = 
+//      Producer.produceBatched producer
+//      |> Metrics.throughputAsyncTo counter (fun (_,r) -> batchSize)
 
     return!
       Seq.init batchCount id
       |> Seq.map (fun batchNo -> async {
         try
           let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-          let! res = produce msgs
-//          let! res =
-//            msgs
-//            |> Seq.map (fun m -> async {
-//              let! prodRes = produce m
-//              offsets.[prodRes.partition] <- prodRes.offset
-//              return () })
-//            |> Async.parallelThrottledIgnore batchSize
+          //let! res = produce msgs
+          let! res =
+            msgs
+            |> Seq.map (fun m -> async {
+              let! prodRes = produce m
+              let mutable o = Unchecked.defaultof<_>
+              let o' = prodRes.offset              
+              if (offsets.TryGetValue (prodRes.partition, &o)) then                
+                if o' >= o then offsets.[prodRes.partition] <- o'
+              else
+                offsets.[prodRes.partition] <- o'
+              Log.info "produce_result|p=%i o=%i count=%i" prodRes.partition prodRes.offset prodRes.count
+              return () })
+            |> Async.parallelThrottledIgnore batchSize
           Interlocked.Add(&completed, int64 batchSize) |> ignore
           return ()
         with ex ->
