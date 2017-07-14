@@ -45,7 +45,10 @@ type ProducerResult =
     /// The offset of the first message produced to the partition.
     val offset : Offset
 
-    new (p,o) = { partition = p ; offset = o }
+    /// The number of messages in the produced batch for the partition.
+    val count : int
+
+    new (p,o,c) = { partition = p ; offset = o ; count = c }
   end
 
 /// The number of partitions of a topic.
@@ -267,8 +270,7 @@ module Producer =
       count <- count + b.messages.Length
     count
 
-  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) =
-    let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
+  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for b in batch do
       let mutable xs = Unchecked.defaultof<_>
       if not (ps.TryGetValue(b.partition, &xs)) then
@@ -296,7 +298,8 @@ module Producer =
     (batch:ProducerMessageBatch seq) = async {
     //Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
 
-    let pms = toMessageSet messageVer cfg.compression batch
+    let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
+    let pms = toMessageSet messageVer cfg.compression batch ps
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
     let! res =
@@ -364,10 +367,16 @@ module Producer =
           |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
 
       if oks.Length > 0 then
-        let oks = oks |> Seq.map (fun (p,o) -> p, Success (ProducerResult(p,o))) |> Map.ofSeq
+        let oks = 
+          oks 
+          |> Seq.map (fun (p,o) -> 
+            let pmc = ps.[p].Count
+            p, Success (ProducerResult(p,o,pmc))) 
+          |> Dict.ofSeq
         for b in batch do
-          Map.tryFind b.partition oks
-          |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
+          let mutable res = Unchecked.defaultof<_>
+          if (oks.TryGetValue(b.partition, &res)) then
+            IVar.tryPut res b.rep |> ignore
 
     | Failure errs ->
       let err = ProducerError.BrokerChanError (b,errs)

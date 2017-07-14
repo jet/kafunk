@@ -27,4 +27,6 @@ let offsets =
   |> Async.RunSynchronously
 
 for kvp in offsets do
-  printfn "partition=%i earliest=%i latest=%i" kvp.Key (fst kvp.Value) (snd kvp.Value)
+  let e,l = kvp.Value
+  let c = l - e
+  printfn "partition=%i earliest=%i latest=%i count=%i" kvp.Key e l c

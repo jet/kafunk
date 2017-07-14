@@ -1,3 +1,7 @@
+### 0.1.3-alpha - 14.07.2017
+
+* Added ProducerResult.count indicating the number of messages produced in a batch for a partition.
+
 ### 0.1.2-alpha - 03.07.2017
 
 * Fixed consumer offset commit [bug](https://github.com/jet/kafunk/issues/152) wherein after a rebalance a consumer gets assigned a new partition
