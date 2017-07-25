@@ -1,3 +1,8 @@
+### 0.1.4-beta - 25.07.2017
+
+* Fixed v0.10.1 protocol bug for Offset API.
+* Fixed v0.10.1 protocol bug for JoinGroup API. 
+
 ### 0.1.3-alpha - 14.07.2017
 
 * Added ProducerResult.count indicating the number of messages produced in a batch for a partition.

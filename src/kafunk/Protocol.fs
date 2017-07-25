@@ -21,6 +21,7 @@ module Protocol =
 
   type ApiVersion = int16
 
+  /// A list of supported versions.
   [<Compile(Module)>]
   module Versions =
     
@@ -837,13 +838,15 @@ module Protocol =
         let ts = 
           if ver >= 1s then buf.ReadInt64 ()
           else 0L
-        let os = buf.ReadArray (fun buf -> buf.ReadInt64())
+        let os = 
+          if ver >= 1s then [|buf.ReadInt64 ()|]
+          else buf.ReadArray (fun buf -> buf.ReadInt64 ())
         PartitionOffsets(p, ec, ts, os)
       let readTopic (buf:BinaryZipper) =
         let t = buf.ReadString ()
         let ps = buf.ReadArray readPartition
         t,ps
-      let topics = buf.ReadArray (readTopic)
+      let topics = buf.ReadArray readTopic
       OffsetResponse(topics)
 
   // Offset Commit/Fetch API
@@ -1070,9 +1073,10 @@ module Protocol =
         { errorCode = errorCode; generationId = generationId; groupProtocol = groupProtocol;
           leaderId = leaderId; memberId = memberId; members = members }
 
-    let internal sizeRequest (req:Request) =
+    let internal sizeRequest (ver:ApiVersion, req:Request) =
       Binary.sizeString req.groupId +
       Binary.sizeInt32 req.sessionTimeout +
+      (if ver >= 1s then 4 else 0) +
       Binary.sizeString req.memberId +
       Binary.sizeString req.protocolType +
       GroupProtocols.size req.groupProtocols
@@ -1423,7 +1427,7 @@ module Protocol =
       | GroupCoordinator x -> GroupCoordinatorRequest.size x
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
       | OffsetFetch x -> OffsetFetchRequest.size x
-      | JoinGroup x -> JoinGroup.sizeRequest x
+      | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
       | SyncGroup x -> SyncGroupRequest.size x
       | LeaveGroup x -> LeaveGroupRequest.size x
       | ListGroups x -> ListGroupsRequest.size x

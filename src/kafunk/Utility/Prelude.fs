@@ -42,6 +42,8 @@ module Disposable =
 let UnixEpoch = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
 
 type DateTime with
+  static member FromUnixMilliseconds (ms:int64) =
+    UnixEpoch + TimeSpan.FromMilliseconds (float ms)
   static member UtcNowUnixMilliseconds = int64 (DateTime.UtcNow - UnixEpoch).TotalMilliseconds
 
 type TimeSpan with

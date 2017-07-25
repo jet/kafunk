@@ -6,11 +6,10 @@ open Kafunk
 open System
 open System.Diagnostics
 open System.Threading
+open Refs
 
 //Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
-
-let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
 
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
