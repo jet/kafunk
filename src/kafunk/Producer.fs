@@ -176,9 +176,6 @@ type ProducerConfig = {
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
     }
 
-  static member internal messageVersion (connVersion:Version) =
-    Versions.produceReqMessage (Versions.byKey connVersion ApiKey.Produce)
-
 
 /// Producer state corresponding to the state of a cluster.
 [<NoEquality;NoComparison;AutoSerializable(false)>]
@@ -420,7 +417,7 @@ module Producer =
 
     let! routes = getProducerRoutes conn cfg.topic
     let partitions = routes.partitions
-    let messageVer = ProducerConfig.messageVersion conn.Config.version
+    let messageVer = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
 
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')

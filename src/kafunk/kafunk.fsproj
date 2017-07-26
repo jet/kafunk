@@ -77,6 +77,7 @@
     <Compile Include="Tcp.fs" />
     <Compile Include="Protocol.fs" />
     <Compile Include="Helpers.fs" />
+    <Compile Include="Versions.fs" />
     <Compile Include="Chan.fs" />
     <Compile Include="Kafka.fs" />
     <Compile Include="Compression.fs" />

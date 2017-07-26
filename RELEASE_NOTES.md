@@ -1,7 +1,9 @@
 ### 0.1.4-beta - 25.07.2017
 
-* Fixed v0.10.1 protocol bug for Offset API.
-* Fixed v0.10.1 protocol bug for JoinGroup API. 
+* Fixed v0.10.1 protocol bug for `Offset` API.
+* Fixed v0.10.1 protocol bug for `JoinGroup` API. 
+* Added `ApiVersionsRequest`.
+* Added support for automatically detecting API versions via `ApiVersionRequest` using `KafkaConfig.autoApiVersions`.
 
 ### 0.1.3-alpha - 14.07.2017
 

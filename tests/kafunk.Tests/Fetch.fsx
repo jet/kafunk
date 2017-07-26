@@ -9,7 +9,7 @@ open Refs
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
 
-let connCfg = KafkaConfig.create ([KafkaUri.parse host], version=Protocol.Versions.V_0_10_1)
+let connCfg = KafkaConfig.create ([KafkaUri.parse host], version=Versions.V_0_10_1)
 let conn = Kafka.conn connCfg
 
 let offsetRange =

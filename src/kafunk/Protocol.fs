@@ -5,59 +5,26 @@ namespace Kafunk
 module Protocol =
 
   type ApiKey =
-    | Produce = 0s
-    | Fetch = 1s
-    | Offset = 2s
-    | Metadata = 3s
-    | OffsetCommit = 8s
-    | OffsetFetch = 9s
-    | GroupCoordinator = 10s
-    | JoinGroup = 11s
-    | Heartbeat = 12s
-    | LeaveGroup = 13s
-    | SyncGroup = 14s
-    | DescribeGroups = 15s
-    | ListGroups = 16s
+    | Produce = 0
+    | Fetch = 1
+    | Offset = 2
+    | Metadata = 3
+    | OffsetCommit = 8
+    | OffsetFetch = 9
+    | GroupCoordinator = 10
+    | JoinGroup = 11
+    | Heartbeat = 12
+    | LeaveGroup = 13
+    | SyncGroup = 14
+    | DescribeGroups = 15
+    | ListGroups = 16
+    | ApiVersions = 18
 
   type ApiVersion = int16
 
-  /// A list of supported versions.
   [<Compile(Module)>]
-  module Versions =
+  module internal MessageVersions =
     
-    let V_0_8_2 = System.Version (0, 8, 2)
-    let V_0_9_0 = System.Version (0, 9, 0)
-    let V_0_10_0 = System.Version (0, 10, 0)
-    let V_0_10_1 = System.Version (0, 10, 1)
-
-    /// Returns an ApiVersion given a system version and an ApiKey.
-    let internal byKey (version:System.Version) (apiKey:ApiKey) : ApiVersion = 
-      match apiKey with
-      | ApiKey.OffsetFetch -> 
-        if version >= V_0_9_0 then 1s
-        elif version >= V_0_8_2 then 0s
-        else failwith "not supported"
-      | ApiKey.OffsetCommit -> 
-        if version >= V_0_9_0 then 2s
-        elif version >= V_0_8_2 then 1s
-        else 0s
-      | ApiKey.Produce -> 
-        if version >= V_0_10_0 then 2s
-        elif version >= V_0_9_0 then 1s
-        else 0s
-      | ApiKey.Fetch ->
-        if version >= V_0_10_0 then 2s
-        elif version >= V_0_9_0 then 1s
-        else 0s
-      | ApiKey.JoinGroup -> 
-        if version >= V_0_10_1 then 1s
-        else 0s
-      | ApiKey.Offset ->
-        if version >= V_0_10_1 then 1s
-        else 0s
-      | _ -> 
-        0s
-
     /// Gets the version of Message for a ProduceRequest of the specified API version.
     let internal produceReqMessage (apiVer:ApiVersion) =
       if apiVer >= 2s then 1s
@@ -644,7 +611,7 @@ module Protocol =
       size
 
     static member internal Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
-      let messageVer = Versions.produceReqMessage ver
+      let messageVer = MessageVersions.produceReqMessage ver
       buf.WriteInt16 x.requiredAcks
       buf.WriteInt32 x.timeout
       buf.WriteInt32 x.topics.Length
@@ -773,7 +740,7 @@ module Protocol =
           let errorCode = buf.ReadInt16 ()
           let hwo = buf.ReadInt64 ()
           let mss = buf.ReadInt32 ()
-          let ms = MessageSet.Read (Versions.fetchResMessage ver,partition,errorCode,mss,buf)
+          let ms = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,mss,buf)
           ps.[j] <-  partition, errorCode, hwo, mss, ms
         topics.[i] <- (t,ps)
       let res = FetchResponse(throttleTime, topics)
@@ -1400,6 +1367,34 @@ module Protocol =
       let xs, buf = buf |> Binary.readArray readGroup
       (DescribeGroupsResponse(xs), buf)
 
+  [<NoEquality;NoComparison>]
+  type ApiVersionsRequest =
+    struct end
+    with
+      static member Size (_:ApiVersionsRequest) = 0
+      static member internal Write (_:ApiVersionsRequest, _:BinaryZipper) = ()
+
+  type MinVersion = int16
+  type MaxVersion = int16
+
+  [<NoEquality;NoComparison>]
+  type ApiVersionsResponse =
+    struct
+      val errorCode : ErrorCode
+      val apiVersions : (ApiKey * MinVersion * MaxVersion)[]
+      new (ec,apiVersions) = { errorCode = ec ; apiVersions = apiVersions }
+    end
+    with
+      static member internal Read (_:ApiVersion, buf:BinaryZipper) =
+        let ec = buf.ReadInt16 ()
+        let apiVersions = buf.ReadArray (fun buf ->
+          let apiKey : ApiKey = enum<ApiKey> (int (buf.ReadInt16 ()))
+          let min = buf.ReadInt16 ()
+          let max = buf.ReadInt16 ()
+          apiKey,min,max)
+        ApiVersionsResponse(ec,apiVersions)
+        
+
   /// A Kafka request message.
   type RequestMessage =
     | Metadata of Metadata.Request
@@ -1415,6 +1410,7 @@ module Protocol =
     | LeaveGroup of LeaveGroupRequest
     | ListGroups of ListGroupsRequest
     | DescribeGroups of DescribeGroupsRequest
+    | ApiVersions of ApiVersionsRequest
   with
 
     static member internal size (ver:ApiVersion, x:RequestMessage) =
@@ -1432,6 +1428,7 @@ module Protocol =
       | LeaveGroup x -> LeaveGroupRequest.size x
       | ListGroups x -> ListGroupsRequest.size x
       | DescribeGroups x -> DescribeGroupsRequest.size x
+      | ApiVersions x -> ApiVersionsRequest.Size x
 
     static member internal Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
       match x with
@@ -1448,6 +1445,7 @@ module Protocol =
       | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
       | ListGroups x -> ListGroupsRequest.write x buf.Buffer |> ignore
       | DescribeGroups x -> DescribeGroupsRequest.write x buf.Buffer |> ignore
+      | ApiVersions x -> ApiVersionsRequest.Write (x,buf)
 
     member x.ApiKey =
       match x with
@@ -1464,6 +1462,7 @@ module Protocol =
       | LeaveGroup _ -> ApiKey.LeaveGroup
       | ListGroups _ -> ApiKey.ListGroups
       | DescribeGroups _ -> ApiKey.DescribeGroups
+      | ApiVersions _ -> ApiKey.ApiVersions
 
   /// A Kafka request envelope.
   type Request =
@@ -1508,6 +1507,7 @@ module Protocol =
     | LeaveGroupResponse of LeaveGroupResponse
     | ListGroupsResponse of ListGroupsResponse
     | DescribeGroupsResponse of DescribeGroupsResponse
+    | ApiVersionsResponse of ApiVersionsResponse
   with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
@@ -1536,7 +1536,9 @@ module Protocol =
         let x, _ = ListGroupsResponse.read buf.Buffer in (ResponseMessage.ListGroupsResponse x)
       | ApiKey.DescribeGroups ->
         let x, _ = DescribeGroupsResponse.read buf.Buffer in (ResponseMessage.DescribeGroupsResponse x)
-      | x -> failwith (sprintf "Unsupported ApiKey=%A" x)
+      | ApiKey.ApiVersions -> ApiVersionsResponse.Read (apiVer,buf) |> ResponseMessage.ApiVersionsResponse
+      | x -> 
+        failwith (sprintf "Unsupported ApiKey=%A" x)
 
   /// A Kafka response envelope.
   type Response =

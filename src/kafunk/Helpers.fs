@@ -84,6 +84,7 @@ module internal ResponseEx =
     static member internal toListGroups res = match res with ListGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()
+    static member internal toApiVersions res = match res with ApiVersionsResponse x -> x | _ -> wrongResponse ()
 
   type Broker with
     static member endpoint (b:Broker) =
@@ -315,6 +316,12 @@ module internal Printers =
   type SyncGroupResponse with
     static member Print (x:SyncGroupResponse) =
       sprintf "SyncGroupResponse|error_code=%i" x.errorCode
+
+  type ApiVersionsResponse with
+    static member Print (x:ApiVersionsResponse) =
+      sprintf "ApiVersionsResponse|ec=%i api_versions=[%s]" 
+                x.errorCode
+                (x.apiVersions |> Seq.map (fun (apiKey,_,v) -> sprintf "[api=%i ver=%i]" (int apiKey) v) |> String.concat " ; ")
 
   type RequestMessage with
     static member Print (x:RequestMessage) =

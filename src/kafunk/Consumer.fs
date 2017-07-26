@@ -593,7 +593,7 @@ module Consumer =
     let cfg = c.config
     let topic = cfg.topic
     let fetch = Kafka.fetch c.conn |> AsyncFunc.catch
-    let messageVer = Versions.fetchResMessage (Versions.byKey c.conn.Config.version ApiKey.Fetch)
+    let messageVer = MessageVersions.fetchResMessage (c.conn.ApiVersion ApiKey.Fetch)
     Group.tryAsync
       (state)
       (fun _ -> None)
