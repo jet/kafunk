@@ -174,3 +174,53 @@ let ``AsyncSeq.iterAsyncParallel should propagate exception`` () =
     | Failure _ -> ()
     | Success _ -> Assert.Fail ("error expected")
 
+[<Test>]
+let ``AsyncSeq.iterAsyncParallelThrottled should propagate handler exception`` () =
+  
+  let res =
+    AsyncSeq.init 100L id
+    |> AsyncSeq.iterAsyncParallelThrottled 10 (fun i -> async { if i = 50L then return failwith "oh no" else return () })
+    |> Async.Catch
+    |> (fun x -> Async.RunSynchronously (x, timeout = 10000))
+
+  match res with
+  | Failure _ -> ()
+  | Success _ -> Assert.Fail ("error expected") 
+
+[<Test>]
+let ``AsyncSeq.iterAsyncParallelThrottled should propagate sequence exception`` () =
+  
+  let res =
+    asyncSeq {
+      yield 1
+      yield 2
+      yield 3
+      failwith "oh no"
+    }
+    |> AsyncSeq.iterAsyncParallelThrottled 10 (async.Return >> Async.Ignore)
+    |> Async.Catch
+    |> (fun x -> Async.RunSynchronously (x, timeout = 10000))
+
+  match res with
+  | Failure _ -> ()
+  | Success _ -> Assert.Fail ("error expected")    
+
+
+[<Test>]
+let ``AsyncSeq.iterAsyncParallelThrottled should throttle`` () =
+  
+  let count = ref 0
+  let parallelism = 10
+
+  let res =
+    AsyncSeq.init 100L id
+    |> AsyncSeq.iterAsyncParallelThrottled parallelism (fun i -> async {
+      let c = Interlocked.Increment count
+      if c > parallelism then
+        return failwith "oh no"
+      do! Async.Sleep 10
+      Interlocked.Decrement count |> ignore
+      return () })
+    |> Async.RunSynchronously
+
+  ()

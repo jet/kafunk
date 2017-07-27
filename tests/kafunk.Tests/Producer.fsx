@@ -63,6 +63,7 @@ let producerCfg =
     batchSizeBytes = 2000000,
     batchLingerMs = 1000,
     compression = CompressionCodec.None
+    //maxInFlightRequests = 1
     )
 
 let producer =
