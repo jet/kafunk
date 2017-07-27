@@ -365,6 +365,10 @@ type ConsumerMessageSet =
     /// Returns the last offset in the message set.
     static member lastOffset (ms:ConsumerMessageSet) =
       MessageSet.lastOffset ms.messageSet
+
+    /// Returns the timestamp of the first message.
+    static member firstTimestamp (ms:ConsumerMessageSet) =
+      MessageSet.firstTimestamp ms.messageSet
     
     /// Returns the offset to commit when this message set has been consumed.
     static member commitOffset (ms:ConsumerMessageSet) =

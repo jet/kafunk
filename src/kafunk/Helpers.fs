@@ -9,7 +9,8 @@ module Message =
 
   let create value key attrs =
     // NB: the CRC is computed by the Protocol module during encoding
-    Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
+    //Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
+    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
 
 module MessageSet =
 
@@ -46,6 +47,16 @@ module MessageSet =
     else 
       failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
       
+  /// Returns the timestamp of the first message, if messages are available
+  /// and the message has a timestamp.
+  let firstTimestamp (ms:MessageSet) =
+    if ms.messages.Length = 0 then None
+    else
+      let m = ms.messages.[0]
+      if m.message.timestamp >= 0L then 
+        Some (DateTime.FromUnixMilliseconds m.message.timestamp)
+      else
+        None
 
 // -------------------------------------------------------------------------------------------------------------------------------------
 

@@ -47,7 +47,8 @@ let connCfg =
     //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
     //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
-    bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3
+    bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
+    version = Versions.V_0_10_1
     )
 
 let conn = Kafka.conn connCfg
@@ -161,7 +162,7 @@ let go = async {
                 if o' >= o then offsets.[prodRes.partition] <- o'
               else
                 offsets.[prodRes.partition] <- o'
-              Log.info "produce_result|p=%i o=%i count=%i" prodRes.partition prodRes.offset prodRes.count
+              //Log.info "produce_result|p=%i o=%i count=%i" prodRes.partition prodRes.offset prodRes.count
               return () })
             |> Async.parallelThrottledIgnore batchSize
           Interlocked.Add(&completed, int64 batchSize) |> ignore

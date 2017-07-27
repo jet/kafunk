@@ -37,7 +37,7 @@ let go = async {
     ConsumerConfig.create (
       groupId = group, 
       topic = topic, 
-      autoOffsetReset = AutoOffsetReset.StartFromTime Time.LatestOffset,
+      autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
       fetchMaxBytes = 1000000,
       fetchMinBytes = 1,
       fetchMaxWaitMs = 1000,
@@ -66,13 +66,14 @@ let go = async {
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     //do! Async.Sleep 30000
-    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
+    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
       ms.topic
       ms.partition
       (ms.messageSet.messages.Length)
       (ConsumerMessageSet.size ms)
       (ConsumerMessageSet.firstOffset ms)
       (ConsumerMessageSet.lastOffset ms)
+      (ConsumerMessageSet.firstTimestamp ms)
       (ms.highWatermarkOffset)
       (ConsumerMessageSet.lag ms) }
 
