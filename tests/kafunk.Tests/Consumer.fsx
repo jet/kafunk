@@ -5,7 +5,7 @@ open FSharp.Control
 open Kafunk
 open System
 
-//Log.MinLevel <- LogLevel.Trace
+Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -29,7 +29,9 @@ let go = async {
         [KafkaUri.parse host], 
         //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
-        requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy)
+        requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
+        version = Versions.V_0_10_1,
+        autoApiVersions = true)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
@@ -64,13 +66,14 @@ let go = async {
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     //do! Async.Sleep 30000
-    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i first_offset=%i last_offset=%i high_watermark_offset=%i lag=%i"
+    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
       ms.topic
       ms.partition
       (ms.messageSet.messages.Length)
       (ConsumerMessageSet.size ms)
       (ConsumerMessageSet.firstOffset ms)
       (ConsumerMessageSet.lastOffset ms)
+      (ConsumerMessageSet.firstTimestamp ms)
       (ms.highWatermarkOffset)
       (ConsumerMessageSet.lag ms) }
 

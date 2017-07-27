@@ -16,9 +16,6 @@ let inline flip f a b = f b a
 
 let inline diag a = a,a
 
-let tryDispose (d:#System.IDisposable) = 
-  try d.Dispose() finally ()
-
 /// CompilationRepresentationAttribute
 type Compile = CompilationRepresentationAttribute
   
@@ -26,10 +23,27 @@ type Compile = CompilationRepresentationAttribute
 let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
 
 
+/// Operations on IDisposable.
+module Disposable =
+  
+  let tryDispose (d:#System.IDisposable) = 
+    try d.Dispose() finally ()
+
+  let ofFun (f:unit -> unit) = 
+    { new IDisposable with member __.Dispose () = f () }
+
+  let ofFuns (fs:(unit -> unit) seq) =
+    ofFun (fun () -> for f in fs do f ())
+
+  let ofDisposables (ds:#IDisposable seq) =
+    ofFun (fun () -> for d in ds do d.Dispose())
+
 
 let UnixEpoch = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
 
 type DateTime with
+  static member FromUnixMilliseconds (ms:int64) =
+    UnixEpoch + TimeSpan.FromMilliseconds (float ms)
   static member UtcNowUnixMilliseconds = int64 (DateTime.UtcNow - UnixEpoch).TotalMilliseconds
 
 type TimeSpan with
@@ -274,11 +288,25 @@ module Seq =
 [<Compile(Module)>]
 module Dict =
 
-  let tryGet k (d:#IDictionary<_,_>) =
+  let empty<'a, 'b when 'a : equality> : Dictionary<'a, 'b> = Dictionary<_,_>()
+
+  let tryGet k (d:#IReadOnlyDictionary<_,_>) =
     let mutable v = Unchecked.defaultof<_>
     if d.TryGetValue(k, &v) then Some v
     else None
-    
+
+  let ofSeq (xs:seq<'a * 'b>) : Dictionary<'a, 'b> =
+    let d = Dictionary<'a, 'b>()
+    for (a,b) in xs do
+      d.Add (a,b)
+    d
+  
+  let ofMap (m:Map<'a, 'b>) : Dictionary<'a, 'b> =
+    let d = Dictionary<'a, 'b>()
+    for kvp in m do
+      d.Add (kvp.Key, kvp.Value)
+    d
+
     
 [<Compile(Module)>]
 module Map =
@@ -391,6 +419,18 @@ module Result =
     | Some e -> Choice2Of2 e
     | None -> Choice1Of2 (oks.ToArray())
 
+  let sequence (xs:seq<Result<'b, 'e>>) : Result<'b[], 'e> =
+    use en = xs.GetEnumerator()
+    let oks = ResizeArray<_>()
+    let err = ref None
+    while en.MoveNext() && err.Value.IsNone do
+      match en.Current with
+      | Choice1Of2 b -> oks.Add b
+      | Choice2Of2 e -> err := Some e
+    match !err with
+    | Some e -> Choice2Of2 e
+    | None -> Choice1Of2 (oks.ToArray())
+
   /// Returns a succesful result or raises an exception in case of failure.
   let throw (r:Result<'a, #exn>) : 'a =
     match r with
@@ -460,6 +500,7 @@ module Observable =
   open System
   open System.Threading
   open System.Collections.Concurrent
+  open System.Runtime.ExceptionServices
 
   let private disposable dispose = 
     { new IDisposable with member __.Dispose () = dispose () }
@@ -578,6 +619,27 @@ module Observable =
       let batchSubs = batches.Subscribe(observer.OnNext)
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+
+  /// Union type that represents different messages that can be sent to the
+  /// IObserver interface. The IObserver type is equivalent to a type that has
+  /// just OnNext method that gets 'ObservableUpdate' as an argument.
+  type internal ObservableUpdate<'T> = 
+      | Next of 'T
+      | Error of ExceptionDispatchInfo
+      | Completed
+
+
+  /// Turns observable into an observable that only calls OnNext method of the
+  /// observer, but gives it a discriminated union that represents different
+  /// kinds of events (error, next, completed)
+  let asUpdates (source:IObservable<'T>) = 
+    { new IObservable<_> with
+        member x.Subscribe(observer) =
+          source.Subscribe
+            ({ new IObserver<_> with
+                member x.OnNext(v) = observer.OnNext(Next v)
+                member x.OnCompleted() = observer.OnNext(Completed) 
+                member x.OnError(e) = observer.OnNext(Error (ExceptionDispatchInfo.Capture e)) }) }
 
 
   

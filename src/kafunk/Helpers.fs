@@ -9,7 +9,8 @@ module Message =
 
   let create value key attrs =
     // NB: the CRC is computed by the Protocol module during encoding
-    Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
+    //Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
+    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
 
 module MessageSet =
 
@@ -46,6 +47,16 @@ module MessageSet =
     else 
       failwithf "invalid offset computation last_offset=%i hwm=%i" lastOffset hwm
       
+  /// Returns the timestamp of the first message, if messages are available
+  /// and the message has a timestamp.
+  let firstTimestamp (ms:MessageSet) =
+    if ms.messages.Length = 0 then None
+    else
+      let m = ms.messages.[0]
+      if m.message.timestamp >= 0L then 
+        Some (DateTime.FromUnixMilliseconds m.message.timestamp)
+      else
+        None
 
 // -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -84,6 +95,7 @@ module internal ResponseEx =
     static member internal toListGroups res = match res with ListGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toDescribeGroups res = match res with DescribeGroupsResponse x -> x | _ -> wrongResponse ()
     static member internal toMetadata res = match res with MetadataResponse x -> x | _ -> wrongResponse ()
+    static member internal toApiVersions res = match res with ApiVersionsResponse x -> x | _ -> wrongResponse ()
 
   type Broker with
     static member endpoint (b:Broker) =
@@ -315,6 +327,12 @@ module internal Printers =
   type SyncGroupResponse with
     static member Print (x:SyncGroupResponse) =
       sprintf "SyncGroupResponse|error_code=%i" x.errorCode
+
+  type ApiVersionsResponse with
+    static member Print (x:ApiVersionsResponse) =
+      sprintf "ApiVersionsResponse|ec=%i api_versions=[%s]" 
+                x.errorCode
+                (x.apiVersions |> Seq.map (fun (apiKey,_,v) -> sprintf "[api=%i ver=%i]" (int apiKey) v) |> String.concat " ; ")
 
   type RequestMessage with
     static member Print (x:RequestMessage) =

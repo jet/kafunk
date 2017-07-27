@@ -236,6 +236,24 @@ module AsyncSeq =
       replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
       |> AsyncSeq.iterAsync id }
 
+  let iterAsyncParallelThrottled (parallelism:int) (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
+    use mb = Mb.create ()
+    use sm = new SemaphoreSlim(parallelism)
+    let! err =
+      s 
+      |> AsyncSeq.iterAsync (fun a -> async {
+        //do sm.Wait ()
+        do! sm.WaitAsync () |> Async.awaitTaskUnitCancellationAsError
+        let! b = Async.StartChild (async {
+          try do! f a
+          finally sm.Release () |> ignore })
+        mb.Post (Some b) })
+      |> Async.map (fun _ -> mb.Post None)
+      |> Async.StartChildAsTask
+    return!
+      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
+      |> AsyncSeq.iterAsync id }
+
   // TODO: refactor to a more generic condition
   let bufferByConditionAndTime (cond:IBoundedMbCond<'T>) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
     if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"

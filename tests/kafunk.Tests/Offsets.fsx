@@ -3,15 +3,15 @@
 
 open FSharp.Control
 open Kafunk
+open Refs
 
 let Log = Log.create __SOURCE_FILE__
 
-let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
-
-let host = argiDefault 1 "localhost:9092"
+let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
 
-let conn = Kafka.connHost host
+let connCfg = KafkaConfig.create ([KafkaUri.parse host], version=Protocol.Versions.V_0_10_1)
+let conn = Kafka.conn connCfg
 
 //let offsets = 
 //  Offsets.offsets conn topic [] [ Time.EarliestOffset ; Time.LatestOffset ] 1

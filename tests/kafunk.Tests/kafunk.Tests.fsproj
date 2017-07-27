@@ -88,6 +88,7 @@
     <None Include="MigrateZkOffsets.fsx" />
     <None Include="AsyncTest.fsx" />
     <None Include="MVar.fsx" />
+    <None Include="ApiVersions.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>

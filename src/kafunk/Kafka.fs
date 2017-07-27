@@ -162,6 +162,7 @@ type internal RouteType =
       | RequestMessage.OffsetFetch r -> GroupRoute r.consumerGroup
       | RequestMessage.Produce r -> TopicRoute (r.topics |> Array.map (fun x -> x.topic))
       | RequestMessage.SyncGroup r -> GroupRoute r.groupId
+      | RequestMessage.ApiVersions _ -> BootstrapRoute
 
 
 /// A route is a result where success is a set of request and host pairs
@@ -259,6 +260,7 @@ module internal Routing =
       | GroupCoordinator _ -> bootstrapRoute req
       | DescribeGroups _ -> bootstrapRoute req
       | ListGroups _req -> bootstrapRoute req
+      | ApiVersions _req -> bootstrapRoute req
       
       | Fetch req -> req |> partitionFetchReq state |> topicRoute
       | Offset req -> req |> partitionOffsetReq state |> topicRoute
@@ -409,6 +411,9 @@ type private RetryAction =
       | ResponseMessage.ProduceResponse _ ->
         None
 
+      | ResponseMessage.ApiVersionsResponse r ->
+        RetryAction.errorRetryAction r.errorCode
+        |> Option.map (fun a -> r.errorCode,a)
 
 
 /// Operations for parsing Kafka URIs.
@@ -441,6 +446,10 @@ type KafkaConfig = {
   /// The Kafka server version.
   version : Version
 
+  /// Indicates whether API versions are automatically determined based on
+  /// the ApiVersionsResponse.
+  autoApiVersions : bool
+
   /// The bootstrap brokers to attempt connection to.
   bootstrapServers : Uri list
   
@@ -465,6 +474,9 @@ type KafkaConfig = {
   /// The default Kafka server version = 0.9.0.
   static member DefaultVersion = Version.Parse "0.9.0"
 
+  /// The default setting for supporting auto API versions.
+  static member DefaultAutoApiVersions = false
+
   /// The default broker channel configuration.
   static member DefaultChanConfig = ChanConfig.create ()
 
@@ -478,8 +490,10 @@ type KafkaConfig = {
   static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 50
 
   /// Creates a Kafka configuration object.
-  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, ?version) =
+  static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, 
+                        ?version, ?autoApiVersions) =
     { version = defaultArg version KafkaConfig.DefaultVersion
+      autoApiVersions = defaultArg autoApiVersions KafkaConfig.DefaultAutoApiVersions
       bootstrapServers = bootstrapServers
       bootstrapConnectRetryPolicy = defaultArg bootstrapConnectRetryPolicy KafkaConfig.DefaultBootstrapConnectRetryPolicy
       requestRetryPolicy = defaultArg requestRetryPolicy KafkaConfig.DefaultRequestRetryPolicy
@@ -500,7 +514,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
   
-  let stateCell : MVar<ClusterState> = MVar.createFull ClusterState.Zero
+  let apiVersion = ref (Versions.byVersion cfg.version)
+  let stateCell : MVar<ClusterState> = MVar.createFull (ClusterState.Zero)
   let cts = new CancellationTokenSource()
 
   // NB: The presence of the critical boolean flag is unfortunate but required to
@@ -542,7 +557,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
       return Success ch
     | _ ->
       try
-        let! ch = Chan.connect (cfg.connId, cfg.version, cfg.tcpConfig, cfg.clientId) ep
+        let! ch = Chan.connect (cfg.connId, !apiVersion, cfg.tcpConfig, cfg.clientId) ep
 // NB: can't publish a remove channel message, because no where to publish to.
 // A message queue could work.
 //        Chan.task ch
@@ -842,7 +857,15 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// Connects to a broker from the bootstrap list.
   member internal __.Connect () = async {
     let! _ = getAndApplyBootstrap
+    if cfg.autoApiVersions then      
+      let! res = __.Send (RequestMessage.ApiVersions (ApiVersionsRequest()))
+      let res = res |> ResponseMessage.toApiVersions
+      Log.info "discovered_api_versions|conn_id=%s %s" cfg.connId (ApiVersionsResponse.Print res)
+      apiVersion := Versions.byApiVersionResponse res
     return () }
+
+  member internal __.ApiVersion (apiKey:ApiKey) : ApiVersion =
+    !apiVersion apiKey
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
     let! state = MVar.get stateCell
@@ -931,6 +954,8 @@ module Kafka =
   let describeGroups (c:KafkaConn) : DescribeGroupsRequest -> Async<DescribeGroupsResponse> =
     AsyncFunc.dimap RequestMessage.DescribeGroups ResponseMessage.toDescribeGroups c.Send
 
+  let apiVersions (c:KafkaConn) : Async<ApiVersionsResponse> =
+    c.Send (RequestMessage.ApiVersions (ApiVersionsRequest())) |> Async.map ResponseMessage.toApiVersions
   
 
   

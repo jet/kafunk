@@ -145,6 +145,10 @@ type ProducerConfig = {
   /// If set to 0, no batching will be performed.
   batchLingerMs : int
 
+  /// The maximum number of in-flight produce requests per broker connection.
+  /// If this value is greater than 1, message ordering cannot be guaranteed.
+  maxInFlightRequests : int
+
 } with
 
   /// The default required acks = RequiredAcks.AllInSync.
@@ -162,9 +166,12 @@ type ProducerConfig = {
   /// The default per-broker, produce request linger time in ms = 1000.
   static member DefaultBatchLingerMs = 1000
 
+//  /// The default maximum number of in-flight requests per broker connection.
+//  static member DefaultMaxInFlightRequests = 1
+
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:CompressionCodec,
-                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs) =
+                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs (*,?maxInFlightRequests*)) =
     {
       topic = topic
       partitioner = partition
@@ -174,10 +181,9 @@ type ProducerConfig = {
       bufferSizeBytes = defaultArg bufferSizeBytes ProducerConfig.DefaultBufferSizeBytes
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
+      //maxInFlightRequests = defaultArg maxInFlightRequests ProducerConfig.DefaultMaxInFlightRequests
+      maxInFlightRequests = 1
     }
-
-  static member internal messageVersion (connVersion:Version) =
-    Versions.produceReqMessage (Versions.byKey connVersion ApiKey.Produce)
 
 
 /// Producer state corresponding to the state of a cluster.
@@ -420,7 +426,7 @@ module Producer =
 
     let! routes = getProducerRoutes conn cfg.topic
     let partitions = routes.partitions
-    let messageVer = ProducerConfig.messageVersion conn.Config.version
+    let messageVer = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
 
     let! ct' = Async.CancellationToken
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
@@ -449,12 +455,17 @@ module Producer =
           (buf.Add >> async.Return, flush, produceStream)
       let batchCond =
         BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.batchSizeBytes)
-      let sendProcess =
+      let produceStream =
         produceStream
         |> AsyncSeq.toObservable
         |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
         |> AsyncSeq.ofObservableBuffered
-        |> AsyncSeq.iterAsync sendBatch
+      let sendProcess =
+        if cfg.maxInFlightRequests > 1 then        
+          produceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
+          //produceStream |> AsyncSeq.iterAsyncParallel sendBatch
+        else
+          produceStream |> AsyncSeq.iterAsync sendBatch
       Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i"
         cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes
       sendProcess

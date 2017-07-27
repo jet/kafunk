@@ -150,7 +150,7 @@ module internal Chan =
   /// Creates a fault-tolerant channel to the specified endpoint.
   /// Recoverable failures are retried, otherwise escalated.
   /// Only a single channel per endpoint is needed.
-  let connect (connId:string, version:System.Version, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
+  let connect (connId:string, apiVersion:ApiKey -> ApiVersion, config:ChanConfig, clientId:ClientId) (ep:EndPoint) : Async<Chan> = async {
     
     let conn (ep:EndPoint) = async {
       let ipep = EndPoint.endpoint ep
@@ -226,7 +226,7 @@ module internal Chan =
     /// Encodes the request into a session layer request, keeping ApiKey as state.
     let encode (req:RequestMessage, correlationId:CorrelationId) =
       let apiKey = req.ApiKey
-      let apiVer = Versions.byKey version apiKey
+      let apiVer = apiVersion apiKey
       let req = Request(apiVer, correlationId, clientId, req)
       let size = Request.size (apiVer, req)
       let buf = bufferPool.Alloc size
