@@ -31,7 +31,7 @@ module internal Stream =
       use compStream = makeStream inputStream
       compStream.CopyTo(outputStream)
     let buf = Binary.Segment(outputStream.GetBuffer(), 0, int outputStream.Length)
-    MessageSet.Read (messageVer, 0, 0s, buf.Count, BinaryZipper(buf))
+    MessageSet.Read (messageVer, 0, 0s, buf.Count, true, BinaryZipper(buf))
 
 [<Compile(Module)>]
 module GZip =
@@ -151,7 +151,7 @@ module Snappy =
     
   let decompress (messageVer:ApiVersion) (m:Message) =
     let buf = CompressedMessage.decompress m.value 
-    MessageSet.Read (messageVer, 0, 0s, buf.Count, BinaryZipper(buf))
+    MessageSet.Read (messageVer, 0, 0s, buf.Count, true, BinaryZipper(buf))
   
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with

@@ -434,7 +434,9 @@ module Protocol =
         buf.WriteInt32 x.messageSize
         Message.Write (messageVer, x.message, buf)
 
-    static member internal Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
+    // NB: skipTooLarge=true is for scenarios where decompression is involved and a message set is being decoded from an individual message
+    // which was itself too small.
+    static member internal Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, skipTooLarge:bool, buf:BinaryZipper) =
       let mutable consumed = 0
       let arr = ResizeArray<_>()
       while consumed < messageSetSize && buf.Buffer.Count > 0 do
@@ -445,7 +447,20 @@ module Protocol =
           let (messageSize:MessageSize) = buf.ReadInt32 ()
           let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
           if messageSize > messageSetSize then
-            raise (MessageTooBigException(sprintf "partition=%i offset=%i message_set_size=%i message_size=%i" partition offset messageSetSize messageSize))
+            let errMsg = sprintf "partition=%i offset=%i message_set_size=%i message_size=%i consumed_bytes=%i consumed_count=%i" 
+                                    partition offset messageSetSize messageSize consumed arr.Count
+            if not skipTooLarge then
+              raise (MessageTooBigException(errMsg))
+            else
+//              let payload = Binary.toString buf.Buffer
+//              printfn "|WARN|MessageTooBig|%s" errMsg
+//              printfn "|WARN|MessageTooBig|payload=%s" payload
+//              try
+//                let message = Message.Read (messageVer,buf)
+//                printfn "|WARN|MessageTooBig|payload=%s" (Binary.toString message.value)
+//              with ex ->
+//                printfn "ERROR DECODING MESSAGE|%O" ex
+              ()
           try
             if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
               let message = Message.Read (messageVer,buf)
@@ -740,7 +755,7 @@ module Protocol =
           let errorCode = buf.ReadInt16 ()
           let hwo = buf.ReadInt64 ()
           let mss = buf.ReadInt32 ()
-          let ms = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,mss,buf)
+          let ms = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,mss,false,buf)
           ps.[j] <-  partition, errorCode, hwo, mss, ms
         topics.[i] <- (t,ps)
       let res = FetchResponse(throttleTime, topics)
