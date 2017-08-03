@@ -1,3 +1,7 @@
+### 0.1.4 - 03.08.2017
+
+* Fixed `FetchResponse` `MessageTooBigException` when a message set has been compressed. (#160)
+
 ### 0.1.4-beta - 25.07.2017
 
 * Fixed v0.10.1 protocol bug for `Offset` API.
