@@ -390,6 +390,20 @@ type ConsumerMessageSet =
     static member messages (ms:ConsumerMessageSet) =
       ms.messageSet.messages |> Array.map (fun x -> x.message)
 
+///Range that contains start offsets and end offsets used by consume range
+type OffsetRange = 
+  { startOS : Offset []
+    endOS : Offset [] }
+  member this.Empty = Seq.fold (&&) true (Seq.zip this.startOS this.endOS |> Seq.map (fun (aa, bb) -> aa = bb))
+  member this.Start = this.startOS |> Array.mapi (fun p o -> p, o)
+  member this.End = this.endOS |> Array.mapi (fun p o -> p, o)
+  member this.WaitParitions = 
+    Seq.zip this.startOS this.endOS
+    |> Seq.fold (fun (i, diff) (aa, bb) -> 
+          if aa = bb then (i + 1, diff)
+          else (i + 1, i :: diff)) (0, [])
+    |> snd
+    |> List.toArray
 
 /// High-level consumer API.
 [<Compile(Module)>]
@@ -896,6 +910,70 @@ module Consumer =
             do! Offsets.flushPeriodicCommit commitQueue },
           commitCurrentOffsetsOnGroupJoinProc)
         |> Async.Ignore }
+
+
+  /// Starts consumption from the start offset in the given range
+  /// Will stop consuming for each partition once it reaches the max boundary offset
+  /// Will stop and return the messages WITHIN the range if it overconsumes
+  let consumeRange (c:Consumer) (range:OffsetRange) : Async<seq<Message>> = 
+    async { 
+      let getMsgFromRg (msgs : seq<Partition * Message [] * Map<Partition, Offset>>) range =
+        msgs
+          |> Seq.map (fun (p, ms, _) -> p, ms)
+          |> Seq.groupBy (fst)
+          |> Seq.map (fun (p, u) -> 
+                let num = (range.endOS.[p]) - (range.startOS.[p])
+                u
+                |> Seq.map (snd)
+                |> Array.concat
+                //filter them on end offsets
+                |> Seq.take (int32 (num)))
+          |> Seq.concat
+
+      let isSubsetOf (arr1 : 'a []) (arr2 : 'a []) : bool = 
+        let s1 = Set.ofArray arr1
+        let s2 = Set.ofArray arr2
+        s1.IsSubsetOf s2
+
+      let cfg = c.config
+      let topic = cfg.topic
+      match range.Empty with
+      | true -> 
+        Log.info "Empty Range| conn_id=%s group_id=%s topic=%s " c.conn.Config.connId cfg.groupId  topic
+        return Seq.empty<Message>
+      | false -> 
+        do! commitOffsets c range.Start
+        let endOfTopic : Map<Partition, Offset> = range.End |> Map.ofArray
+
+        //Consumer.streamRange take in end offset
+        let t = 
+          (Map.empty, stream c)
+          //(f: s -> a -> A<'b>) -> s -> AS<'a> -> AS<'b>
+          ||> AsyncSeq.threadStateAsync (fun observedOffsets (_, ms) -> 
+                async { 
+                  let lastOs = ConsumerMessageSet.lastOffset ms
+                  let msgs = ConsumerMessageSet.messages ms
+                  //type U = P*Message[]*state
+                  let state = observedOffsets |> Map.add ms.partition lastOs
+                  return ((ms.partition, msgs, state), state)
+                })
+          |> AsyncSeq.takeWhileInclusive (fun (_, _, observedOffsets) -> 
+               let reached = 
+                 observedOffsets
+                 |> Map.toSeq
+                 |> Seq.choose (fun (p, o') -> 
+                      match endOfTopic |> Map.tryFind p with
+                      //p = observed partition
+                      //o' = observed offset
+                      //o = end offset
+                      | Some o when o' >= (o - 1L) -> Some p
+                      | _ -> None)
+                 |> Seq.toArray
+               //printfn "reached length %O" reached.Length
+               not (isSubsetOf range.WaitParitions reached))
+          |> AsyncSeq.toList
+        //printfn "cp: %O fetched msgs: %A" cp t
+        return getMsgFromRg t range }
 
   /// Closes the consumer and leaves the consumer group.
   /// This causes all underlying streams to complete.
