@@ -315,3 +315,26 @@ module AsyncSeq =
       finally 
          // Cancel on early exit 
          cts.Cancel() }
+
+  let takeWhileInclusive (f : 'a -> bool) (s : AsyncSeq<'a>) : AsyncSeq<'a> = 
+    { new IAsyncEnumerable<'a> with
+        member __.GetEnumerator() = 
+          let en = s.GetEnumerator()
+          let fin = ref false
+          { new IAsyncEnumerator<'a> with
+                
+              member __.MoveNext() = 
+                async { 
+                  if !fin then return None
+                  else 
+                    let! next = en.MoveNext()
+                    match next with
+                    | None -> return None
+                    | Some a -> 
+                      if f a then return Some a
+                      else 
+                        fin := true
+                        return Some a
+                }
+                
+              member __.Dispose() = en.Dispose() } }

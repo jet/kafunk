@@ -390,7 +390,6 @@ type ConsumerMessageSet =
     static member messages (ms:ConsumerMessageSet) =
       ms.messageSet.messages |> Array.map (fun x -> x.message)
 
-
 /// High-level consumer API.
 [<Compile(Module)>]
 module Consumer =
@@ -896,6 +895,75 @@ module Consumer =
             do! Offsets.flushPeriodicCommit commitQueue },
           commitCurrentOffsetsOnGroupJoinProc)
         |> Async.Ignore }
+
+
+  /// Starts consumption from the start offset in the given range
+  /// Will stop consuming for each partition once it reaches the max boundary offset
+  /// Will stop and return the messages WITHIN the range if it overconsumes
+  let streamRange (c:Consumer) (startOs:Map<Partition,Offset>) (endOs:Map<Partition,Offset>) : Async<Message[]> = 
+    async { 
+      let empty = Seq.fold (&&) true (Seq.zip startOs endOs |> Seq.map (fun (aa, bb) -> aa = bb))
+      let waitPartitions = 
+         Seq.zip startOs endOs
+        |> Seq.fold (fun (i, diff) (aa, bb) -> 
+          if aa = bb then (i + 1, diff)
+          else (i + 1, i :: diff)) (0, [])
+        |> snd
+        |> List.toArray
+      let getMsgFromRg (msgs : seq<Partition * Message [] * Map<Partition, Offset>>) =
+        msgs
+        |> Seq.groupBy (fun (p,_,_) -> p)
+        |> Seq.fold (fun s (p, u) -> 
+          let num = (endOs.[p]) - (startOs.[p])
+          let tail = 
+            u
+            |> Seq.map (fun (_,m,_) -> m)
+            |> Array.concat
+            //filter them on end offsets
+            |> Seq.take (int32 (num))
+          Seq.concat [s; tail]) Seq.empty<Message>
+        |> Seq.toArray        
+
+      let isSubsetOf (arr1 : 'a []) (arr2 : 'a []) : bool = 
+        let s1 = Set.ofArray arr1
+        let s2 = Set.ofArray arr2
+        s1.IsSubsetOf s2
+
+      let cfg = c.config
+      let topic = cfg.topic
+      match empty with
+      | true -> 
+        Log.info "Empty Range| conn_id=%s group_id=%s topic=%s " c.conn.Config.connId cfg.groupId  topic
+        return Array.empty<Message>
+      | false -> 
+        do! commitOffsets c (startOs |> Map.toArray)
+
+        //Consumer.streamRange take in end offset
+        let t = 
+          (Map.empty, stream c)
+          //(f: s -> a -> A<'b>) -> s -> AS<'a> -> AS<'b>
+          ||> AsyncSeq.threadStateAsync (fun observedOffsets (_, ms) -> 
+            async { 
+              let lastOs = ConsumerMessageSet.lastOffset ms
+              let msgs = ConsumerMessageSet.messages ms
+              let state = observedOffsets |> Map.add ms.partition lastOs
+              return ((ms.partition, msgs, state), state)
+            })
+          |> AsyncSeq.takeWhileInclusive (fun (_, _, observedOffsets) -> 
+            let reached = 
+              observedOffsets
+              |> Map.toSeq
+              |> Seq.choose (fun (p, o') -> 
+                  match endOs |> Map.tryFind p with
+                  //p = observed partition
+                  //o' = observed offset
+                  //o = end offset
+                  | Some o when o' >= (o - 1L) -> Some p
+                  | _ -> None)
+              |> Seq.toArray
+            not (isSubsetOf waitPartitions reached))
+          |> AsyncSeq.toList
+        return getMsgFromRg t }
 
   /// Closes the consumer and leaves the consumer group.
   /// This causes all underlying streams to complete.
