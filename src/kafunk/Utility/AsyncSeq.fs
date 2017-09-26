@@ -188,72 +188,6 @@ module AsyncSeq =
   let sequenceResultList (s:AsyncSeq<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
     traverseResultList id s
 
-  let replicateUntilNoneAsync (next:Async<'a option>) : AsyncSeq<'a> =
-    AsyncSeq.unfoldAsync 
-      (fun () -> next |> Async.map (Option.map (fun a -> a,()))) 
-      ()
-
-  let private peekTask (f:'a -> 'b) (t:Task<'a>) (a:Async<'b>) : Async<'b> = async {
-    if t.IsCompleted then 
-      return f t.Result
-    else return! a }
-
-  let private peekTaskError (t:Task<_>) (a:Async<'b>) : Async<'b> = async {
-    if t.IsFaulted then 
-      return raise t.Exception
-    else return! a }
-
-  let private chooseTaskAsTask (t:Task<'a>) (a:Async<'a>) = async {
-    let! a = Async.StartChildAsTask a
-    return Task.WhenAny (t, a) |> Task.join }
-
-  let private chooseTask (t:Task<'a>) (a:Async<'a>) : Async<'a> =
-    chooseTaskAsTask t a |> Async.bind Async.awaitTaskCancellationAsError
-
-  let mapAsyncParallel (f:'a -> Async<'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = asyncSeq {
-    use mb = Mb.create ()
-    let! err =
-      s 
-      |> AsyncSeq.iterAsync (fun a -> async {
-        let! b = Async.StartChild (f a)
-        mb.Post (Some b) })
-      |> Async.map (fun _ -> mb.Post None)
-      |> Async.StartChildAsTask
-    yield! 
-      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
-      |> AsyncSeq.mapAsync id }
-
-  let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
-    use mb = Mb.create ()
-    let! err =
-      s 
-      |> AsyncSeq.iterAsync (fun a -> async {
-        let! b = Async.StartChild (f a)
-        mb.Post (Some b) })
-      |> Async.map (fun _ -> mb.Post None)
-      |> Async.StartChildAsTask
-    return!
-      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
-      |> AsyncSeq.iterAsync id }
-
-  let iterAsyncParallelThrottled (parallelism:int) (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
-    use mb = Mb.create ()
-    use sm = new SemaphoreSlim(parallelism)
-    let! err =
-      s 
-      |> AsyncSeq.iterAsync (fun a -> async {
-        //do sm.Wait ()
-        do! sm.WaitAsync () |> Async.awaitTaskUnitCancellationAsError
-        let! b = Async.StartChild (async {
-          try do! f a
-          finally sm.Release () |> ignore })
-        mb.Post (Some b) })
-      |> Async.map (fun _ -> mb.Post None)
-      |> Async.StartChildAsTask
-    return!
-      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
-      |> AsyncSeq.iterAsync id }
-
   // TODO: refactor to a more generic condition
   let bufferByConditionAndTime (cond:IBoundedMbCond<'T>) (timeoutMs:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
     if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
@@ -315,26 +249,3 @@ module AsyncSeq =
       finally 
          // Cancel on early exit 
          cts.Cancel() }
-
-  let takeWhileInclusive (f : 'a -> bool) (s : AsyncSeq<'a>) : AsyncSeq<'a> = 
-    { new IAsyncEnumerable<'a> with
-        member __.GetEnumerator() = 
-          let en = s.GetEnumerator()
-          let fin = ref false
-          { new IAsyncEnumerator<'a> with
-                
-              member __.MoveNext() = 
-                async { 
-                  if !fin then return None
-                  else 
-                    let! next = en.MoveNext()
-                    match next with
-                    | None -> return None
-                    | Some a -> 
-                      if f a then return Some a
-                      else 
-                        fin := true
-                        return Some a
-                }
-                
-              member __.Dispose() = en.Dispose() } }

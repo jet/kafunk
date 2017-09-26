@@ -1,5 +1,5 @@
 source https://api.nuget.org/v3/index.json
-nuget FSharp.Control.AsyncSeq
+nuget FSharp.Control.AsyncSeq 2.0.13
 nuget Snappy.NET
 
 group Build
