@@ -62,6 +62,8 @@ module Option =
   
   let getOr (defaultValue:'a) = function Some a -> a | None -> defaultValue
 
+  let getOrLazy (f:unit -> 'a) = function Some a -> a | None -> f ()
+
 
 module Choice =
 

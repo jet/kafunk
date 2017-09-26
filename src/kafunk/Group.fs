@@ -6,6 +6,7 @@ open System.Threading
 open System.Threading.Tasks
 open Kafunk
 
+
 /// Internal state corresponding to a single generation of the group protocol.
 [<NoEquality;NoComparison;AutoSerializable(false)>]
 type GroupMemberState = {
@@ -181,8 +182,7 @@ module Group =
     let groupSyncErrorRetryTimeoutMs = 1000
 
     /// Attempts the initial group handshake.
-    let join (prevMemberId:MemberId option) = async {
-      let! _ = conn.GetGroupCoordinator groupId
+    let join (prevMemberId:MemberId option) = async {      
       let req = JoinGroup.Request(groupId, sessionTimeout, rebalanceTimeout, defaultArg prevMemberId "", protocolType, GroupProtocols(protocols))
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
@@ -224,12 +224,12 @@ module Group =
         return failwithf "unknown syncgroup error_code=%i" res.errorCode }
     
     /// Starts the heartbeating process to remain in the group.
-    let hearbeat (joinGroupRes:JoinGroup.Response, syncGroupRes:SyncGroupResponse) = async {
+    let hearbeat (groupCoord:Broker, joinGroupRes:JoinGroup.Response, syncGroupRes:SyncGroupResponse) = async {
 
       let heartbeatSleepMs = cfg.sessionTimeout / cfg.heartbeatFrequency
 
-      Log.info "starting_heartbeat_process|conn_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i" 
-        conn.Config.connId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs
+      Log.info "starting_heartbeat_process|conn_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i group_coord=%s" 
+        conn.Config.connId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs groupCoord.host
 
       let state =
         let closed = IVar.create ()
@@ -269,16 +269,16 @@ module Group =
                 return true
               | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode 
               | ErrorCode.NotCoordinatorForGroupCode ->
-                Log.warn "heartbeat_error|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i heartbeat_count=%i" 
-                  conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count
+                Log.warn "heartbeat_error|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i heartbeat_count=%i group_coord=%s" 
+                  conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count groupCoord.host
                 do! leaveAndRejoin gm state res.errorCode
                 return false
               | ec ->
                 return failwithf "unknown_heartbeat_error|conn_id=%s error_code=%i" 
                   conn.Config.connId ec
             | Failure ex ->
-              Log.warn "heartbeat_exception|conn_id=%s group_id=%s generation_id=%i error=\"%O\"" 
-                conn.Config.connId gm.config.groupId state.state.generationId ex
+              Log.warn "heartbeat_exception|conn_id=%s group_id=%s generation_id=%i group_coord=%s error=\"%O\"" 
+                conn.Config.connId gm.config.groupId state.state.generationId groupCoord.host ex
               do! leaveInternal gm state
               return false })
 
@@ -300,13 +300,15 @@ module Group =
     /// Joins a group, syncs the group, starts the heartbeat process.
     let rec joinSyncHeartbeat (prevMemberId:MemberId option, prevErrorCode:ErrorCode option) = async {
       
+      let! groupCoord = conn.GetGroupCoordinator groupId
+      
       match prevMemberId with
       | None -> 
-        Log.info "joining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A" 
-          conn.Config.connId groupId protocolType protocolNames
+        Log.info "joining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A group_coord=%s" 
+          conn.Config.connId groupId protocolType protocolNames groupCoord.host
       | Some prevMemberId -> 
-        Log.info "rejoining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A member_id=%s"
-          conn.Config.connId groupId protocolType protocolNames prevMemberId
+        Log.info "rejoining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A member_id=%s group_coord=%s"
+          conn.Config.connId groupId protocolType protocolNames prevMemberId groupCoord.host
 
       let prevMemberId = 
         match prevErrorCode with
@@ -331,7 +333,7 @@ module Group =
           let! syncGroupRes = syncGroupLeader joinGroupRes
           match syncGroupRes with
           | Success syncGroupRes ->
-            return! hearbeat (joinGroupRes,syncGroupRes)
+            return! hearbeat (groupCoord,joinGroupRes,syncGroupRes)
           
           | Failure ec ->
             Log.warn "sync_group_error|conn_id=%s group_id=%s error_code=%i" 
@@ -350,7 +352,7 @@ module Group =
           let! syncGroupRes = syncGroupFollower joinGroupRes
           match syncGroupRes with
           | Success syncGroupRes ->
-            return! hearbeat (joinGroupRes,syncGroupRes)
+            return! hearbeat (groupCoord,joinGroupRes,syncGroupRes)
           
           | Failure ec ->
             Log.warn "sync_group_error|conn_id=%s group_id=%s error_code=%i" 

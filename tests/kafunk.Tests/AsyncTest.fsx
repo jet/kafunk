@@ -8,43 +8,102 @@ open System.Threading
 open System.Threading.Tasks
 open System.Diagnostics
 
-let N = 10000
-
 module AsyncSeq =
 
-  let replicateUntilNoneAsync (next:Async<'a option>) : AsyncSeq<'a> =
-    AsyncSeq.unfoldAsync 
-      (fun () -> next |> Async.map (Option.map (fun a -> a,()))) 
-      ()
+  let iterAsyncParallel (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> =
+    asyncSeq {
+      for a in s do
+        let! c = Async.StartChild (f a)
+        yield c }
+    |> AsyncSeq.iterAsync id
 
-  let private chooseTaskAsTask (t:Task<'a>) (a:Async<'a>) = async {
-    let! a = Async.StartChildAsTask a
-    return Task.WhenAny (t, a) |> Task.join }
+  let spanInclusive (f:'a -> bool) (s:AsyncSeq<'a>) : AsyncSeq<'a> =
+    { new IAsyncEnumerable<'a> with
+        member __.GetEnumerator () = 
+          let en = s.GetEnumerator ()
+          let fin = ref false
+          { new IAsyncEnumerator<'a> with
+              member __.MoveNext () = async {
+                if !fin then return None else
+                let! next = en.MoveNext ()
+                match next with
+                | None -> 
+                  return None
+                | Some a ->
+                  if f a then return Some a
+                  else 
+                    fin := true
+                    return Some a }
+              member __.Dispose () = 
+                en.Dispose () } }
+  
+  let takeWhileInclusive (f:'a -> bool) (s:AsyncSeq<'a>) : AsyncSeq<'a> =
+    { new IAsyncEnumerable<'a> with
+        member __.GetEnumerator () = 
+          let en = s.GetEnumerator ()
+          let fin = ref false
+          { new IAsyncEnumerator<'a> with
+              member __.MoveNext () = async {
+                if !fin then return None else
+                let! next = en.MoveNext ()
+                match next with
+                | None -> 
+                  return None
+                | Some a ->
+                  if f a then return Some a
+                  else 
+                    fin := true
+                    return Some a }
+              member __.Dispose () = 
+                en.Dispose () } }
 
-  let private chooseTask (t:Task<'a>) (a:Async<'a>) : Async<'a> =
-    chooseTaskAsTask t a |> Async.bind Async.awaitTaskCancellationAsError
 
-  let iterAsyncParallelThrottled (parallelism:int) (f:'a -> Async<unit>) (s:AsyncSeq<'a>) : Async<unit> = async {
-    use mb = Mb.create ()
-    use sm = new SemaphoreSlim(parallelism)
-    let! err =
-      s 
-      |> AsyncSeq.iterAsync (fun a -> async {
-        do sm.Wait ()
-        let! b = Async.StartChild (async {
-          try do! f a
-          finally sm.Release () |> ignore })
-        mb.Post (Some b) })
-      |> Async.map (fun _ -> mb.Post None)
-      |> Async.StartChildAsTask
-    return!
-      replicateUntilNoneAsync (chooseTask (err |> Task.taskFault) (Mb.take mb))
-      |> AsyncSeq.iterAsync id }
 
-AsyncSeq.init 100L id
-|> AsyncSeq.iterAsyncParallelThrottled 10
-  (fun i -> async { 
-    printfn "%i" i
-    do! Async.Sleep 1000
-    return () })
+let s = asyncSeq {
+  yield 1
+  yield 100000
+  yield 1
+  yield 2 }
+
+s
+|> AsyncSeq.iterAsyncParallel (fun x -> async {
+  printfn "x=%i" x
+  do! Async.Sleep x })
 |> Async.RunSynchronously
+
+
+
+//let s = asyncSeq {  
+//  yield (1,10L)
+//  yield (2,11L)
+//  yield (1,11L)
+//  yield (2,12L)
+//  do! Async.Sleep -1 }
+//
+//let endOfTopic : Map<Partition, Offset> = 
+//  Map.ofList [ (1,11L) ; (2,12L) ]
+//
+//let rs =
+//  (Map.empty, s)
+//  ||> AsyncSeq.scan (fun observedOffsets (p,o) -> observedOffsets |> Map.add p o)
+//  |> AsyncSeq.skip 1
+//  |> AsyncSeq.takeWhileInclusive (fun observedOffsets -> 
+//    let notYetReached =
+//      observedOffsets
+//      |> Map.toSeq
+//      |> Seq.choose (fun (p,o') -> 
+//        match endOfTopic |> Map.tryFind p with
+//        | Some o when o' < o -> Some (p,o)
+//        | _ -> None)
+//      |> Seq.toArray  
+//    notYetReached.Length > 0)
+//  |> AsyncSeq.toList
+//
+//printfn "%A" rs
+
+  
+
+//let host = ""
+//let topic = ""
+//let conn = Kafka.connHost host
+//let offsetRange = Offsets.offsetRange conn topic [] |> Async.RunSynchronously

@@ -294,6 +294,10 @@ with
 [<NoEquality;NoComparison;AutoSerializable(false)>]
 type ReqRepSession<'a, 'b, 's> internal
   (
+    
+    /// The remote endpoint.
+    remoteEndpoint:IPEndPoint,
+
     /// A correlation id generator.
     correlationId:unit -> CorrelationId,
 
@@ -359,10 +363,10 @@ type ReqRepSession<'a, 'b, 's> internal
   let rec receiveProcess = async {
     try
       do! receive |> AsyncSeq.iter demux
-      Log.warn "restarting_receive_loop"
+      Log.warn "restarting_receive_loop|remote_endpoint=%O" remoteEndpoint
       return! receiveProcess
     with ex ->
-      Log.error "receive_loop_faiure|error=\"%O\"" ex
+      Log.error "receive_loop_faiure|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
       return raise ex }
 
   let receiveTask : Task<unit> = 
@@ -397,13 +401,14 @@ module Session =
   /// Creates a request/reply session listening to the specified input stream and
   /// sending to the specified output.
   let requestReply
+    (remoteEndpoint:IPEndPoint)
     (correlationId:unit -> CorrelationId)
     (encode:'a * CorrelationId -> Binary.Segment * 's)
     (decode:CorrelationId * 's * Binary.Segment -> 'b)
     (awaitResponse:'a -> 'b option)
     (receive:AsyncSeq<Binary.Segment>)
     (send:Binary.Segment -> Async<int>) =
-      new ReqRepSession<'a, 'b, 's>(correlationId, encode, decode, awaitResponse, receive, send)
+      new ReqRepSession<'a, 'b, 's>(remoteEndpoint, correlationId, encode, decode, awaitResponse, receive, send)
 
   /// Sends a request on the session and awaits the response.
   let send (session:ReqRepSession<_, _, _>) req = session.Send req

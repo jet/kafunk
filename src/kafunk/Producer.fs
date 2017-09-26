@@ -396,14 +396,18 @@ module Producer =
     Log.info "fetching_producer_metadata|topic=%s" topic
     let! state = conn.GetMetadataState [|topic|]
 
-    let partitions = ClusterState.topicPartitions state |> Map.find topic
+    let partitions = 
+      ClusterState.topicPartitions state 
+      |> Map.tryFind topic
+      |> Option.getOrLazy 
+        (fun () -> failwithf "invalid_state: cluster metadata doesn't have partition information for topic=%s" topic)
 
     let brokerByPartition =
       partitions
       |> Seq.map (fun p ->
         match ClusterState.tryFindTopicPartitionBroker (topic, p) state with
-        | Some ch -> p, ch
-        | None -> failwith "invalid state: should have broker after metadata fetch!")
+        | Some ch -> p,ch
+        | None -> failwithf "invalid_state: should have broker after metadata fetch topic=%s partition=%i" topic p)
       |> Map.ofSeq
 
     let partitionsByBroker =
