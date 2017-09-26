@@ -1,4 +1,4 @@
-### 0.1.4-rc1 - 26.09.2017
+### 0.1.5-rc1 - 26.09.2017
 
 * Added `Consumer.streamRange` to read a specified range of offsets.
 * Added `Consumer.periodicOffsetCommitter` which can help ensuring periodic offset commits when using `Consumer.stream`.
