@@ -1,3 +1,10 @@
+### 0.1.4-rc1 - 26.09.2017
+
+* Added `Consumer.streamRange` to read a specified range of offsets.
+* Added `Consumer.periodicOffsetCommitter` which can help ensuring periodic offset commits when using `Consumer.stream`.
+* Logging improvements: changed some ERROR messages to WARN, added group coordinator to group related logs, caught missing partition info error
+* AsyncSeq v2.0.13
+
 ### 0.1.4 - 03.08.2017
 
 * Fixed `FetchResponse` `MessageTooBigException` when a message set has been compressed. (#160)

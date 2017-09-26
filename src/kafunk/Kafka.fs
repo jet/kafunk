@@ -795,7 +795,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! sendToBrokerWithRecovery critical rs state b req
 
     | Failure rt ->
-      Log.info "missing_route|route_type=%A request=%s" rt (RequestMessage.Print req)
+      Log.trace "missing_route|route_type=%A request=%s" rt (RequestMessage.Print req)
       let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
       match rs' with
       | Some rs -> 
@@ -869,7 +869,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   member internal __.GetGroupCoordinator (groupId:GroupId) = async {
     let! state = MVar.get stateCell
-    return! getAndApplyGroupCoordinator state groupId }
+    let! state' = getAndApplyGroupCoordinator state groupId
+    let broker = ClusterState.tryFindGroupCoordinatorBroker groupId state'
+    return broker |> Option.get }
 
   member internal __.GetMetadataState (topics:TopicName[]) = async {
     let! state = MVar.get stateCell

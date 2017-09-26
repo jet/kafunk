@@ -861,6 +861,29 @@ module Consumer =
         |> Async.Ignore
         |> Async.cancelTokenWith consumerState.closed id)
 
+  /// Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
+  /// Commits the current offsets assigned to the consumer upon creation.
+  /// Returns a pair consisting of the commit queue and a process which restarts commits after a rebalance.
+  let periodicOffsetCommitter (c:Consumer) (commitInterval:TimeSpan) = async {
+    let assignedPartitions = state c |> Async.map (fun s -> s.assignments)
+    let commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)
+    // commit current offets on group rebalance, including first join,
+    // so that they're committed periodically even if no messages are consumed
+    let commitCurrentOffsetsOnGroupJoinProc =
+      states c
+      |> AsyncSeq.iterAsync (fun s -> async {
+        let! currentOffsets = async {
+          let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, s.assignments |]
+          return
+            currentOffsets 
+            |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
+            |> Seq.concat
+            |> Seq.where (fun (_,o) -> o <> -1L)
+            |> Seq.toArray }
+        Offsets.enqueuePeriodicCommit commitQueue currentOffsets })
+    //let! _ = Async.StartChild commitCurrentOffsetsOnGroupJoinProc
+    return commitQueue,commitCurrentOffsetsOnGroupJoinProc }
+
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
   /// The offsets will be enqueued to be committed after the handler completes, and the commits will be invoked at
@@ -869,22 +892,8 @@ module Consumer =
     (c:Consumer)
     (commitInterval:TimeSpan)
     (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
-      let assignedPartitions = state c |> Async.map (fun s -> s.assignments)
-      use commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)            
-      // commit current offets on group rebalance, including first join,
-      // so that they're committed periodically even if no messages are consumed
-      let commitCurrentOffsetsOnGroupJoinProc =
-        states c
-        |> AsyncSeq.iterAsync (fun s -> async {
-          let! currentOffsets = async {
-            let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, s.assignments |]
-            return
-              currentOffsets 
-              |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
-              |> Seq.concat
-              |> Seq.where (fun (_,o) -> o <> -1L)
-              |> Seq.toArray }
-          Offsets.enqueuePeriodicCommit commitQueue currentOffsets })
+      let! commitQueue,commitCurrentOffsetsOnGroupJoinProc = periodicOffsetCommitter c commitInterval
+      use commitQueue = commitQueue
       let handler s ms = async {
         do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }      
@@ -896,12 +905,11 @@ module Consumer =
           commitCurrentOffsetsOnGroupJoinProc)
         |> Async.Ignore }
 
-
   /// Starts consumption from the start offset in the given range
   /// Will stop consuming for each partition once it reaches the max boundary offset
   /// Will stop and return the messages WITHIN the range if it overconsumes
-  let streamRange (c:Consumer) (startOs:Map<Partition,Offset>) (endOs:Map<Partition,Offset>) : Async<Message[]> = 
-    async { 
+  let streamRange (c:Consumer) (startOs:Map<Partition, Offset>) (endOs:Map<Partition, Offset>) : Async<Message[]> = 
+    async {
       let empty = Seq.fold (&&) true (Seq.zip startOs endOs |> Seq.map (fun (aa, bb) -> aa = bb))
       let waitPartitions = 
          Seq.zip startOs endOs
@@ -933,22 +941,17 @@ module Consumer =
       let topic = cfg.topic
       match empty with
       | true -> 
-        Log.info "Empty Range| conn_id=%s group_id=%s topic=%s " c.conn.Config.connId cfg.groupId  topic
+        Log.info "empty_range|conn_id=%s group_id=%s topic=%s" c.conn.Config.connId cfg.groupId  topic
         return Array.empty<Message>
       | false -> 
         do! commitOffsets c (startOs |> Map.toArray)
-
-        //Consumer.streamRange take in end offset
         let t = 
           (Map.empty, stream c)
-          //(f: s -> a -> A<'b>) -> s -> AS<'a> -> AS<'b>
-          ||> AsyncSeq.threadStateAsync (fun observedOffsets (_, ms) -> 
-            async { 
+          ||> AsyncSeq.threadStateAsync (fun observedOffsets (_,ms) -> async { 
               let lastOs = ConsumerMessageSet.lastOffset ms
               let msgs = ConsumerMessageSet.messages ms
-              let state = observedOffsets |> Map.add ms.partition lastOs
-              return ((ms.partition, msgs, state), state)
-            })
+              let observedOffsets' = observedOffsets |> Map.add ms.partition lastOs
+              return ((ms.partition,msgs,observedOffsets'), observedOffsets') })
           |> AsyncSeq.takeWhileInclusive (fun (_, _, observedOffsets) -> 
             let reached = 
               observedOffsets

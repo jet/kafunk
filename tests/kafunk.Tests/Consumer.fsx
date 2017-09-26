@@ -20,7 +20,7 @@ let go = async {
     let connConfig = 
       let chanConfig = 
         ChanConfig.create (
-          requestTimeout = TimeSpan.FromSeconds 60.0,
+          requestTimeout = TimeSpan.FromSeconds 30.0,
           receiveBufferSize = 8192 * 50,
           sendBufferSize = 8192 * 50,
           connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
@@ -38,7 +38,7 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 1000000,
+      fetchMaxBytes = 50000,
       fetchMinBytes = 1,
       fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,

@@ -8,7 +8,6 @@ open System.Text
 open System.Threading
 open System.Threading.Tasks
 
-
 /// Configuration for a TCP channel to an individual broker.
 type ChanConfig = {
   
@@ -239,7 +238,7 @@ module internal Chan =
 
     let session =
       Session.requestReply
-        Session.corrId encode decode RequestMessage.awaitResponse receiveStream send
+        (EndPoint.endpoint ep) Session.corrId encode decode RequestMessage.awaitResponse receiveStream send
 
     let send =
       Session.send session
