@@ -53,17 +53,17 @@ let go = async {
   Log.info "offset_range|range=[%s]" 
     (range |> Map.toSeq |> Seq.map (fun (p,(e,l)) -> sprintf "[p=%i e=%i l=%i]" p e l) |> String.concat " ; ")
 
-//  do!
-//    Consumer.stream consumer
-//    |> AsyncSeq.iter (fun ms -> Log.info "here")
-  
-  do! Consumer.consume consumer (fun _ _ -> async { Log.info "hero" })
+  let! mss = Consumer.streamRange consumer range
 
-  //let! messages = Consumer.streamRange consumer range
-  //Log.info "count=%i" messages.Length
+  for ms in mss do
+    for m in ms.messageSet.messages do
+      Log.info "p=%i key=%s" 
+        ms.partition 
+        (Binary.toString m.message.key)
 
-  return ()
+  Log.info "done"
 
 }
 
-Async.RunSynchronously go
+try Async.RunSynchronously go
+with ex -> Log.error "error=%O" ex

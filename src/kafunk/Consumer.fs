@@ -914,8 +914,7 @@ module Consumer =
     do! commitOffsets c (offsetRange |> Map.toSeq |> Seq.map (fun (p,(e,_)) -> p,e) |> Seq.toArray)
     return!
       (Map.empty, stream c)
-      ||> AsyncSeq.threadStateAsync (fun observedOffsets (_,ms) -> async { 
-        Log.info "p=%i msc=%i" ms.partition ms.messageSet.messages.Length
+      ||> AsyncSeq.threadStateAsync (fun observedOffsets (_,ms) -> async {
         let lastOs = ConsumerMessageSet.lastOffset ms
         let observedOffsets' = observedOffsets |> Map.add ms.partition lastOs
         return ((ms,observedOffsets'), observedOffsets') })
@@ -923,11 +922,12 @@ module Consumer =
         let reachedPartitions =
           (offsetRange,observedOffsets)
           ||> Map.mergeChoice (fun p -> function
-            | Choice1Of3 ((_,o),o') -> if o' >= (o - 1L) then Some p else None
-            | Choice2Of3 _ -> None
-            | Choice3Of3 _ -> Some p)
+            | Choice1Of3 ((_,targetOffset),observedOffset) -> 
+              if observedOffset >= (targetOffset - 1L) then Some p 
+              else None
+            | _ -> None)
           |> Map.toSeq
-          |> Seq.map fst
+          |> Seq.choose snd
           |> set
         not (Set.isSuperset reachedPartitions targetPartitions))
       |> AsyncSeq.map fst
