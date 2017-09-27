@@ -63,7 +63,7 @@
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L973-973" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Consumer.fs#L938-938" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -349,10 +349,10 @@ Returns a pair consisting of the commit queue and a process which restarts commi
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '64', 64)" onmouseover="showTip(event, '64', 64)">
-            streamRange c startOs endOs
+            streamRange c offsetRange
           </code>
           <div class="tip" id="64">
-            <strong>Signature:</strong> c:Consumer -&gt; startOs:Map&lt;Partition,Offset&gt; -&gt; endOs:Map&lt;Partition,Offset&gt; -&gt; Async&lt;Message []&gt;<br />
+            <strong>Signature:</strong> c:Consumer -&gt; offsetRange:Map&lt;Partition,(Offset * Offset)&gt; -&gt; Async&lt;ConsumerMessageSet []&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -360,9 +360,9 @@ Returns a pair consisting of the commit queue and a process which restarts commi
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Starts consumption from the start offset in the given range
-Will stop consuming for each partition once it reaches the max boundary offset
-Will stop and return the messages WITHIN the range if it overconsumes</p>
+          <p>Starts consumption from the start offset in the given range.
+Will stop consuming for each partition once it reaches the max boundary offset.
+Will stop and return the messages WITHIN the range if it overconsumes.</p>
 
 
         </td>
