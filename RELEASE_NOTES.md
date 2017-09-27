@@ -1,3 +1,7 @@
+### 0.1.5-rc2 - 27.09.2017
+* AsyncSeq v2.0.14 to fix bug in mapAsyncParallel
+* Change offset range argument type Consumer.streamRange
+
 ### 0.1.5-rc1 - 26.09.2017
 
 * Added `Consumer.streamRange` to read a specified range of offsets.
