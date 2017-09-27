@@ -90,6 +90,7 @@
     <None Include="MVar.fsx" />
     <None Include="ApiVersions.fsx" />
     <Content Include="App.config" />
+    <None Include="StreamRange.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
