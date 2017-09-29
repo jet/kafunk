@@ -483,11 +483,11 @@ type KafkaConfig = {
   /// The default client id = "".
   static member DefaultClientId = ""
 
-  /// The default bootstrap broker connection retry policy = RetryPolicy.constantBoundedMs 2000 10.
-  static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 2000 10
+  /// The default bootstrap broker connection retry policy = RetryPolicy.constantBoundedMs 2000 3.
+  static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 2000 3
 
-  /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 50.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 50
+  /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 5.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 5
 
   /// Creates a Kafka configuration object.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, 
@@ -574,7 +574,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
       |> MVar.updateStateAsync (fun state -> async {
         if ClusterState.containsBrokerChan state b.nodeId then 
           return state, Success state
-        else 
+        else
           let! ch = connBroker state b
           match ch with
           | Success state' -> 
@@ -593,13 +593,15 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   /// Connects to the first available bootstrap broker and adds the connection to the cluster state.
   and bootstrap =
-    let connect (callingState:ClusterState) = async { 
-      Log.info "connecting_to_bootstrap_brokers|conn_id=%s brokers=%A" cfg.connId cfg.bootstrapServers
+    let connect (rs:RetryState) (callingState:ClusterState) = async { 
+      Log.info "connecting_to_bootstrap_brokers|conn_id=%s brokers=%A attempt=%i" cfg.connId cfg.bootstrapServers rs.attempt
       return!
         cfg.bootstrapServers
         |> AsyncSeq.ofSeq
         |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
-          let b = Broker(-2, uri.Host, uri.Port)
+          //Log.info "connecting_to_bootstrap_broker|conn_id=%s broker=%O" cfg.connId uri
+          // NB: broker with negative id so as to not overlap with brokers where id is known
+          let b = Broker(-2, uri.Host, uri.Port) 
           let! state' = connBroker callingState b
           match state' with
           | Success state' ->
@@ -607,7 +609,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
           | Failure e ->
             return Failure e }) }
     connect
-    |> Faults.AsyncFunc.retryResultThrowList 
+    |> Faults.AsyncFunc.retryStateResultThrowList 
         (fun errs -> exn("Failed to connect to a bootstrap broker.", Exn.ofSeq errs)) 
         cfg.bootstrapConnectRetryPolicy
     

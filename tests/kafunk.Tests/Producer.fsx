@@ -8,8 +8,11 @@ open System.Diagnostics
 open System.Threading
 open Refs
 
-//Log.MinLevel <- LogLevel.Trace
+Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
+
+
+
 
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
@@ -20,7 +23,13 @@ let parallelism = argiDefault 6 "1" |> Int32.Parse
 let explicitBatch = argiDefault 7 "false" |> Boolean.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
-let payload = Array.zeroCreate messageSize
+
+let payload = 
+  let bytes = Array.zeroCreate messageSize
+  let rng = Random()
+  rng.NextBytes bytes
+  bytes
+
 let batchCount = int (N / int64 batchSize)
 
 Log.info "producer_run_starting|host=%s topic=%s messages=%i batch_size=%i batch_count=%i message_size=%i parallelism=%i MB=%i" 
@@ -44,11 +53,11 @@ let connCfg =
     [KafkaUri.parse host], 
     //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
-    //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
-    //bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy)
-    bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
-    version = Versions.V_0_10_1
+    requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
+    //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
+    bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy,
+    //bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
+    version = Versions.V_0_9_0
     )
 
 let conn = Kafka.conn connCfg
@@ -61,6 +70,7 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 2000000,
+    //batchSizeBytes = 0,
     batchLingerMs = 1000,
     compression = CompressionCodec.None
     //maxInFlightRequests = 1
@@ -71,7 +81,7 @@ let producer =
   |> Async.RunSynchronously
 
 let counter = Metrics.counter Log (1000 * 5)
-//let timer = Metrics.timer Log (1000 * 5)
+let timer = Metrics.timer Log (1000 * 5)
 
 let cts = new CancellationTokenSource()
 
@@ -141,7 +151,7 @@ let go = async {
     let produce = 
       Producer.produce producer
       |> Metrics.throughputAsyncTo counter (fun _ -> 1)
-      //|> Metrics.latencyAsyncTo timer
+      |> Metrics.latencyAsyncTo timer
 
 //    let produce = 
 //      Producer.produceBatched producer

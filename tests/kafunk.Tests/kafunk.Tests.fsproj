@@ -97,6 +97,8 @@
     <None Include="MVar.fsx" />
     <None Include="ApiVersions.fsx" />
     <None Include="StreamRange.fsx" />
+    <None Include="CommitOffsets.fsx" />
+    <None Include="GroupInfo.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>

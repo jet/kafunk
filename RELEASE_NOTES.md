@@ -1,3 +1,8 @@
+### 0.1.5-rc3
+* Adjust retry policy defaults: reduce retries to fail fast
+* Exposed internal ConsumerGroup.decodeMemberAssignment
+* Improve consumer group stability, ensuring escalation in all failure modes
+
 ### 0.1.5-rc2 - 27.09.2017
 * AsyncSeq v2.0.14 to fix bug in mapAsyncParallel
 * Change offset range argument type Consumer.streamRange
