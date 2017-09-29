@@ -269,22 +269,22 @@ module internal Faults =
 
   /// Returns a stream of async computations corresponding to invocations of the argument 
   /// computation until the computations succeeds.
-  let retryAsyncResultStream (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : AsyncSeq<Result<'a, 'e>> =
+  let private retryAsyncResultStream (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : AsyncSeq<Result<'a, 'e>> =
     (AsyncSeq.replicateInfiniteAsync a, RetryPolicy.delayStream p)
     ||> AsyncSeq.interleaveChoice
     |> AsyncSeq.choose Choice.tryLeft
 
-  let retryAsyncResultRef (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
+  let private retryAsyncResultRef (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
     retryAsyncResultStream p a |> AsyncSeq.sequenceResult m
     
-  /// Retries an async computation returning a result according to the specified backoff strategy.
-  /// Returns an async computation containing a result, which is Success of a pair of the successful result and errors
-  /// accumulated during retries, if any, and otherwise, a Failure of accumulated errors.
-  let retryAsyncResultWarn (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
-    retryAsyncResultStream p a |> AsyncSeq.sequenceResultWarn m
-
-  let retryAsyncResultWarnList (policy:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e list, 'e list>> =
-    retryAsyncResultWarn Monoid.freeList policy (a |> Async.map (Result.mapError List.singleton))
+//  /// Retries an async computation returning a result according to the specified backoff strategy.
+//  /// Returns an async computation containing a result, which is Success of a pair of the successful result and errors
+//  /// accumulated during retries, if any, and otherwise, a Failure of accumulated errors.
+//  let retryAsyncResultWarn (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e, 'e>> =
+//    retryAsyncResultStream p a |> AsyncSeq.sequenceResultWarn m
+//
+//  let retryAsyncResultWarnList (policy:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a * 'e list, 'e list>> =
+//    retryAsyncResultWarn Monoid.freeList policy (a |> Async.map (Result.mapError List.singleton))
 
   let retryAsyncResult (m:Monoid<'e>) (p:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
     let rec loop i e = async {
@@ -302,6 +302,22 @@ module internal Faults =
           return! loop (RetryState.next i) e }
     loop RetryState.init m.Zero
 
+  let retryStateAsyncResult (m:Monoid<'e>) (p:RetryPolicy) (a:RetryState -> Async<Result<'a, 'e>>) : Async<Result<'a, 'e>> =
+    let rec loop rs e = async {
+      let! r = a rs
+      match r with
+      | Success a -> 
+        return Success a
+      | Failure e' ->
+        let e = m.Merge (e,e')
+        match RetryPolicy.delayAt rs p with
+        | None -> 
+          return Failure e
+        | Some wait ->
+          do! Async.sleep wait
+          return! loop (RetryState.next rs) e }
+    loop RetryState.init m.Zero
+
   /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
   /// Returns None when shouldRetry returns false.
   let retryAsync (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
@@ -314,14 +330,23 @@ module internal Faults =
 
   let retryAsyncResultList (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
     retryAsyncResult Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
+
+  let retryStateAsyncResultList (b:RetryPolicy) (a:RetryState -> Async<Result<'a, 'e>>) : Async<Result<'a, 'e list>> =
+    retryStateAsyncResult Monoid.freeList b (a >> Async.map (Result.mapError List.singleton))
     
   /// Retries the specified async computation returning a Result.
   /// Returns the first successful value or throws an exception based on errors observed during retries.
   let retryResultThrow (f:'e -> #exn) (m:Monoid<'e>) (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryAsyncResult m b a |> Async.map (Result.throwMap f)
 
+  let retryStateResultThrow (f:'e -> #exn) (m:Monoid<'e>) (b:RetryPolicy) (a:RetryState -> Async<Result<'a, 'e>>) : Async<'a> =
+    retryStateAsyncResult m b a |> Async.map (Result.throwMap f)
+
   let retryResultThrowList (f:'e list -> #exn) (b:RetryPolicy) (a:Async<Result<'a, 'e>>) : Async<'a> =
     retryResultThrow f Monoid.freeList b (a |> Async.map (Result.mapError List.singleton))
+
+  let retryStateResultThrowList (f:'e list -> #exn) (b:RetryPolicy) (a:RetryState -> Async<Result<'a, 'e>>) : Async<'a> =
+    retryStateResultThrow f Monoid.freeList b (a >> Async.map (Result.mapError List.singleton))
 
   module AsyncFunc =
 
@@ -334,17 +359,14 @@ module internal Faults =
     let retryResultList (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b, 'e list>> =
       fun a -> async.Delay (fun () -> f a) |> retryAsyncResultList p
 
-    let retryResultWarn (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b * 'e, 'e>> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultWarn m p
-
-    let retryResultWarnList (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<Result<'b * 'e list, 'e list>> =
-      fun a -> async.Delay (fun () -> f a) |> retryAsyncResultWarnList p
-
     let retryResultThrow (ex:'e -> #exn) (m:Monoid<'e>) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> f a) |> retryResultThrow ex m p
 
     let retryResultThrowList (ex:'e list -> #exn) (p:RetryPolicy) (f:'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
       fun a -> async.Delay (fun () -> f a) |> retryResultThrowList ex p
+
+    let retryStateResultThrowList (ex:'e list -> #exn) (p:RetryPolicy) (f:RetryState -> 'a -> Async<Result<'b, 'e>>) : 'a -> Async<'b> =
+      fun a -> retryStateResultThrowList ex p (fun rs -> f rs a)
       
     let loop (f:Async<'f> -> 'a -> Async<'b * 'f>) : 'a -> Async<'b> =
       let fb = MVar.create ()

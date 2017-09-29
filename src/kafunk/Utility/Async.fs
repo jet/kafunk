@@ -164,7 +164,6 @@ module Async =
         do! comp
         return a
       with ex ->
-        do! comp
         return! err ex }
 
   let tryFinally (compensation:unit -> unit) (a:Async<'a>) : Async<'a> =

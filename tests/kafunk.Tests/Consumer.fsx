@@ -26,8 +26,8 @@ let go = async {
           connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
           requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy)
       KafkaConfig.create (
-        [KafkaUri.parse host], 
-        //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
+        //[KafkaUri.parse host], 
+        [KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
         version = Versions.V_0_9_0,
@@ -38,7 +38,7 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 50000,
+      fetchMaxBytes = 500000,
       fetchMinBytes = 1,
       fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,
@@ -84,7 +84,10 @@ let go = async {
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
   do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
+  //do! Consumer.consume consumer handle
   //do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
+
+  Log.info "done_consuming"
 
 }
 

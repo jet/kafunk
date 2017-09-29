@@ -34,6 +34,7 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   let Log = Log.create "Resource"
   let cell : MVar<ResourceEpoch<'r>> = MVar.create ()
   let name = typeof<'r>.Name
+  let recoveryTimeout = TimeSpan.FromSeconds 60.0
 
   let create (prevEpoch:ResourceEpoch<'r> option) = async {
     let closed = new CancellationTokenSource()
@@ -82,7 +83,9 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
         Log.trace "resource_already_recovered|type=%s calling_version=%i current_version=%i" 
           name callingEpoch.version currentEpoch.version
         return currentEpoch }
-    cell |> MVar.updateAsync update
+    cell 
+    |> MVar.updateAsync update
+    |> Async.timeoutWith id (fun () -> failwithf "resource_recovery_timed_out") recoveryTimeout
     
   member internal __.Timeout<'a, 'b> (op:'r -> ('a -> Async<'b>)) : 'a -> Async<'b option> =
     fun a -> async {

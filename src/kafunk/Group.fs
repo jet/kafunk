@@ -118,14 +118,14 @@ module Group =
         match action with
         | GroupLeaveAction.LeaveAndRejoin ec ->
           if IVar.tryPut action state.closed then
-            Log.warn "leaving_group_to_rejoin|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i"
+            Log.info "leaving_group_to_rejoin|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i"
               gm.conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId ec
             return true
           else
             return false
         | GroupLeaveAction.LeaveGroup ->
           if IVar.tryPut action state.closed then
-            Log.warn "leaving_group|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
+            Log.info "leaving_group|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s" 
               gm.conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId
             return true
           else
@@ -179,7 +179,8 @@ module Group =
     let protocolNames = protocols |> Array.map (fun (n,_) -> n)
     let sessionTimeout = cfg.sessionTimeout
     let rebalanceTimeout = cfg.rebalanceTimeout
-    let groupSyncErrorRetryTimeoutMs = 1000
+    let groupSyncErrorRetryTimeoutMs = 1000 // TODO: retry policy
+    let groupJoinMaxAttempts = 10
 
     /// Attempts the initial group handshake.
     let join (prevMemberId:MemberId option) = async {      
@@ -195,11 +196,8 @@ module Group =
         return failwithf "unknown_join_group_error=%i" res.errorCode  }
   
     /// Synchronizes the group after all members have joined.
-    let syncGroupLeader (joinGroupRes:JoinGroup.Response) = async {
-                   
-      let! memberAssignments = 
-        cfg.protocol.assign gm prevState joinGroupRes.groupProtocol joinGroupRes.members.members
-
+    let syncGroupLeader (joinGroupRes:JoinGroup.Response) = async {                   
+      let! memberAssignments = cfg.protocol.assign gm prevState joinGroupRes.groupProtocol joinGroupRes.members.members
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
       let! res = Kafka.syncGroup conn req
       match res.errorCode with
@@ -229,7 +227,7 @@ module Group =
       let heartbeatSleepMs = cfg.sessionTimeout / cfg.heartbeatFrequency
 
       Log.info "starting_heartbeat_process|conn_id=%s group_id=%s generation_id=%i member_id=%s heartbeat_frequency=%i session_timeout=%i heartbeat_sleep=%i group_coord=%s" 
-        conn.Config.connId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs groupCoord.host
+        conn.Config.connId groupId joinGroupRes.generationId joinGroupRes.memberId cfg.heartbeatFrequency cfg.sessionTimeout heartbeatSleepMs (Broker.endpoint groupCoord)
 
       let state =
         let closed = IVar.create ()
@@ -270,7 +268,7 @@ module Group =
               | ErrorCode.IllegalGenerationCode | ErrorCode.UnknownMemberIdCode | ErrorCode.RebalanceInProgressCode 
               | ErrorCode.NotCoordinatorForGroupCode ->
                 Log.warn "heartbeat_error|conn_id=%s group_id=%s generation_id=%i member_id=%s leader_id=%s error_code=%i heartbeat_count=%i group_coord=%s" 
-                  conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count groupCoord.host
+                  conn.Config.connId gm.config.groupId state.state.generationId state.state.memberId state.state.leaderId res.errorCode count (Broker.endpoint groupCoord)
                 do! leaveAndRejoin gm state res.errorCode
                 return false
               | ec ->
@@ -278,7 +276,7 @@ module Group =
                   conn.Config.connId ec
             | Failure ex ->
               Log.warn "heartbeat_exception|conn_id=%s group_id=%s generation_id=%i group_coord=%s error=\"%O\"" 
-                conn.Config.connId gm.config.groupId state.state.generationId groupCoord.host ex
+                conn.Config.connId gm.config.groupId state.state.generationId (Broker.endpoint groupCoord) ex
               do! leaveInternal gm state
               return false })
 
@@ -298,17 +296,20 @@ module Group =
 
 
     /// Joins a group, syncs the group, starts the heartbeat process.
-    let rec joinSyncHeartbeat (prevMemberId:MemberId option, prevErrorCode:ErrorCode option) = async {
+    let rec joinSyncHeartbeat (rs:RetryState) (prevMemberId:MemberId option, prevErrorCode:ErrorCode option) = async {     
       
       let! groupCoord = conn.GetGroupCoordinator groupId
-      
+            
+      if rs.attempt > groupJoinMaxAttempts then 
+        failwithf "join_group_failed|group_coord=%O attempt=%i" (Broker.endpoint groupCoord) rs.attempt
+
       match prevMemberId with
       | None -> 
         Log.info "joining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A group_coord=%s" 
-          conn.Config.connId groupId protocolType protocolNames groupCoord.host
+          conn.Config.connId groupId protocolType protocolNames (Broker.endpoint groupCoord)
       | Some prevMemberId -> 
         Log.info "rejoining_group|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A member_id=%s group_coord=%s"
-          conn.Config.connId groupId protocolType protocolNames prevMemberId groupCoord.host
+          conn.Config.connId groupId protocolType protocolNames prevMemberId (Broker.endpoint groupCoord)
 
       let prevMemberId = 
         match prevErrorCode with
@@ -339,7 +340,7 @@ module Group =
             Log.warn "sync_group_error|conn_id=%s group_id=%s error_code=%i" 
               conn.Config.connId groupId ec
             do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
-            return! joinSyncHeartbeat (prevMemberId, Some ec)
+            return! joinSyncHeartbeat (RetryState.next rs) (prevMemberId, Some ec)
         
         else
           Log.info "joined_group_as_follower|conn_id=%s group_id=%s member_id=%s generation_id=%i leader_id=%s group_protocol=%s"
@@ -358,15 +359,15 @@ module Group =
             Log.warn "sync_group_error|conn_id=%s group_id=%s error_code=%i" 
               conn.Config.connId groupId ec
             do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
-            return! joinSyncHeartbeat (prevMemberId, Some ec)
+            return! joinSyncHeartbeat (RetryState.next rs) (prevMemberId, Some ec)
 
       | Failure joinGroupErr ->
         Log.warn "join_group_error|conn_id=%s group_id=%s error_code=%i prev_member_id=%A" 
           conn.Config.connId groupId joinGroupErr prevMemberId
         do! Async.Sleep groupSyncErrorRetryTimeoutMs // TODO: configure as RetryPolicy
-        return! joinSyncHeartbeat (prevMemberId, Some joinGroupErr)  }
+        return! joinSyncHeartbeat (RetryState.next rs) (prevMemberId, Some joinGroupErr)  }
 
-    return! joinSyncHeartbeat (prevState |> Option.map (fun s -> s.memberId), prevErrorCode) }
+    return! joinSyncHeartbeat RetryState.init (prevState |> Option.map (fun s -> s.memberId), prevErrorCode) }
 
 //  let internal generationsInternal (gm:GroupMember) =
 //    SVar.tap gm.state
@@ -394,24 +395,25 @@ module Group =
 
   /// Creates a group member and joins it to the group.
   let createJoin (conn:KafkaConn) (config:GroupConfig) = async {
-    let gm = 
+    
+    let groupMember = 
       { GroupMember.conn = conn
         state = SVar.create ()
         config = config }
 
-    let! _ = join gm (None, None)
+    let! _ = join groupMember (None, None)
     
 //    let rec rejoinProc () = async {
-//      let! state = stateInternal gm
+//      let! state = stateInternal groupMember
 //      let! action = IVar.get state.closed
 //      match action with
 //      | GroupLeaveAction.LeaveAndRejoin ec ->
-//        let! _ = join gm (Some state.state, Some ec)
+//        let! _ = join groupMember (Some state.state, Some ec)
 //        return! rejoinProc ()
 //      | GroupLeaveAction.LeaveGroup -> 
 //        return () }
 //    
 //    let! _ = Async.StartChild (rejoinProc ())
 
-    return gm }
+    return groupMember }
 

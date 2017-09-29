@@ -151,4 +151,26 @@ let ``Faults.AsyncFunc.retry should retry with condition and retry policy`` () =
 
       shouldEqual expected actual None
 
+[<Test>]
+let ``Resource`` () = 
+  
+  let go = async {
 
+    let! r = 
+      Resource.recoverableRecreate 
+        (fun ct prev -> async { return () })
+        (fun (r,v,s,ex) -> async { return () })
+
+    let! op =
+      r
+      |> Resource.injectResult
+        (fun r a -> async {
+          return Failure (ResourceErrorAction.RecoverResume (exn(""), a))
+          })
+
+
+    return ()
+
+  }
+
+  ()

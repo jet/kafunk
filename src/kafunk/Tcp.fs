@@ -57,7 +57,6 @@ module Socket =
     Async.FromContinuations <| fun (ok, error, _) ->
       try
         let args = alloc ()
-        //let args = new SocketAsyncEventArgs()
         config args
         let rec k (_:obj) (args:SocketAsyncEventArgs) =
           try
@@ -67,7 +66,6 @@ module Socket =
             | e -> error (SocketException(int e))
           finally
             free args
-            //args.Dispose ()
         and k' = EventHandler<SocketAsyncEventArgs>(k)
         args.add_Completed(k')
         if not (op args) then
@@ -362,8 +360,10 @@ type ReqRepSession<'a, 'b, 's> internal
 
   let rec receiveProcess = async {
     try
+      Log.info "starting_receive_loop|remote_endpoint=%O" remoteEndpoint
       do! receive |> AsyncSeq.iter demux
       Log.warn "restarting_receive_loop|remote_endpoint=%O" remoteEndpoint
+      //do! Async.SwitchToThreadPool ()
       return! receiveProcess
     with ex ->
       Log.error "receive_loop_faiure|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex

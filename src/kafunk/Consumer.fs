@@ -26,7 +26,7 @@ module ConsumerGroup =
   }
 
   /// Decodes member state from the MemberAssignment field in SyncGroupResponse.
-  let internal decodeMemberAssignment (memberAssignment:MemberAssignment) =
+  let decodeMemberAssignment (memberAssignment:MemberAssignment) =
       
     let assignment,_ = ConsumerGroupMemberAssignment.read memberAssignment
           
@@ -446,6 +446,7 @@ module Consumer =
             Log.warn "commit_offset_exception|conn_id=%s group_id=%s generation_id=%i error=%O" 
               c.conn.Config.connId cfg.groupId state.state.generationId ex
             do! Group.leaveInternal c.groupMember state
+            //return raise ex }) }
             return () }) }
 
   /// Explicitly commits offsets to a consumer group, to a specific offset time.
@@ -596,6 +597,8 @@ module Consumer =
     let cfg = c.config
     let topic = cfg.topic
     let fetch = Kafka.fetch c.conn |> AsyncFunc.catch
+//    let fetch (_:FetchRequest) : Async<Result<FetchResponse, exn>> = async {
+//      return Failure (exn "testing escalation!") }
     let messageVer = MessageVersions.fetchResMessage (c.conn.ApiVersion ApiKey.Fetch)
     Group.tryAsync
       (state)
@@ -657,7 +660,7 @@ module Consumer =
         | Failure ex ->
           Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" 
             state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
-          do! Group.leaveInternal c.groupMember state
+          //do! Group.leaveInternal c.groupMember state
           return raise ex })
 
   /// Handles out of range offsets.
@@ -759,8 +762,12 @@ module Consumer =
 
             return Some (mss, (nextOffsets,retryQueue)) })
 
-  /// consumes fetchStream and dispatches to per-partition buffers
-  let private fetchProcess (c:Consumer) state initOffsets partitionBuffers = async {
+  /// Consumes fetchStream and dispatches to per-partition buffers.
+  let private fetchProcess 
+    (c:Consumer) 
+    (state:GroupMemberStateWrapper)
+    (initOffsets:(Partition * Offset)[])
+    (partitionBuffers:Map<Partition, BoundedMb<ConsumerMessageSet>>) = async {
     let assignment = Array.map fst initOffsets
     let cfg = c.config
     let topic = cfg.topic
@@ -770,27 +777,15 @@ module Consumer =
     Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
       cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
     return!
-      Async.tryFinnallyWithAsync
-        (async {
-          do!
-            fetchStream c state initOffsets
-            |> AsyncSeq.iterAsync (fun mss -> async {
-              let! _ =
-                mss
-                |> Seq.map (fun ms -> async {
-                  let buf = partitionBuffers |> Map.find ms.partition
-                  do! buf |> BoundedMb.put ms })
-                |> Async.Parallel
-              return () }) })
-          (async {
-            Log.info "fetch_process_stopping|group_id=%s generation_id=%i member_id=%s topic=%s" 
-              cfg.groupId state.state.generationId state.state.memberId topic
-            return () })
-          (fun ex -> async {
-            Log.error "fetch_process_errored|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i error=%O" 
-              cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length) ex
-            do! Group.leaveInternal c.groupMember state
-            return raise ex }) }
+      fetchStream c state initOffsets
+      |> AsyncSeq.iterAsync (fun mss -> async {
+        let! _ =
+          mss
+          |> Seq.map (fun ms -> async {
+            let buf = partitionBuffers |> Map.find ms.partition
+            do! buf |> BoundedMb.put ms })
+          |> Async.Parallel
+        return () }) }
 
   /// Initiates consumption of a single generation of the consumer group protocol.
   let private consumeGeneration (c:Consumer) (state:GroupMemberStateWrapper) = async {
@@ -818,8 +813,21 @@ module Consumer =
     let! initOffsets = fetchOffsetsFallback c topic assignment
     Log.info "fetched_initial_offsets|conn_id=%s group_id=%s member_id=%s topic=%s offsets=%s" 
       c.conn.Config.connId cfg.groupId state.state.memberId topic (Printers.partitionOffsetPairs initOffsets)
-                                               
-    Async.Start (fetchProcess c state initOffsets partitionBuffers, fetchProcessCancellation.Token)
+      
+    let fetchProcess =
+      Async.tryFinnallyWithAsync
+        (fetchProcess c state initOffsets partitionBuffers)
+        (async {
+          Log.info "fetch_process_stopping|group_id=%s generation_id=%i member_id=%s topic=%s" 
+            cfg.groupId state.state.generationId state.state.memberId topic
+          return () })
+        (fun ex -> async {
+          Log.error "fetch_process_errored|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i error=%O" 
+            cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length) ex
+          do! Group.leaveInternal c.groupMember state
+          return () })
+
+    Async.Start (fetchProcess, fetchProcessCancellation.Token)
         
     let partitionStreams =
       partitionBuffers
@@ -838,8 +846,8 @@ module Consumer =
   let generations (c:Consumer) =
     Group.generationsInternal c.groupMember
     |> AsyncSeq.mapAsyncParallel (fun state -> async {
-      let! partitionStreams = consumeGeneration c state
       let consumerState = consumerStateFromGroupMemberState state.state
+      let! partitionStreams = consumeGeneration c state      
       return consumerState,partitionStreams })
 
   /// Returns a stream of message sets across all partitions assigned to the consumer.
@@ -881,7 +889,6 @@ module Consumer =
             |> Seq.where (fun (_,o) -> o <> -1L)
             |> Seq.toArray }
         Offsets.enqueuePeriodicCommit commitQueue currentOffsets })
-    //let! _ = Async.StartChild commitCurrentOffsetsOnGroupJoinProc
     return commitQueue,commitCurrentOffsetsOnGroupJoinProc }
 
   /// Starts consumption using the specified handler.
@@ -898,11 +905,11 @@ module Consumer =
         do! handler s ms
         Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }      
       do!
-        Async.parallel2
+        Async.choose
           (async {
             do! consume c handler
-            do! Offsets.flushPeriodicCommit commitQueue },
-          commitCurrentOffsetsOnGroupJoinProc)
+            do! Offsets.flushPeriodicCommit commitQueue })
+          commitCurrentOffsetsOnGroupJoinProc
         |> Async.Ignore }
 
   /// Starts consumption from the start offset in the given range.
@@ -937,3 +944,4 @@ module Consumer =
   /// This causes all underlying streams to complete.
   let close (c:Consumer) = async {
     return! Group.leave c.groupMember }
+
