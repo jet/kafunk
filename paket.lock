@@ -1,7 +1,7 @@
 NUGET
   remote: https://api.nuget.org/v3/index.json
     Crc32C.NET (1.0.5)
-    FSharp.Control.AsyncSeq (2.0.15)
+    FSharp.Control.AsyncSeq (2.0.16)
     Snappy.NET (1.1.1.8)
       Crc32C.NET (>= 1.0.5)
 

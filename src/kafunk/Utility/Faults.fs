@@ -230,7 +230,7 @@ module FlowMonitor =
   /// Threshold = less than @count events are observed during @period.
   let undeflows (count:int) (period:TimeSpan) (stream:AsyncSeq<'a>) =
     stream
-    |> AsyncSeq.bufferByTime period
+    |> AsyncSeq.bufferByTime (period.TotalMilliseconds |> int32)
     |> AsyncSeq.choose (fun buf ->
       if buf.Length < count then Some buf
       else None)

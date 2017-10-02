@@ -118,9 +118,6 @@ module AsyncSeq =
   let windowed (windowSize:int) : AsyncSeq<'a> -> AsyncSeq<'a[]> =
     AsyncPipe.transduce (AsyncPipe.windowed windowSize)
 
-  let bufferByTime (timeSpan:TimeSpan) : AsyncSeq<'a> -> AsyncSeq<'a[]> =
-    AsyncPipe.transduce (AsyncPipe.bufferByTime timeSpan)
-
   let unfoldInfiniteAsync (s:'s) (f:'s -> Async<'a * 's>) : AsyncSeq<'a> =
     AsyncSeq.unfoldAsync (f >> Async.map Some) s 
 

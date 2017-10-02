@@ -1,4 +1,4 @@
-### 0.1.5-rc3
+### 0.1.5-rc3 - 02.10.2017
 * Adjust retry policy defaults: reduce retries to fail fast
 * Exposed internal ConsumerGroup.decodeMemberAssignment
 * Improve consumer group stability, ensuring escalation in all failure modes
