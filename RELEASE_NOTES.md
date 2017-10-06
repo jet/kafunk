@@ -1,3 +1,6 @@
+### 0.1.5-rc4 - 06.10.2017
+* BUG: race condition in consumer group join wherein multiple groups created on the same connection might prevent a group coordinator from being retrieved
+
 ### 0.1.5-rc3 - 02.10.2017
 * Adjust retry policy defaults: reduce retries to fail fast
 * Exposed internal ConsumerGroup.decodeMemberAssignment
