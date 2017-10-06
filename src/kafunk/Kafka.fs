@@ -679,8 +679,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and getAndApplyGroupCoordinator (callerState:ClusterState) (groupId:GroupId) =
     stateCell 
     |> MVar.updateAsync (fun (currentState:ClusterState) -> async {
-      if currentState.version > callerState.version then 
-        Log.trace "skipping_group_coordinator_update|current_version=%i caller_version=%i" currentState.version callerState.version
+      if currentState.version > callerState.version && 
+        ClusterState.tryFindGroupCoordinatorBroker groupId currentState |> Option.isSome then 
+        Log.trace "skipping_group_coordinator_update|current_version=%i caller_version=%i group_id=%s" currentState.version callerState.version groupId
         return currentState 
       else
         let! state' = groupCoordinator currentState groupId

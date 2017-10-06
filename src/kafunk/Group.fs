@@ -298,6 +298,9 @@ module Group =
     /// Joins a group, syncs the group, starts the heartbeat process.
     let rec joinSyncHeartbeat (rs:RetryState) (prevMemberId:MemberId option, prevErrorCode:ErrorCode option) = async {     
       
+      Log.info "getting_group_coordinator|conn_id=%s group_id=%s protocol_type=%s protocol_names=%A"
+        conn.Config.connId groupId protocolType protocolNames
+
       let! groupCoord = conn.GetGroupCoordinator groupId
             
       if rs.attempt > groupJoinMaxAttempts then 

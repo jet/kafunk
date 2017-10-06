@@ -470,16 +470,21 @@ module Producer =
           //produceStream |> AsyncSeq.iterAsyncParallel sendBatch
         else
           produceStream |> AsyncSeq.iterAsync sendBatch
-      Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i"
-        cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes
+      Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i batch_linger=%i"
+        cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes cfg.batchLingerMs
       sendProcess
+      |> Async.tryCancelled (fun _ ->
+        Log.info "produce_process_cancelled|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
+        let buffer = flush |> Async.RunSynchronously
+        for batch in buffer do
+          IVar.tryPut (Failure (ProducerError.BatchError batch)) batch.rep |> ignore)
       |> Async.tryFinally (fun _ ->
         Log.info "produce_process_stopping|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
         let buffer = flush |> Async.RunSynchronously
         for batch in buffer do
           IVar.tryPut (Failure (ProducerError.BatchError batch)) batch.rep |> ignore)
       |> Async.tryWith (fun ex -> async {
-        Log.error "producer_broker_queue_exception|ep=%O topic=%s error=\"%O\"" ep cfg.topic ex })
+        Log.error "producer_process_exception|ep=%O topic=%s error=\"%O\"" ep cfg.topic ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
       add
 
