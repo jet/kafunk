@@ -264,17 +264,17 @@ module Producer =
       size <- size + (ProducerMessage.size m)
     size
 
-  let private batchSizeBytes (batch:ProducerMessageBatch seq) =
-    let mutable size = 0
-    for b in batch do
-      size <- size + b.size
-    size
+  //let private batchSizeBytes (batch:ProducerMessageBatch seq) =
+  //  let mutable size = 0
+  //  for b in batch do
+  //    size <- size + b.size
+  //  size
 
-  let private batchCount (batch:ProducerMessageBatch seq) =
-    let mutable count = 0
-    for b in batch do
-      count <- count + b.messages.Length
-    count
+  //let private batchCount (batch:ProducerMessageBatch seq) =
+  //  let mutable count = 0
+  //  for b in batch do
+  //    count <- count + b.messages.Length
+  //  count
 
   let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for b in batch do
@@ -537,29 +537,41 @@ module Producer =
         | _ -> Resource.ResourceErrorAction.RecoverRetry ex
       return Failure recovery }
 
-  let private produceBatchInternal (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
+  let private produceBatchedWithState (p:Producer) (state:ProducerState) (batch:ProducerMessage seq) = async {
+    let! res = 
+      batch
+      |> Seq.groupBy state.partition
+      |> Seq.map (fun (pt,ms) ->
+        let rep = IVar.create ()
+        let ms = ms |> Seq.toArray
+        let batch = ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms)
+        batch)
+      |> Seq.map (sendBatch p state) 
+      |> Async.Parallel
+    let oks,errs = res |> Seq.partitionChoices
+    if errs.Length > 0 then
+      let retries,recovers =
+        errs 
+        |> Seq.map (function 
+          | Resource.ResourceErrorAction.Retry e -> Choice1Of2 e 
+          | Resource.ResourceErrorAction.RecoverRetry e -> Choice2Of2 e 
+          | _ -> failwith "unreachable state")
+        |> Seq.partitionChoices
+      if recovers.Length > 0 then
+        let ex = Exn.ofSeq (Seq.append recovers retries)
+        return Failure (Resource.ResourceErrorAction.RecoverRetry ex)
+      else
+        let ex = Exn.ofSeq retries
+        return Failure (Resource.ResourceErrorAction.RecoverRetry ex)
+    else 
+      return Success oks }
+
+  let private produceBatchWithState (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
       let p,ms = createBatch state.routes.partitions.Length
       let rep = IVar.create ()
       ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
     return! sendBatch p state batch }
-
-//  let private produceInternal (p:Producer) (state:ProducerState) (m:ProducerMessage) : Async<ProducerResult> =
-//    let pt = state.partition m
-//    let rep = IVar.create ()
-//    let batch = ProducerMessageBatch(pt,[|m|],rep,ProducerMessage.size m)
-//    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (sendBatch p) batch
-
-  let private produceBatchedInternal (p:Producer) (state:ProducerState) (batch:ProducerMessage seq) : Async<Result<ProducerResult[], ResourceErrorAction<ProducerResult[], exn>>> =
-    batch
-    |> Seq.groupBy state.partition
-    |> Seq.map (fun (pt,ms) ->
-      let rep = IVar.create ()
-      let ms = ms |> Seq.toArray
-      let batch = ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms)
-      Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (sendBatch p) batch)
-    |> Async.Parallel
-    |> Async.map Success
 
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
@@ -593,13 +605,13 @@ module Producer =
   /// selected here will override the partition function that is configured
   /// in ProducerConfig value passed in when connecting to Kafka.
   let produceBatch (p:Producer) (createBatch:PartitionCount -> Partition * ProducerMessage[]) =
-    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchInternal p) createBatch
+    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchWithState p) createBatch
 
   /// Produces a batch of messages, by assigning a partition to each message,
   /// grouping messages by partitions and sending batches by partition in
   /// parallel and collecting the results.
-  let produceBatched (p:Producer) (batch:ProducerMessage seq) =
-    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchedInternal p) batch
+  let produceBatched (p:Producer) (batch:ProducerMessage seq) : Async<ProducerResult[]> =
+    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchedWithState p) batch
 
   /// Produces a message. The message will be sent as part of a batch and the
   /// result will correspond to the offset produced by the entire batch.

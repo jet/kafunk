@@ -1,13 +1,16 @@
+### 0.1.5-rc5 - 07.10.2017
+* BUG: Producer.produceBatched doesn't recover after transient failures
+
 ### 0.1.5-rc4 - 06.10.2017
 * BUG: race condition in consumer group join wherein multiple groups created on the same connection might prevent a group coordinator from being retrieved
 
 ### 0.1.5-rc3 - 02.10.2017
 * Adjust retry policy defaults: reduce retries to fail fast
 * Exposed internal ConsumerGroup.decodeMemberAssignment
-* Improve consumer group stability, ensuring escalation in all failure modes
+* Improve consumer group stability, ensuring escalation in all consumer failure modes
 
 ### 0.1.5-rc2 - 27.09.2017
-* AsyncSeq v2.0.14 to fix bug in mapAsyncParallel
+* AsyncSeq v2.0.14
 * Change offset range argument type Consumer.streamRange
 
 ### 0.1.5-rc1 - 26.09.2017
