@@ -8,11 +8,8 @@ open System.Diagnostics
 open System.Threading
 open Refs
 
-Log.MinLevel <- LogLevel.Trace
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
-
-
-
 
 let host = argiDefault 1 "localhost"
 let topic = argiDefault 2 "absurd-topic"
@@ -20,7 +17,7 @@ let N = argiDefault 3 "1000000" |> Int64.Parse
 let batchSize = argiDefault 4 "100" |> Int32.Parse
 let messageSize = argiDefault 5 "10" |> Int32.Parse
 let parallelism = argiDefault 6 "1" |> Int32.Parse
-let explicitBatch = argiDefault 7 "false" |> Boolean.Parse
+let produceType = argiDefault 7 "0" |> Int32.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
 
@@ -50,8 +47,8 @@ let connCfg =
       )
 
   KafkaConfig.create (
-    [KafkaUri.parse host], 
-    //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
+    //[KafkaUri.parse host], 
+    [KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
     requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
@@ -108,24 +105,39 @@ let go = async {
 
   let! _ = Async.StartChild monitor
 
-//  let threadPoolMonitor = async {
-//    while true do
-//      do! Async.Sleep (1000 * 5)
-//      let maxWorkerThreads = ref 0
-//      let maxIoThreads = ref 0
-//      let minWorkerThreads = ref 0
-//      let minIoThreads = ref 0
-//      let availWorkerThreads = ref 0
-//      let availIoThreads = ref 0
-//      ThreadPool.GetMaxThreads (maxWorkerThreads, maxIoThreads)
-//      ThreadPool.GetMinThreads (minWorkerThreads, minIoThreads)
-//      ThreadPool.GetAvailableThreads (availWorkerThreads, availIoThreads)
-//      Log.info "thread_pool|max_worker=%i max_io=%i min_worker=%i min_io=%i avail_worker=%i avail_io=%i"
-//        !maxWorkerThreads !maxIoThreads !minWorkerThreads !minIoThreads !availWorkerThreads !availIoThreads }
-//
-//  let! _ = Async.StartChild threadPoolMonitor
+  if produceType = 0 then
 
-  if explicitBatch then
+    let produce = 
+      Producer.produce producer
+      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
+      //|> Metrics.latencyAsyncTo timer
+
+    return!
+      Seq.init batchCount id
+      |> Seq.map (fun batchNo -> async {
+        try
+          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
+          let! res =
+            msgs
+            |> Seq.map (fun m -> async {
+              let! prodRes = produce m
+              let mutable o = Unchecked.defaultof<_>
+              let o' = prodRes.offset              
+              if (offsets.TryGetValue (prodRes.partition, &o)) then                
+                if o' >= o then offsets.[prodRes.partition] <- o'
+              else
+                offsets.[prodRes.partition] <- o'
+              //Log.info "produce_result|p=%i o=%i count=%i" prodRes.partition prodRes.offset prodRes.count
+              return () })
+            |> Async.parallelThrottledIgnore batchSize
+          Interlocked.Add(&completed, int64 batchSize) |> ignore
+          return ()
+        with ex ->
+          Log.error "produce_error|%O" ex
+          return raise ex })
+      |> Async.parallelThrottledIgnore parallelism 
+
+  elif produceType = 1 then
 
     let produceBatch = 
       Producer.produceBatch producer
@@ -146,37 +158,21 @@ let go = async {
           return raise ex })
       |> Async.parallelThrottledIgnore parallelism
 
-  else
+  elif produceType = 2 then
 
-    let produce = 
-      Producer.produce producer
-      |> Metrics.throughputAsyncTo counter (fun _ -> 1)
-      |> Metrics.latencyAsyncTo timer
-
-//    let produce = 
-//      Producer.produceBatched producer
-//      |> Metrics.throughputAsyncTo counter (fun (_,r) -> batchSize)
+    let produceBatched = 
+      Producer.produceBatched producer
+      |> Metrics.throughputAsyncTo counter (fun (_,r) -> batchSize)
+      //|> Metrics.latencyAsyncTo timer
 
     return!
       Seq.init batchCount id
       |> Seq.map (fun batchNo -> async {
         try
-          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-          //let! res = produce msgs
-          let! res =
-            msgs
-            |> Seq.map (fun m -> async {
-              let! prodRes = produce m
-              let mutable o = Unchecked.defaultof<_>
-              let o' = prodRes.offset              
-              if (offsets.TryGetValue (prodRes.partition, &o)) then                
-                if o' >= o then offsets.[prodRes.partition] <- o'
-              else
-                offsets.[prodRes.partition] <- o'
-              //Log.info "produce_result|p=%i o=%i count=%i" prodRes.partition prodRes.offset prodRes.count
-              return () })
-            |> Async.parallelThrottledIgnore batchSize
-          Interlocked.Add(&completed, int64 batchSize) |> ignore
+          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)          
+          let! res = produceBatched msgs
+          let count = res |> Seq.sumBy (fun x -> x.count)
+          Interlocked.Add(&completed, int64 count) |> ignore
           return ()
         with ex ->
           Log.error "produce_error|%O" ex

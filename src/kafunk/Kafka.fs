@@ -486,8 +486,8 @@ type KafkaConfig = {
   /// The default bootstrap broker connection retry policy = RetryPolicy.constantBoundedMs 2000 3.
   static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 2000 3
 
-  /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 5.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 5
+  /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 20.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 20
 
   /// Creates a Kafka configuration object.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, 
