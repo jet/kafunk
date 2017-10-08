@@ -129,6 +129,9 @@ module internal Printers =
   let partitions (os:seq<Partition>) =
     concatMapSb os (fun sb (p) -> sb.AppendFormat("{0}", p)) ","
 
+  let partitionCount (pc:int) =
+    partitions (Seq.init pc id)
+
   let topicPartitions (os:seq<TopicName * Partition>) =
     concatMapSb os (fun sb (t,p) -> sb.AppendFormat("[t={0} p={1}]", t, p)) ","
     
