@@ -194,7 +194,7 @@ type private ProducerState = {
   routes : ProducerRoutes
 
   /// Per-partition queues.
-  partitionQueues : Dictionary<Partition, ProducerMessageBatch -> Async<unit>>
+  partitionQueues : (ProducerMessageBatch -> Async<unit>)[]
 
   /// The partition function.
   partition : ProducerMessage -> Partition }
@@ -203,10 +203,10 @@ type private ProducerState = {
 and ProducerRoutes = {
 
   /// The set of partitions for the topic.
-  partitions : Partition[]
+  partitionCount : int
 
   /// Brokers allocated to each partition.
-  borkerByPartition : Map<Partition, Broker>
+  borkerByPartition : Broker[]
 
   /// Partitions allocated to each broker.
   partitionsByBroker : Map<Broker, Partition[]> }
@@ -218,6 +218,7 @@ and private ProducerError =
   | RecoverableError of Partition * Offset * ErrorCode
   | BatchError of ProducerMessageBatch
   with
+    override __.ToString () = ProducerError.errorMessage __
     static member errorMessage (x:ProducerError) =
       match x with
       | BrokerChanError (b,errs) -> sprintf "broker_channel_errors|node_id=%i ep=%O errors=[%s]" b.nodeId (Broker.endpoint b) (ChanError.printErrors errs)
@@ -263,18 +264,6 @@ module Producer =
     for m in batch do
       size <- size + (ProducerMessage.size m)
     size
-
-  //let private batchSizeBytes (batch:ProducerMessageBatch seq) =
-  //  let mutable size = 0
-  //  for b in batch do
-  //    size <- size + b.size
-  //  size
-
-  //let private batchCount (batch:ProducerMessageBatch seq) =
-  //  let mutable count = 0
-  //  for b in batch do
-  //    count <- count + b.messages.Length
-  //  count
 
   let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for b in batch do
@@ -401,35 +390,37 @@ module Producer =
       |> Map.tryFind topic
       |> Option.getOrLazy 
         (fun () -> failwithf "invalid_state: cluster metadata doesn't have partition information for topic=%s" topic)
+    
+    let partitionCount = partitions.Length
 
     let brokerByPartition =
-      partitions
+      Seq.init partitionCount id
       |> Seq.map (fun p ->
         match ClusterState.tryFindTopicPartitionBroker (topic, p) state with
-        | Some ch -> p,ch
+        | Some b -> b
         | None -> failwithf "invalid_state: should have broker after metadata fetch topic=%s partition=%i" topic p)
-      |> Map.ofSeq
+      |> Seq.toArray
 
     let partitionsByBroker =
       brokerByPartition
-      |> Map.toSeq
+      |> Seq.mapi (fun p b -> p,b)
       |> Seq.groupBy snd
       |> Seq.map (fun (b,xs) -> b, xs |> Seq.map fst |> Seq.sort |> Seq.toArray)
       |> Map.ofSeq
 
     Log.info "discovered_topic_partitions|topic=%s partitions=[%s] allocs=[%s]"
-      topic (Printers.partitions partitions) (partitionsByBroker |> Map.toSeq |> Seq.map (fun (b,ps) -> sprintf "[n=%i ep=%s ps=[%s]]" b.nodeId (Broker.endpoint b) (Printers.partitions ps)) |> String.concat " ; ")
+      topic (Printers.partitionCount partitionCount) (partitionsByBroker |> Map.toSeq |> Seq.map (fun (b,ps) -> sprintf "[n=%i ep=%s ps=[%s]]" b.nodeId (Broker.endpoint b) (Printers.partitions ps)) |> String.concat " ; ")
 
     return {
       ProducerRoutes.borkerByPartition = brokerByPartition
       partitionsByBroker = partitionsByBroker
-      partitions = partitions } }
+      partitionCount = partitionCount } }
 
   /// Fetches cluster state and initializes a per-broker produce queue.
   let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
 
     let! routes = getProducerRoutes conn cfg.topic
-    let partitions = routes.partitions
+    let partitionCount = routes.partitionCount
     let messageVer = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
 
     let! ct' = Async.CancellationToken
@@ -491,15 +482,14 @@ module Producer =
     let partitionQueues =
       let qs = Dict.ofSeq []
       routes.borkerByPartition
-      |> Map.toSeq
-      |> Seq.map (fun (p,b) ->
+      |> Seq.mapi (fun _ b ->
         match Dict.tryGet b.nodeId qs with
-        | Some q -> p,q
+        | Some q -> q
         | None ->
           let q = startBrokerQueue b
           qs.Add (b.nodeId,q)
-          p,q)
-      |> Map.ofSeq
+          q)
+      |> Seq.toArray
 
 //    let partitionQueues =
 //      brokerByPartition
@@ -509,16 +499,15 @@ module Producer =
 //        p,q)
 //      |> Map.ofSeq
 
-    let partition = Partitioner.partition cfg.partitioner cfg.topic partitions.Length
+    let partition = Partitioner.partition cfg.partitioner cfg.topic partitionCount
 
     return {
       routes = routes
-      partitionQueues = partitionQueues |> Dict.ofMap
+      partitionQueues = partitionQueues
       partition = partition } }
 
   let private getBrokerQueueByPartition (state:ProducerState) (p:Partition) =
-    let mutable q = Unchecked.defaultof<_>
-    if state.partitionQueues.TryGetValue(p, &q) then q
+    if state.partitionQueues.Length > p then state.partitionQueues.[p]
     else failwithf "unable to find broker for partition=%i" p
 
   let private sendBatch (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
@@ -544,8 +533,7 @@ module Producer =
       |> Seq.map (fun (pt,ms) ->
         let rep = IVar.create ()
         let ms = ms |> Seq.toArray
-        let batch = ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms)
-        batch)
+        ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms))
       |> Seq.map (sendBatch p state) 
       |> Async.Parallel
     let oks,errs = res |> Seq.partitionChoices
@@ -568,7 +556,7 @@ module Producer =
 
   let private produceBatchWithState (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
-      let p,ms = createBatch state.routes.partitions.Length
+      let p,ms = createBatch state.routes.partitionCount
       let rep = IVar.create ()
       ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
     return! sendBatch p state batch }
@@ -587,11 +575,11 @@ module Producer =
         (initProducer conn config)
         (fun (s,v,_,ex) -> async {
           Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=\"%O\""
-            v config.topic (Printers.partitions s.routes.partitions) ex
+            v config.topic (Printers.partitionCount s.routes.partitionCount) ex
           return () })
     let! state = Resource.get resource
     let p = { state = resource ; config = config ; conn = conn ; batchTimeout = batchTimeout }
-    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitions state.routes.partitions)
+    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitionCount state.routes.partitionCount)
     return p }
 
   /// Creates a producer.

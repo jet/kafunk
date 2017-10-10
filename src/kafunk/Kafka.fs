@@ -36,6 +36,17 @@ type internal ClusterState = {
     |> Seq.map (fun (tn,xs) -> tn, xs |> Seq.map snd |> Seq.toArray)
     |> Map.ofSeq
 
+  /// Determines whether the cluster state contains metadata for the specified topics.
+  static member containsTopicMetadata (ts:TopicName[]) (s:ClusterState) =
+    let topics = s.brokersByTopicPartition |> Seq.map (fun kvp -> kvp.Key |> fst) |> set
+    ts |> Seq.forall (fun x -> Set.contains x topics )
+
+  /// Returns the broker channel for the coordinator for the specified group.
+  static member containsGroupCoordinator (groupId:GroupId) (s:ClusterState) =
+    s
+    |> ClusterState.tryFindGroupCoordinatorBroker groupId
+    |> Option.isSome
+
   /// Returns the broker channel for the coordinator for the specified group.
   static member tryFindGroupCoordinatorBroker (groupId:GroupId) (s:ClusterState) =
     s.brokersByGroup
@@ -647,7 +658,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and getAndApplyMetadata (requireMatchingCaller:bool) (callerState:ClusterState) (topics:TopicName[]) =
     stateCell
     |> MVar.updateAsync (fun (currentState:ClusterState) -> async {
-      if requireMatchingCaller && currentState.version > callerState.version then 
+      if requireMatchingCaller 
+        && currentState.version > callerState.version 
+        && ClusterState.containsTopicMetadata topics currentState then 
         Log.trace "skipping_metadata_update|current_version=%i caller_version=%i" currentState.version callerState.version
         return currentState 
       else
@@ -679,8 +692,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and getAndApplyGroupCoordinator (callerState:ClusterState) (groupId:GroupId) =
     stateCell 
     |> MVar.updateAsync (fun (currentState:ClusterState) -> async {
-      if currentState.version > callerState.version && 
-        ClusterState.tryFindGroupCoordinatorBroker groupId currentState |> Option.isSome then 
+      if currentState.version > callerState.version 
+        && ClusterState.containsGroupCoordinator groupId currentState then 
         Log.trace "skipping_group_coordinator_update|current_version=%i caller_version=%i group_id=%s" currentState.version callerState.version groupId
         return currentState 
       else

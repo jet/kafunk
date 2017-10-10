@@ -1,3 +1,6 @@
+### 0.1.5-rc6 - 10.10.2017
+* Producer performance improvement
+
 ### 0.1.5-rc5 - 07.10.2017
 * BUG: Producer.produceBatched doesn't recover after transient failures
 
