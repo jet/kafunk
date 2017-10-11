@@ -14,7 +14,7 @@ This example demonstrates how to consume using Kafunk.
 (**
 
 Joining the consumer group:
-See also: (ConsumerConfig)[https://jet.github.io/kafunk/reference/kafunk-consumerconfig.html]
+See also: [ConsumerConfig](https://jet.github.io/kafunk/reference/kafunk-consumerconfig.html)
 
 *)
 
@@ -113,8 +113,14 @@ Consumer.consumePeriodicCommit consumer
 *)
 
 
-/// Create a commit queue
-let commitQueue = Offsets.createPeriodicCommitQueue (TimeSpan.FromHours 1.0, async { return failwith "" }, Consumer.commitOffsets consumer)
+/// Create a commit queue.
+let (commitQueue,commitProccess) = 
+  Consumer.periodicOffsetCommitter consumer (TimeSpan.FromSeconds 60.0)
+  |> Async.RunSynchronously
+
+/// Start the background commit process.
+/// You may wish to trap exceptions in this process in order to crash.
+Async.Start commitProccess
 
 let ms : ConsumerMessageSet = failwith "some message set"
 
@@ -150,7 +156,7 @@ Consumer.stream consumer
 (**
 
 The resulting stream merges all of the per-broker streams covering all assigned partitions of the consumed topic. Note that offsets 
-must be committed explicitly.
+must be committed explicitly as described earlier.
 
 *)
 
@@ -191,6 +197,29 @@ let consumerOffsets =
 for (t,os) in consumerOffsets do
   for (p,o) in os do
     printfn "topic=%s partition=%i offset=%i" t p o
+
+
+
+(**
+
+## Consuming Fixed Ranges
+
+Kafunk provides a helper to consumer a fixed range of offsets. For example, to read the range of
+messages in the topic at the time of invocation:
+
+*)
+
+/// Read the current offset range.
+let offsetRange = 
+  Offsets.offsetRange conn "my-topic" [] 
+  |> Async.RunSynchronously
+
+/// Read messages corresponding to the offset range.
+let messageRange = 
+  Consumer.streamRange consumer offsetRange
+  |> Async.RunSynchronously
+
+
 
 
 (**

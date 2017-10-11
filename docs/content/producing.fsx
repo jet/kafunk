@@ -47,10 +47,7 @@ let producerConfig =
     batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
     
     /// The maximum time to wait for a batch.
-    batchLingerMs = ProducerConfig.DefaultBatchLingerMs,
-        
-    /// The retry policy.
-    retryPolicy = ProducerConfig.DefaultRetryPolicy)
+    batchLingerMs = ProducerConfig.DefaultBatchLingerMs)
 
 
 /// Create a producer.
@@ -74,7 +71,7 @@ printfn "partition=%i offset=%i" prodRes.partition prodRes.offset
 
 (**
 
-## Batching
+## Buffering
 
 The function `Producer.produce` accepts a single message, but the producer batches messages internally by partition and broker based on
 batching settings specified in the configuration. Bigger batches mean fewer round-trips to the broker, and therefore, greater throughput 
@@ -101,18 +98,21 @@ It is also possible to explicitly batch messages on the client side:
 
 *)
 
-let batchRes =
-  Producer.produceBatch 
+let producerResults =
+  Producer.produceBatched 
     producer 
-    (fun pc -> 0, [| ProducerMessage.ofString ("message1") ; ProducerMessage.ofString ("message2") |] )
+    [| ProducerMessage.ofString ("message1") ; ProducerMessage.ofString ("message2") |]
   |> Async.RunSynchronously
 
 
 (**
 
-The `Producer.produceBatch` function accepts a function taking the current set of partitions for the topic, and returning a pair of partition and
-message array. This function allows for the creation of explicit batches destined for an individual partition. Ordering of messages in the array 
-is preserved.
+The `Producer.produceBatched` takes a collection of messages, groups them by partition and produces in parallel 
+across partitions but maintaining the input order within partitions. The operation returns an array of ProducerResult
+values, one for each partition produced to. The producer result value contains the partition, the offset of the first
+message written to the partition and a count of messages written to that partition as part of the batch. Note that this
+count doesn't necessarily correspond to the count of messages provided to the operation due to buffering. See above for more
+details.
 
 *)
 

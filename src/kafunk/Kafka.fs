@@ -495,7 +495,7 @@ type KafkaConfig = {
   static member DefaultClientId = ""
 
   /// The default bootstrap broker connection retry policy = RetryPolicy.constantBoundedMs 2000 3.
-  static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 2000 3
+  static member DefaultBootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3
 
   /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 20.
   static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 20
