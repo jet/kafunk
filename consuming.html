@@ -36,7 +36,7 @@
 <h1><a name="Consuming" class="anchor" href="#Consuming">Consuming</a></h1>
 <p>This example demonstrates how to consume using Kafunk.</p>
 <p>Joining the consumer group:
-See also: (ConsumerConfig)[<a href="https://jet.github.io/kafunk/reference/kafunk-consumerconfig.html">https://jet.github.io/kafunk/reference/kafunk-consumerconfig.html</a>]</p>
+See also: <a href="https://jet.github.io/kafunk/reference/kafunk-consumerconfig.html">ConsumerConfig</a></p>
 <table class="pre"><tr><td class="lines"><pre class="fssnip"><span class="l"> 1: </span>
 <span class="l"> 2: </span>
 <span class="l"> 3: </span>
@@ -150,16 +150,28 @@ the critical path.</p>
 </table>
 <h2><a name="Periodic-Offset-Commit" class="anchor" href="#Periodic-Offset-Commit">Periodic Offset Commit</a></h2>
 <p><code>Consumer.consumePeriodicCommit</code> commits offsets periodically using the following mechanism.</p>
-<table class="pre"><tr><td class="lines"><pre class="fssnip"><span class="l">1: </span>
-<span class="l">2: </span>
-<span class="l">3: </span>
-<span class="l">4: </span>
-<span class="l">5: </span>
-<span class="l">6: </span>
-<span class="l">7: </span>
+<table class="pre"><tr><td class="lines"><pre class="fssnip"><span class="l"> 1: </span>
+<span class="l"> 2: </span>
+<span class="l"> 3: </span>
+<span class="l"> 4: </span>
+<span class="l"> 5: </span>
+<span class="l"> 6: </span>
+<span class="l"> 7: </span>
+<span class="l"> 8: </span>
+<span class="l"> 9: </span>
+<span class="l">10: </span>
+<span class="l">11: </span>
+<span class="l">12: </span>
+<span class="l">13: </span>
 </pre></td>
-<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="c">/// Create a commit queue</span>
-<span class="k">let</span> <span class="i">commitQueue</span> <span class="o">=</span> <span class="i">Offsets</span><span class="o">.</span><span class="i">createPeriodicCommitQueue</span> (<span class="i">TimeSpan</span><span class="o">.</span><span class="i">FromHours</span> <span class="n">1.0</span>, <span class="i">async</span> { <span class="k">return</span> <span class="i">failwith</span> <span class="s">&quot;&quot;</span> }, <span class="i">Consumer</span><span class="o">.</span><span class="i">commitOffsets</span> <span class="i">consumer</span>)
+<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="c">/// Create a commit queue.</span>
+<span class="k">let</span> (<span class="i">commitQueue</span>,<span class="i">commitProccess</span>) <span class="o">=</span> 
+  <span class="i">Consumer</span><span class="o">.</span><span class="i">periodicOffsetCommitter</span> <span class="i">consumer</span> (<span class="i">TimeSpan</span><span class="o">.</span><span class="i">FromSeconds</span> <span class="n">60.0</span>)
+  <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
+
+<span class="c">/// Start the background commit process.</span>
+<span class="c">/// You may wish to trap exceptions in this process in order to crash.</span>
+<span class="i">Async</span><span class="o">.</span><span class="i">Start</span> <span class="i">commitProccess</span>
 
 <span class="k">let</span> <span class="i">ms</span> <span class="o">:</span> <span class="i">ConsumerMessageSet</span> <span class="o">=</span> <span class="i">failwith</span> <span class="s">&quot;some message set&quot;</span>
 
@@ -185,7 +197,7 @@ to consume messages directly using an asynchronous sequence:</p>
 </tr>
 </table>
 <p>The resulting stream merges all of the per-broker streams covering all assigned partitions of the consumed topic. Note that offsets
-must be committed explicitly.</p>
+must be committed explicitly as described earlier.</p>
 <h2><a name="Consumer-Offsets" class="anchor" href="#Consumer-Offsets">Consumer Offsets</a></h2>
 <p>Consumer offsets can be committed explicitly. This can be used to reset a consumer to a particular offset when
 the consumer instances are offline. Note that consumer instances only fetch committed offsets when they are starting
@@ -222,6 +234,31 @@ to consumer, or when rejoining.</p>
 <span class="k">for</span> (<span class="i">t</span>,<span class="i">os</span>) <span class="k">in</span> <span class="i">consumerOffsets</span> <span class="k">do</span>
   <span class="k">for</span> (<span class="i">p</span>,<span class="i">o</span>) <span class="k">in</span> <span class="i">os</span> <span class="k">do</span>
     <span class="i">printfn</span> <span class="s">&quot;topic=%s partition=%i offset=%i&quot;</span> <span class="i">t</span> <span class="i">p</span> <span class="i">o</span>
+</code></pre></td>
+</tr>
+</table>
+<h2><a name="Consuming-Fixed-Ranges" class="anchor" href="#Consuming-Fixed-Ranges">Consuming Fixed Ranges</a></h2>
+<p>Kafunk provides a helper to consumer a fixed range of offsets. For example, to read the range of
+messages in the topic at the time of invocation:</p>
+<table class="pre"><tr><td class="lines"><pre class="fssnip"><span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+<span class="l">4: </span>
+<span class="l">5: </span>
+<span class="l">6: </span>
+<span class="l">7: </span>
+<span class="l">8: </span>
+<span class="l">9: </span>
+</pre></td>
+<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="c">/// Read the current offset range.</span>
+<span class="k">let</span> <span class="i">offsetRange</span> <span class="o">=</span> 
+  <span class="i">Offsets</span><span class="o">.</span><span class="i">offsetRange</span> <span class="i">conn</span> <span class="s">&quot;my-topic&quot;</span> [] 
+  <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
+
+<span class="c">/// Read messages corresponding to the offset range.</span>
+<span class="k">let</span> <span class="i">messageRange</span> <span class="o">=</span> 
+  <span class="i">Consumer</span><span class="o">.</span><span class="i">streamRange</span> <span class="i">consumer</span> <span class="i">offsetRange</span>
+  <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
 </code></pre></td>
 </tr>
 </table>

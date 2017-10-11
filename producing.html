@@ -86,9 +86,6 @@ See also: (ProducerConfig)[<a href="https://jet.github.io/kafunk/reference/kafun
 <span class="l">47: </span>
 <span class="l">48: </span>
 <span class="l">49: </span>
-<span class="l">50: </span>
-<span class="l">51: </span>
-<span class="l">52: </span>
 </pre></td>
 <td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="prep">#r</span> <span class="s">&quot;kafunk.dll&quot;</span>
 <span class="prep">#r</span> <span class="s">&quot;FSharp.Control.AsyncSeq.dll&quot;</span>
@@ -118,10 +115,7 @@ See also: (ProducerConfig)[<a href="https://jet.github.io/kafunk/reference/kafun
     <span class="i">batchSizeBytes</span> <span class="o">=</span> <span class="i">ProducerConfig</span><span class="o">.</span><span class="i">DefaultBatchSizeBytes</span>,
     
     <span class="c">/// The maximum time to wait for a batch.</span>
-    <span class="i">batchLingerMs</span> <span class="o">=</span> <span class="i">ProducerConfig</span><span class="o">.</span><span class="i">DefaultBatchLingerMs</span>,
-        
-    <span class="c">/// The retry policy.</span>
-    <span class="i">retryPolicy</span> <span class="o">=</span> <span class="i">ProducerConfig</span><span class="o">.</span><span class="i">DefaultRetryPolicy</span>)
+    <span class="i">batchLingerMs</span> <span class="o">=</span> <span class="i">ProducerConfig</span><span class="o">.</span><span class="i">DefaultBatchLingerMs</span>)
 
 
 <span class="c">/// Create a producer.</span>
@@ -145,7 +139,7 @@ See also: (ProducerConfig)[<a href="https://jet.github.io/kafunk/reference/kafun
 </code></pre></td>
 </tr>
 </table>
-<h2><a name="Batching" class="anchor" href="#Batching">Batching</a></h2>
+<h2><a name="Buffering" class="anchor" href="#Buffering">Buffering</a></h2>
 <p>The function <code>Producer.produce</code> accepts a single message, but the producer batches messages internally by partition and broker based on
 batching settings specified in the configuration. Bigger batches mean fewer round-trips to the broker, and therefore, greater throughput
 at the cost of increased latency.</p>
@@ -164,17 +158,20 @@ Note that care must be taken to ensure message ordering requirements aren't viol
 <span class="l">4: </span>
 <span class="l">5: </span>
 </pre></td>
-<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span class="i">batchRes</span> <span class="o">=</span>
-  <span class="i">Producer</span><span class="o">.</span><span class="i">produceBatch</span> 
+<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span class="i">producerResults</span> <span class="o">=</span>
+  <span class="i">Producer</span><span class="o">.</span><span class="i">produceBatched</span> 
     <span class="i">producer</span> 
-    (<span class="k">fun</span> <span class="i">pc</span> <span class="k">-&gt;</span> <span class="n">0</span>, [| <span class="i">ProducerMessage</span><span class="o">.</span><span class="i">ofString</span> (<span class="s">&quot;message1&quot;</span>) ; <span class="i">ProducerMessage</span><span class="o">.</span><span class="i">ofString</span> (<span class="s">&quot;message2&quot;</span>) |] )
+    [| <span class="i">ProducerMessage</span><span class="o">.</span><span class="i">ofString</span> (<span class="s">&quot;message1&quot;</span>) ; <span class="i">ProducerMessage</span><span class="o">.</span><span class="i">ofString</span> (<span class="s">&quot;message2&quot;</span>) |]
   <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
 </code></pre></td>
 </tr>
 </table>
-<p>The <code>Producer.produceBatch</code> function accepts a function taking the current set of partitions for the topic, and returning a pair of partition and
-message array. This function allows for the creation of explicit batches destined for an individual partition. Ordering of messages in the array
-is preserved.</p>
+<p>The <code>Producer.produceBatched</code> takes a collection of messages, groups them by partition and produces in parallel
+across partitions but maintaining the input order within partitions. The operation returns an array of ProducerResult
+values, one for each partition produced to. The producer result value contains the partition, the offset of the first
+message written to the partition and a count of messages written to that partition as part of the batch. Note that this
+count doesn't necessarily correspond to the count of messages provided to the operation due to buffering. See above for more
+details.</p>
 <h2><a name="Contributing-and-copyright" class="anchor" href="#Contributing-and-copyright">Contributing and copyright</a></h2>
 <p>The project is hosted on <a href="https://github.com/jet/kafunk">GitHub</a> where you can <a href="https://github.com/jet/kafunk/issues">report issues</a>, fork
 the project and submit pull requests. If you're adding a new public API, please also
