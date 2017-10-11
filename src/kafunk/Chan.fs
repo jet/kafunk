@@ -52,8 +52,8 @@ type ChanConfig = {
   /// The default TCP request timeout = 30s.
   static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
   
-  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 2000 3.
-  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 2000 3
+  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 1000 2.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2
   
   /// The default TCP Nagle setting = false.
   static member DefaultUseNagle = false

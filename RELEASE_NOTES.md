@@ -1,3 +1,6 @@
+### 0.1.5 - 11.10.2017
+* Cumulitive release with fixes since 0.1.4
+
 ### 0.1.5-rc6 - 10.10.2017
 * Producer performance improvement
 
