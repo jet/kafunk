@@ -65,8 +65,7 @@ module ConsumerInfo =
       Async.parallel2 (
         Offsets.offsetRange conn topic partitions,
         Consumer.fetchOffsets conn groupId [|topic,partitions|])
-
-    printfn "consumerOffsets=%A" consumerOffsets
+        
     let consumerOffsets =
       consumerOffsets
       |> Seq.collect (fun (t,os) ->
