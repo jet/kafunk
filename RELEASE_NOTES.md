@@ -1,3 +1,6 @@
+### 0.1.6-rc1 - 13.10.2017
+* Fixed 'ConsumerProgress.progress' returning -1 for offsets when Array.empty is passed in
+
 ### 0.1.5 - 11.10.2017
 * Cumulitive release with fixes since 0.1.4
 

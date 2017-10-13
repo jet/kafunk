@@ -52,11 +52,20 @@ module ConsumerInfo =
 
   /// Returns consumer progress information.
   /// Passing empty set of partitions returns information for all partitions.
-  let progress (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) (ps:Partition[]) = async {
+  let progress (conn:KafkaConn) (groupId:GroupId) (topic:TopicName) (ps:Partition[]) = async {    
+    let! partitions = 
+      if ps |> Array.isEmpty then
+        async {
+        let! metaData = conn.GetMetadata [|topic|]
+        return metaData.Item topic }
+      else 
+        async { return ps }
+
     let! topicOffsets,consumerOffsets =
       Async.parallel2 (
-        Offsets.offsetRange conn topic ps,
-        Consumer.fetchOffsets conn groupId [|topic,ps|])
+        Offsets.offsetRange conn topic partitions,
+        Consumer.fetchOffsets conn groupId [|topic,partitions|])
+        
     let consumerOffsets =
       consumerOffsets
       |> Seq.collect (fun (t,os) ->
