@@ -7,7 +7,7 @@ open Refs
 
 let Log = Log.create __SOURCE_FILE__
 
-let host = "guardians-shared.kafka.eastus2.qa.jet.network:9092"
+let host = "localhost"
 
 let go = async {
 
