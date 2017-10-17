@@ -31,7 +31,7 @@ type internal ResourceEpoch<'r> = {
 type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, close:('r * int * obj * exn) -> Async<unit>) =
   
   let name = typeof<'r>.Name    
-  let Log = Log.create "Resource"
+  let Log = Log.create "Kafunk.Resource"
   let cell : MVar<ResourceEpoch<'r>> = MVar.create ()  
   let recoveryTimeout = TimeSpan.FromSeconds 60.0
 
@@ -63,7 +63,6 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
       return () }
 
   member internal __.Get () = async {
-    //let! ep = MVar.get cell
     let ep = MVar.getFastUnsafe cell
     match ep with
     | None -> 
