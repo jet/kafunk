@@ -178,7 +178,7 @@ module internal Chan =
             | Failure (Choice1Of2 _) ->
               Log.warn "tcp_connection_timed_out|conn_id=%s remote_endpoint=%O timeout=%O" connId ipep config.connectTimeout
             | Failure (Choice2Of2 e) ->
-              Log.error "tcp_connection_failed|conn_id=%s remote_endpoint=%O error=\"%O\"" connId ipep e)
+              Log.warn "tcp_connection_failed|conn_id=%s remote_endpoint=%O error=\"%O\"" connId ipep e)
       |> AsyncFunc.mapOut (snd >> Result.codiagExn)
       |> Faults.AsyncFunc.retryResultThrow id Exn.monoid config.connectRetryPolicy
 
@@ -205,7 +205,7 @@ module internal Chan =
           else 
             return Success received
         with ex ->
-          Log.error "receive_failure|conn_id=%s remote_endpoint=%O error=\"%O\"" connId ep ex
+          Log.warn "receive_failure|conn_id=%s remote_endpoint=%O error=\"%O\"" connId ep ex
           return Failure (ResourceErrorAction.RecoverResume (ex,0)) }
       socketAgent 
       |> Resource.injectResult receive

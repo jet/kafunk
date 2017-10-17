@@ -125,6 +125,9 @@ module RetryPolicy =
   /// No retry.
   let none = create (konst None)
 
+  /// Infinite retries.
+  let infinite = create (konst (Some TimeSpan.Zero))
+
   /// Returns an unbounded retry policy with a constant delay of the specified duration.
   let constant (delay:TimeSpan) = 
     create <| fun _ -> Some delay
