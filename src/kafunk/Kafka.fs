@@ -569,11 +569,6 @@ type KafkaConn internal (cfg:KafkaConfig) =
     | _ ->
       try
         let! ch = Chan.connect (cfg.connId, !apiVersion, cfg.tcpConfig, cfg.clientId) ep
-// NB: can't publish a remove channel message, because no where to publish to.
-// A message queue could work.
-//        Chan.task ch
-//        |> Task.extend (fun t -> if t.IsFaulted then  )
-//        |> ignore
         return Success ch
       with ex ->
         return Failure ex }
@@ -621,7 +616,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
             return Failure e }) }
     connect
     |> Faults.AsyncFunc.retryStateResultThrowList 
-        (fun errs -> exn("Failed to connect to a bootstrap broker.", Exn.ofSeq errs)) 
+        (fun errs ->
+          let exnInner = Exn.ofSeq errs
+          Log.error "failed_to_connect_bootstrap_broker|brokers=%A error=\"%O\"" cfg.bootstrapServers exnInner
+          exn("Failed to connect to a bootstrap broker.", exnInner))
         cfg.bootstrapConnectRetryPolicy
     
   /// Connects to the first available broker in the bootstrap list and returns the 
@@ -643,7 +641,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
     for tmd in metadata.topicMetadata do
       for pmd in tmd.partitionMetadata do
         if pmd.leader = -1 then
-          Log.warn "leaderless_partition_detected|partition=%i error_code=%i" pmd.partitionId pmd.partitionErrorCode
+          Log.error "leaderless_partition_detected|partition=%i error_code=%i" pmd.partitionId pmd.partitionErrorCode
       
     let topicNodes =
       metadata.topicMetadata 
@@ -828,7 +826,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
             else return! getAndApplyMetadata true state tns }
         return! routeToBrokerWithRecovery critical rs state' req
       | None ->
-        return failwithf "missng_route|attempts=%i route_type=%A" rs.attempt rt }
+        return failwithf "missing_route|attempts=%i route_type=%A" rs.attempt rt }
 
   /// Handles a failure to communicate with a broker.
   and recoverBrokerChanRequestError (critical:bool) (state:ClusterState) (b:Broker, req:RequestMessage, chanErrs:ChanError list) = async {

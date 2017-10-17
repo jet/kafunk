@@ -26,7 +26,7 @@ module ConsumerGroup =
   }
 
   /// Decodes member state from the MemberAssignment field in SyncGroupResponse.
-  let decodeMemberAssignment (memberAssignment:MemberAssignment) =
+  let decodeMemberAssignments (memberAssignment:MemberAssignment) =
       
     let assignment,_ = ConsumerGroupMemberAssignment.read memberAssignment
           
@@ -36,8 +36,12 @@ module ConsumerGroup =
       |> Seq.map (fun (t,ps) -> t, ps |> Seq.collect snd |> Seq.toArray)
       |> Seq.toArray
 
+    assignments
+
+  /// Decodes member state from the MemberAssignment field in SyncGroupResponse.
+  let internal decodeMemberAssignment (memberAssignment:MemberAssignment) =
     // TODO: consider support for multi-topic subscriptions
-    let t,ps = assignments.[0]
+    let t,ps = (decodeMemberAssignments memberAssignment).[0]
     t,ps
   
   let private toArraySeg size write x =

@@ -1,3 +1,8 @@
+### 0.1.6-rc2 - 17.10.2017
+* Producer retry without recovery when recovery not needed.
+* Ensure that Resource isn't corrupted after a failed resource recovery attempt and can be retried again.
+* Resource performance improvement.
+
 ### 0.1.6-rc1 - 13.10.2017
 * Fixed 'ConsumerProgress.progress' returning -1 for offsets when Array.empty is passed in
 

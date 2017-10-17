@@ -458,7 +458,6 @@ module Producer =
       let sendProcess =
         if cfg.maxInFlightRequests > 1 then        
           produceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
-          //produceStream |> AsyncSeq.iterAsyncParallel sendBatch
         else
           produceStream |> AsyncSeq.iterAsync sendBatch
       Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i batch_linger=%i"
@@ -490,14 +489,6 @@ module Producer =
           qs.Add (b.nodeId,q)
           q)
       |> Seq.toArray
-
-//    let partitionQueues =
-//      brokerByPartition
-//      |> Map.toSeq
-//      |> Seq.map (fun (p,b) ->
-//        let q = startBrokerQueue b
-//        p,q)
-//      |> Map.ofSeq
 
     let partition = Partitioner.partition cfg.partitioner cfg.topic partitionCount
 
@@ -541,8 +532,8 @@ module Producer =
       let retries,recovers =
         errs 
         |> Seq.map (function 
-          | Resource.ResourceErrorAction.Retry e -> Choice1Of2 e 
-          | Resource.ResourceErrorAction.RecoverRetry e -> Choice2Of2 e 
+          | Resource.ResourceErrorAction.Retry e -> Choice1Of2 e
+          | Resource.ResourceErrorAction.RecoverRetry e -> Choice2Of2 e
           | _ -> failwith "unreachable state")
         |> Seq.partitionChoices
       if recovers.Length > 0 then
@@ -550,7 +541,7 @@ module Producer =
         return Failure (Resource.ResourceErrorAction.RecoverRetry ex)
       else
         let ex = Exn.ofSeq retries
-        return Failure (Resource.ResourceErrorAction.RecoverRetry ex)
+        return Failure (Resource.ResourceErrorAction.Retry ex)
     else 
       return Success oks }
 
