@@ -1,3 +1,6 @@
+### 0.1.6-rc2 - 16.10.2017
+* Producer retry without recovery when recovery not needed.
+
 ### 0.1.6-rc1 - 13.10.2017
 * Fixed 'ConsumerProgress.progress' returning -1 for offsets when Array.empty is passed in
 
