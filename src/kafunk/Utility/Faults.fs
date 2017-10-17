@@ -148,22 +148,21 @@ module RetryPolicy =
   /// Returns an unbounded retry policy with a linearly increasing delay.
   let linearBounded (init:TimeSpan) (increment:TimeSpan) (attempts:int) = 
     linear init increment |> maxAttempts attempts
-    
-  let checkMax (s: TimeSpan) = 
-    let upper = TimeSpan.FromMilliseconds 2000000000
-    min upper s
-
+   
   let randomize r = 
     let rand = System.Random()
     let hi, lo = 1.0 + r, 1.0 - r
     fun (s: TimeSpan) -> (float s.Milliseconds) * (rand.NextDouble() * (hi - lo) + lo) |> TimeSpan.FromMilliseconds
 
-  let exp (init: TimeSpan) (multiplier) : RetryPolicy = 
+  let exp (init: TimeSpan) (multiplier) limit : RetryPolicy = 
+    create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> (fun s -> min limit s) |> Some)
+
+  let expRand init multiplier limit = 
     let randomize = randomize 0.1
-    create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> randomize |> checkMax |> Some)
+    create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> randomize |> (fun s -> min limit s) |> Some)
 
   let defaultExpRetry init = 
-    exp init 2
+    expRand init 2
 
 /// A retry queue.
 [<StructuredFormatDisplay("RetryQueue({items})")>]
