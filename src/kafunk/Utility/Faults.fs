@@ -154,13 +154,16 @@ module RetryPolicy =
     let hi, lo = 1.0 + r, 1.0 - r
     fun (s: TimeSpan) -> (float s.Milliseconds) * (rand.NextDouble() * (hi - lo) + lo) |> TimeSpan.FromMilliseconds
 
+  // exponentially backs off after every retry
   let exp (init: TimeSpan) (multiplier) limit : RetryPolicy = 
     create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> (fun s -> min limit s) |> Some)
 
+  // exponential backoff after retry with randomized backoff times (helps spread out retries for multiple clients
   let expRand init multiplier limit = 
     let randomize = randomize 0.1
     create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> randomize |> (fun s -> min limit s) |> Some)
 
+  // default exponential backoff retry strategy with jitter
   let defaultExpRetry init = 
     expRand init 2
 
