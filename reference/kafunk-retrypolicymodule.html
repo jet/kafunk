@@ -105,7 +105,7 @@ the delay and next state, or None if the retries have stopped.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L129-129" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L132-132" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -125,7 +125,7 @@ the delay and next state, or None if the retries have stopped.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L137-137" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L140-140" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -145,7 +145,7 @@ the delay and next state, or None if the retries have stopped.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L141-141" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L144-144" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -165,7 +165,7 @@ the delay and next state, or None if the retries have stopped.</p>
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L133-133" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L136-136" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -260,18 +260,18 @@ has elapsed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '184', 184)" onmouseover="showTip(event, '184', 184)">
-            linear init increment
+            infinite 
           </code>
           <div class="tip" id="184">
-            <strong>Signature:</strong> init:TimeSpan -&gt; increment:TimeSpan -&gt; RetryPolicy<br />
+            <strong>Signature:</strong> RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L145-145" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L129-129" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>Returns an unbounded retry policy with a linearly increasing delay.</p>
+          <p>Infinite retries.</p>
 
 
         </td>
@@ -280,14 +280,14 @@ has elapsed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '185', 185)" onmouseover="showTip(event, '185', 185)">
-            linearBounded init increment attempts
+            linear init increment
           </code>
           <div class="tip" id="185">
-            <strong>Signature:</strong> init:TimeSpan -&gt; increment:TimeSpan -&gt; attempts:int -&gt; RetryPolicy<br />
+            <strong>Signature:</strong> init:TimeSpan -&gt; increment:TimeSpan -&gt; RetryPolicy<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L149-149" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L148-148" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -300,9 +300,29 @@ has elapsed.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '186', 186)" onmouseover="showTip(event, '186', 186)">
-            maxAttempts maxAttempts p
+            linearBounded init increment attempts
           </code>
           <div class="tip" id="186">
+            <strong>Signature:</strong> init:TimeSpan -&gt; increment:TimeSpan -&gt; attempts:int -&gt; RetryPolicy<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Faults.fs#L152-152" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns an unbounded retry policy with a linearly increasing delay.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '187', 187)" onmouseover="showTip(event, '187', 187)">
+            maxAttempts maxAttempts p
+          </code>
+          <div class="tip" id="187">
             <strong>Signature:</strong> maxAttempts:int -&gt; p:RetryPolicy -&gt; RetryPolicy<br />
                       </div>
         </td>
@@ -319,10 +339,10 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '187', 187)" onmouseover="showTip(event, '187', 187)">
+          <code onmouseout="hideTip(event, '188', 188)" onmouseover="showTip(event, '188', 188)">
             maxDelay maxDelay b
           </code>
-          <div class="tip" id="187">
+          <div class="tip" id="188">
             <strong>Signature:</strong> maxDelay:TimeSpan -&gt; b:RetryPolicy -&gt; RetryPolicy<br />
                       </div>
         </td>
@@ -339,10 +359,10 @@ has elapsed.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '188', 188)" onmouseover="showTip(event, '188', 188)">
+          <code onmouseout="hideTip(event, '189', 189)" onmouseover="showTip(event, '189', 189)">
             none 
           </code>
-          <div class="tip" id="188">
+          <div class="tip" id="189">
             <strong>Signature:</strong> RetryPolicy<br />
                       </div>
         </td>
