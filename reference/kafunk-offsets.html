@@ -55,10 +55,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
+          <code onmouseout="hideTip(event, '114', 114)" onmouseover="showTip(event, '114', 114)">
             createPeriodicCommitQueue (...)
           </code>
-          <div class="tip" id="112">
+          <div class="tip" id="114">
             <strong>Signature:</strong> (TimeSpan * Async&lt;Partition []&gt; * ((Partition * Offset) [] -&gt; Async&lt;unit&gt;)) -&gt; PeriodicCommitQueue<br />
                       </div>
         </td>
@@ -75,10 +75,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '113', 113)" onmouseover="showTip(event, '113', 113)">
+          <code onmouseout="hideTip(event, '115', 115)" onmouseover="showTip(event, '115', 115)">
             enqueuePeriodicCommit q os
           </code>
-          <div class="tip" id="113">
+          <div class="tip" id="115">
             <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; os:seq&lt;Partition * Offset&gt; -&gt; unit<br />
                       </div>
         </td>
@@ -95,10 +95,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '114', 114)" onmouseover="showTip(event, '114', 114)">
+          <code onmouseout="hideTip(event, '116', 116)" onmouseover="showTip(event, '116', 116)">
             flushPeriodicCommit q
           </code>
-          <div class="tip" id="114">
+          <div class="tip" id="116">
             <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
@@ -115,10 +115,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '115', 115)" onmouseover="showTip(event, '115', 115)">
+          <code onmouseout="hideTip(event, '117', 117)" onmouseover="showTip(event, '117', 117)">
             offsetRange conn topic partitions
           </code>
-          <div class="tip" id="115">
+          <div class="tip" id="117">
             <strong>Signature:</strong> conn:KafkaConn -&gt; topic:TopicName -&gt; partitions:seq&lt;Partition&gt; -&gt; Async&lt;Map&lt;Partition,(Offset * Offset)&gt;&gt;<br />
                       </div>
         </td>
@@ -136,10 +136,10 @@ If empty is passed in for Partitions, will return information for all partitions
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '116', 116)" onmouseover="showTip(event, '116', 116)">
+          <code onmouseout="hideTip(event, '118', 118)" onmouseover="showTip(event, '118', 118)">
             offsets (...)
           </code>
-          <div class="tip" id="116">
+          <div class="tip" id="118">
             <strong>Signature:</strong> conn:KafkaConn -&gt; topic:TopicName -&gt; partitions:seq&lt;Partition&gt; -&gt; times:seq&lt;Time&gt; -&gt; maxOffsets:MaxNumberOfOffsets -&gt; Async&lt;Map&lt;Time,OffsetResponse&gt;&gt;<br />
                       </div>
         </td>

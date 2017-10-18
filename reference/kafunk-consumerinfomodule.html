@@ -56,14 +56,54 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '68', 68)" onmouseover="showTip(event, '68', 68)">
-            consumerProgress c
+            consumerGroupByTopics conn topics
           </code>
           <div class="tip" id="68">
+            <strong>Signature:</strong> conn:KafkaConn -&gt; topics:seq&lt;TopicName&gt; -&gt; Async&lt;Map&lt;TopicName,ConsumerGroupInfo []&gt;&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L174-174" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Given topic names, returns all of the consumer groups consuming that topic.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '69', 69)" onmouseover="showTip(event, '69', 69)">
+            consumerGroups conn
+          </code>
+          <div class="tip" id="69">
+            <strong>Signature:</strong> conn:KafkaConn -&gt; Async&lt;ConsumerGroupInfo []&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L153-153" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Returns information about all consumer groups.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '70', 70)" onmouseover="showTip(event, '70', 70)">
+            consumerProgress c
+          </code>
+          <div class="tip" id="70">
             <strong>Signature:</strong> c:Consumer -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L102-102" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L148-148" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -75,15 +115,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '69', 69)" onmouseover="showTip(event, '69', 69)">
+          <code onmouseout="hideTip(event, '71', 71)" onmouseover="showTip(event, '71', 71)">
             progress conn groupId topic ps
           </code>
-          <div class="tip" id="69">
+          <div class="tip" id="71">
             <strong>Signature:</strong> conn:KafkaConn -&gt; groupId:GroupId -&gt; topic:TopicName -&gt; ps:Partition [] -&gt; Async&lt;ConsumerProgressInfo&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L55-55" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L101-101" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
