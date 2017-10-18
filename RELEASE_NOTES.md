@@ -1,3 +1,6 @@
+### 0.1.6-rc3 - 18.10.2017
+* NEW: ConsumerInfo.consumerGroups returns information about all consumer groups in the cluster, including group members and the topics-partitions they are assgined.
+
 ### 0.1.6-rc2 - 17.10.2017
 * Producer retry without recovery when recovery not needed.
 * Ensure that Resource isn't corrupted after a failed resource recovery attempt and can be retried again.

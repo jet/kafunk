@@ -46,6 +46,52 @@ and ConsumerPartitionProgressInfo = {
 
 }
 
+/// Information about a consumer group.
+type ConsumerGroupInfo = {
+  
+  /// The consumer group id.
+  group_id : GroupId
+  
+  /// The protocol.
+  protocol : Protocol
+  
+  protocol_type : ProtocolType
+  
+  /// State associated with the group.
+  state : State
+  
+  /// The members in the consumer group.
+  members : ConsumerGroupMemberInfo[]
+} 
+  with 
+    /// Returns a list of members subscribed to the specified topic.
+    static member subscribedToTopic (topic:TopicName) (x:ConsumerGroupInfo) : ConsumerGroupMemberInfo[] =
+      x.members
+      |> Seq.choose (fun m -> 
+        if m.assignments |> Seq.exists (fun (t,_) -> t = topic) then Some m
+        else None)
+      |> Seq.toArray
+    
+/// Information about a consumer group member.
+and ConsumerGroupMemberInfo = {
+  
+  /// The unique member id.
+  member_id : MemberId
+  
+  /// The client-provided id.
+  client_id : ClientId
+  
+  /// The client's host name.
+  client_host : ClientHost
+  
+  /// Member specific metadata.
+  member_metadata : MemberMetadata
+  
+  /// The topics and partitions assigned to this member.
+  assignments : (TopicName * Partition[])[]
+}
+
+
 /// Operations for providing consumer progress information.
 [<Compile(Module)>]
 module ConsumerInfo =
@@ -103,3 +149,39 @@ module ConsumerInfo =
     let! state = Consumer.state c
     return! progress c.conn c.config.groupId c.config.topic state.assignments }
 
+  /// Returns information about all consumer groups.
+  let consumerGroups (conn:KafkaConn) : Async<ConsumerGroupInfo[]> = async {  
+    let! res = Kafka.listGroups conn (ListGroupsRequest())  
+    let groupIds = 
+      res.groups 
+      |> Seq.choose (fun (g,pt) -> 
+        if pt = "consumer" then Some g
+        else None) 
+      |> Seq.toArray
+    let! res = Kafka.describeGroups conn (DescribeGroupsRequest(groupIds))
+    return seq {
+      for (ec,gid,state,protoType,proto,gm) in res.groups do
+        if ec = ErrorCode.NoError then
+          let members = seq {
+            for (mid,cid,ch,md,ma) in gm.members do
+              let assignments = ConsumerGroup.decodeMemberAssignments ma
+              yield { ConsumerGroupMemberInfo.assignments = assignments ; client_id = cid ; client_host = ch ; member_metadata = md ; member_id = mid } }
+          let groupInfo = 
+            { ConsumerGroupInfo.group_id = gid ; protocol = proto ; protocol_type = protoType ; state = state ; members = members |> Seq.toArray }
+          yield groupInfo } |> Seq.toArray }
+
+  /// Given topic names, returns all of the consumer groups consuming that topic.
+  let consumerGroupByTopics (conn:KafkaConn) (topics:TopicName seq) : Async<Map<TopicName, ConsumerGroupInfo[]>> = async {  
+    let! groups = consumerGroups conn
+    let topics = set topics
+    return
+      groups
+      |> Seq.collect (fun g -> 
+        let assignedTopics = g.members |> Seq.collect (fun m -> m.assignments |> Seq.map fst) |> set
+        topics
+        |> Seq.choose (fun t -> 
+          if Set.contains t assignedTopics then Some (t,g)
+          else None))
+      |> Seq.groupBy fst
+      |> Seq.map (fun (t,xs) -> t, xs |> Seq.map snd |> Seq.toArray)
+      |> Map.ofSeq }

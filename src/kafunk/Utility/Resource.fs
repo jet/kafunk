@@ -35,33 +35,6 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   let cell : MVar<ResourceEpoch<'r>> = MVar.create ()  
   let recoveryTimeout = TimeSpan.FromSeconds 60.0
 
-  let create (prevEpoch:ResourceEpoch<'r> option) = async {
-    match prevEpoch with
-    | Some ep when not ep.closed.IsCancellationRequested -> return ep
-    | _ ->
-      let closed = new CancellationTokenSource()
-      let version = 
-        match prevEpoch with
-        | Some prev ->
-          prev.version + 1
-        | None ->
-          0
-      let! res = create closed.Token (prevEpoch |> Option.map (fun e -> e.resource)) |> Async.Catch
-      match res with
-      | Success r ->
-        return { resource = r ; closed = closed ; version = version }
-      | Failure e ->
-        Log.warn "failed_to_create_resource|type=%s version=%i error=\"%O\"" name version e
-        return raise e }
-
-  let recover (req:obj) (ex:exn) (callingEpoch:ResourceEpoch<'r>) = async {
-    if callingEpoch.closed.IsCancellationRequested then
-      return ()
-    else
-      callingEpoch.closed.Cancel ()
-      do! close (callingEpoch.resource, callingEpoch.version, req, ex)
-      return () }
-
   member internal __.Get () = async {
     let ep = MVar.getFastUnsafe cell
     match ep with
@@ -77,14 +50,34 @@ type Resource<'r> internal (create:CancellationToken -> 'r option -> Async<'r>, 
   member internal __.Create () = async {
     return! 
       cell 
-      |> MVar.putOrUpdateAsync create }
+      |> MVar.putOrUpdateAsync (fun (prevEpoch:ResourceEpoch<'r> option) -> async {
+        match prevEpoch with
+        | Some ep when not ep.closed.IsCancellationRequested -> 
+          return ep
+        | _ ->
+          let closed = new CancellationTokenSource()
+          let version = 
+            match prevEpoch with
+            | Some prev ->
+              prev.version + 1
+            | None ->
+              0
+          let! res = create closed.Token (prevEpoch |> Option.map (fun e -> e.resource)) |> Async.Catch
+          match res with
+          | Success r ->
+            return { resource = r ; closed = closed ; version = version }
+          | Failure e ->
+            Log.warn "failed_to_create_resource|type=%s version=%i error=\"%O\"" name version e
+            return raise e }) }
 
   member private __.Recover (callingEpoch:ResourceEpoch<'r>, req:obj, ex:exn) =
     cell 
     |> MVar.updateAsync (fun currentEpoch -> async {
       if currentEpoch.version = callingEpoch.version then
         try
-          do! recover req ex callingEpoch
+          if not callingEpoch.closed.IsCancellationRequested then
+            callingEpoch.closed.Cancel ()
+            do! close (callingEpoch.resource, callingEpoch.version, req, ex)
           return currentEpoch
         with ex ->
           let errMsg = sprintf "recovery_failed|type=%s version=%i error=\"%O\"" name currentEpoch.version ex
