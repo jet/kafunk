@@ -109,6 +109,7 @@
     <None Include="GroupInfo.fsx" />
     <None Include="Confluent.fsx" />
     <Content Include="App.config" />
+    <None Include="buffering.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
