@@ -74,6 +74,7 @@
     <Compile Include="Utility\Faults.fs" />
     <Compile Include="Utility\Resource.fs" />
     <Compile Include="Utility\Pool.fs" />
+    <Compile Include="Utility\Buffer.fs" />
     <Compile Include="Tcp.fs" />
     <Compile Include="Protocol.fs" />
     <Compile Include="Helpers.fs" />
