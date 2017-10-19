@@ -220,6 +220,48 @@ let messageRange =
   |> Async.RunSynchronously
 
 
+(**
+
+## Consumer Progress Information
+
+Kafunk contains a helper module which provides consumer progress information. 
+
+*)
+
+
+let progress = 
+  ConsumerInfo.progress conn "my-group" "my-topic" [||]
+  |> Async.RunSynchronously
+
+printfn "total_lag=%i partitions=%i" progress.totalLag progress.partitions.Length
+
+
+
+(**
+
+## Consumer Group Information
+
+*)
+
+/// Get all consumer groups.
+let groups = 
+  ConsumerInfo.consumerGroups conn
+  |> Async.RunSynchronously
+
+for g in groups do
+  printfn "group_id=%s members=%i" g.group_id g.members.Length
+
+
+/// Get consumer groups subscribed to specific topics.
+let groupsByTopic = 
+  ConsumerInfo.consumerGroupByTopics conn ["my-topic"]
+  |> Async.RunSynchronously
+
+for c in groupsByTopic |> Map.find "my-topic" do
+  printfn "group_id=%s" c.group_id
+
+
+
 
 
 (**
