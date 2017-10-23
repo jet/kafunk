@@ -262,6 +262,59 @@ messages in the topic at the time of invocation:</p>
 </code></pre></td>
 </tr>
 </table>
+<h2><a name="Consumer-Progress-Information" class="anchor" href="#Consumer-Progress-Information">Consumer Progress Information</a></h2>
+<p>Kafunk contains a helper module which provides consumer progress information.</p>
+<table class="pre"><tr><td class="lines"><pre class="fssnip"><span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+<span class="l">4: </span>
+<span class="l">5: </span>
+</pre></td>
+<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="k">let</span> <span class="i">progress</span> <span class="o">=</span> 
+  <span class="i">ConsumerInfo</span><span class="o">.</span><span class="i">progress</span> <span class="i">conn</span> <span class="s">&quot;my-group&quot;</span> <span class="s">&quot;my-topic&quot;</span> [||]
+  <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
+
+<span class="i">printfn</span> <span class="s">&quot;total_lag=%i partitions=%i&quot;</span> <span class="i">progress</span><span class="o">.</span><span class="i">totalLag</span> <span class="i">progress</span><span class="o">.</span><span class="i">partitions</span><span class="o">.</span><span class="i">Length</span>
+</code></pre></td>
+</tr>
+</table>
+<h2><a name="Consumer-Group-Information" class="anchor" href="#Consumer-Group-Information">Consumer Group Information</a></h2>
+<table class="pre"><tr><td class="lines"><pre class="fssnip"><span class="l"> 1: </span>
+<span class="l"> 2: </span>
+<span class="l"> 3: </span>
+<span class="l"> 4: </span>
+<span class="l"> 5: </span>
+<span class="l"> 6: </span>
+<span class="l"> 7: </span>
+<span class="l"> 8: </span>
+<span class="l"> 9: </span>
+<span class="l">10: </span>
+<span class="l">11: </span>
+<span class="l">12: </span>
+<span class="l">13: </span>
+<span class="l">14: </span>
+<span class="l">15: </span>
+<span class="l">16: </span>
+</pre></td>
+<td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="c">/// Get all consumer groups.</span>
+<span class="k">let</span> <span class="i">groups</span> <span class="o">=</span> 
+  <span class="i">ConsumerInfo</span><span class="o">.</span><span class="i">consumerGroups</span> <span class="i">conn</span>
+  <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
+
+<span class="k">for</span> <span class="i">g</span> <span class="k">in</span> <span class="i">groups</span> <span class="k">do</span>
+  <span class="i">printfn</span> <span class="s">&quot;group_id=%s members=%i&quot;</span> <span class="i">g</span><span class="o">.</span><span class="i">group_id</span> <span class="i">g</span><span class="o">.</span><span class="i">members</span><span class="o">.</span><span class="i">Length</span>
+
+
+<span class="c">/// Get consumer groups subscribed to specific topics.</span>
+<span class="k">let</span> <span class="i">groupsByTopic</span> <span class="o">=</span> 
+  <span class="i">ConsumerInfo</span><span class="o">.</span><span class="i">consumerGroupByTopics</span> <span class="i">conn</span> [<span class="s">&quot;my-topic&quot;</span>]
+  <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
+
+<span class="k">for</span> <span class="i">c</span> <span class="k">in</span> <span class="i">groupsByTopic</span> <span class="o">|&gt;</span> <span class="i">Map</span><span class="o">.</span><span class="i">find</span> <span class="s">&quot;my-topic&quot;</span> <span class="k">do</span>
+  <span class="i">printfn</span> <span class="s">&quot;group_id=%s&quot;</span> <span class="i">c</span><span class="o">.</span><span class="i">group_id</span>
+</code></pre></td>
+</tr>
+</table>
 <h2><a name="Rolling-Updates" class="anchor" href="#Rolling-Updates">Rolling Updates</a></h2>
 <p>Kafka supports rolling updates of consumer group member instances. This can be done by having a newever version of
 a consumer support both new and old versions of consumer group assignment strategies. The assignment strategy itself can
