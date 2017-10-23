@@ -1,3 +1,6 @@
+### 0.1.6 - 23.10.2017
+* Cumulitive release.
+
 ### 0.1.6-rc3 - 18.10.2017
 * NEW: ConsumerInfo.consumerGroups returns information about all consumer groups in the cluster, including group members and the topics-partitions they are assgined.
 
