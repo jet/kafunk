@@ -23,7 +23,9 @@ module BufferingProducer =
 
   let private Log = Log.create "Kafunk.BufferingProducer"
   
-  ///Create a producer with buffer
+  ///Create a producer with buffer with capacity specified by user. In order to increase throughput, the buffer would flush the messages to kafka producer in a batch. 
+  ///But user who care about latency can specify the largest time to wait for flushing by setting batchTimeMs. 
+  ///The user can also set timeInervalMs to specify the maximum time to wait between two message arrivals.
   let createBufferingProducer (producer:Producer) (buffertype:BufferType) (capacity:int) (batchSize:int) (batchTimeMs:int) (timeIntervalMs:int) (errorHandle:(ProducerMessage seq -> unit) option)= 
 
     let consume (producer: Producer) (batch: ProducerMessage seq): Async<unit> = async {
