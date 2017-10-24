@@ -5,14 +5,11 @@ open Kafunk
 
 type BufferingProducer  = private {
 
-  ///The producer
+  /// The producer
   producer : Producer
 
-  ///The buffer
-  buffer : Buffer<ProducerMessage>
-  
-  ///The function that consume the buffer and send to Kafka
-  consume : ProducerMessage -> bool }
+  /// The buffer
+  buffer : Buffer<ProducerMessage> }
 
 and BufferType = 
     | Blocking
@@ -23,9 +20,9 @@ module BufferingProducer =
 
   let private Log = Log.create "Kafunk.BufferingProducer"
   
-  ///Create a producer with buffer with capacity specified by user. In order to increase throughput, the buffer would flush the messages to kafka producer in a batch. 
-  ///But user who care about latency can specify the largest time to wait for flushing by setting batchTimeMs. 
-  ///The user can also set timeInervalMs to specify the maximum time to wait between two message arrivals.
+  /// Create a producer with buffer with capacity specified by user. In order to increase throughput, the buffer would flush the messages to kafka producer in a batch. 
+  /// But users who care about latency can specify the largest time to wait for flushing by setting batchTimeMs. 
+  /// Users can also set timeInervalMs to specify the maximum time to wait between two message arrivals.
   let createBufferingProducer (producer:Producer) (buffertype:BufferType) (capacity:int) (batchSize:int) (batchTimeMs:int) (timeIntervalMs:int) (errorHandle:(ProducerMessage seq -> unit) option)= 
 
     let consume (producer: Producer) (batch: ProducerMessage seq): Async<unit> = async {
@@ -38,17 +35,25 @@ module BufferingProducer =
         | Some x -> x batch
         | None -> () }
     
-    let buf, consume =
+    let buf = 
       match buffertype with
-      | Blocking -> Buffer.startBlockingWithConsumer capacity batchSize batchTimeMs timeIntervalMs (consume producer) (fun x -> Log.warn "buffering_producer_process_overflow_warning|cap=%O size=%O" capacity x)
-      | Discarding -> Buffer.startDiscardingWithConsumer capacity batchSize batchTimeMs timeIntervalMs (consume producer) (fun x -> Log.warn "buffering_producer_process_overflow_warning|cap=%O size=%O" capacity x)
+      | Blocking -> 
+        let tmp = new Buffer<'a> (BufferBound.BlockAfter capacity)
+        tmp.Blocking |> Event.add (fun x -> Log.warn "producer_buffer_full_warning|cap=%O size=%O" capacity x)
+        tmp
+      | Discarding -> 
+        let tmp = new Buffer<'a> (BufferBound.DiscardAfter capacity)
+        tmp.Discarding |> Event.add (fun x -> Log.warn "producer_buffer_full_warning|cap=%O size=%O" capacity x)
+        tmp
 
-    { producer = producer; buffer = buf; consume = consume }
+    buf.Consume (batchSize, batchTimeMs, timeIntervalMs, (consume producer)) |> Async.Start
+
+    { producer = producer; buffer = buf }
   
   ///Get the current size of buffer
   let getSize (producer:BufferingProducer) = 
-    Buffer.getSize (producer.buffer)
+    producer.buffer.Size
    
   ///Buffering the message
   let produce (producer:BufferingProducer) (message : ProducerMessage) = 
-    producer.consume message
+    producer.buffer.Add message
