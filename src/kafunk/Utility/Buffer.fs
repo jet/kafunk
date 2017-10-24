@@ -24,7 +24,7 @@ type Buffer<'a> internal (bound:BufferBound) =
   member __.Discarding = discardingEvent.Publish
 
   /// Triggered when error is raised during producing
-  member __.ErrorHandling = errorHandlingEvent = Event<'a[]>()
+  member __.ErrorHandling = errorHandlingEvent.Publish
 
   /// Get the size of queue
   member __.Size = queue.Count
