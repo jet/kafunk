@@ -99,8 +99,8 @@
     <None Include="StreamRange.fsx" />
     <None Include="CommitOffsets.fsx" />
     <None Include="GroupInfo.fsx" />
+    <None Include="Buffering.fsx" />
     <Content Include="App.config" />
-    <None Include="buffering.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

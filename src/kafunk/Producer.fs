@@ -251,14 +251,6 @@ and [<NoEquality;NoComparison;AutoSerializable(false)>] Producer = private {
   /// and the batch linger time.
   batchTimeout : TimeSpan }
 
-and BufferingProducer  = private {
-
-  ///The producer
-  producer : Producer
-
-  ///The buffer
-  buffer : ProducerMessage -> bool }
-
 /// High-level producer API.
 [<Compile(Module)>]
 module Producer =
@@ -610,27 +602,3 @@ module Producer =
   let configuration (p:Producer) =
     p.config
 
-[<Compile(Module)>]
-module BufferingProducer = 
-
-  let private Log = Log.create "Kafunk.BufferingProducer"
-  
-  ///Create a producer with buffer
-  let createBufferingProducer (conn:KafkaConn) (cfg:ProducerConfig) (capacity:int) (batchSize:int) (batchTimeMs:int) (timeIntervalMs:int) (errorHandle:(ProducerMessage seq -> unit) option)= 
-    let producer = 
-      Producer.create conn cfg
-
-    let consume (producer: Producer) (batch: ProducerMessage seq): Async<unit> = async {
-      try
-        do! Producer.produceBatched producer batch |> Async.Ignore
-        return ()
-      with ex ->
-        Log.error "buffering_producer_process_error|error=\"%O\" topic=%s" ex cfg.topic
-        match errorHandle with
-        | Some x -> x batch
-        | None -> () }
-
-    {producer = producer; buffer = Buffer.startDiscardingWithConsumer capacity batchSize batchTimeMs timeIntervalMs (consume producer) (fun x -> Log.warn "buffering_producer_process_overflow_warning|cap=%O size=%O" capacity x)}
-  
-  let produce (producer : BufferingProducer) (message : ProducerMessage) = 
-    producer.buffer message

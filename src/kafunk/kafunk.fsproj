@@ -83,6 +83,7 @@
     <Compile Include="Kafka.fs" />
     <Compile Include="Compression.fs" />
     <Compile Include="Producer.fs" />
+    <Compile Include="ProduceBuffer.fs" />
     <Compile Include="Group.fs" />
     <Compile Include="Offsets.fs" />
     <Compile Include="Consumer.fs" />
