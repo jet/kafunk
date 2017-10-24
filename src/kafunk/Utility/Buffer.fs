@@ -22,6 +22,9 @@ type Buffer<'a> internal (bound:BufferBound) =
   /// Triggered when the buffer discards an item.
   member __.Discarding = discardingEvent.Publish
 
+  /// Get the size of queue
+  member __.Size = queue.Count
+
   /// Adds an item to the buffer respecting the bound configuration.
   /// Returns a bool indicating whether the item was added.
   member __.Add (a:'a) = 
@@ -70,17 +73,19 @@ and BufferBound =
 
 module Buffer =
 
+  let getSize (buf: Buffer<'a>) = buf.Size
+
   let startBlockingWithConsumer 
     (capacity:int) 
     (batchSize:int) 
     (batchTimeMs:int)
     (timeIntervalMs:int)
     (consume:'a[] -> Async<unit>)
-    (blocking:int -> unit) : 'a -> bool =
+    (blocking:int -> unit) : Buffer<'a> * ('a -> bool) =
     let buf = new Buffer<'a> (BufferBound.BlockAfter capacity)
     buf.Consume (batchSize, batchTimeMs, timeIntervalMs, consume) |> Async.Start
     buf.Blocking |> Event.add blocking
-    buf.Add
+    buf, buf.Add
   
   let startDiscardingWithConsumer
     (capacity:int) 
@@ -88,8 +93,8 @@ module Buffer =
     (batchTimeMs:int) 
     (timeIntervalMs:int)
     (consume:'a[] -> Async<unit>)
-    (discarding:int -> unit) : 'a -> bool =
+    (discarding:int -> unit) : Buffer<'a> * ('a -> bool) =
     let buf = new Buffer<'a> (BufferBound.DiscardAfter capacity)
     buf.Consume (batchSize, batchTimeMs, timeIntervalMs, consume) |> Async.Start
     buf.Discarding |> Event.add discarding
-    buf.Add
+    buf, buf.Add
