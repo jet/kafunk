@@ -15,6 +15,7 @@ type Buffer<'a> internal (bound:BufferBound) =
   
   let blockingEvent = Event<int>()
   let discardingEvent = Event<int>()
+  let errorHandlingEvent = Event<'a[]>()
 
   /// Triggered when the buffer blocks an item.
   member __.Blocking = blockingEvent.Publish
@@ -22,8 +23,14 @@ type Buffer<'a> internal (bound:BufferBound) =
   /// Triggered when the buffer discards an item.
   member __.Discarding = discardingEvent.Publish
 
+  /// Triggered when error is raised during producing
+  member __.ErrorHandling = errorHandlingEvent = Event<'a[]>()
+
   /// Get the size of queue
   member __.Size = queue.Count
+
+  member __.TriggerErrorEvents (a:'a[]) = 
+    errorHandlingEvent.Trigger a
 
   /// Adds an item to the buffer respecting the bound configuration.
   /// Returns a bool indicating whether the item was added.
@@ -70,31 +77,3 @@ and BufferBound =
 
   /// The buffer blocks additions after reaching the specified capacity.
   | BlockAfter of capacity:int
-
-module Buffer =
-
-  let getSize (buf: Buffer<'a>) = buf.Size
-
-  let startBlockingWithConsumer 
-    (capacity:int) 
-    (batchSize:int) 
-    (batchTimeMs:int)
-    (timeIntervalMs:int)
-    (consume:'a[] -> Async<unit>)
-    (blocking:int -> unit) : Buffer<'a> * ('a -> bool) =
-    let buf = new Buffer<'a> (BufferBound.BlockAfter capacity)
-    buf.Consume (batchSize, batchTimeMs, timeIntervalMs, consume) |> Async.Start
-    buf.Blocking |> Event.add blocking
-    buf, buf.Add
-  
-  let startDiscardingWithConsumer
-    (capacity:int) 
-    (batchSize:int) 
-    (batchTimeMs:int) 
-    (timeIntervalMs:int)
-    (consume:'a[] -> Async<unit>)
-    (discarding:int -> unit) : Buffer<'a> * ('a -> bool) =
-    let buf = new Buffer<'a> (BufferBound.DiscardAfter capacity)
-    buf.Consume (batchSize, batchTimeMs, timeIntervalMs, consume) |> Async.Start
-    buf.Discarding |> Event.add discarding
-    buf, buf.Add
