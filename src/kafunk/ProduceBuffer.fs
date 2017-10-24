@@ -11,6 +11,7 @@ type BufferingProducer  = private {
   ///The buffer
   buffer : Buffer<ProducerMessage>
   
+  ///The function that consume the buffer and send to Kafka
   consume : ProducerMessage -> bool }
 
 and BufferType = 
@@ -42,8 +43,10 @@ module BufferingProducer =
 
     { producer = producer; buffer = buf; consume = consume }
   
+  ///Get the current size of buffer
   let getSize (producer:BufferingProducer) = 
     Buffer.getSize (producer.buffer)
-
+   
+  ///Buffering the message
   let produce (producer:BufferingProducer) (message : ProducerMessage) = 
     producer.consume message
