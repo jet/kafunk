@@ -15,7 +15,6 @@ type Buffer<'a> internal (bound:BufferBound) =
   
   let blockingEvent = Event<int>()
   let discardingEvent = Event<int>()
-  let errorHandlingEvent = Event<'a[]>()
 
   /// Triggered when the buffer blocks an item.
   member __.Blocking = blockingEvent.Publish
@@ -23,14 +22,8 @@ type Buffer<'a> internal (bound:BufferBound) =
   /// Triggered when the buffer discards an item.
   member __.Discarding = discardingEvent.Publish
 
-  /// Triggered when error is raised during producing
-  member __.ErrorHandling = errorHandlingEvent.Publish
-
   /// Get the size of queue
   member __.Size = queue.Count
-
-  member __.TriggerErrorEvents (a:'a[]) = 
-    errorHandlingEvent.Trigger a
 
   /// Adds an item to the buffer respecting the bound configuration.
   /// Returns a bool indicating whether the item was added.

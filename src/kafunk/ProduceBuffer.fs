@@ -9,7 +9,13 @@ type BufferingProducer  = private {
   producer : Producer
 
   /// The buffer
-  buffer : Buffer<ProducerMessage> }
+  buffer : Buffer<ProducerMessage> 
+  
+  /// Error Handling Event
+  errorHandling : IEvent<ProducerMessage[]>
+  
+  /// Result Handling Event
+  resultHandling : IEvent<bool> }
 
 and BufferType = 
     | Blocking
@@ -41,7 +47,10 @@ module BufferingProducer =
 
     buf.Consume (batchSize, batchTimeMs, timeIntervalMs, (consume producer)) |> Async.Start
 
-    { producer = producer; buffer = buf }
+    let errorHandlingEvent = Event<ProducerMessage[]>()
+    let resultHandlingEvent = Event<bool>()
+
+    { producer = producer; buffer = buf; errorHandling = errorHandlingEvent.Publish; resultHandling = resultHandlingEvent.Publish }
   
   /// Get the current size of buffer
   let getSize (producer:BufferingProducer) = 
@@ -61,8 +70,8 @@ module BufferingProducer =
 
   /// Subscribe error events
   let subscribeError (producer:BufferingProducer) (handle:ProducerMessage seq -> unit) = 
-    producer.buffer.ErrorHandling |> Event.add handle
+    producer.errorHandling |> Event.add handle
 
   /// Subscribe produce result
   let subsribeProduceResult (producer:BufferingProducer) (handle:bool -> unit) = 
-    ()
+    producer.resultHandling |> Event.add handle
