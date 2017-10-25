@@ -22,6 +22,7 @@ and BufferType =
     | Discarding
 
 and BufferConfig = {
+
   /// The type of buffer based on the behavior when buffer is full could be either Discarding or Blocking
   buftype : BufferType
 
