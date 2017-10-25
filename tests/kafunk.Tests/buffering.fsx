@@ -54,6 +54,7 @@ let producerCfg =
     )
 
 let producer = Producer.create conn producerCfg
+let bufConfig = {BufferConf}
 let cap = 1000
 let buffer = BufferingProducer.createBufferingProducer producer Discarding cap 100 1000 90
 let produce = BufferingProducer.produce buffer
