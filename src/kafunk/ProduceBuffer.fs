@@ -21,6 +21,22 @@ and BufferType =
     | Blocking
     | Discarding
 
+and BufferConfig = {
+  /// The type of buffer based on the behavior when buffer is full could be either Discarding or Blocking
+  buftype : BufferType
+
+  /// The capacity of the buffer
+  capacity : int
+
+  /// The batch size when buffer flush to Kafka Producer
+  batchSize : int
+  
+  /// The maximum wait time of buffer to form a batch
+  batchTimeMs : int
+
+  /// The maximum wait time between two arrival of two messages
+  timeIntervalMs : int }
+
 [<Compile(Module)>]
 module BufferingProducer = 
 
@@ -29,7 +45,7 @@ module BufferingProducer =
   /// Create a producer with buffer with capacity specified by user. In order to increase throughput, the buffer would flush the messages to kafka producer in a batch. 
   /// But users who care about latency can specify the largest time to wait for flushing by setting batchTimeMs. 
   /// Users can also set timeInervalMs to specify the maximum time to wait between two message arrivals.
-  let createBufferingProducer (producer:Producer) (buffertype:BufferType) (capacity:int) (batchSize:int) (batchTimeMs:int) (timeIntervalMs:int) = 
+  let create (producer:Producer) (config:BufferConfig) = 
     let errorHandlingEvent = Event<ProducerMessage seq>()
     let resultHandlingEvent = Event<ProducerResult[]>()
 
@@ -42,13 +58,13 @@ module BufferingProducer =
         errorHandlingEvent.Trigger batch}
     
     let buf = 
-      match buffertype with
+      match config.buftype with
       | Blocking -> 
-          new Buffer<ProducerMessage> (BufferBound.BlockAfter capacity)
+          new Buffer<ProducerMessage> (BufferBound.BlockAfter config.capacity)
       | Discarding -> 
-          new Buffer<ProducerMessage> (BufferBound.DiscardAfter capacity)
+          new Buffer<ProducerMessage> (BufferBound.DiscardAfter config.capacity)
 
-    buf.Consume (batchSize, batchTimeMs, timeIntervalMs, (consume producer)) |> Async.Start
+    buf.Consume (config.batchSize, config.batchTimeMs, config.timeIntervalMs, (consume producer)) |> Async.Start
 
     { producer = producer; buffer = buf; errorHandling = errorHandlingEvent.Publish; resultHandling = resultHandlingEvent.Publish }
   
@@ -60,18 +76,18 @@ module BufferingProducer =
   let produce (producer:BufferingProducer) = 
     producer.buffer.Add
   
-  /// Subscribe blocking events
+  /// Subscribe blocking events, the input of handler should be the size of buffer
   let subscribeBlocking (producer:BufferingProducer) (handle:int -> unit) = 
     producer.buffer.Blocking |> Event.add handle
   
-  /// Subscribe discarding events
+  /// Subscribe discarding events, the input of handler should be the size of buffer
   let subscribeDiscarding (producer:BufferingProducer) (handle:int -> unit) = 
     producer.buffer.Discarding |> Event.add handle    
 
-  /// Subscribe error events
+  /// Subscribe error events, the input of handler should a sequence of message of failed batch
   let subscribeError (producer:BufferingProducer) (handle:ProducerMessage seq -> unit) = 
     producer.errorHandling |> Event.add handle
 
-  /// Subscribe produce result
+  /// Subscribe produce result, the input of handler should be the ProducerResult of a batch
   let subsribeProduceResult (producer:BufferingProducer) (handle:ProducerResult[] -> unit) = 
     producer.resultHandling |> Event.add handle
