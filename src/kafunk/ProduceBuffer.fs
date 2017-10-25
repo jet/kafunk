@@ -12,10 +12,10 @@ type BufferingProducer  = private {
   buffer : Buffer<ProducerMessage> 
   
   /// Error Handling Event
-  errorHandling : IEvent<ProducerMessage[]>
+  errorHandling : IEvent<ProducerMessage seq>
   
   /// Result Handling Event
-  resultHandling : IEvent<bool> }
+  resultHandling : IEvent<ProducerResult[]> }
 
 and BufferType = 
     | Blocking
@@ -30,13 +30,16 @@ module BufferingProducer =
   /// But users who care about latency can specify the largest time to wait for flushing by setting batchTimeMs. 
   /// Users can also set timeInervalMs to specify the maximum time to wait between two message arrivals.
   let createBufferingProducer (producer:Producer) (buffertype:BufferType) (capacity:int) (batchSize:int) (batchTimeMs:int) (timeIntervalMs:int) = 
+    let errorHandlingEvent = Event<ProducerMessage seq>()
+    let resultHandlingEvent = Event<ProducerResult[]>()
 
     let consume (producer: Producer) (batch: ProducerMessage seq): Async<unit> = async {
       try
-        do! Producer.produceBatched producer batch |> Async.Ignore
-        return ()
+        let! res = Producer.produceBatched producer batch
+        return resultHandlingEvent.Trigger res
       with ex ->
-        Log.error "buffering_producer_process_error|error=\"%O\" topic=%s" ex producer.config.topic }
+        Log.error "buffering_producer_process_error|error=\"%O\" topic=%s" ex producer.config.topic 
+        errorHandlingEvent.Trigger batch}
     
     let buf = 
       match buffertype with
@@ -46,9 +49,6 @@ module BufferingProducer =
           new Buffer<'a> (BufferBound.DiscardAfter capacity)
 
     buf.Consume (batchSize, batchTimeMs, timeIntervalMs, (consume producer)) |> Async.Start
-
-    let errorHandlingEvent = Event<ProducerMessage[]>()
-    let resultHandlingEvent = Event<bool>()
 
     { producer = producer; buffer = buf; errorHandling = errorHandlingEvent.Publish; resultHandling = resultHandlingEvent.Publish }
   
@@ -73,5 +73,5 @@ module BufferingProducer =
     producer.errorHandling |> Event.add handle
 
   /// Subscribe produce result
-  let subsribeProduceResult (producer:BufferingProducer) (handle:bool -> unit) = 
+  let subsribeProduceResult (producer:BufferingProducer) (handle:ProducerResult[] -> unit) = 
     producer.resultHandling |> Event.add handle
