@@ -47,4 +47,6 @@ let internal byApiVersionResponse (x:ApiVersionsResponse) : ApiKey -> ApiVersion
     | ApiKey.Produce -> min 2s v
     | ApiKey.Metadata -> min 0s v
     | ApiKey.Offset -> min 1s v
+    | ApiKey.JoinGroup -> min 2s v
+    | ApiKey.SyncGroup -> min 1s v
     | _ -> v
