@@ -1,3 +1,6 @@
+### 0.1.7 - 24.10.2017
+* Fix Join/Sync group response for v10 and greater
+
 ### 0.1.6 - 23.10.2017
 * Cumulitive release.
 

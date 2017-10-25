@@ -30,8 +30,8 @@ let go = async {
         //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-        version = Versions.V_0_9_0,
-        autoApiVersions = false)
+        //version = Versions.V_0_9_0,
+        autoApiVersions = true)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (

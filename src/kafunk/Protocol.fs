@@ -984,7 +984,7 @@ module Protocol =
     end
   with
 
-    static member internal  read buf =
+    static member internal read buf =
       let ec, buf = Binary.readInt16 buf
       let cid, buf = Binary.readInt32 buf
       let ch, buf = Binary.readString buf
@@ -1021,11 +1021,13 @@ module Protocol =
     end
   with
 
-    static member internal read buf =
-      let readMember =
-        Binary.read2 Binary.readString Binary.readBytes
-      let xs, buf = buf |> Binary.readArray readMember
-      (Members(xs), buf)
+    static member internal Read (buf:BinaryZipper) =      
+      let ms = 
+        buf.ReadArray (fun buf ->
+          let mid = buf.ReadString ()
+          let md = buf.ReadBytes()
+          mid,md)
+      Members(ms)
 
   module JoinGroup =
 
@@ -1045,15 +1047,16 @@ module Protocol =
     [<Struct>]
     [<NoEquality;NoComparison>]
     type Response =
+      val throttleTime : ThrottleTime
       val errorCode : ErrorCode
       val generationId : GenerationId
       val groupProtocol : GroupProtocol
       val leaderId : LeaderId
       val memberId : MemberId
       val members : Members
-      new (errorCode, generationId, groupProtocol, leaderId, memberId, members) =
-        { errorCode = errorCode; generationId = generationId; groupProtocol = groupProtocol;
-          leaderId = leaderId; memberId = memberId; members = members }
+      new (throttleTimeMs,errorCode, generationId, groupProtocol, leaderId, memberId, members) =
+        { throttleTime = throttleTimeMs ; errorCode = errorCode; generationId = generationId; 
+          groupProtocol = groupProtocol; leaderId = leaderId; memberId = memberId; members = members }
 
     let internal sizeRequest (ver:ApiVersion, req:Request) =
       Binary.sizeString req.groupId +
@@ -1074,16 +1077,18 @@ module Protocol =
       let buf = GroupProtocols.write req.groupProtocols buf
       buf
 
-    let internal readResponse buf =
-      let (errorCode, gid, gp, lid, mid, ms), buf =
-        buf |> Binary.read6
-          Binary.readInt16
-          Binary.readInt32
-          Binary.readString
-          Binary.readString
-          Binary.readString
-          Members.read
-      (Response(errorCode, gid, gp, lid, mid, ms), buf)
+    let internal ReadResponse (ver:ApiVersion, buf:BinaryZipper) =
+      let tt = 
+        if ver >= 2s then buf.ReadInt32 ()
+        else 0
+      let ec = buf.ReadInt16 ()
+      let gid = buf.ReadInt32 ()
+      let gp = buf.ReadString ()
+      let lid = buf.ReadString ()
+      let mid = buf.ReadString ()
+      let ms = Members.Read buf
+      Response(tt, ec, gid, gp, lid, mid, ms)
+        
 
   [<NoEquality;NoComparison>]
   type GroupAssignment =
@@ -1132,16 +1137,21 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type SyncGroupResponse =
     struct
+      val throttleTime : ThrottleTime
       val errorCode : ErrorCode
       val memberAssignment : MemberAssignment
-      new (errorCode, memberAssignment) = { errorCode = errorCode; memberAssignment = memberAssignment }
+      new (throttleTime,errorCode, memberAssignment) = 
+        { throttleTime = throttleTime ; errorCode = errorCode; memberAssignment = memberAssignment }
     end
   with
 
-    static member internal read buf =
-      let errorCode, buf = Binary.readInt16 buf
-      let ma, buf = Binary.readBytes buf
-      (SyncGroupResponse(errorCode, ma), buf)
+    static member internal Read (ver:ApiVersion,buf:BinaryZipper) =
+      let tt = 
+        if ver >= 1s then buf.ReadInt32 ()
+        else 0
+      let errorCode = buf.ReadInt16 ()
+      let ma = buf.ReadBytes ()
+      SyncGroupResponse(tt, errorCode, ma)
 
   /// Sent by a consumer to the group coordinator.
   [<NoEquality;NoComparison>]
@@ -1201,9 +1211,9 @@ module Protocol =
     end
   with
 
-    static member internal read buf =
-      let errorCode, buf = Binary.readInt16 buf
-      (LeaveGroupResponse(errorCode), buf)
+    static member internal Read (buf:BinaryZipper) =
+      let errorCode = buf.ReadInt16 ()
+      LeaveGroupResponse(errorCode)
 
   // Consumer groups
   // https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Client-side+Assignment+Proposal
@@ -1541,12 +1551,9 @@ module Protocol =
         let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
       | ApiKey.OffsetFetch ->
         let x, _ = OffsetFetchResponse.read buf.Buffer in (ResponseMessage.OffsetFetchResponse x)
-      | ApiKey.JoinGroup ->
-        let x, _ = JoinGroup.readResponse buf.Buffer in (ResponseMessage.JoinGroupResponse x)
-      | ApiKey.SyncGroup ->
-        let x, _ = SyncGroupResponse.read buf.Buffer in (ResponseMessage.SyncGroupResponse x)
-      | ApiKey.LeaveGroup ->
-        let x, _ = LeaveGroupResponse.read buf.Buffer in (ResponseMessage.LeaveGroupResponse x)
+      | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
+      | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
+      | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse
       | ApiKey.ListGroups ->
         let x, _ = ListGroupsResponse.read buf.Buffer in (ResponseMessage.ListGroupsResponse x)
       | ApiKey.DescribeGroups ->
