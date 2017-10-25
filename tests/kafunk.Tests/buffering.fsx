@@ -54,13 +54,12 @@ let producerCfg =
     )
 
 let producer = Producer.create conn producerCfg
-let bufConfig = {BufferConf}
-let cap = 1000
-let buffer = BufferingProducer.createBufferingProducer producer Discarding cap 100 1000 90
+let bufConfig = {BufferConfig.buftype = Discarding; capacity = 1000; batchSize = 100; batchTimeMs = 1000; timeIntervalMs = 90}
+let buffer = BufferingProducer.create producer bufConfig
 let produce = BufferingProducer.produce buffer
 
 // Handle overflow with log
-BufferingProducer.subscribeDiscarding buffer (Log.warn "buffering_producer_overflow_warning|cap=%d, size=%d" cap)
+BufferingProducer.subscribeDiscarding buffer (Log.warn "buffering_producer_overflow_warning|cap=%d, size=%d" bufConfig.capacity)
 
 // Handle error with retry
 BufferingProducer.subscribeError buffer (Seq.map produce >> ignore)
