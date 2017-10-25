@@ -74,7 +74,7 @@ let countLatency (_:ProducerResult[]) =
   timer.Record(int(current - prev))
   prev <- current
 
-// Subscribe result to now the time interval of writting to Kafka
+// Subscribe result to show the time interval of writting to Kafka
 BufferingProducer.subsribeProduceResult buffer countLatency
 
 let mutable completed = 0L
