@@ -44,9 +44,9 @@ module BufferingProducer =
     let buf = 
       match buffertype with
       | Blocking -> 
-          new Buffer<'a> (BufferBound.BlockAfter capacity)
+          new Buffer<ProducerMessage> (BufferBound.BlockAfter capacity)
       | Discarding -> 
-          new Buffer<'a> (BufferBound.DiscardAfter capacity)
+          new Buffer<ProducerMessage> (BufferBound.DiscardAfter capacity)
 
     buf.Consume (batchSize, batchTimeMs, timeIntervalMs, (consume producer)) |> Async.Start
 
