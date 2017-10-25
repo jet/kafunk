@@ -601,4 +601,3 @@ module Producer =
   /// Gets the configuration for the producer.
   let configuration (p:Producer) =
     p.config
-
