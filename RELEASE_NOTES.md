@@ -1,3 +1,6 @@
+### 0.1.8 - 30.10.2017
+* Fix producer recovery wherein a produce batch timeout may overlap with broker connection failures, resulting in retries without rediscovery.
+
 ### 0.1.7 - 24.10.2017
 * Fix Join/Sync group response for v10 and greater
 

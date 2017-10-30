@@ -216,7 +216,7 @@ and private ProducerError =
   | BrokerChanError of Broker * ChanError list
   | TransientError of Partition * Offset * ErrorCode
   | RecoverableError of Partition * Offset * ErrorCode
-  | BatchError of ProducerMessageBatch
+  | BatchTimeoutError of ProducerMessageBatch
   with
     override __.ToString () = ProducerError.errorMessage __
     static member errorMessage (x:ProducerError) =
@@ -224,7 +224,7 @@ and private ProducerError =
       | BrokerChanError (b,errs) -> sprintf "broker_channel_errors|node_id=%i ep=%O errors=[%s]" b.nodeId (Broker.endpoint b) (ChanError.printErrors errs)
       | TransientError (p,o,ec) -> sprintf "transient_producer_error|p=%i o=%i ec=%i" p o ec
       | RecoverableError (p,o,ec) -> sprintf "recoverable_producer_error|p=%i o=%i ec=%i" p o ec
-      | BatchError batch -> sprintf "batch_timeout_error|partition=%i size=%i message_count=%i" batch.partition batch.size batch.messages.Length
+      | BatchTimeoutError batch -> sprintf "batch_timeout_error|partition=%i size=%i message_count=%i" batch.partition batch.size batch.messages.Length
 
 and [<NoEquality;NoComparison;AutoSerializable(false)>] private ProducerMessageBatch =
   struct
@@ -467,12 +467,12 @@ module Producer =
         Log.info "produce_process_cancelled|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
         let buffer = flush |> Async.RunSynchronously
         for batch in buffer do
-          IVar.tryPut (Failure (ProducerError.BatchError batch)) batch.rep |> ignore)
+          IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
       |> Async.tryFinally (fun _ ->
         Log.info "produce_process_stopping|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
         let buffer = flush |> Async.RunSynchronously
         for batch in buffer do
-          IVar.tryPut (Failure (ProducerError.BatchError batch)) batch.rep |> ignore)
+          IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
       |> Async.tryWith (fun ex -> async {
         Log.error "producer_process_exception|ep=%O topic=%s error=\"%O\"" ep cfg.topic ex })
       |> (fun x -> Async.Start (x, queueCts.Token))
@@ -504,7 +504,7 @@ module Producer =
   let private sendBatch (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
     let q = getBrokerQueueByPartition state batch.partition
     do! q batch
-    let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchError batch)) batch.rep
+    let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch)) batch.rep
     match res with
     | Success res ->
       return Success res
@@ -513,7 +513,6 @@ module Producer =
         let ex = exn(ProducerError.errorMessage err)
         match err with
         | TransientError _ -> Resource.ResourceErrorAction.Retry ex
-        | BatchError _ -> Resource.ResourceErrorAction.Retry ex
         | _ -> Resource.ResourceErrorAction.RecoverRetry ex
       return Failure recovery }
 
