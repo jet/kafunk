@@ -224,6 +224,53 @@ module AsyncSeq =
             yield! loop (Some rest) timeoutMs }
       yield! loop None timeoutMs }
 
+  let bufferByCountAndTimeAndTimeInterval (bufferSize:int) (timeoutMs:int) (timeInterval:int) (source:AsyncSeq<'T>) : AsyncSeq<'T[]> = 
+    if (bufferSize < 1) then invalidArg "bufferSize" "must be positive"
+    if (timeoutMs < 1) then invalidArg "timeoutMs" "must be positive"
+    if (timeInterval < 1) then invalidArg "timeIntervalMs" "must be positive"
+    asyncSeq {
+      let buffer = new ResizeArray<_>()
+      use ie = source.GetEnumerator()
+      let rec loop rem rt = asyncSeq {
+        let! move = 
+          match rem with
+          | Some rem -> async.Return rem
+          | None -> Async.StartChildAsTask(ie.MoveNext())
+        let t = Stopwatch.GetTimestamp()
+        let! time = Async.StartChildAsTask(Async.Sleep (max 0 rt))
+        let! interval = Async.StartChildAsTask(Async.Sleep timeInterval)
+        let! moveOr = Async.chooseTasks3 move time interval
+        let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
+        match moveOr with
+        | Choice1Of3 (None, _, _) -> 
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+        | Choice1Of3 (Some v, _, _) ->
+          buffer.Add v
+          if buffer.Count = bufferSize then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop None timeoutMs
+          else
+            yield! loop None (rt - delta)
+        | Choice2Of3 (_, rest, _) ->
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop (Some rest) timeoutMs
+          else
+            yield! loop (Some rest) timeoutMs
+        | Choice3Of3 (_, rest, _) ->
+          if buffer.Count > 0 then
+            yield buffer.ToArray()
+            buffer.Clear()
+            yield! loop (Some rest) (rt - delta)
+          else 
+            yield! loop (Some rest) (rt - delta)
+      }
+      yield! loop None timeoutMs
+    }
+
   let ofObservableBuffered (source : System.IObservable<_>) = 
     asyncSeq {
       let! ct = Async.CancellationToken

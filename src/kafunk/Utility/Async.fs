@@ -377,7 +377,14 @@ module Async =
         elif i = 1 then return (Choice2Of2 (b.Result, a)) 
         else return! failwith (sprintf "unreachable, i = %d" i) }
     
-
+  let chooseTasks3 (a:Task<'T>) (b:Task<'U>) (c:Task<'O>): Async<Choice<'T * Task<'U> * Task<'O>, 'U * Task<'T> * Task<'O>, 'O * Task<'T> * Task<'U>>> =
+    async { 
+        let! ct = Async.CancellationToken
+        let i = Task.WaitAny( [| (a :> Task);(b :> Task); (c :> Task) |],ct)
+        if i = 0 then return (Choice1Of3 (a.Result, b, c))
+        elif i = 1 then return (Choice2Of3 (b.Result, a, c)) 
+        elif i = 2 then return (Choice3Of3 (c.Result, a, b))
+        else return! failwith (sprintf "unreachable, i = %d" i) }    
 
 /// Operations on functions of the form 'a -> Async<'b>.
 module AsyncFunc =
