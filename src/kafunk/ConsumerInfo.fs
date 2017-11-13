@@ -150,7 +150,7 @@ module ConsumerInfo =
     return! progress c.conn c.config.groupId c.config.topic state.assignments }
 
   /// Returns information about all consumer groups.
-  let consumerGroups (conn:KafkaConn) : Async<ConsumerGroupInfo[]> = async {  
+  let consumerGroups (conn:KafkaConn) : Async<ConsumerGroupInfo[]> = async {
     let! res = Kafka.listGroups conn (ListGroupsRequest())  
     let groupIds = 
       res.groups 

@@ -291,7 +291,7 @@ module Producer =
     (messageVer:int16)
     (b:Broker)
     (batch:ProducerMessageBatch seq) = async {
-    //Log.trace "sending_batch|ep=%O batch_count=%i batch_size=%i" (Chan.endpoint ch) (batchCount batch) (batchSizeBytes batch)
+    Log.trace "sending_batch|ep=%O batch_size_bytes=%i" (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size))
 
     let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
     let pms = toMessageSet messageVer cfg.compression batch ps
@@ -516,15 +516,35 @@ module Producer =
         | _ -> Resource.ResourceErrorAction.RecoverRetry ex
       return Failure recovery }
 
+  let private splitBySize (maxBatchSize:int) (batch:ProducerMessage seq) =
+    // NB: if the size of an individual message is larger than the max, then this
+    // would still add it to the batch and potentially cause the server to return an error
+    let batches = ResizeArray<_>()
+    let currentBatch = ResizeArray<_>()
+    let mutable currentBatchSize = 0
+    for b in batch do
+      let messageSize = b.value.Count + b.key.Count
+      if (currentBatchSize + messageSize) >= maxBatchSize then 
+        if currentBatch.Count > 0 then
+          batches.Add (currentBatch.ToArray())
+          currentBatch.Clear()
+        currentBatchSize <- 0
+      currentBatch.Add b
+      currentBatchSize <- currentBatchSize + messageSize
+    if currentBatch.Count > 0 then
+      batches.Add (currentBatch.ToArray())
+    batches.ToArray()
+
   let private produceBatchedWithState (p:Producer) (state:ProducerState) (batch:ProducerMessage seq) = async {
     let! res = 
       batch
-      |> Seq.groupBy state.partition
-      |> Seq.map (fun (pt,ms) ->
-        let rep = IVar.create ()
-        let ms = ms |> Seq.toArray
-        ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms))
-      |> Seq.map (sendBatch p state) 
+      |> Seq.groupBy state.partition 
+      |> Seq.collect (fun (pt,ms) -> seq {
+        let batches = splitBySize p.config.batchSizeBytes ms
+        for ms in batches do
+          let rep = IVar.create ()
+          let b = ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms)
+          yield sendBatch p state b })
       |> Async.Parallel
     let oks,errs = res |> Seq.partitionChoices
     if errs.Length > 0 then

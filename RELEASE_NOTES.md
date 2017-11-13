@@ -1,3 +1,6 @@
+### 0.1.9 - 13.11.2017
+* Fix Producer batching wherein if Producer.produceBatched was called with a batch size larger than the max, it would still send it.
+
 ### 0.1.8 - 30.10.2017
 * Fix producer recovery wherein a produce batch timeout may overlap with broker connection failures, resulting in retries without rediscovery.
 

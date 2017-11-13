@@ -526,20 +526,20 @@ module Observable =
 
     create (fun (observer:IObserver<'a[]>) ->
 
-      let batchQueue = new BlockingCollection<'a>()
+      let batchQueue = new ConcurrentQueue<'a>()
 
       let batches =
         interval timeSpan
         |> Observable.map (fun _ ->
           let batch = new ResizeArray<_>(batchQueue.Count)
           let mutable item : 'a = Unchecked.defaultof<'a>
-          while (batchQueue.TryTake(&item)) do batch.Add(item)
+          while (batchQueue.TryDequeue(&item)) do batch.Add(item)
           batch.ToArray())
 
       let sourceSubs =
         source.Subscribe <| { new IObserver<_> with
           member __.OnNext(a) =
-            batchQueue.Add a
+            batchQueue.Enqueue a
           member __.OnError(e) = 
             observer.OnError(e)
           member __.OnCompleted() = 
@@ -547,7 +547,7 @@ module Observable =
 
       let batchSubs = batches.Subscribe (observer.OnNext)
 
-      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose())
 
   let bufferByTimeAndCount (timeSpan:TimeSpan) (bufferSize:int) (source:IObservable<'a>) =
 
@@ -586,16 +586,16 @@ module Observable =
   
   let bufferByTimeAndCondition (timeSpan:TimeSpan) (cond:IBoundedMbCond<'a>) (source:IObservable<'a>) =
 
-    let takeAny (queue:BlockingCollection<'a>) =
+    let takeAny (queue:ConcurrentQueue<'a>) =
       let batch = new ResizeArray<_>()
       let mutable item : 'a = Unchecked.defaultof<'a>
-      while (queue.TryTake(&item)) do 
+      while (queue.TryDequeue(&item)) do 
         batch.Add(item)
       batch.ToArray()
 
     create (fun (observer:IObserver<'a[]>) ->
 
-      let batchQueue = new BlockingCollection<'a>()
+      let batchQueue = new ConcurrentQueue<'a>()
       let batchEvent = new Event<unit>()
 
       let batches =
@@ -608,7 +608,7 @@ module Observable =
       let sourceSubs =
         source.Subscribe <| { new IObserver<_> with
           member __.OnNext(a) =
-            batchQueue.Add a
+            batchQueue.Enqueue a
             cond.Add a
             if cond.Satisfied then
               cond.Reset ()
@@ -620,7 +620,7 @@ module Observable =
 
       let batchSubs = batches.Subscribe(observer.OnNext)
 
-      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose())
 
   /// Union type that represents different messages that can be sent to the
   /// IObserver interface. The IObserver type is equivalent to a type that has

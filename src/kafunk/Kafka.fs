@@ -14,6 +14,7 @@ type internal ClusterState = {
   brokersByGroup : Map<GroupId, Broker>
   brokerChansByNodeId : Map<NodeId, Chan>
   brokerChansByEndPoint : Map<EndPoint, Chan>
+  brokersByNodeId : Map<NodeId, Broker>
   version : int
 } with
   
@@ -25,6 +26,7 @@ type internal ClusterState = {
       brokersByTopicPartition = Map.empty
       brokersByGroup = Map.empty
       brokerChansByNodeId = Map.empty
+      brokersByNodeId = Map.empty
       version = 0
     }
 
@@ -71,6 +73,7 @@ type internal ClusterState = {
         | None -> None)
     {
       s with
+          brokersByNodeId = brokersById
           brokersByTopicPartition = s.brokersByTopicPartition |> Map.addMany brokersByPartitions
           version = s.version + 1
     }
@@ -134,6 +137,7 @@ type internal ClusterState = {
           | b -> b
         brokersByGroup = s.brokersByGroup |> Map.removeAll groupIds
         brokersByTopicPartition = s.brokersByTopicPartition |> Map.removeAll topicPartitions
+        brokersByNodeId = s.brokersByNodeId |> Map.remove b.nodeId
         version = s.version + 1
     }
   
@@ -156,17 +160,18 @@ type internal ClusterState = {
 type internal RouteType =
   | BootstrapRoute
   | TopicRoute of TopicName[]
-  | GroupRoute of GroupId 
+  | GroupRoute of GroupId
+  | AllBrokersRoute
   with 
     static member ofRequest (req:RequestMessage) =
       match req with
-      | RequestMessage.DescribeGroups _ -> BootstrapRoute
+      | RequestMessage.DescribeGroups _ -> AllBrokersRoute
       | RequestMessage.Fetch r -> TopicRoute (r.topics |> Array.map fst)
       | RequestMessage.GroupCoordinator _ -> BootstrapRoute
       | RequestMessage.Heartbeat r -> GroupRoute r.groupId
       | RequestMessage.JoinGroup r -> GroupRoute r.groupId
       | RequestMessage.LeaveGroup r -> GroupRoute r.groupId
-      | RequestMessage.ListGroups _ -> BootstrapRoute
+      | RequestMessage.ListGroups _ -> AllBrokersRoute
       | RequestMessage.Metadata _ -> BootstrapRoute
       | RequestMessage.Offset _ -> BootstrapRoute
       | RequestMessage.OffsetCommit r -> GroupRoute r.consumerGroup
@@ -241,6 +246,21 @@ module internal Routing =
           new FetchResponse(tt, rs |> Array.collect (fun r -> r.topics))
       ResponseMessage.FetchResponse res)
 
+  let concatListGroupsRes (rs:ResponseMessage[]) =
+    rs
+    |> Array.map ResponseMessage.toListGroups
+    |> (fun rs -> 
+      let res =
+        if rs.Length = 0 then 
+          new ListGroupsResponse (ErrorCode.NoError, [||])
+        else
+          let ec = 
+            rs 
+            |> Seq.tryPick (fun r -> if r.errorCode <> ErrorCode.NoError then Some r.errorCode else None)
+            |> Option.getOr ErrorCode.NoError
+          new ListGroupsResponse (ec, rs |> Array.collect (fun r -> r.groups))
+      ResponseMessage.ListGroupsResponse res)
+
   let concatOffsetResponses (rs:ResponseMessage[]) =
     rs
     |> Array.map ResponseMessage.toOffset
@@ -265,12 +285,19 @@ module internal Routing =
       | Some ch -> Success [| req,ch |]
       | None -> Failure (RouteType.GroupRoute gid)
 
+    let allBrokersRoute (req:RequestMessage) =
+      if state.brokersByNodeId.Count = 0 then Failure RouteType.AllBrokersRoute else      
+      state.brokersByNodeId
+      |> Seq.map (fun kvp -> req,kvp.Value)
+      |> Seq.toArray
+      |> Success
+
     fun (req:RequestMessage) ->
       match req with
       | Metadata _ -> bootstrapRoute req
       | GroupCoordinator _ -> bootstrapRoute req
-      | DescribeGroups _ -> bootstrapRoute req
-      | ListGroups _req -> bootstrapRoute req
+      | DescribeGroups _ -> allBrokersRoute req
+      | ListGroups _req -> allBrokersRoute req
       | ApiVersions _req -> bootstrapRoute req
       
       | Fetch req -> req |> partitionFetchReq state |> topicRoute
@@ -804,6 +831,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return! scatterGather Routing.concatOffsetResponses
       | RequestMessage.Fetch _ ->
         return! scatterGather Routing.concatFetchRes
+      | RequestMessage.ListGroups _ ->
+        return! scatterGather Routing.concatListGroupsRes
       | _ ->
         let req,b = routes.[0]
         return! sendToBrokerWithRecovery critical rs state b req
@@ -823,7 +852,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
             else return! getAndApplyGroupCoordinator state gid
           | RouteType.TopicRoute tns ->
             if critical then return! metadata state tns
-            else return! getAndApplyMetadata true state tns }
+            else return! getAndApplyMetadata true state tns
+          | RouteType.AllBrokersRoute ->
+            if critical then return! metadata state [||]
+            else return! getAndApplyMetadata true state [||] }
         return! routeToBrokerWithRecovery critical rs state' req
       | None ->
         return failwithf "missing_route|attempts=%i route_type=%A" rs.attempt rt }
