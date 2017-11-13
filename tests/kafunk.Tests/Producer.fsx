@@ -8,7 +8,7 @@ open System.Diagnostics
 open System.Threading
 open Refs
 
-//Log.MinLevel <- LogLevel.Trace
+Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let host = argiDefault 1 "localhost"
@@ -17,7 +17,7 @@ let N = argiDefault 3 "1000000" |> Int64.Parse
 let batchSize = argiDefault 4 "100" |> Int32.Parse
 let messageSize = argiDefault 5 "10" |> Int32.Parse
 let parallelism = argiDefault 6 "1" |> Int32.Parse
-let produceType = argiDefault 7 "0" |> Int32.Parse
+let produceType = argiDefault 7 "2" |> Int32.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
 
@@ -47,8 +47,8 @@ let connCfg =
       )
 
   KafkaConfig.create (
-    //[KafkaUri.parse host], 
-    [KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
+    [KafkaUri.parse host], 
+    //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
     requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
@@ -66,7 +66,7 @@ let producerCfg =
     requiredAcks = RequiredAcks.AllInSync,
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
-    batchSizeBytes = 2000000,
+    batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
     //batchSizeBytes = 0,
     batchLingerMs = 1000,
     compression = CompressionCodec.None
