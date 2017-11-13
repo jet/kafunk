@@ -291,7 +291,7 @@ module Producer =
     (messageVer:int16)
     (b:Broker)
     (batch:ProducerMessageBatch seq) = async {
-    Log.trace "sending_batch|ep=%O batch_size_bytes=%i" (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size))
+    //Log.trace "sending_batch|ep=%O batch_size_bytes=%i" (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size))
 
     let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
     let pms = toMessageSet messageVer cfg.compression batch ps
