@@ -18,10 +18,11 @@ module BoundedMbCond =
   let group (G:Group<'g>) (f:'a -> 'g) (bound:'g -> bool) =
     let mutable value = Group.zero G
     { new IBoundedMbCond<'a> with
-        member __.Add (a:'a) = value <- Group.add G value (f a)
+        member __.Add (a:'a) =  value <- Group.add G value (f a)
         member __.Remove (a:'a) = value <- Group.subtract G value (f a)
         member __.Satisfied = bound value
-        member __.Reset () = value <- Group.zero G }
+        member __.Reset () = value <- Group.zero G
+        member __.WillSatisfy (a:'a) = Group.add G value (f a) |> bound }
 
   /// Creates a condition based on count.
   let count (capacity:int) = 

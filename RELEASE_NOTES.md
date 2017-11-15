@@ -1,3 +1,6 @@
+### 0.1.10 - 15.11.2017
+* Fix another scenario referenced in 0.1.9 producer batching fix.
+
 ### 0.1.9 - 13.11.2017
 * Fix Producer batching wherein if Producer.produceBatched was called with a batch size larger than the max, it would still send it.
 

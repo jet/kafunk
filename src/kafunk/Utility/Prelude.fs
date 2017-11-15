@@ -494,6 +494,7 @@ type IBoundedMbCond<'a> =
   abstract member Remove : 'a -> unit
   abstract member Reset : unit -> unit
   abstract member Satisfied : bool
+  abstract member WillSatisfy : 'a -> bool
 
 
 [<Compile(Module)>]
@@ -583,19 +584,19 @@ module Observable =
       let batchSubs = batches.Subscribe(observer.OnNext)
 
       fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
-  
+
   let bufferByTimeAndCondition (timeSpan:TimeSpan) (cond:IBoundedMbCond<'a>) (source:IObservable<'a>) =
 
-    let takeAny (queue:ConcurrentQueue<'a>) =
+    let takeAny (queue:BlockingCollection<'a>) =
       let batch = new ResizeArray<_>()
       let mutable item : 'a = Unchecked.defaultof<'a>
-      while (queue.TryDequeue(&item)) do 
+      while (queue.TryTake(&item)) do 
         batch.Add(item)
       batch.ToArray()
 
     create (fun (observer:IObserver<'a[]>) ->
 
-      let batchQueue = new ConcurrentQueue<'a>()
+      let batchQueue = new BlockingCollection<'a>()
       let batchEvent = new Event<unit>()
 
       let batches =
@@ -608,7 +609,7 @@ module Observable =
       let sourceSubs =
         source.Subscribe <| { new IObserver<_> with
           member __.OnNext(a) =
-            batchQueue.Enqueue a
+            batchQueue.Add a
             cond.Add a
             if cond.Satisfied then
               cond.Reset ()
@@ -620,7 +621,7 @@ module Observable =
 
       let batchSubs = batches.Subscribe(observer.OnNext)
 
-      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose())
+      fun () -> sourceSubs.Dispose() ; batchSubs.Dispose() ; batchQueue.Dispose())
 
   /// Union type that represents different messages that can be sent to the
   /// IObserver interface. The IObserver type is equivalent to a type that has

@@ -166,12 +166,12 @@ type ProducerConfig = {
   /// The default per-broker, produce request linger time in ms = 1000.
   static member DefaultBatchLingerMs = 1000
 
-//  /// The default maximum number of in-flight requests per broker connection.
-//  static member DefaultMaxInFlightRequests = 1
+  /// The default maximum number of in-flight requests per broker connection.
+  static member DefaultMaxInFlightRequests = 1
 
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:CompressionCodec,
-                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs (*,?maxInFlightRequests*)) =
+                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs, ?maxInFlightRequests) =
     {
       topic = topic
       partitioner = partition
@@ -181,8 +181,7 @@ type ProducerConfig = {
       bufferSizeBytes = defaultArg bufferSizeBytes ProducerConfig.DefaultBufferSizeBytes
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
-      //maxInFlightRequests = defaultArg maxInFlightRequests ProducerConfig.DefaultMaxInFlightRequests
-      maxInFlightRequests = 1
+      maxInFlightRequests = defaultArg maxInFlightRequests ProducerConfig.DefaultMaxInFlightRequests
     }
 
 
@@ -265,13 +264,15 @@ module Producer =
       size <- size + (ProducerMessage.size m)
     size
 
-  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:seq<ProducerMessageBatch>) (ps:Dictionary<Partition, ResizeArray<_>>) =
-    for b in batch do
+  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
+    for i = 0 to batch.Length - 1 do
+      let b = batch.[i]
       let mutable xs = Unchecked.defaultof<_>
       if not (ps.TryGetValue(b.partition, &xs)) then
         xs <- ResizeArray<_>()
         ps.Add (b.partition, xs)
-      for pm in b.messages do
+      for j = 0 to b.messages.Length - 1 do
+        let pm = b.messages.[j]
         let m = Message.create pm.value pm.key None
         let ms = Message.Size (messageVer,m)
         xs.Add (MessageSetItem(0L, ms, m))
@@ -290,10 +291,10 @@ module Producer =
     (cfg:ProducerConfig)
     (messageVer:int16)
     (b:Broker)
-    (batch:ProducerMessageBatch seq) = async {
+    (batch:ProducerMessageBatch[]) = async {
     //Log.trace "sending_batch|ep=%O batch_size_bytes=%i" (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size))
 
-    let ps : Dictionary<Partition, ResizeArray<_>> = Dict.empty
+    let ps = Dictionary<Partition, ResizeArray<_>>()
     let pms = toMessageSet messageVer cfg.compression batch ps
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
@@ -362,12 +363,13 @@ module Producer =
           |> Option.iter (fun res -> IVar.tryPut res b.rep |> ignore)
 
       if oks.Length > 0 then
-        let oks' = Dict.empty
+        let oks' = Dictionary<_,_>()
         for i = 0 to oks.Length - 1 do
           let p,o = oks.[i] in
           let pmc = ps.[p].Count in
           oks'.[p] <- Success (ProducerResult(p,o,pmc))
-        for b in batch do
+        for i = 0 to batch.Length - 1 do
+          let b = batch.[i]
           let mutable res = Unchecked.defaultof<_>
           if (oks'.TryGetValue(b.partition, &res)) then
             IVar.tryPut res b.rep |> ignore
@@ -434,10 +436,9 @@ module Producer =
         if cfg.bufferSizeBytes > 0 then
           let bufferCond =
             BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.bufferSizeBytes)
-          let buffer = BoundedMb.createByCondition bufferCond
-          let produceStream =
-            AsyncSeq.replicateInfiniteAsync (BoundedMb.take buffer)
-          (flip BoundedMb.put buffer),(BoundedMb.getAll buffer),produceStream
+          let boundedBuffer = BoundedMb.createByCondition bufferCond
+          let produceStream = AsyncSeq.replicateInfiniteAsync (BoundedMb.take boundedBuffer)
+          (flip BoundedMb.put boundedBuffer),(BoundedMb.getAll boundedBuffer),produceStream
         else
           let buf = new Collections.Concurrent.BlockingCollection<_>()
           let produceStream = buf.GetConsumingEnumerable() |> AsyncSeq.ofSeq
@@ -450,16 +451,17 @@ module Producer =
           (buf.Add >> async.Return, flush, produceStream)
       let batchCond =
         BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.batchSizeBytes)
-      let produceStream =
+      let batchedProduceStream =
         produceStream
-        |> AsyncSeq.toObservable
-        |> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
-        |> AsyncSeq.ofObservableBuffered
+        |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
+        //|> AsyncSeq.toObservable
+        //|> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
+        //|> AsyncSeq.ofObservableBuffered
       let sendProcess =
         if cfg.maxInFlightRequests > 1 then        
-          produceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
+          batchedProduceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
         else
-          produceStream |> AsyncSeq.iterAsync sendBatch
+          batchedProduceStream |> AsyncSeq.iterAsync sendBatch
       Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i batch_linger=%i"
         cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes cfg.batchLingerMs
       sendProcess
@@ -497,24 +499,12 @@ module Producer =
       partitionQueues = partitionQueues
       partition = partition } }
 
-  let private getBrokerQueueByPartition (state:ProducerState) (p:Partition) =
-    if state.partitionQueues.Length > p then state.partitionQueues.[p]
-    else failwithf "unable to find broker for partition=%i" p
-
   let private sendBatch (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
-    let q = getBrokerQueueByPartition state batch.partition
-    do! q batch
-    let! res = IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch)) batch.rep
-    match res with
-    | Success res ->
-      return Success res
-    | Failure err ->
-      let recovery =
-        let ex = exn(ProducerError.errorMessage err)
-        match err with
-        | TransientError _ -> Resource.ResourceErrorAction.Retry ex
-        | _ -> Resource.ResourceErrorAction.RecoverRetry ex
-      return Failure recovery }
+    if state.partitionQueues.Length < batch.partition then 
+      return failwithf "unable to find broker queue for partition=%i" batch.partition 
+    else
+      do! state.partitionQueues.[batch.partition] batch
+      return! batch.rep |> IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch)) }
 
   let private splitBySize (maxBatchSize:int) (batch:ProducerMessage seq) =
     // NB: if the size of an individual message is larger than the max, then this
@@ -522,38 +512,58 @@ module Producer =
     let batches = ResizeArray<_>()
     let currentBatch = ResizeArray<_>()
     let mutable currentBatchSize = 0
-    for b in batch do
-      let messageSize = b.value.Count + b.key.Count
+    for pm in batch do
+      let messageSize = ProducerMessage.size pm
       if (currentBatchSize + messageSize) >= maxBatchSize then 
         if currentBatch.Count > 0 then
           batches.Add (currentBatch.ToArray())
           currentBatch.Clear()
         currentBatchSize <- 0
-      currentBatch.Add b
+      currentBatch.Add pm
       currentBatchSize <- currentBatchSize + messageSize
     if currentBatch.Count > 0 then
       batches.Add (currentBatch.ToArray())
     batches.ToArray()
 
-  let private produceBatchedWithState (p:Producer) (state:ProducerState) (batch:ProducerMessage seq) = async {
-    let! res = 
-      batch
-      |> Seq.groupBy state.partition 
-      |> Seq.collect (fun (pt,ms) -> seq {
-        let batches = splitBySize p.config.batchSizeBytes ms
-        for ms in batches do
-          let rep = IVar.create ()
-          let b = ProducerMessageBatch(pt,ms,rep,messageBatchSizeBytes ms)
-          yield sendBatch p state b })
-      |> Async.Parallel
-    let oks,errs = res |> Seq.partitionChoices
+  /// Forms batch produce requests which can be sent in parallel, ensuring batches adhere to the maximum batch size.
+  let private formBatchProduceRequests (producer:Producer) (state:ProducerState) (batch:ProducerMessage seq) =
+    let ps = Array.zeroCreate state.routes.partitionCount
+    for pm in batch do
+      let p = state.partition pm
+      if isNull ps.[p] then        
+        ps.[p] <- ResizeArray<_>()
+      ps.[p].Add pm
+    seq {
+      for p = 0 to ps.Length - 1 do
+        let partitionBatch = ps.[p]
+        if not (isNull partitionBatch) then
+          let partitionBatches = splitBySize producer.config.batchSizeBytes partitionBatch
+          let req = async {
+            let rs = Array.zeroCreate partitionBatches.Length
+            for i = 0 to rs.Length - 1 do
+              let partitionBatch = partitionBatches.[i]
+              let rep = IVar.create ()
+              let batchSize = messageBatchSizeBytes partitionBatch
+              let b = ProducerMessageBatch(p,partitionBatch,rep,batchSize)
+              let! r = sendBatch producer state b
+              rs.[i] <- r
+            return rs }
+          yield req }
+
+  let private producerErrorToRetryAction (err:ProducerError) =
+    let ex = exn(ProducerError.errorMessage err)
+    match err with
+    | ProducerError.TransientError _ -> Choice1Of2 ex
+    | _ -> Choice2Of2 ex
+
+  let private produceBatchedWithState (producer:Producer) (state:ProducerState) (batch:ProducerMessage seq) = async {
+    let reqs = formBatchProduceRequests producer state batch
+    let! res = Async.Parallel reqs
+    let oks,errs = res |> Seq.concat |> Seq.partitionChoices
     if errs.Length > 0 then
       let retries,recovers =
         errs 
-        |> Seq.map (function 
-          | Resource.ResourceErrorAction.Retry e -> Choice1Of2 e
-          | Resource.ResourceErrorAction.RecoverRetry e -> Choice2Of2 e
-          | _ -> failwith "unreachable state")
+        |> Seq.map producerErrorToRetryAction
         |> Seq.partitionChoices
       if recovers.Length > 0 then
         let ex = Exn.ofSeq (Seq.append recovers retries)
@@ -569,7 +579,13 @@ module Producer =
       let p,ms = createBatch state.routes.partitionCount
       let rep = IVar.create ()
       ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
-    return! sendBatch p state batch }
+    let! res = sendBatch p state batch
+    match res with
+    | Success res -> return Success res
+    | Failure err ->
+      match producerErrorToRetryAction err with
+      | Choice1Of2 ex -> return Failure <| Resource.ResourceErrorAction.Retry ex
+      | Choice2Of2 ex -> return Failure <| Resource.ResourceErrorAction.RecoverRetry ex }
 
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
@@ -614,8 +630,8 @@ module Producer =
   /// Produces a message. The message will be sent as part of a batch and the
   /// result will correspond to the offset produced by the entire batch.
   let produce (p:Producer) (m:ProducerMessage) =
-    //Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceInternal p) m
     produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
+    //produceBatched p [|m|] |> Async.map (Array.item 0)
 
   /// Gets the configuration for the producer.
   let configuration (p:Producer) =

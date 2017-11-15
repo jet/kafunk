@@ -67,10 +67,9 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
-    //batchSizeBytes = 0,
-    batchLingerMs = 1000,
-    compression = CompressionCodec.None
-    //maxInFlightRequests = 1
+    batchLingerMs = 100,
+    compression = CompressionCodec.None,
+    maxInFlightRequests = 1
     )
 
 let producer =
@@ -171,8 +170,9 @@ let go = async {
         try
           let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)          
           let! res = produceBatched msgs
-          let count = res |> Seq.sumBy (fun x -> x.count)
-          Interlocked.Add(&completed, int64 count) |> ignore
+          //let count = res |> Seq.sumBy (fun x -> x.count)
+          //Interlocked.Add(&completed, int64 count) |> ignore
+          Interlocked.Add(&completed, int64 msgs.Length) |> ignore
           return ()
         with ex ->
           Log.error "produce_error|%O" ex
