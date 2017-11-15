@@ -77,11 +77,16 @@ module IVar =
   let inline get (i:IVar<'a>) : Async<'a> = 
     i.Task |> awaitTaskCancellationAsError
 
+//  /// Creates an async computation which returns the value contained in an IVar.
+//  let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
+//    let! ct = Async.CancellationToken
+//    (Task.Delay (timeout, ct)).ContinueWith (Func<_,_>(fun _ -> tryPut (timeoutResult ()) i))
+//    |> ignore
+//    return! i.Task |> awaitTaskCancellationAsError }
+
   /// Creates an async computation which returns the value contained in an IVar.
   let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
-    let! ct = Async.CancellationToken
-    (Task.Delay (timeout, ct)).ContinueWith (Func<_,_>(fun _ -> tryPut (timeoutResult ()) i))
-    |> ignore
+    use _timer = new Timer((fun _ -> tryPut (timeoutResult ()) i |> ignore), null, (int timeout.TotalMilliseconds), Timeout.Infinite)
     return! i.Task |> awaitTaskCancellationAsError }
 
   /// Returns a cancellation token which is cancelled when the IVar is set.
@@ -159,7 +164,6 @@ module Async =
         do! comp
         return a
       with ex ->
-        do! comp
         return! err ex }
 
   let tryFinally (compensation:unit -> unit) (a:Async<'a>) : Async<'a> =
@@ -224,39 +228,45 @@ module Async =
   /// when all computations in the sequence complete. Up to parallelism computations will
   /// be in-flight at any given point in time. Error or cancellation of any computation in
   /// the sequence causes the resulting computation to error or cancel, respectively.
-  let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) = async {
+  let parallelThrottledIgnoreThread (startOnCallingThread:bool) (parallelism:int) (xs:seq<Async<_>>) = async {
     let! ct = Async.CancellationToken
-    use cts = CancellationTokenSource.CreateLinkedTokenSource ct
     use sm = new SemaphoreSlim(parallelism)
     let count = ref 1
     let res = IVar.create ()
-    IVar.intoCancellationToken cts res
     let tryComplete () =
       if Interlocked.Decrement count = 0 then
-        IVar.tryPut () res |> ignore
-      elif not res.Task.IsCompleted then
-        // NB: there is a small chance of a race where task completes immediately after the check
-        // in which case the following would throw an ObjectDisposedException
-        sm.Release () |> ignore
+        IVar.tryPut () res
+      else
+        not res.Task.IsCompleted
     let ok _ =
-      tryComplete ()
+      if tryComplete () then
+        sm.Release() |> ignore      
     let err (ex:exn) =
       if IVar.tryError ex res then
         sm.Release() |> ignore
     let cnc (_:OperationCanceledException) =
       if IVar.tryCancel res then
         sm.Release() |> ignore
-    Async.Start (async {
-      try
-        use en = xs.GetEnumerator()
-        while not (cts.Token.IsCancellationRequested) && en.MoveNext() do
-          sm.Wait ()
-          Interlocked.Increment count |> ignore
-          startThreadPoolWithContinuations (en.Current, ok, err, cnc, cts.Token)
-        tryComplete () |> ignore
-      with ex ->
-        IVar.tryError ex res |> ignore }, cts.Token)
-    do! res.Task |> awaitTaskCancellationAsError }
+    let start = async {
+      use en = xs.GetEnumerator()
+      while not (res.Task.IsCompleted) && en.MoveNext() do
+        sm.Wait()
+        Interlocked.Increment count |> ignore
+        if startOnCallingThread then Async.StartWithContinuations (en.Current, ok, err, cnc, ct)
+        else startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
+      tryComplete () |> ignore }
+    Async.Start (tryWith (err >> async.Return) start, ct)
+    return! res.Task |> awaitTaskCancellationAsError }
+
+  let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) =
+    parallelThrottledIgnoreThread true parallelism xs
+
+  let parallelThrottled (startOnCallingThread:bool) (parallelism:int) (xs:seq<Async<'a>>) : Async<'a[]> = async { 
+    let mutable rs : 'a[] = Unchecked.defaultof<_>
+    let xs = xs |> Seq.toArray |> Array.mapi (fun i comp -> comp |> map (fun a -> rs.[i] <- a))    
+    rs <- Array.zeroCreate xs.Length
+    do! parallelThrottledIgnoreThread startOnCallingThread parallelism xs
+    return rs }
 
   /// Creates an async computation which completes when any of the argument computations completes.
   /// The other computation is cancelled.
@@ -429,6 +439,9 @@ module AsyncFunc =
 
   let timeoutResult (t:TimeSpan) (f:'a -> Async<'b>) : 'a -> Async<Result<'b, TimeoutException>> =
     fun a -> Async.timeoutResult t (async.Delay (fun () -> f a))
+
+  let tryFinally (comp:'a -> unit) (f:'a -> Async<'b>) : 'a -> Async<'b> =
+    fun a -> async.TryFinally (f a, fun () -> comp a)
 
 
 /// A mailbox processor.
