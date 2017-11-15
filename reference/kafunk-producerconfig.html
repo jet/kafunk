@@ -250,7 +250,7 @@ which the message should be written to.</p>
             create(...)
           </code>
           <div class="tip" id="659">
-            <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:CompressionCodec option * timeout:Timeout option * bufferSizeBytes:int option * batchSizeBytes:int option * batchLingerMs:int option) -&gt; ProducerConfig<br />
+            <strong>Signature:</strong> (topic:TopicName * partition:Partitioner * requiredAcks:RequiredAcks option * compression:CompressionCodec option * timeout:Timeout option * bufferSizeBytes:int option * batchSizeBytes:int option * batchLingerMs:int option * maxInFlightRequests:int option) -&gt; ProducerConfig<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -330,9 +330,30 @@ which the message should be written to.</p>
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '663', 663)" onmouseover="showTip(event, '663', 663)">
-            DefaultRequiredAcks
+            DefaultMaxInFlightRequests
           </code>
           <div class="tip" id="663">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Producer.fs#L170-170" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>The default maximum number of in-flight requests per broker connection.</p>
+
+
+              <p>CompiledName: <code>get_DefaultMaxInFlightRequests</code></p>
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '664', 664)" onmouseover="showTip(event, '664', 664)">
+            DefaultRequiredAcks
+          </code>
+          <div class="tip" id="664">
             <strong>Signature:</strong> RequiredAcks<br />
                       </div>
         </td>
@@ -350,10 +371,10 @@ which the message should be written to.</p>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '664', 664)" onmouseover="showTip(event, '664', 664)">
+          <code onmouseout="hideTip(event, '665', 665)" onmouseover="showTip(event, '665', 665)">
             DefaultTimeoutMs
           </code>
-          <div class="tip" id="664">
+          <div class="tip" id="665">
             <strong>Signature:</strong> int<br />
                       </div>
         </td>
