@@ -246,3 +246,6 @@ module AsyncSeq =
       finally 
          // Cancel on early exit 
          cts.Cancel() }
+
+  let mergeChoice3 (s1:AsyncSeq<'a>) (s2:AsyncSeq<'b>) (s3:AsyncSeq<'c>) : AsyncSeq<Choice<'a, 'b, 'c>> =
+    AsyncSeq.mergeAll [ s1 |> AsyncSeq.map Choice1Of3 ; s2 |> AsyncSeq.map Choice2Of3 ; s3 |> AsyncSeq.map Choice3Of3 ]

@@ -125,7 +125,7 @@ Async.Start commitProccess
 let ms : ConsumerMessageSet = failwith "some message set"
 
 /// Asynchronously enqueue offsets to be committed.
-Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms)
+commitQueue (ConsumerMessageSet.commitPartitionOffsets ms)
 
 (**
 

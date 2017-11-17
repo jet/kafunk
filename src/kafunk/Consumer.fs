@@ -3,7 +3,6 @@ namespace Kafunk
 open FSharp.Control
 open System
 open System.Threading
-open System.Threading.Tasks
 open Kafunk
 
 /// The consumer group protocol.
@@ -875,25 +874,19 @@ module Consumer =
 
   /// Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
   /// Commits the current offsets assigned to the consumer upon creation.
-  /// Returns a pair consisting of the commit queue and a process which restarts commits after a rebalance.
+  /// Returns a pair consisting of the commit queue and a process which commits offsets and reacts to rebalancing.
   let periodicOffsetCommitter (c:Consumer) (commitInterval:TimeSpan) = async {
-    let assignedPartitions = state c |> Async.map (fun s -> s.assignments)
-    let commitQueue = Offsets.createPeriodicCommitQueue (commitInterval, assignedPartitions, commitOffsets c)
-    // commit current offets on group rebalance, including first join,
-    // so that they're committed periodically even if no messages are consumed
-    let commitCurrentOffsetsOnGroupJoinProc =
+    let rebalanced = 
       states c
-      |> AsyncSeq.iterAsync (fun s -> async {
-        let! currentOffsets = async {
-          let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, s.assignments |]
-          return
-            currentOffsets 
-            |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
-            |> Seq.concat
-            |> Seq.where (fun (_,o) -> o <> -1L)
-            |> Seq.toArray }
-        Offsets.enqueuePeriodicCommit commitQueue currentOffsets })
-    return commitQueue,commitCurrentOffsetsOnGroupJoinProc }
+      |> AsyncSeq.mapAsync (fun s -> async {
+        let! currentOffsets = fetchOffsets c.conn c.config.groupId [| c.config.topic, s.assignments |]
+        return
+          currentOffsets 
+          |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
+          |> Seq.concat
+          |> Seq.where (fun (_,o) -> o <> -1L)
+          |> Seq.toArray })
+    return! Offsets.periodicOffsetCommitter commitInterval rebalanced (commitOffsets c) }
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
@@ -903,23 +896,16 @@ module Consumer =
     (c:Consumer)
     (commitInterval:TimeSpan)
     (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
-      let! commitQueue,commitCurrentOffsetsOnGroupJoinProc = periodicOffsetCommitter c commitInterval
-      use commitQueue = commitQueue
+      let! queueOffsetCommit,commitProc = periodicOffsetCommitter c commitInterval
       let handler s ms = async {
         do! handler s ms
-        Offsets.enqueuePeriodicCommit commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }      
-      do!
-        Async.choose
-          (async {
-            do! consume c handler
-            do! Offsets.flushPeriodicCommit commitQueue })
-          commitCurrentOffsetsOnGroupJoinProc
-        |> Async.Ignore }
+        queueOffsetCommit (ConsumerMessageSet.commitPartitionOffsets ms) }
+      do! Async.choose (consume c handler) commitProc }
 
   /// Starts consumption from the start offset in the given range.
   /// Will stop consuming for each partition once it reaches the max boundary offset.
   /// Will stop and return the messages WITHIN the range if it overconsumes.
-  let streamRange (c:Consumer) (offsetRange:Map<Partition, Offset * Offset>) : Async<ConsumerMessageSet[]> = async {      
+  let streamRange (c:Consumer) (offsetRange:Map<Partition, Offset * Offset>) : Async<ConsumerMessageSet[]> = async {
     let targetPartitions = 
       offsetRange |> Map.toSeq |> Seq.map fst |> set
     do! commitOffsets c (offsetRange |> Map.toSeq |> Seq.map (fun (p,(e,_)) -> p,e) |> Seq.toArray)

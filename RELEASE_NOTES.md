@@ -1,3 +1,6 @@
+### 0.1.11 - 17.11.2017
+* BREAKING: Offset commit queue is now a function rather than a ADT.
+
 ### 0.1.10 - 15.11.2017
 * Fix another scenario referenced in 0.1.9 producer batching fix.
 

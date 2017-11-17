@@ -2,64 +2,36 @@
 namespace Kafunk
 
 open System
-open System.Threading
-
-type private PeriodicCommitQueueMsg =
-  | Enqueue of offsets:(Partition * Offset) seq
-  | Commit of AsyncReplyChannel<unit> option
-
-/// A queue for offsets to be periodically committed.
-type PeriodicCommitQueue internal (interval:TimeSpan, assignedPartitions:Async<Partition[]>, commit:(Partition * Offset)[] -> Async<unit>) =
-  
-  let cts = new CancellationTokenSource()
-
-  let rec enqueueLoop (commits:Map<Partition, Offset>) (mb:Mb<_>) = async {
-    let! msg = mb.Receive ()
-    match msg with
-    | Enqueue (os) ->
-      let commits' =
-        (commits,os) 
-        ||> Seq.fold (fun m (p,o) -> Map.add p o m)
-      return! enqueueLoop commits' mb
-    | Commit rep ->
-      // only commit currently assigned partitions
-      let! assignedPartitions = assignedPartitions
-      let commits = 
-        commits
-        |> Map.onlyKeys assignedPartitions
-      let offsets =
-        commits
-        |> Map.toSeq
-        |> Seq.map (fun (p,o) -> p,o)
-        |> Seq.toArray
-      if offsets.Length > 0 then
-        do! commit offsets
-      rep |> Option.iter (fun r -> r.Reply())
-      return! enqueueLoop commits mb }
-
-  let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
-  
-  let rec commitLoop = async {
-    do! Async.sleep interval
-    mbp.Post (Commit None)
-    return! commitLoop }
-
-  do Async.Start (commitLoop, cts.Token)
-
-  member internal __.Enqueue (os:(Partition * Offset) seq) =
-    mbp.Post (Enqueue (os))
-
-  member internal __.Flush () =
-    mbp.PostAndAsyncReply (fun ch -> Commit (Some ch))
-
-  interface IDisposable with
-    member __.Dispose () =
-      cts.Cancel ()
-      (mbp :> IDisposable).Dispose ()
+open FSharp.Control
 
 /// Operations on offsets.
 module Offsets =
   
+  /// Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
+  /// Commits the current offsets assigned to the consumer upon creation.
+  /// Returns a pair consisting of the commit queue and a process which commits offsets and reacts to rebalancing.
+  let periodicOffsetCommitter 
+    (interval:TimeSpan) 
+    (rebalance:AsyncSeq<(Partition * Offset)[]>)
+    (commit:(Partition * Offset)[] -> Async<unit>) : Async<((Partition * Offset)[] -> unit) * Async<unit>> = async {
+    let mb = Mb.create ()
+    let queuedOffsets = AsyncSeq.replicateInfiniteAsync (Mb.take mb)
+    let ticks = AsyncSeq.intervalMs (int interval.TotalMilliseconds)
+    let commitProc =
+      AsyncSeq.mergeChoice3 ticks queuedOffsets rebalance
+      |> AsyncSeq.scanAsync (fun offsets event -> async {
+        match event with
+        | Choice1Of3 _ -> 
+          do! commit (offsets |> Map.toArray)
+          return offsets
+        | Choice2Of3 queued ->
+          return offsets |> Map.addMany queued
+        | Choice3Of3 assigned ->          
+          return assigned |> Map.ofArray
+        }) Map.empty  
+      |> AsyncSeq.iter ignore
+    return mb.Post,commitProc }
+
   /// Gets available offsets for the specified topic, at the specified times.
   /// Returns a map of times to offset responses.
   /// If empty is passed in for Partitions, will return information for all partitions.
@@ -105,15 +77,3 @@ module Offsets =
         | Choice3Of3 l -> (-1L,l))
     
     return offsets }
-
-  /// Creates a periodic offset commit queue which commits enqueued commits at the specified interval.
-  let createPeriodicCommitQueue interval = 
-    new PeriodicCommitQueue (interval)
-
-  /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.
-  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
-    q.Enqueue (os)
-    
-  /// Commits whatever remains in the queue.
-  let flushPeriodicCommit (q:PeriodicCommitQueue) =
-    q.Flush ()
