@@ -2,3 +2,4 @@ FSharp.Control.AsyncSeq
 group Test
 NUnit
 NUnit.Runners
+Confluent.Kafka

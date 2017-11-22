@@ -17,3 +17,4 @@ group Test
 
   nuget NUnit
   nuget NUnit.Runners
+  nuget Confluent.Kafka

@@ -248,4 +248,9 @@ module AsyncSeq =
          cts.Cancel() }
 
   let mergeChoice3 (s1:AsyncSeq<'a>) (s2:AsyncSeq<'b>) (s3:AsyncSeq<'c>) : AsyncSeq<Choice<'a, 'b, 'c>> =
-    AsyncSeq.mergeAll [ s1 |> AsyncSeq.map Choice1Of3 ; s2 |> AsyncSeq.map Choice2Of3 ; s3 |> AsyncSeq.map Choice3Of3 ]
+    AsyncSeq.mergeAll 
+      [ s1 |> AsyncSeq.map Choice1Of3 ; s2 |> AsyncSeq.map Choice2Of3 ; s3 |> AsyncSeq.map Choice3Of3 ]
+
+  let mergeChoice4 (s1:AsyncSeq<'a>) (s2:AsyncSeq<'b>) (s3:AsyncSeq<'c>) (s4:AsyncSeq<'d>) : AsyncSeq<Choice<'a, 'b, 'c, 'd>> =
+    AsyncSeq.mergeAll 
+      [ s1 |> AsyncSeq.map Choice1Of4 ; s2 |> AsyncSeq.map Choice2Of4 ; s3 |> AsyncSeq.map Choice3Of4 ; s4 |> AsyncSeq.map Choice4Of4 ]

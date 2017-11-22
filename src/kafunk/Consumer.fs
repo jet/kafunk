@@ -886,7 +886,7 @@ module Consumer =
           |> Seq.concat
           |> Seq.where (fun (_,o) -> o <> -1L)
           |> Seq.toArray })
-    return! Offsets.periodicOffsetCommitter commitInterval rebalanced (commitOffsets c) }
+    return! PeriodicCommitQueue.create commitInterval rebalanced (commitOffsets c) }
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.
@@ -896,11 +896,11 @@ module Consumer =
     (c:Consumer)
     (commitInterval:TimeSpan)
     (handler:ConsumerState -> ConsumerMessageSet -> Async<unit>) : Async<unit> = async {
-      let! queueOffsetCommit,commitProc = periodicOffsetCommitter c commitInterval
+      let! commitQueue = periodicOffsetCommitter c commitInterval
       let handler s ms = async {
         do! handler s ms
-        queueOffsetCommit (ConsumerMessageSet.commitPartitionOffsets ms) }
-      do! Async.choose (consume c handler) commitProc }
+        PeriodicCommitQueue.enqueue commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
+      do! Async.choose (consume c handler) (PeriodicCommitQueue.start commitQueue) }
 
   /// Starts consumption from the start offset in the given range.
   /// Will stop consuming for each partition once it reaches the max boundary offset.

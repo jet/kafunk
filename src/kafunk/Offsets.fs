@@ -4,34 +4,68 @@ namespace Kafunk
 open System
 open FSharp.Control
 
-/// Operations on offsets.
-module Offsets =
-  
+/// A periodic commit queue.
+type PeriodicCommitQueue = private {
+  queuedOffsets : Mb<(Partition * Offset)[]>
+  flushes : Mb<IVar<unit>>
+  proc : Async<unit>
+}
+
+/// Operations on periodic commit queues.
+[<Compile(Module)>]
+module PeriodicCommitQueue =
+
   /// Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
   /// Commits the current offsets assigned to the consumer upon creation.
   /// Returns a pair consisting of the commit queue and a process which commits offsets and reacts to rebalancing.
-  let periodicOffsetCommitter 
+  let create 
     (interval:TimeSpan) 
     (rebalance:AsyncSeq<(Partition * Offset)[]>)
-    (commit:(Partition * Offset)[] -> Async<unit>) : Async<((Partition * Offset)[] -> unit) * Async<unit>> = async {
-    let mb = Mb.create ()
-    let queuedOffsets = AsyncSeq.replicateInfiniteAsync (Mb.take mb)
+    (commit:(Partition * Offset)[] -> Async<unit>) : Async<PeriodicCommitQueue> = async {
+    let queuedOffsetsMb = Mb.create ()
+    let flushesMb = Mb.create ()
+    let queuedOffsets = AsyncSeq.replicateInfiniteAsync (Mb.take queuedOffsetsMb)
+    let flushes = AsyncSeq.replicateInfiniteAsync (Mb.take flushesMb)
     let ticks = AsyncSeq.intervalMs (int interval.TotalMilliseconds)
     let commitProc =
-      AsyncSeq.mergeChoice3 ticks queuedOffsets rebalance
+      AsyncSeq.mergeChoice4 ticks queuedOffsets rebalance flushes
       |> AsyncSeq.scanAsync (fun offsets event -> async {
         match event with
-        | Choice1Of3 _ -> 
+        | Choice1Of4 _ ->
           do! commit (offsets |> Map.toArray)
           return offsets
-        | Choice2Of3 queued ->
+        | Choice2Of4 queued ->
           return offsets |> Map.addMany queued
-        | Choice3Of3 assigned ->          
+        | Choice3Of4 assigned ->          
           return assigned |> Map.ofArray
+        | Choice4Of4 (rep:IVar<unit>) ->
+          try
+            do! commit (offsets |> Map.toArray)
+            IVar.put () rep
+          with ex ->
+            IVar.error ex rep
+          return offsets
         }) Map.empty  
       |> AsyncSeq.iter ignore
-    return mb.Post,commitProc }
+    return { proc = commitProc ; queuedOffsets = queuedOffsetsMb ; flushes = flushesMb } }
 
+  /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.
+  let enqueue (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
+    q.queuedOffsets.Post (os |> Seq.toArray)
+    
+  /// Commits whatever remains in the queue.
+  let flush (q:PeriodicCommitQueue) = async {
+    let rep = IVar.create ()
+    q.flushes.Post rep
+    return! rep |> IVar.get }
+
+  /// Stars the commit queue.
+  let start (q:PeriodicCommitQueue) =
+    q.proc
+
+/// Operations on offsets.
+module Offsets =
+  
   /// Gets available offsets for the specified topic, at the specified times.
   /// Returns a map of times to offset responses.
   /// If empty is passed in for Partitions, will return information for all partitions.
