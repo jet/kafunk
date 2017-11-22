@@ -196,9 +196,11 @@ module AsyncSeq =
           match rem with
           | Some rem -> async.Return rem
           | None -> Async.StartChildAsTask (ie.MoveNext())
-        let t = Stopwatch.GetTimestamp()
-        let! time = Async.StartChildAsTask (Async.Sleep (max 0 rt))
-        let! moveOr = Async.chooseTasks move time
+        let t = Stopwatch.GetTimestamp()        
+        let time = Task.Delay (max 0 rt)
+        let! moveOr = Async.chooseTasksUnit move time
+//        let! time = Async.StartChildAsTask (Async.Sleep (max 0 rt))
+//        let! moveOr = Async.chooseTasks move time
         let delta = int ((Stopwatch.GetTimestamp() - t) * 1000L / Stopwatch.Frequency)
         match moveOr with
         | Choice1Of2 (None, _) -> 

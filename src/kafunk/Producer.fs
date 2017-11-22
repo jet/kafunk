@@ -205,10 +205,7 @@ and ProducerRoutes = {
   partitionCount : int
 
   /// Brokers allocated to each partition.
-  borkerByPartition : Broker[]
-
-  /// Partitions allocated to each broker.
-  partitionsByBroker : Map<Broker, Partition[]> }
+  borkerByPartition : Broker[] }
 
 /// A producer-specific error.
 and private ProducerError =
@@ -415,7 +412,6 @@ module Producer =
 
     return {
       ProducerRoutes.borkerByPartition = brokerByPartition
-      partitionsByBroker = partitionsByBroker
       partitionCount = partitionCount } }
 
   /// Fetches cluster state and initializes a per-broker produce queue.

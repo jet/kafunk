@@ -43,7 +43,7 @@ let config =
       
     "bootstrap.servers", box host 
     "acks", box "all"
-    "batch.size", box 16384
+    //"batch.size", box 16384
     "linger.ms", box 100
     "max.in.flight.requests.per.connection", box 1
 

@@ -382,6 +382,20 @@ module Async =
         if i = 0 then return (Choice1Of2 (a.Result, b))
         elif i = 1 then return (Choice2Of2 (b.Result, a)) 
         else return! failwith (sprintf "unreachable, i = %d" i) }
+
+  let chooseTasksAsync (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> = async {
+    let ta, tb = a :> Task, b :> Task
+    let! i = Task.WhenAny( ta, tb ) |> awaitTaskCancellationAsError
+    if i = ta then return (Choice1Of2 (a.Result, b))
+    elif i = tb then return (Choice2Of2 (b.Result, a)) 
+    else return! failwith "unreachable" }
+
+  let chooseTasksUnit (a:Task<'T>) (b:Task) : Async<Choice<'T * Task, unit * Task<'T>>> = async {
+    let ta, tb = a :> Task, b
+    let! i = Task.WhenAny( ta, tb ) |> awaitTaskCancellationAsError
+    if i = ta then return (Choice1Of2 (a.Result, b))
+    elif i = tb then return (Choice2Of2 ((), a)) 
+    else return! failwith "unreachable" }
     
 
 
