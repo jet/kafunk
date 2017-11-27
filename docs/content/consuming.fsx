@@ -114,18 +114,18 @@ Consumer.consumePeriodicCommit consumer
 
 
 /// Create a commit queue.
-let (commitQueue,commitProccess) = 
+let commitQueue = 
   Consumer.periodicOffsetCommitter consumer (TimeSpan.FromSeconds 60.0)
   |> Async.RunSynchronously
 
-/// Start the background commit process.
+/// Start the commit process.
 /// You may wish to trap exceptions in this process in order to crash.
-Async.Start commitProccess
+Async.Start (PeriodicCommitQueue.proccess commitQueue)
 
 let ms : ConsumerMessageSet = failwith "some message set"
 
 /// Asynchronously enqueue offsets to be committed.
-commitQueue (ConsumerMessageSet.commitPartitionOffsets ms)
+PeriodicCommitQueue.enqueue commitQueue (ConsumerMessageSet.commitPartitionOffsets ms)
 
 (**
 

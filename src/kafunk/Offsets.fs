@@ -4,7 +4,7 @@ namespace Kafunk
 open System
 open FSharp.Control
 
-/// A periodic commit queue.
+/// A periodic offset commit queue.
 type PeriodicCommitQueue = private {
   queuedOffsets : Mb<(Partition * Offset)[]>
   flushes : Mb<IVar<unit>>
@@ -59,8 +59,9 @@ module PeriodicCommitQueue =
     q.flushes.Post rep
     return! rep |> IVar.get }
 
-  /// Stars the commit queue.
-  let start (q:PeriodicCommitQueue) =
+  /// Returns the commit proccess, which must be explicitly started by the caller.
+  /// This way, the caller can handle exceptions in the commit process.
+  let proccess (q:PeriodicCommitQueue) =
     q.proc
 
 /// Operations on offsets.

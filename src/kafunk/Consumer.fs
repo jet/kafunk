@@ -900,7 +900,7 @@ module Consumer =
       let handler s ms = async {
         do! handler s ms
         PeriodicCommitQueue.enqueue commitQueue (ConsumerMessageSet.commitPartitionOffsets ms) }
-      do! Async.choose (consume c handler) (PeriodicCommitQueue.start commitQueue) }
+      do! Async.choose (consume c handler) (PeriodicCommitQueue.proccess commitQueue) }
 
   /// Starts consumption from the start offset in the given range.
   /// Will stop consuming for each partition once it reaches the max boundary offset.
