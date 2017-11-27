@@ -2,60 +2,67 @@
 namespace Kafunk
 
 open System
-open System.Threading
+open FSharp.Control
 
-type private PeriodicCommitQueueMsg =
-  | Enqueue of offsets:(Partition * Offset) seq
-  | Commit of AsyncReplyChannel<unit> option
+/// A periodic offset commit queue.
+type PeriodicCommitQueue = private {
+  queuedOffsets : Mb<(Partition * Offset)[]>
+  flushes : Mb<IVar<unit>>
+  proc : Async<unit>
+}
 
-/// A queue for offsets to be periodically committed.
-type PeriodicCommitQueue internal (interval:TimeSpan, assignedPartitions:Async<Partition[]>, commit:(Partition * Offset)[] -> Async<unit>) =
-  
-  let cts = new CancellationTokenSource()
+/// Operations on periodic commit queues.
+[<Compile(Module)>]
+module PeriodicCommitQueue =
 
-  let rec enqueueLoop (commits:Map<Partition, Offset>) (mb:Mb<_>) = async {
-    let! msg = mb.Receive ()
-    match msg with
-    | Enqueue (os) ->
-      let commits' =
-        (commits,os) 
-        ||> Seq.fold (fun m (p,o) -> Map.add p o m)
-      return! enqueueLoop commits' mb
-    | Commit rep ->
-      // only commit currently assigned partitions
-      let! assignedPartitions = assignedPartitions
-      let commits = 
-        commits
-        |> Map.onlyKeys assignedPartitions
-      let offsets =
-        commits
-        |> Map.toSeq
-        |> Seq.map (fun (p,o) -> p,o)
-        |> Seq.toArray
-      if offsets.Length > 0 then
-        do! commit offsets
-      rep |> Option.iter (fun r -> r.Reply())
-      return! enqueueLoop commits mb }
+  /// Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
+  /// Commits the current offsets assigned to the consumer upon creation.
+  /// Returns a pair consisting of the commit queue and a process which commits offsets and reacts to rebalancing.
+  let create 
+    (interval:TimeSpan) 
+    (rebalance:AsyncSeq<(Partition * Offset)[]>)
+    (commit:(Partition * Offset)[] -> Async<unit>) : Async<PeriodicCommitQueue> = async {
+    let queuedOffsetsMb = Mb.create ()
+    let flushesMb = Mb.create ()
+    let queuedOffsets = AsyncSeq.replicateInfiniteAsync (Mb.take queuedOffsetsMb)
+    let flushes = AsyncSeq.replicateInfiniteAsync (Mb.take flushesMb)
+    let ticks = AsyncSeq.intervalMs (int interval.TotalMilliseconds)
+    let commitProc =
+      AsyncSeq.mergeChoice4 ticks queuedOffsets rebalance flushes
+      |> AsyncSeq.scanAsync (fun offsets event -> async {
+        match event with
+        | Choice1Of4 _ ->
+          do! commit (offsets |> Map.toArray)
+          return offsets
+        | Choice2Of4 queued ->
+          return offsets |> Map.addMany queued
+        | Choice3Of4 assigned ->          
+          return assigned |> Map.ofArray
+        | Choice4Of4 (rep:IVar<unit>) ->
+          try
+            do! commit (offsets |> Map.toArray)
+            IVar.put () rep
+          with ex ->
+            IVar.error ex rep
+          return offsets
+        }) Map.empty  
+      |> AsyncSeq.iter ignore
+    return { proc = commitProc ; queuedOffsets = queuedOffsetsMb ; flushes = flushesMb } }
 
-  let mbp = Mb.Start (enqueueLoop Map.empty, cts.Token)
-  
-  let rec commitLoop = async {
-    do! Async.sleep interval
-    mbp.Post (Commit None)
-    return! commitLoop }
+  /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.
+  let enqueue (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
+    q.queuedOffsets.Post (os |> Seq.toArray)
+    
+  /// Commits whatever remains in the queue.
+  let flush (q:PeriodicCommitQueue) = async {
+    let rep = IVar.create ()
+    q.flushes.Post rep
+    return! rep |> IVar.get }
 
-  do Async.Start (commitLoop, cts.Token)
-
-  member internal __.Enqueue (os:(Partition * Offset) seq) =
-    mbp.Post (Enqueue (os))
-
-  member internal __.Flush () =
-    mbp.PostAndAsyncReply (fun ch -> Commit (Some ch))
-
-  interface IDisposable with
-    member __.Dispose () =
-      cts.Cancel ()
-      (mbp :> IDisposable).Dispose ()
+  /// Returns the commit proccess, which must be explicitly started by the caller.
+  /// This way, the caller can handle exceptions in the commit process.
+  let proccess (q:PeriodicCommitQueue) =
+    q.proc
 
 /// Operations on offsets.
 module Offsets =
@@ -105,15 +112,3 @@ module Offsets =
         | Choice3Of3 l -> (-1L,l))
     
     return offsets }
-
-  /// Creates a periodic offset commit queue which commits enqueued commits at the specified interval.
-  let createPeriodicCommitQueue interval = 
-    new PeriodicCommitQueue (interval)
-
-  /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.
-  let enqueuePeriodicCommit (q:PeriodicCommitQueue) (os:(Partition * Offset) seq) =
-    q.Enqueue (os)
-    
-  /// Commits whatever remains in the queue.
-  let flushPeriodicCommit (q:PeriodicCommitQueue) =
-    q.Flush ()

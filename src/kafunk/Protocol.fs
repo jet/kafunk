@@ -345,7 +345,7 @@ module Protocol =
     end
   with
 
-    static member internal Size (ver:ApiVersion, m:Message) =
+    static member Size (ver:ApiVersion, m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
@@ -420,7 +420,7 @@ module Protocol =
     end
   with
 
-    static member internal Size (ver:ApiVersion, x:MessageSet) =
+    static member Size (ver:ApiVersion, x:MessageSet) =
       let mutable size = 0
       for i = 0 to x.messages.Length - 1 do
         let m = x.messages.[i].message

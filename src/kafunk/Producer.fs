@@ -205,10 +205,7 @@ and ProducerRoutes = {
   partitionCount : int
 
   /// Brokers allocated to each partition.
-  borkerByPartition : Broker[]
-
-  /// Partitions allocated to each broker.
-  partitionsByBroker : Map<Broker, Partition[]> }
+  borkerByPartition : Broker[] }
 
 /// A producer-specific error.
 and private ProducerError =
@@ -415,7 +412,6 @@ module Producer =
 
     return {
       ProducerRoutes.borkerByPartition = brokerByPartition
-      partitionsByBroker = partitionsByBroker
       partitionCount = partitionCount } }
 
   /// Fetches cluster state and initializes a per-broker produce queue.
@@ -506,13 +502,14 @@ module Producer =
       do! state.partitionQueues.[batch.partition] batch
       return! batch.rep |> IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch)) }
 
-  let private splitBySize (maxBatchSize:int) (batch:ProducerMessage seq) =
+  let private splitBySize (maxBatchSize:int) (batch:ProducerMessage ResizeArray) =
     // NB: if the size of an individual message is larger than the max, then this
     // would still add it to the batch and potentially cause the server to return an error
     let batches = ResizeArray<_>()
     let currentBatch = ResizeArray<_>()
     let mutable currentBatchSize = 0
-    for pm in batch do
+    for i = 0 to batch.Count - 1 do
+      let pm = batch.[i]
       let messageSize = ProducerMessage.size pm
       if (currentBatchSize + messageSize) >= maxBatchSize then 
         if currentBatch.Count > 0 then
