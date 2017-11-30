@@ -859,7 +859,7 @@ module Consumer =
   /// Returns a stream of message sets across all partitions assigned to the consumer.
   let stream (c:Consumer) =
     generations c
-    |> AsyncSeq.collect (fun (s,ps) -> AsyncSeq.mergeAll (ps |> Seq.map snd |> Seq.toList) |> AsyncSeq.map (fun ms -> s,ms))
+    |> AsyncSeq.collect (fun (s,ps) -> AsyncSeq.mergeAllRoundRobin (ps |> Seq.map snd |> Seq.toList) |> AsyncSeq.map (fun ms -> s,ms))
 
   /// Starts consumption using the specified handler.
   /// The handler will be invoked in parallel across topic/partitions, but sequentially within a topic/partition.

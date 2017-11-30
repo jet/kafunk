@@ -303,3 +303,38 @@ module AsyncSeq =
   let mergeChoice4 (s1:AsyncSeq<'a>) (s2:AsyncSeq<'b>) (s3:AsyncSeq<'c>) (s4:AsyncSeq<'d>) : AsyncSeq<Choice<'a, 'b, 'c, 'd>> =
     AsyncSeq.mergeAll 
       [ s1 |> AsyncSeq.map Choice1Of4 ; s2 |> AsyncSeq.map Choice2Of4 ; s3 |> AsyncSeq.map Choice3Of4 ; s4 |> AsyncSeq.map Choice4Of4 ]
+
+  /// merges multiple async seqs together, distribution spread across evenly throughout each async seq
+  let mergeAllRoundRobin (ss:AsyncSeq<'T> list) : AsyncSeq<'T> =
+    asyncSeq { 
+      let n = ss.Length
+      if n > 0 then 
+        let ies = [| for source in ss -> source.GetEnumerator()  |]
+        let tasks = Array.zeroCreate n
+        for i in 0 .. ss.Length - 1 do 
+          let! task = Async.StartChildAsTask (ies.[i].MoveNext())
+          do tasks.[i] <- task
+        let fin = ref n
+        while fin.Value > 0 do 
+          let! results = 
+            tasks 
+            |> Array.map(fun t -> async { 
+              let! ti = Task.WhenAny([t]) |> Async.AwaitTask
+              let i  = Array.IndexOf (tasks, ti)
+              let v = ti.Result
+              match v.IsSome with 
+              | true -> 
+                  let! task = Async.StartChildAsTask (ies.[i].MoveNext())
+                  do tasks.[i] <- task
+              | false ->
+                  let t = System.Threading.Tasks.TaskCompletionSource()
+                  tasks.[i] <- t.Task // result never gets set
+                  fin := fin.Value - 1
+              return v
+               })
+            |> Async.Parallel         
+          for res in results do
+            if res.IsSome then
+              yield res.Value
+            
+    }
