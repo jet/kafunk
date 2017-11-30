@@ -467,6 +467,20 @@ module Consumer =
   /// Passing an empty array returns offset information for all topics and partitions.
   /// Passing a topic and an empty array of partitions returns all partitions for that topic.
   let fetchOffsets (conn:KafkaConn) (groupId:GroupId) (topics:(TopicName * Partition[])[]) : Async<(TopicName * (Partition * Offset)[])[]> = async {
+    let! topics =
+      topics 
+      |> Array.map(fun (t, ps) -> async {
+        let! partitions =
+          match ps |> Array.isEmpty with
+          | true ->
+            async {
+              let! metaData = conn.GetMetadata [|t|]
+              return metaData.Item t }
+          | false -> 
+            async { return ps }
+        return t,partitions })
+      |> Async.Parallel
+
     let req = OffsetFetchRequest(groupId, topics)
     let! res = Kafka.offsetFetch conn req
     let oks,errors =
