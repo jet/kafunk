@@ -1,3 +1,7 @@
+### 0.1.12-rc1 - 30.11.2017
+* Fixed 'Consumer.fetchOffsets' returning no offsets when Array.empty is passed in as partitions per topic
+* Fixed 'Consumer.stream' function that sometimes causes starvation when AsyncSeq.mergeAll would prioritize first few tasks rather than later
+
 ### 0.1.11 - 17.11.2017
 * BREAKING: Offset commit queue is moved to module `PeriodicCommitQueue`. See: https://jet.github.io/kafunk/consuming.html#Periodic-Offset-Commit.
 * Producer performance improvements.
