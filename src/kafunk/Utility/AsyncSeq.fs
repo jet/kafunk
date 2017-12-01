@@ -305,36 +305,45 @@ module AsyncSeq =
       [ s1 |> AsyncSeq.map Choice1Of4 ; s2 |> AsyncSeq.map Choice2Of4 ; s3 |> AsyncSeq.map Choice3Of4 ; s4 |> AsyncSeq.map Choice4Of4 ]
 
   /// merges multiple async seqs together, distribution spread across evenly throughout each async seq
-  let mergeAllRoundRobin (ss:AsyncSeq<'T> list) : AsyncSeq<'T> =
+  let mergeAllRoundRobin (asyncSeqList:AsyncSeq<'T> list) : AsyncSeq<'T> =
     asyncSeq { 
-      let n = ss.Length
-      if n > 0 then 
-        let ies = [| for source in ss -> source.GetEnumerator()  |]
-        let tasks = Array.zeroCreate n
-        for i in 0 .. ss.Length - 1 do 
-          let! task = Async.StartChildAsTask (ies.[i].MoveNext())
-          do tasks.[i] <- task
-        let fin = ref n
+      let numOfAsyncSeqs = asyncSeqList.Length
+      if numOfAsyncSeqs > 0 then 
+        let ies = [| for source in asyncSeqList -> source.GetEnumerator()  |]
+        
+        let! tasks =
+          asyncSeqList
+          |> List.toArray
+          |> Array.mapi(fun i _ -> async {
+            let! task = Async.StartChildAsTask (ies.[i].MoveNext())
+            return i,task
+              })
+          |> Async.Parallel
+          
+        let fin = ref numOfAsyncSeqs
+
         while fin.Value > 0 do 
           let! results = 
-            tasks 
-            |> Array.map(fun t -> async { 
-              let! ti = Task.WhenAny([t]) |> Async.AwaitTask
-              let i  = Array.IndexOf (tasks, ti)
-              let v = ti.Result
-              match v.IsSome with 
-              | true -> 
-                  let! task = Async.StartChildAsTask (ies.[i].MoveNext())
-                  do tasks.[i] <- task
-              | false ->
-                  let t = System.Threading.Tasks.TaskCompletionSource()
-                  tasks.[i] <- t.Task // result never gets set
-                  fin := fin.Value - 1
-              return v
-               })
-            |> Async.Parallel         
-          for res in results do
-            if res.IsSome then
-              yield res.Value
+            tasks
+            |> Array.map(fun (i,t) -> async { 
+              if i < 0 then
+                return i, None
+              else
+                let! taskResult = t |> Async.AwaitTask
+                return i, taskResult })
+            |> Async.Parallel       
+                    
+          for j in 0..results.Length-1 do
+            let i, res = results.[j]
+            match res with
+            | Some r -> // moving on to the next task in ith async seq 
+              yield r
+              let! task = Async.StartChildAsTask (ies.[i].MoveNext())
+              do tasks.[i] <- i,task
+            | None when i >= 0 -> // when that async seq i ran out
+              let _,unused = tasks.[j]
+              tasks.[j] <- -1,unused
+              fin := fin.Value - 1
+            | _ -> () // ignore
             
     }
