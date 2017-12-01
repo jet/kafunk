@@ -265,10 +265,9 @@ module AsyncSeq =
         let ies = [| for source in asyncSeqList -> source.GetEnumerator()  |]
         
         let! tasks =
-          asyncSeqList
-          |> List.toArray
-          |> Array.mapi(fun i _ -> async {
-            let! task = Async.StartChildAsTask (ies.[i].MoveNext())
+          ies
+          |> Array.mapi(fun i enum -> async {
+            let! task = Async.StartChildAsTask (enum.MoveNext())
             return i,task
               })
           |> Async.Parallel
