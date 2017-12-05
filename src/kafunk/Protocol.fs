@@ -939,17 +939,44 @@ module Protocol =
   type OffsetFetchResponse =
     struct
       val topics : (TopicName * (Partition * Offset * Meta * ErrorCode)[])[]
-      new (topics) = { topics = topics }
+      val errorCode : ErrorCode option
+      new (topics, errorCode) = { topics = topics; errorCode = errorCode }
     end
   with
 
-    static member internal read buf =
-      let readPartition =
-        Binary.read4 Binary.readInt32 Binary.readInt64 Binary.readString Binary.readInt16
-      let readTopic =
-        Binary.read2 Binary.readString (Binary.readArray readPartition)
-      let topics, buf = buf |> Binary.readArray readTopic
-      (OffsetFetchResponse(topics), buf)
+    static member internal Read (version:ApiVersion, buf:BinaryZipper) =
+        let readTopics (buf: BinaryZipper) =
+            let readPartition (buf: BinaryZipper) =
+                let partition = buf.ReadInt32()
+                let offset = buf.ReadInt64()
+                let metadata = buf.ReadString()
+                let errorCode = buf.ReadInt16()
+                partition, offset, metadata, errorCode
+
+            let readTopic (buf: BinaryZipper) =
+                let topicName = buf.ReadString()
+                let partitions = buf.ReadArray readPartition
+                topicName, partitions
+            
+            buf.ReadArray readTopic
+
+        match version with
+        | 0s 
+        | 1s -> 
+            let topics = readTopics buf
+            OffsetFetchResponse(topics, None)    
+        | 2s -> 
+            let topics = readTopics buf
+            let errorCode = buf.ReadInt16()
+            OffsetFetchResponse(topics, Some errorCode) 
+        | 3s -> 
+            // TODO: add somewhere?
+            let throttleTimeMs = buf.ReadInt32()
+            let topics = readTopics buf
+            let errorCode = buf.ReadInt16()
+            OffsetFetchResponse(topics, Some errorCode)
+        | _ -> 
+            failwithf "Unsupported API Version: %i" version
 
   // Group Membership API
 
@@ -1549,8 +1576,7 @@ module Protocol =
         let x, _ = GroupCoordinatorResponse.read buf.Buffer in (ResponseMessage.GroupCoordinatorResponse x)
       | ApiKey.OffsetCommit ->
         let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
-      | ApiKey.OffsetFetch ->
-        let x, _ = OffsetFetchResponse.read buf.Buffer in (ResponseMessage.OffsetFetchResponse x)
+      | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
       | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
       | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse

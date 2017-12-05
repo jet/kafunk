@@ -393,6 +393,7 @@ type private RetryAction =
           |> Option.map (fun action -> r.errorCode,action)
 
       | ResponseMessage.OffsetFetchResponse r -> 
+        // TODO: duplicate error logic below for the entire response if the api version is v2
         r.topics
         |> Seq.tryPick (fun (_t,ps) ->
           ps
