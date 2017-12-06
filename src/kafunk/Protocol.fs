@@ -947,9 +947,10 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type OffsetFetchResponse =
     struct
+      val throttleTime : ThrottleTime
       val topics : (TopicName * (Partition * Offset * Meta * ErrorCode)[])[]
       val errorCode : ErrorCode option
-      new (topics, errorCode) = { topics = topics; errorCode = errorCode }
+      new (topics, errorCode, throttleTime) = { topics = topics; errorCode = errorCode; throttleTime = throttleTime }
     end
   with
 
@@ -973,17 +974,16 @@ module Protocol =
         | 0s 
         | 1s -> 
             let topics = readTopics buf
-            OffsetFetchResponse(topics, None)    
+            OffsetFetchResponse(topics, None, 0)    
         | 2s -> 
             let topics = readTopics buf
             let errorCode = buf.ReadInt16()
-            OffsetFetchResponse(topics, Some errorCode) 
+            OffsetFetchResponse(topics, Some errorCode, 0) 
         | 3s -> 
-            // TODO: add somewhere?
             let throttleTimeMs = buf.ReadInt32()
             let topics = readTopics buf
             let errorCode = buf.ReadInt16()
-            OffsetFetchResponse(topics, Some errorCode)
+            OffsetFetchResponse(topics, Some errorCode, throttleTimeMs)
         | _ -> 
             failwithf "Unsupported API Version: %i" version
 
