@@ -800,9 +800,8 @@ module Consumer =
       c.conn.Config.connId cfg.groupId topic (Printers.partitions assignment)
       
     if assignment.Length = 0 then
-      Log.error "no_partitions_assigned|conn_id=%s group_id=%s member_id=%s topic=%s" 
+      Log.warn "no_partitions_assigned|conn_id=%s group_id=%s member_id=%s topic=%s" 
         c.conn.Config.connId cfg.groupId state.state.memberId topic
-      return failwithf "no partitions assigned!"
 
     let! ct = Async.CancellationToken
     let fetchProcessCancellation = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
