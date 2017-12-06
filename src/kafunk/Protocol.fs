@@ -923,33 +923,69 @@ module Protocol =
     end
   with
 
-    static member internal size (x:OffsetFetchRequest) =
-      let topicSize (name, parts) =
-        Binary.sizeString name + Binary.sizeArray parts Binary.sizeInt32
-      Binary.sizeString x.consumerGroup + Binary.sizeArray x.topics topicSize
+    static member internal Size (_: ApiVersion, req: OffsetFetchRequest) =
+        let partitionsSize = Binary.sizeInt32 
 
-    static member internal write (x:OffsetFetchRequest) buf =
-      let writeTopic =
-        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps Binary.writeInt32)
-      buf
-      |> Binary.writeString x.consumerGroup
-      |> Binary.writeArray x.topics writeTopic
+        let topicSize (topicName, partitions) = 
+            Binary.sizeString topicName +
+            Binary.sizeArray partitions partitionsSize
+
+        Binary.sizeString req.consumerGroup +
+        Binary.sizeArray req.topics topicSize
+    
+    static member internal Write (_: ApiVersion, req:OffsetFetchRequest, buf:BinaryZipper) =
+        let writePartitions (buf: BinaryZipper, partition) =
+            buf.WriteInt32 partition
+
+        let writeTopics (buf: BinaryZipper, (topicName, partitions)) =
+            buf.WriteString topicName
+            buf.WriteArray (partitions, writePartitions)
+
+        buf.WriteString req.consumerGroup
+        buf.WriteArray (req.topics, writeTopics)
 
   [<NoEquality;NoComparison>]
   type OffsetFetchResponse =
     struct
+      val throttleTime : ThrottleTime
       val topics : (TopicName * (Partition * Offset * Meta * ErrorCode)[])[]
-      new (topics) = { topics = topics }
+      val errorCode : ErrorCode option
+      new (topics, errorCode, throttleTime) = { topics = topics; errorCode = errorCode; throttleTime = throttleTime }
     end
   with
 
-    static member internal read buf =
-      let readPartition =
-        Binary.read4 Binary.readInt32 Binary.readInt64 Binary.readString Binary.readInt16
-      let readTopic =
-        Binary.read2 Binary.readString (Binary.readArray readPartition)
-      let topics, buf = buf |> Binary.readArray readTopic
-      (OffsetFetchResponse(topics), buf)
+    static member internal Read (version:ApiVersion, buf:BinaryZipper) =
+        let readTopics (buf: BinaryZipper) =
+            let readPartition (buf: BinaryZipper) =
+                let partition = buf.ReadInt32()
+                let offset = buf.ReadInt64()
+                let metadata = buf.ReadString()
+                let errorCode = buf.ReadInt16()
+                partition, offset, metadata, errorCode
+
+            let readTopic (buf: BinaryZipper) =
+                let topicName = buf.ReadString()
+                let partitions = buf.ReadArray readPartition
+                topicName, partitions
+            
+            buf.ReadArray readTopic
+
+        match version with
+        | 0s 
+        | 1s -> 
+            let topics = readTopics buf
+            OffsetFetchResponse(topics, None, 0)    
+        | 2s -> 
+            let topics = readTopics buf
+            let errorCode = buf.ReadInt16()
+            OffsetFetchResponse(topics, Some errorCode, 0) 
+        | 3s -> 
+            let throttleTimeMs = buf.ReadInt32()
+            let topics = readTopics buf
+            let errorCode = buf.ReadInt16()
+            OffsetFetchResponse(topics, Some errorCode, throttleTimeMs)
+        | _ -> 
+            failwithf "Unsupported API Version: %i" version
 
   // Group Membership API
 
@@ -1447,7 +1483,7 @@ module Protocol =
       | Offset x -> OffsetRequest.Size (ver,x)
       | GroupCoordinator x -> GroupCoordinatorRequest.size x
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
-      | OffsetFetch x -> OffsetFetchRequest.size x
+      | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
       | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
       | SyncGroup x -> SyncGroupRequest.size x
       | LeaveGroup x -> LeaveGroupRequest.size x
@@ -1464,7 +1500,7 @@ module Protocol =
       | Offset x -> OffsetRequest.Write (ver,x,buf)
       | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
       | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
-      | OffsetFetch x -> OffsetFetchRequest.write x buf.Buffer |> ignore
+      | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
       | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
       | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
       | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
@@ -1549,8 +1585,7 @@ module Protocol =
         let x, _ = GroupCoordinatorResponse.read buf.Buffer in (ResponseMessage.GroupCoordinatorResponse x)
       | ApiKey.OffsetCommit ->
         let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
-      | ApiKey.OffsetFetch ->
-        let x, _ = OffsetFetchResponse.read buf.Buffer in (ResponseMessage.OffsetFetchResponse x)
+      | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
       | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
       | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse

@@ -393,16 +393,19 @@ type private RetryAction =
           |> Option.map (fun action -> r.errorCode,action)
 
       | ResponseMessage.OffsetFetchResponse r -> 
-        r.topics
-        |> Seq.tryPick (fun (_t,ps) ->
-          ps
-          |> Seq.tryPick (fun (_p,_o,_md,ec) -> 
-            match ec with
-            | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
-              Some (ec,RetryAction.PassThru)
-            | _ ->
-              RetryAction.errorRetryAction ec
-              |> Option.map (fun action -> ec,action)))
+        match r.errorCode with
+        | Some eCode -> Some (eCode, RetryAction.PassThru)
+        | None ->
+            r.topics
+            |> Seq.tryPick (fun (_t,ps) ->
+              ps
+              |> Seq.tryPick (fun (_p,_o,_md,ec) -> 
+                match ec with
+                | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
+                  Some (ec,RetryAction.PassThru)
+                | _ ->
+                  RetryAction.errorRetryAction ec
+                  |> Option.map (fun action -> ec,action)))
 
       | ResponseMessage.OffsetCommitResponse r ->
         r.topics
