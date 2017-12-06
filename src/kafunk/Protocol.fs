@@ -923,17 +923,26 @@ module Protocol =
     end
   with
 
-    static member internal size (x:OffsetFetchRequest) =
-      let topicSize (name, parts) =
-        Binary.sizeString name + Binary.sizeArray parts Binary.sizeInt32
-      Binary.sizeString x.consumerGroup + Binary.sizeArray x.topics topicSize
+    static member internal Size (_: ApiVersion, req: OffsetFetchRequest) =
+        let partitionsSize = Binary.sizeInt32 
 
-    static member internal write (x:OffsetFetchRequest) buf =
-      let writeTopic =
-        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps Binary.writeInt32)
-      buf
-      |> Binary.writeString x.consumerGroup
-      |> Binary.writeArray x.topics writeTopic
+        let topicSize (topicName, partitions) = 
+            Binary.sizeString topicName +
+            Binary.sizeArray partitions partitionsSize
+
+        Binary.sizeString req.consumerGroup +
+        Binary.sizeArray req.topics topicSize
+    
+    static member internal Write (_: ApiVersion, req:OffsetFetchRequest, buf:BinaryZipper) =
+        let writePartitions (buf: BinaryZipper, partition) =
+            buf.WriteInt32 partition
+
+        let writeTopics (buf: BinaryZipper, (topicName, partitions)) =
+            buf.WriteString topicName
+            buf.WriteArray (partitions, writePartitions)
+
+        buf.WriteString req.consumerGroup
+        buf.WriteArray (req.topics, writeTopics)
 
   [<NoEquality;NoComparison>]
   type OffsetFetchResponse =
@@ -1474,7 +1483,7 @@ module Protocol =
       | Offset x -> OffsetRequest.Size (ver,x)
       | GroupCoordinator x -> GroupCoordinatorRequest.size x
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
-      | OffsetFetch x -> OffsetFetchRequest.size x
+      | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
       | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
       | SyncGroup x -> SyncGroupRequest.size x
       | LeaveGroup x -> LeaveGroupRequest.size x
@@ -1491,7 +1500,7 @@ module Protocol =
       | Offset x -> OffsetRequest.Write (ver,x,buf)
       | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
       | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
-      | OffsetFetch x -> OffsetFetchRequest.write x buf.Buffer |> ignore
+      | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
       | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
       | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
       | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
