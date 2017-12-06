@@ -1,3 +1,6 @@
+### 0.1.12
+* Added support for all versions of the OffsetFetch API in the Kafka protocol.
+
 ### 0.1.11 - 17.11.2017
 * BREAKING: Offset commit queue is moved to module `PeriodicCommitQueue`. See: https://jet.github.io/kafunk/consuming.html#Periodic-Offset-Commit.
 * Producer performance improvements.
