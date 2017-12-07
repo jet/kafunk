@@ -1203,29 +1203,37 @@ module Protocol =
     end
   with
 
-    static member internal size (x:HeartbeatRequest) =
-      Binary.sizeString x.groupId + Binary.sizeInt32 x.generationId + Binary.sizeString x.memberId
+    static member internal Size (_:ApiVersion, req:HeartbeatRequest) =
+      Binary.sizeString req.groupId + Binary.sizeInt32 req.generationId + Binary.sizeString req.memberId
 
-    static member internal write (x:HeartbeatRequest) buf =
-      buf
-      |> Binary.writeString x.groupId
-      |> Binary.writeInt32 x.generationId
-      |> Binary.writeString x.memberId
+    static member internal Write (_:ApiVersion, req:HeartbeatRequest, buf: BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.generationId
+      buf.WriteString req.memberId
 
   /// Heartbeat response from the group coordinator.
   [<NoEquality;NoComparison>]
   type HeartbeatResponse =
     struct
       val errorCode : ErrorCode
-      new (errorCode) = { errorCode = errorCode }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, throttleTimeMs) = { errorCode = errorCode ; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver: ApiVersion, buf: BinaryZipper) =
+      match ver with
+      | 0s ->
+        let errorCode = buf.ReadInt16()
+        HeartbeatResponse(errorCode, 0)
+      | 1s ->
+        let throttleTimeMs = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        HeartbeatResponse(errorCode, throttleTimeMs)
+      | _ ->
+        failwithf "Unsupported Heartbeat Response API Version: %i" ver
+        
 
-    static member internal read buf =
-      let errorCode, buf = Binary.readInt16 buf
-      (HeartbeatResponse(errorCode), buf)
-
-  /// An explciti request to leave a group. Preferred over session timeout.
+  /// An explicit request to leave a group. Preferred over session timeout.
   [<NoEquality;NoComparison>]
   type LeaveGroupRequest =
     struct
@@ -1234,24 +1242,33 @@ module Protocol =
       new (groupId, memberId) = { groupId = groupId; memberId = memberId }
     end
   with
+    static member internal Size (_:ApiVersion, req:LeaveGroupRequest) =
+      Binary.sizeString req.groupId + Binary.sizeString req.memberId
 
-    static member internal size (x:LeaveGroupRequest) =
-      Binary.sizeString x.groupId + Binary.sizeString x.memberId
-
-    static member internal write (x:LeaveGroupRequest) buf =
-      buf |> Binary.writeString x.groupId |> Binary.writeString x.memberId
+    static member internal Write (_:ApiVersion, req:LeaveGroupRequest, buf: BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteString req.memberId
 
   [<NoEquality;NoComparison>]
   type LeaveGroupResponse =
     struct
       val errorCode : ErrorCode
-      new (errorCode) = { errorCode = errorCode }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, throttleTimeMs) = { errorCode = errorCode ; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver: ApiVersion, buf:BinaryZipper) =
+      match ver with
+      | 0s ->
+        let errorCode = buf.ReadInt16()
+        LeaveGroupResponse(errorCode, 0)
+      | 1s ->
+        let throttleMs = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        LeaveGroupResponse(errorCode, throttleMs)
+      | _ ->
+        failwithf "Unsupported LeaveGroup Response API Version: %i" ver
 
-    static member internal Read (buf:BinaryZipper) =
-      let errorCode = buf.ReadInt16 ()
-      LeaveGroupResponse(errorCode)
 
   // Consumer groups
   // https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Client-side+Assignment+Proposal
@@ -1505,7 +1522,7 @@ module Protocol =
 
     static member internal size (ver:ApiVersion, x:RequestMessage) =
       match x with
-      | Heartbeat x -> HeartbeatRequest.size x
+      | Heartbeat x -> HeartbeatRequest.Size (ver,x)
       | Metadata x -> Metadata.sizeRequest x
       | Fetch x -> FetchRequest.Size x
       | Produce x -> ProduceRequest.Size x
@@ -1515,14 +1532,14 @@ module Protocol =
       | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
       | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
       | SyncGroup x -> SyncGroupRequest.size x
-      | LeaveGroup x -> LeaveGroupRequest.size x
+      | LeaveGroup x -> LeaveGroupRequest.Size (ver,x)
       | ListGroups x -> ListGroupsRequest.Size (ver,x)
       | DescribeGroups x -> DescribeGroupsRequest.Size (ver,x)
       | ApiVersions x -> ApiVersionsRequest.Size x
 
     static member internal Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
       match x with
-      | Heartbeat x -> HeartbeatRequest.write x buf.Buffer |> ignore
+      | Heartbeat x -> HeartbeatRequest.Write (ver,x,buf)
       | Metadata x -> Metadata.writeRequest x buf.Buffer |> ignore
       | Fetch x -> FetchRequest.Write (x,buf)
       | Produce x -> ProduceRequest.Write (ver,x,buf)
@@ -1532,7 +1549,7 @@ module Protocol =
       | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
       | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
       | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
-      | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
+      | LeaveGroup x -> LeaveGroupRequest.Write (ver,x,buf)
       | ListGroups x -> ListGroupsRequest.Write (ver,x,buf)
       | DescribeGroups x -> DescribeGroupsRequest.Write (ver,x,buf) 
       | ApiVersions x -> ApiVersionsRequest.Write (x,buf)
@@ -1603,8 +1620,7 @@ module Protocol =
     /// Decodes the response given the specified ApiKey corresponding to the request.
     static member internal Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
       match apiKey with
-      | ApiKey.Heartbeat ->
-        let x, _ = HeartbeatResponse.read buf.Buffer in (ResponseMessage.HeartbeatResponse x)
+      | ApiKey.Heartbeat -> HeartbeatResponse.Read (apiVer,buf) |> ResponseMessage.HeartbeatResponse 
       | ApiKey.Metadata ->
         let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
@@ -1617,7 +1633,7 @@ module Protocol =
       | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
       | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
-      | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse
+      | ApiKey.LeaveGroup -> LeaveGroupResponse.Read (apiVer,buf) |> ResponseMessage.LeaveGroupResponse
       | ApiKey.ListGroups -> ListGroupsResponse.Read (apiVer,buf) |> ResponseMessage.ListGroupsResponse
       | ApiKey.DescribeGroups -> DescribeGroupsResponse.Read (apiVer,buf) |> ResponseMessage.DescribeGroupsResponse 
       | ApiKey.ApiVersions -> ApiVersionsResponse.Read (apiVer,buf) |> ResponseMessage.ApiVersionsResponse
