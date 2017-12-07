@@ -1413,22 +1413,40 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type DescribeGroupsResponse =
     struct
+      val throttleTime : ThrottleTime
       val groups : (ErrorCode * GroupId * State * ProtocolType * Protocol * GroupMembers)[]
-      new (groups) = { groups = groups }
+      new (groups, throttleTime) = { groups = groups; throttleTime = throttleTime }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let readMembers (buf: BinaryZipper) =
+        let memberId = buf.ReadString()
+        let clientId = buf.ReadString()
+        let clientHost = buf.ReadString()
+        let memberMetadata = buf.ReadBytes()
+        let memberAssignment = buf.ReadBytes()
+        memberId, clientId, clientHost, memberMetadata, memberAssignment
 
-    static member internal read buf =
-      let readGroup =
-        Binary.read6
-          Binary.readInt16
-          Binary.readString
-          Binary.readString
-          Binary.readString
-          Binary.readString
-          GroupMembers.read
-      let xs, buf = buf |> Binary.readArray readGroup
-      (DescribeGroupsResponse(xs), buf)
+      let readGroup (buf: BinaryZipper) =
+        let errorCode = buf.ReadInt16()
+        let groupId = buf.ReadString()
+        let state = buf.ReadString()
+        let protocolType = buf.ReadString()
+        let protocol = buf.ReadString()
+        let members = buf.ReadArray readMembers
+        errorCode, groupId, state, protocolType, protocol, GroupMembers(members)
+
+      match ver with
+      | 0s ->
+        let groups = buf.ReadArray readGroup
+        DescribeGroupsResponse(groups, 0)
+      | 1s ->
+        let throttleTimeMs = buf.ReadInt32()
+        let groups = buf.ReadArray readGroup
+        DescribeGroupsResponse(groups, throttleTimeMs)
+      | _ -> 
+        failwithf "Unsupported DescribeGroups API Response Version: %i" ver
+            
 
   [<NoEquality;NoComparison>]
   type ApiVersionsRequest =
@@ -1593,8 +1611,7 @@ module Protocol =
       | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse
       | ApiKey.ListGroups ->
         let x, _ = ListGroupsResponse.read buf.Buffer in (ResponseMessage.ListGroupsResponse x)
-      | ApiKey.DescribeGroups ->
-        let x, _ = DescribeGroupsResponse.read buf.Buffer in (ResponseMessage.DescribeGroupsResponse x)
+      | ApiKey.DescribeGroups -> DescribeGroupsResponse.Read (apiVer,buf) |> ResponseMessage.DescribeGroupsResponse 
       | ApiKey.ApiVersions -> ApiVersionsResponse.Read (apiVer,buf) |> ResponseMessage.ApiVersionsResponse
       | x -> 
         failwith (sprintf "Unsupported ApiKey=%A" x)
