@@ -252,13 +252,13 @@ module internal Routing =
     |> (fun rs -> 
       let res =
         if rs.Length = 0 then 
-          new ListGroupsResponse (ErrorCode.NoError, [||])
+          new ListGroupsResponse (ErrorCode.NoError, [||], 0)
         else
           let ec = 
             rs 
             |> Seq.tryPick (fun r -> if r.errorCode <> ErrorCode.NoError then Some r.errorCode else None)
             |> Option.getOr ErrorCode.NoError
-          new ListGroupsResponse (ec, rs |> Array.collect (fun r -> r.groups))
+          new ListGroupsResponse (ec, rs |> Array.collect (fun r -> r.groups), 0)
       ResponseMessage.ListGroupsResponse res)
 
   let concatOffsetResponses (rs:ResponseMessage[]) =

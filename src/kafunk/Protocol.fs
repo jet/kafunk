@@ -1355,25 +1355,36 @@ module Protocol =
     struct
     end
   with
-
-    static member size (_:ListGroupsRequest) = 0
-
-    static member write (_:ListGroupsRequest) buf = buf
+    static member Size (_:ApiVersion, _:ListGroupsRequest) = 0
+    static member Write (_:ApiVersion, _:ListGroupsRequest, _:BinaryZipper) = ()
 
   type ListGroupsResponse =
     struct
       val errorCode : ErrorCode
       val groups : (GroupId * ProtocolType)[]
-      new (errorCode, groups) = { errorCode = errorCode; groups = groups }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, groups, throttleTimeMs) = { errorCode = errorCode; groups = groups ; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver: ApiVersion, buf: BinaryZipper) =
+      let readGroup (buf: BinaryZipper) =
+        let groupId = buf.ReadString()
+        let protocolType = buf.ReadString()
+        groupId, protocolType
 
-    static member internal read buf =
-      let readGroup =
-        Binary.read2 Binary.readString Binary.readString
-      let errorCode, buf = Binary.readInt16 buf
-      let gs, buf = buf |> Binary.readArray readGroup
-      (ListGroupsResponse(errorCode, gs), buf)
+      match ver with
+      | 0s ->
+        let errorCode = buf.ReadInt16()
+        let groups = buf.ReadArray readGroup
+        ListGroupsResponse(errorCode, groups, 0)
+      | 1s ->
+        let throttleTime = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        let groups = buf.ReadArray readGroup
+        ListGroupsResponse(errorCode, groups, throttleTime)
+      | _ ->
+        failwithf "Unsupported ListGroups Response API Version: %i" ver
+
 
   type State = string
 
@@ -1388,12 +1399,17 @@ module Protocol =
       new (members) = { members = members }
     end
   with
-
-    static member internal read buf =
-      let readGroupMember =
-        Binary.read5 Binary.readString Binary.readString Binary.readString Binary.readBytes Binary.readBytes
-      let xs, buf = buf |> Binary.readArray readGroupMember
-      (GroupMembers(xs), buf)
+    static member internal Read (_:ApiVersion, buf: BinaryZipper) =
+      let readGroupMember (buf: BinaryZipper) =
+        let memberId = buf.ReadString()
+        let clientId = buf.ReadString()
+        let clientHost = buf.ReadString()
+        let memberMetadata = buf.ReadBytes()
+        let memberAssignment = buf.ReadBytes()
+        memberId, clientId, clientHost, memberMetadata, memberAssignment
+      
+      let members = buf.ReadArray readGroupMember
+      GroupMembers(members)
 
   [<NoEquality;NoComparison>]
   type DescribeGroupsRequest =
@@ -1402,7 +1418,6 @@ module Protocol =
       new (groupIds) = { groupIds = groupIds }
     end
   with
-
     static member internal Size (_: ApiVersion, req: DescribeGroupsRequest) =
       Binary.sizeArray req.groupIds Binary.sizeString
     
@@ -1421,22 +1436,14 @@ module Protocol =
     end
   with
     static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
-      let readMembers (buf: BinaryZipper) =
-        let memberId = buf.ReadString()
-        let clientId = buf.ReadString()
-        let clientHost = buf.ReadString()
-        let memberMetadata = buf.ReadBytes()
-        let memberAssignment = buf.ReadBytes()
-        memberId, clientId, clientHost, memberMetadata, memberAssignment
-
       let readGroup (buf: BinaryZipper) =
         let errorCode = buf.ReadInt16()
         let groupId = buf.ReadString()
         let state = buf.ReadString()
         let protocolType = buf.ReadString()
         let protocol = buf.ReadString()
-        let members = buf.ReadArray readMembers
-        errorCode, groupId, state, protocolType, protocol, GroupMembers(members)
+        let members = GroupMembers.Read(ver, buf)
+        errorCode, groupId, state, protocolType, protocol, members
 
       match ver with
       | 0s ->
@@ -1509,7 +1516,7 @@ module Protocol =
       | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
       | SyncGroup x -> SyncGroupRequest.size x
       | LeaveGroup x -> LeaveGroupRequest.size x
-      | ListGroups x -> ListGroupsRequest.size x
+      | ListGroups x -> ListGroupsRequest.Size (ver,x)
       | DescribeGroups x -> DescribeGroupsRequest.Size (ver,x)
       | ApiVersions x -> ApiVersionsRequest.Size x
 
@@ -1526,7 +1533,7 @@ module Protocol =
       | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
       | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
       | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
-      | ListGroups x -> ListGroupsRequest.write x buf.Buffer |> ignore
+      | ListGroups x -> ListGroupsRequest.Write (ver,x,buf)
       | DescribeGroups x -> DescribeGroupsRequest.Write (ver,x,buf) 
       | ApiVersions x -> ApiVersionsRequest.Write (x,buf)
 
@@ -1611,8 +1618,7 @@ module Protocol =
       | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
       | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse
-      | ApiKey.ListGroups ->
-        let x, _ = ListGroupsResponse.read buf.Buffer in (ResponseMessage.ListGroupsResponse x)
+      | ApiKey.ListGroups -> ListGroupsResponse.Read (apiVer,buf) |> ResponseMessage.ListGroupsResponse
       | ApiKey.DescribeGroups -> DescribeGroupsResponse.Read (apiVer,buf) |> ResponseMessage.DescribeGroupsResponse 
       | ApiKey.ApiVersions -> ApiVersionsResponse.Read (apiVer,buf) |> ResponseMessage.ApiVersionsResponse
       | x -> 
