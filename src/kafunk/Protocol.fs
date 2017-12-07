@@ -1043,13 +1043,17 @@ module Protocol =
     end
   with
 
-    static member internal size (x:GroupProtocols) =
+    static member internal Size (_:ApiVersion, x:GroupProtocols) =
       let protocolSize (name, metadata) =
         Binary.sizeString name + Binary.sizeBytes metadata
       Binary.sizeArray x.protocols protocolSize
 
-    static member internal write (x:GroupProtocols) buf =
-      buf |> Binary.writeArray x.protocols (Binary.write2 Binary.writeString Binary.writeBytes)
+    static member internal Write (_:ApiVersion, x:GroupProtocols, buf:BinaryZipper) =
+      let writeProtocol (buf:BinaryZipper, (protocolName, protocolMetadata)) =
+        buf.WriteString protocolName
+        buf.WriteBytes protocolMetadata
+
+      buf.WriteArray(x.protocols, writeProtocol)
 
   [<NoEquality;NoComparison>]
   type Members =
@@ -1096,36 +1100,33 @@ module Protocol =
         { throttleTime = throttleTimeMs ; errorCode = errorCode; generationId = generationId; 
           groupProtocol = groupProtocol; leaderId = leaderId; memberId = memberId; members = members }
 
-    let internal sizeRequest (ver:ApiVersion, req:Request) =
+    let internal Size(ver:ApiVersion, req:Request) =
       Binary.sizeString req.groupId +
       Binary.sizeInt32 req.sessionTimeout +
       (if ver >= 1s then 4 else 0) +
       Binary.sizeString req.memberId +
       Binary.sizeString req.protocolType +
-      GroupProtocols.size req.groupProtocols
+      GroupProtocols.Size(ver,req.groupProtocols)
 
-    let internal writeRequest (ver:ApiVersion, req:Request) buf =
-      let buf = Binary.writeString req.groupId buf
-      let buf = Binary.writeInt32 req.sessionTimeout buf
-      let buf = 
-        if ver >= 1s then Binary.writeInt32 req.rebalanceTimeout buf
-        else buf
-      let buf = Binary.writeString req.memberId buf
-      let buf = Binary.writeString req.protocolType buf
-      let buf = GroupProtocols.write req.groupProtocols buf
-      buf
+    let internal Write (ver:ApiVersion, req:Request, buf:BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.sessionTimeout
+      (if ver >= 1s then buf.WriteInt32 req.rebalanceTimeout)
+      buf.WriteString req.memberId
+      buf.WriteString req.protocolType
+      GroupProtocols.Write(ver, req.groupProtocols, buf)
 
-    let internal ReadResponse (ver:ApiVersion, buf:BinaryZipper) =
-      let tt = 
+    let internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let throttleTimeMs = 
         if ver >= 2s then buf.ReadInt32 ()
         else 0
-      let ec = buf.ReadInt16 ()
-      let gid = buf.ReadInt32 ()
-      let gp = buf.ReadString ()
-      let lid = buf.ReadString ()
-      let mid = buf.ReadString ()
-      let ms = Members.Read buf
-      Response(tt, ec, gid, gp, lid, mid, ms)
+      let errorCode = buf.ReadInt16 ()
+      let groupId = buf.ReadInt32 ()
+      let groupProtocol = buf.ReadString ()
+      let leaderId = buf.ReadString ()
+      let memberId = buf.ReadString ()
+      let members = Members.Read buf
+      Response(throttleTimeMs, errorCode, groupId, groupProtocol, leaderId, memberId, members)
         
 
   [<NoEquality;NoComparison>]
@@ -1136,11 +1137,15 @@ module Protocol =
     end
   with
 
-    static member internal size (x:GroupAssignment) =
-      Binary.sizeArray x.members (fun (memId, memAssign) -> Binary.sizeString memId + Binary.sizeBytes memAssign)
+    static member internal Size (_:ApiVersion, req:GroupAssignment) =
+      Binary.sizeArray req.members (fun (memId, memAssign) -> Binary.sizeString memId + Binary.sizeBytes memAssign)
 
-    static member internal write (x:GroupAssignment) buf =
-      buf |> Binary.writeArray x.members (Binary.write2 Binary.writeString Binary.writeBytes)
+    static member internal Write (_:ApiVersion, req:GroupAssignment, buf:BinaryZipper) =
+      let writeMember (buf: BinaryZipper, (memberId, memberAssignment)) =
+        buf.WriteString memberId
+        buf.WriteBytes memberAssignment
+
+      buf.WriteArray(req.members, writeMember)
 
   /// The sync group request is used by the group leader to assign state (e.g.
   /// partition assignments) to all members of the current generation. All
@@ -1157,20 +1162,17 @@ module Protocol =
         { groupId = groupId; generationId = generationId; memberId = memberId; groupAssignment = groupAssignment }
     end
   with
+    static member internal Size (ver:ApiVersion, req: SyncGroupRequest) =
+      Binary.sizeString req.groupId +
+      Binary.sizeInt32 req.generationId +
+      Binary.sizeString req.memberId +
+      GroupAssignment.Size(ver, req.groupAssignment)
 
-    static member internal size (x:SyncGroupRequest) =
-      Binary.sizeString x.groupId +
-      Binary.sizeInt32 x.generationId +
-      Binary.sizeString x.memberId +
-      GroupAssignment.size x.groupAssignment
-
-    static member internal write (x:SyncGroupRequest) buf =
-      let buf =
-        buf
-        |> Binary.writeString x.groupId
-        |> Binary.writeInt32 x.generationId
-        |> Binary.writeString x.memberId
-      GroupAssignment.write x.groupAssignment buf
+    static member internal Write (ver:ApiVersion, req:SyncGroupRequest, buf:BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.generationId
+      buf.WriteString req.memberId
+      GroupAssignment.Write(ver, req.groupAssignment, buf)
 
   [<NoEquality;NoComparison>]
   type SyncGroupResponse =
@@ -1182,7 +1184,6 @@ module Protocol =
         { throttleTime = throttleTime ; errorCode = errorCode; memberAssignment = memberAssignment }
     end
   with
-
     static member internal Read (ver:ApiVersion,buf:BinaryZipper) =
       let tt = 
         if ver >= 1s then buf.ReadInt32 ()
@@ -1190,6 +1191,7 @@ module Protocol =
       let errorCode = buf.ReadInt16 ()
       let ma = buf.ReadBytes ()
       SyncGroupResponse(tt, errorCode, ma)
+
 
   /// Sent by a consumer to the group coordinator.
   [<NoEquality;NoComparison>]
@@ -1202,7 +1204,6 @@ module Protocol =
         { groupId = groupId; generationId = generationId; memberId = memberId }
     end
   with
-
     static member internal Size (_:ApiVersion, req:HeartbeatRequest) =
       Binary.sizeString req.groupId + Binary.sizeInt32 req.generationId + Binary.sizeString req.memberId
 
@@ -1530,8 +1531,8 @@ module Protocol =
       | GroupCoordinator x -> GroupCoordinatorRequest.size x
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
       | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
-      | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
-      | SyncGroup x -> SyncGroupRequest.size x
+      | JoinGroup x -> JoinGroup.Size (ver,x)
+      | SyncGroup x -> SyncGroupRequest.Size (ver,x)
       | LeaveGroup x -> LeaveGroupRequest.Size (ver,x)
       | ListGroups x -> ListGroupsRequest.Size (ver,x)
       | DescribeGroups x -> DescribeGroupsRequest.Size (ver,x)
@@ -1547,8 +1548,8 @@ module Protocol =
       | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
       | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
       | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
-      | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
-      | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
+      | JoinGroup x -> JoinGroup.Write (ver,x,buf) 
+      | SyncGroup x -> SyncGroupRequest.Write (ver,x,buf)
       | LeaveGroup x -> LeaveGroupRequest.Write (ver,x,buf)
       | ListGroups x -> ListGroupsRequest.Write (ver,x,buf)
       | DescribeGroups x -> DescribeGroupsRequest.Write (ver,x,buf) 
@@ -1631,7 +1632,7 @@ module Protocol =
       | ApiKey.OffsetCommit ->
         let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
       | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
-      | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
+      | ApiKey.JoinGroup -> JoinGroup.Read (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
       | ApiKey.LeaveGroup -> LeaveGroupResponse.Read (apiVer,buf) |> ResponseMessage.LeaveGroupResponse
       | ApiKey.ListGroups -> ListGroupsResponse.Read (apiVer,buf) |> ResponseMessage.ListGroupsResponse
