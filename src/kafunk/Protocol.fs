@@ -1403,12 +1403,14 @@ module Protocol =
     end
   with
 
-    static member internal size (x:DescribeGroupsRequest) =
-      Binary.sizeArray x.groupIds Binary.sizeString
+    static member internal Size (_: ApiVersion, req: DescribeGroupsRequest) =
+      Binary.sizeArray req.groupIds Binary.sizeString
+    
+    static member internal Write (_: ApiVersion, req:DescribeGroupsRequest, buf:BinaryZipper) =
+      let writeGroup (buf: BinaryZipper, groupId) =
+        buf.WriteString groupId
 
-    static member internal write (x:DescribeGroupsRequest) buf =
-      buf |> Binary.writeArray x.groupIds Binary.writeString
-
+      buf.WriteArray (req.groupIds, writeGroup)
 
   [<NoEquality;NoComparison>]
   type DescribeGroupsResponse =
@@ -1508,7 +1510,7 @@ module Protocol =
       | SyncGroup x -> SyncGroupRequest.size x
       | LeaveGroup x -> LeaveGroupRequest.size x
       | ListGroups x -> ListGroupsRequest.size x
-      | DescribeGroups x -> DescribeGroupsRequest.size x
+      | DescribeGroups x -> DescribeGroupsRequest.Size (ver,x)
       | ApiVersions x -> ApiVersionsRequest.Size x
 
     static member internal Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
@@ -1525,7 +1527,7 @@ module Protocol =
       | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
       | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
       | ListGroups x -> ListGroupsRequest.write x buf.Buffer |> ignore
-      | DescribeGroups x -> DescribeGroupsRequest.write x buf.Buffer |> ignore
+      | DescribeGroups x -> DescribeGroupsRequest.Write (ver,x,buf) 
       | ApiVersions x -> ApiVersionsRequest.Write (x,buf)
 
     member x.ApiKey =
