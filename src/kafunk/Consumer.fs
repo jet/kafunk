@@ -789,23 +789,11 @@ module Consumer =
             do! buf |> BoundedMb.put ms })
           |> Async.Parallel
         return () }) }
-
-  /// Initiates consumption of a single generation of the consumer group protocol.
-  let private consumeGeneration (c:Consumer) (state:GroupMemberStateWrapper) = async {
-      
+   
+  let private consumeTopic (c: Consumer) (state: GroupMemberStateWrapper) (topic: TopicName) (assignment: Partition[]) = async {
     let cfg = c.config
-
-    let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
-    Log.info "consumer_group_assignment_received|conn_id=%s group_id=%s topic=%s partitions=[%s]"
-      c.conn.Config.connId cfg.groupId topic (Printers.partitions assignment)
-      
-    if assignment.Length = 0 then
-      Log.warn "no_partitions_assigned|conn_id=%s group_id=%s member_id=%s topic=%s" 
-        c.conn.Config.connId cfg.groupId state.state.memberId topic
-
     let! ct = Async.CancellationToken
     let fetchProcessCancellation = CancellationTokenSource.CreateLinkedTokenSource (ct, state.state.closed)
-
     // initialize per-partition messageset buffers
     let partitionBuffers =
       assignment
@@ -830,7 +818,7 @@ module Consumer =
           return () })
 
     Async.Start (fetchProcess, fetchProcessCancellation.Token)
-        
+    
     let partitionStreams =
       partitionBuffers
       |> Map.toSeq
@@ -841,7 +829,23 @@ module Consumer =
         p, AsyncSeq.replicateUntilNoneAsync tryTake)
       |> Seq.toArray
 
-    return partitionStreams }
+    return partitionStreams 
+  }
+
+  /// Initiates consumption of a single generation of the consumer group protocol.
+  let private consumeGeneration (c:Consumer) (state:GroupMemberStateWrapper) = 
+    let groupId = c.config.groupId
+
+    let topic,assignment = state.state.memberAssignment |> ConsumerGroup.decodeMemberAssignment
+    Log.info "consumer_group_assignment_received|conn_id=%s group_id=%s topic=%s partitions=[%s]"
+      c.conn.Config.connId groupId topic (Printers.partitions assignment)
+      
+    if assignment.Length = 0 then
+      Log.warn "no_partitions_assigned|conn_id=%s group_id=%s member_id=%s topic=%s" 
+        c.conn.Config.connId groupId state.state.memberId topic
+      async.Return [||]
+    else
+      consumeTopic c state topic assignment
 
   /// Returns an async sequence corresponding to generations, where each generation
   /// is paired with the set of assigned fetch streams.
