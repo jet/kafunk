@@ -850,30 +850,6 @@ module Protocol =
           consumerId = consumerId; retentionTime = retentionTime; topics = topics }
     end
   with
-
-//    static member internal size (x:OffsetCommitRequest) =
-//      let partitionSize (part, offset, ts, metadata) =
-//        Binary.sizeInt32 part + Binary.sizeInt64 offset + Binary.sizeString metadata
-//      let topicSize (name, partitions) =
-//        Binary.sizeString name + Binary.sizeArray partitions partitionSize
-//      Binary.sizeString x.consumerGroup +
-//      Binary.sizeInt32 x.consumerGroupGenerationId +
-//      Binary.sizeString x.consumerId +
-//      Binary.sizeInt64 x.retentionTime +
-//      Binary.sizeArray x.topics topicSize
-
-//    static member internal write (x:OffsetCommitRequest) buf =
-//      let writePartition =
-//        Binary.write3 Binary.writeInt32 Binary.writeInt64 Binary.writeString
-//      let writeTopic =
-//        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
-//      buf
-//      |> Binary.writeString x.consumerGroup
-//      |> Binary.writeInt32 x.consumerGroupGenerationId
-//      |> Binary.writeString x.consumerId
-//      |> Binary.writeInt64 x.retentionTime
-//      |> Binary.writeArray x.topics writeTopic
-
     static member internal Size (ver:ApiVersion, x:OffsetCommitRequest) =
       let partitionSize (part, offset, ts, metadata) =
         Binary.sizeInt32 part + 
@@ -906,18 +882,34 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type OffsetCommitResponse =
     struct
+      val throttleTimeMs : ThrottleTime
       val topics : (TopicName * (Partition * ErrorCode)[])[]
-      new (topics) = { topics = topics }
+      new (topics) = { throttleTimeMs = 0; topics = topics }
+      new (throttleTime, topics) = { throttleTimeMs = throttleTime; topics = topics }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let readPartitions (buf:BinaryZipper) =
+        let partition = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        partition, errorCode
 
-    static member internal read buf =
-      let readPartition =
-        Binary.read2 Binary.readInt32 Binary.readInt16
-      let readTopic =
-        Binary.read2 Binary.readString (Binary.readArray readPartition)
-      let topics, buf = buf |> Binary.readArray readTopic
-      (OffsetCommitResponse(topics), buf)
+      let readTopic (buf:BinaryZipper) =
+        let topicName = buf.ReadString()
+        let partitions = buf.ReadArray readPartitions
+        topicName, partitions
+           
+      match ver with
+      | 0s | 1s | 2s ->
+        let topics = buf.ReadArray readTopic
+        OffsetCommitResponse(topics)
+      | 3s ->
+        let throttleTimeMs = buf.ReadInt32()
+        let topics = buf.ReadArray readTopic
+        OffsetCommitResponse(throttleTimeMs, topics)
+      | _ ->
+        failwithf "Unsupported OffsetCommit Response API Version: %i" ver
+
 
   type OffsetFetchRequest =
     struct
@@ -1653,10 +1645,9 @@ module Protocol =
         let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
       | ApiKey.Produce -> ProduceResponse.Read (apiVer,buf) |> ResponseMessage.ProduceResponse
-      | ApiKey.Offset -> OffsetResponse.Read (apiVer, buf) |> ResponseMessage.OffsetResponse
+      | ApiKey.Offset -> OffsetResponse.Read (apiVer,buf) |> ResponseMessage.OffsetResponse
       | ApiKey.GroupCoordinator -> GroupCoordinatorResponse.Read (apiVer, buf) |> ResponseMessage.GroupCoordinatorResponse 
-      | ApiKey.OffsetCommit ->
-        let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
+      | ApiKey.OffsetCommit -> OffsetCommitResponse.Read (apiVer,buf) |> ResponseMessage.OffsetCommitResponse 
       | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
       | ApiKey.JoinGroup -> JoinGroup.Read (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
