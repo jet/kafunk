@@ -45,6 +45,21 @@ module Binary =
   let inline copy (src : Segment) (dest : Segment) (count : int) =
     System.Buffer.BlockCopy(src.Array, src.Offset, dest.Array, dest.Offset, count)
 
+  let inline sizeBool (_:bool) = 1
+
+  let inline peekBool (buf: Segment) : bool =
+    System.Convert.ToBoolean(buf.Array.[buf.Offset])
+  
+  let inline readBool (buf: Segment) : bool * Segment =
+    (peekBool buf, (buf |> shiftOffset 1))
+  
+  let inline pokeBool (x : bool) (buf : Segment) =
+    buf.Array.[buf.Offset] <- System.Convert.ToByte(x)
+    buf
+
+  let inline writeBool (x: bool) (buf: Segment) =
+    pokeBool x buf |> shiftOffset 1
+
   let inline sizeInt8 (_:int8) = 1
 
   let inline peekInt8 (buf : Segment) : int8 =
@@ -320,6 +335,13 @@ type BinaryZipper (buf:ArraySegment<byte>) =
 
   member __.ShiftOffset (n) =
     buf <- Binary.shiftOffset n buf
+
+  member __.ReadBool () : bool =
+    let r = Binary.peekBool buf
+    r
+  
+  member __.WriteBool (x:bool) =
+    buf <- Binary.writeBool x buf
 
   member __.ReadInt8 () : int8 =
     let r = Binary.peekInt8 buf

@@ -664,7 +664,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
       routeToBrokerWithRecovery true RetryState.init state
       |> AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
     
-    let! metadata = send (Metadata.Request(topics))
+    let! metadata = send (MetadataRequest(topics))
     Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
 
     /// TODO: spin on missing leader?
@@ -966,7 +966,7 @@ module Kafka =
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
-  let metadata (c:KafkaConn) : Metadata.Request -> Async<MetadataResponse> =
+  let metadata (c:KafkaConn) : MetadataRequest -> Async<MetadataResponse> =
     AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata c.Send
 
   let fetch (c:KafkaConn) : FetchRequest -> Async<FetchResponse> =

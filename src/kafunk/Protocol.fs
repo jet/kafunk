@@ -496,24 +496,6 @@ module Protocol =
         Message.CheckCrc (ver,x.message)
 
 
-
-  // Metadata API
-  module Metadata =
-
-    /// Request metadata on all or a specific set of topics.
-    /// Can be routed to any node in the bootstrap list.
-    type Request =
-      struct
-        val topicNames : TopicName[]
-        new (topicNames) = { topicNames = topicNames }
-      end
-
-    let sizeRequest (x:Request) =
-        Binary.sizeArray x.topicNames Binary.sizeString
-
-    let writeRequest (x:Request) =
-        Binary.writeArray x.topicNames Binary.writeString
-
   /// A Kafka broker consists of a node id, host name and TCP port.
   [<AutoSerializable(false);StructuralEquality;StructuralComparison>]
   type Broker =
@@ -521,13 +503,27 @@ module Protocol =
       val nodeId : NodeId
       val host : Host
       val port : Port
-      new (nodeId, host, port) = { nodeId = nodeId; host = host; port = port }
+      val rack : string
+      new (nodeId, host, port) = { nodeId = nodeId; host = host; port = port; rack = null }
+      new (nodeId, host, port, rack) = { nodeId = nodeId; host = host; port = port; rack = rack }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      match ver with
+      | 0s ->
+        let nodeId = buf.ReadInt32()
+        let host = buf.ReadString()
+        let port = buf.ReadInt32()
+        Broker(nodeId, host, port)
+      | 1s ->
+        let nodeId = buf.ReadInt32()
+        let host = buf.ReadString()
+        let port = buf.ReadInt32()
+        let rack = buf.ReadString()
+        Broker(nodeId, host, port, rack)
+      | _ ->
+        failwithf "Unsupported Broker Format for Metadata Api Response Version: %i" ver
 
-    static member internal read buf =
-      let (nodeId, host, port), buf = Binary.read3 Binary.readInt32 Binary.readString Binary.readInt32 buf
-      (Broker(nodeId, host, port), buf)
 
   [<NoEquality;NoComparison;AutoSerializable(false)>]
   type PartitionMetadata =
@@ -537,19 +533,23 @@ module Protocol =
       val leader : Leader
       val replicas : Replicas
       val isr : Isr
-      new (partitionErrorCode, partitionId, leader, replicas, isr) =
+      val offlineReplicas : Replicas
+      new (partitionErrorCode, partitionId, leader, replicas, isr, offlineReplicas) =
         { partitionErrorCode = partitionErrorCode; partitionId = partitionId;
-          leader = leader; replicas = replicas; isr = isr }
+          leader = leader; replicas = replicas; isr = isr; offlineReplicas = offlineReplicas }
     end
   with
-
-    static member internal read buf =
-      let partitionErrorCode, buf = Binary.readInt16 buf
-      let partitionId, buf = Binary.readInt32 buf
-      let leader, buf = Binary.readInt32 buf
-      let replicas, buf = Binary.readArray Binary.readInt32 buf
-      let isr, buf = Binary.readArray Binary.readInt32 buf
-      (PartitionMetadata(partitionErrorCode, partitionId, leader, replicas, isr), buf)
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let errorCode = buf.ReadInt16()
+      let partition = buf.ReadInt32()
+      let leader = buf.ReadInt32()
+      let replicas = buf.ReadArray (fun b -> b.ReadInt32())
+      let inSyncReplicas = buf.ReadArray (fun b -> b.ReadInt32())
+      let offlineReplicas = 
+        match ver with 
+        | 5s -> buf.ReadArray (fun b -> b.ReadInt32()) 
+        | _ -> [||]
+      PartitionMetadata(errorCode, partition, leader, replicas, inSyncReplicas, offlineReplicas)
 
   /// Metadata for a specific topic consisting of a set of partition-to-broker assignments.
   [<NoEquality;NoComparison>]
@@ -558,16 +558,51 @@ module Protocol =
       val topicErrorCode : TopicErrorCode
       val topicName : TopicName
       val partitionMetadata : PartitionMetadata[]
-      new (topicErrorCode, topicName, partitionMetadata) =
-        { topicErrorCode = topicErrorCode; topicName = topicName; partitionMetadata = partitionMetadata }
+      val isInternal : bool
+      new (topicErrorCode, topicName, partitionMetadata, isInternal) =
+        { topicErrorCode = topicErrorCode; topicName = topicName; partitionMetadata = partitionMetadata; isInternal = isInternal }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let errorCode = buf.ReadInt16()
+      let topic = buf.ReadString()
+      let isInternal = match ver with | 0s -> false | _ -> buf.ReadBool()
+      let partitionMetadata = buf.ReadArray (fun b -> PartitionMetadata.Read(ver, b))
+      TopicMetadata(errorCode, topic, partitionMetadata, isInternal)
+    
+  /// Request metadata on all or a specific set of topics.
+  /// Can be routed to any node in the bootstrap list.
+  [<NoEquality;NoComparison>]
+  type MetadataRequest =
+    struct
+      val topics : TopicName[]
+      val autoTopicCreation : bool
+      new (topics) =  { topics = topics ; autoTopicCreation = false }
+      new (topics, autoTopicCreation) =  { topics = topics ; autoTopicCreation = autoTopicCreation }
+    end
+  with
+    static member internal Size (ver:ApiVersion, req:MetadataRequest) =
+      let topicSize = Binary.sizeArray req.topics Binary.sizeString
+      match ver with
+      | 0s | 1s | 2s | 3s ->
+        topicSize
+      | 4s | 5s ->
+        topicSize + Binary.sizeBool req.autoTopicCreation
+      | _ ->
+        failwithf "Unsupported MetadataRequest API Version %i" ver
 
-    static member internal read buf =
-      let errorCode, buf = Binary.readInt16 buf
-      let topicName, buf = Binary.readString buf
-      let partitionMetadata, buf = Binary.readArray PartitionMetadata.read buf
-      (TopicMetadata(errorCode, topicName, partitionMetadata), buf)
+    static member internal Write (ver:ApiVersion, req:MetadataRequest, buf:BinaryZipper) =
+      let writeTopics (buf:BinaryZipper, t:TopicName) =
+        buf.WriteString t
+        
+      match ver with
+      | 0s | 1s | 2s | 3s ->
+        buf.WriteArray(req.topics, writeTopics)
+      | 4s | 5s ->
+        buf.WriteArray(req.topics, writeTopics)
+        buf.WriteBool req.autoTopicCreation
+      | _ ->
+        failwithf "Unsupported MetadataRequest API Version %i" ver
 
   /// Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
   /// The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
@@ -576,14 +611,30 @@ module Protocol =
     struct
       val brokers : Broker[]
       val topicMetadata : TopicMetadata[]
-      new (brokers, topicMetadata) =  { brokers = brokers; topicMetadata = topicMetadata }
+      val controllerId : int
+      val clusterId: string
+      val throttleTimeMs: ThrottleTime
+      new (brokers, topicMetadata, controllerId, clusterId, throttleTimeMs) =  
+        { brokers = brokers; topicMetadata = topicMetadata; controllerId = controllerId; clusterId = clusterId;
+          throttleTimeMs = throttleTimeMs }
     end
   with
-
-    static member internal read buf =
-      let brokers, buf = Binary.readArray Broker.read buf
-      let topicMetadata, buf = Binary.readArray TopicMetadata.read buf
-      (MetadataResponse(brokers, topicMetadata), buf)
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let throttleTimeMs =
+        match ver with
+        | 0s | 1s | 2s -> 0
+        | _ -> buf.ReadInt32()
+      let brokers = buf.ReadArray (fun b -> Broker.Read(ver, b))
+      let clusterId =
+        match ver with
+        | 0s | 1s -> null
+        | _ -> buf.ReadString()
+      let controllerId = 
+        match ver with 
+        | 0s -> -1 
+        | _ -> buf.ReadInt32()
+      let topicMetadata = buf.ReadArray (fun b -> TopicMetadata.Read(ver,b))
+      MetadataResponse(brokers, topicMetadata, controllerId, clusterId, throttleTimeMs)
 
   // Produce API
 
@@ -1524,7 +1575,7 @@ module Protocol =
 
   /// A Kafka request message.
   type RequestMessage =
-    | Metadata of Metadata.Request
+    | Metadata of MetadataRequest
     | Fetch of FetchRequest
     | Produce of ProduceRequest
     | Offset of OffsetRequest
@@ -1543,7 +1594,7 @@ module Protocol =
     static member internal size (ver:ApiVersion, x:RequestMessage) =
       match x with
       | Heartbeat x -> HeartbeatRequest.Size (ver,x)
-      | Metadata x -> Metadata.sizeRequest x
+      | Metadata x -> MetadataRequest.Size (ver,x)
       | Fetch x -> FetchRequest.Size x
       | Produce x -> ProduceRequest.Size x
       | Offset x -> OffsetRequest.Size (ver,x)
@@ -1560,7 +1611,7 @@ module Protocol =
     static member internal Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
       match x with
       | Heartbeat x -> HeartbeatRequest.Write (ver,x,buf)
-      | Metadata x -> Metadata.writeRequest x buf.Buffer |> ignore
+      | Metadata x -> MetadataRequest.Write (ver,x,buf)
       | Fetch x -> FetchRequest.Write (x,buf)
       | Produce x -> ProduceRequest.Write (ver,x,buf)
       | Offset x -> OffsetRequest.Write (ver,x,buf)
@@ -1641,8 +1692,7 @@ module Protocol =
     static member internal Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
       match apiKey with
       | ApiKey.Heartbeat -> HeartbeatResponse.Read (apiVer,buf) |> ResponseMessage.HeartbeatResponse 
-      | ApiKey.Metadata ->
-        let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
+      | ApiKey.Metadata -> MetadataResponse.Read (apiVer,buf) |> ResponseMessage.MetadataResponse 
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
       | ApiKey.Produce -> ProduceResponse.Read (apiVer,buf) |> ResponseMessage.ProduceResponse
       | ApiKey.Offset -> OffsetResponse.Read (apiVer,buf) |> ResponseMessage.OffsetResponse
