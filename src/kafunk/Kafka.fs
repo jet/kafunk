@@ -193,15 +193,15 @@ module internal Routing =
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
   let private partitionFetchReq (state:ClusterState) (req:FetchRequest) =
     req.topics
-    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> (tn, p, o, mb)))
+    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, _, mb) -> (tn, p, o, mb)))
     |> Seq.groupBy (fun (tn, p, _, _) -> ClusterState.tryFindTopicPartitionBroker (tn, p) state |> Result.ofOptionMap (fun () -> tn))
     |> Seq.map (fun (ch,reqs) ->
       let topics =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, mb)) |> Seq.toArray)
+        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, 0L, mb)) |> Seq.toArray)
         |> Seq.toArray
-      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
+      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics, 0, 0y)
       ch, RequestMessage.Fetch req)
     |> Seq.toArray
 

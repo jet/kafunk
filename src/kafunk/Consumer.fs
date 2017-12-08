@@ -622,8 +622,8 @@ module Consumer =
       (fun _ -> None)
       (async {
         let req = 
-          let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |]
-          FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os)
+          let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,0L,cfg.fetchMaxBytes) |]
+          FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os, 0, 0y)
         let! res = fetch req
         match res with
         | Success res ->

@@ -256,9 +256,16 @@ module Protocol =
   /// The offset to begin this fetch from.
   type FetchOffset = int64
 
+  /// The earliest available offset of the follower replica (only used when sent by follower).
+  type LogStartOffset = int64
+
   /// The maximum bytes to include in the message set for this partition. This
   /// helps bound the size of the response.
   type MaxBytes = int32
+
+  /// This controls visibility of transactional records. If set to 0, makes all records
+  /// visible. If set to 1, separates aborted transactions so they can be discarded.
+  type IsolationLevel = int8
 
   /// The offset at the end of the log for this partition. This can be used by
   /// the client to determine how many messages behind the end of the log they
@@ -748,42 +755,45 @@ module Protocol =
       val replicaId : ReplicaId
       val maxWaitTime : MaxWaitTime
       val minBytes : MinBytes
-      val topics : (TopicName * (Partition * FetchOffset * MaxBytes)[])[]
-      new (replicaId, maxWaitTime, minBytes, topics) =
-        { replicaId = replicaId; maxWaitTime = maxWaitTime; minBytes = minBytes; topics = topics }
+      val maxBytes : MaxBytes
+      val isolationLevel : IsolationLevel
+      val topics : (TopicName * (Partition * FetchOffset * LogStartOffset * MaxBytes)[])[]
+      new (replicaId, maxWaitTime, minBytes, topics, maxBytes, isolationLevel) =
+        { replicaId = replicaId; maxWaitTime = maxWaitTime; minBytes = minBytes; topics = topics; 
+          maxBytes = maxBytes; isolationLevel = isolationLevel }
     end
   with
-
-    static member internal Size (x:FetchRequest) =
-      let mutable size = 0
-      size <- size + 4 // replicaId
-      size <- size + 4 // maxWaitTime
-      size <- size + 4 // minBytes
-      size <- size + 4 // topic array size
-      for i = 0 to x.topics.Length - 1 do
-        let (t,ps) = x.topics.[i]
-        size <- size + (Binary.sizeString t)
+    // leverages mutability to reduce performance overhead
+    static member internal Size (ver:ApiVersion, req:FetchRequest) =
+      let mutable size = 16 // replicaId + maxWaitTime + minBytes + topic array size (4 bytes each)
+      if ver >= 3s then size <- size + 4 // maxBytes
+      if ver >= 4s then size <- size + 1 // isolation level
+      for i = 0 to req.topics.Length - 1 do 
+        let (t,ps) = req.topics.[i]
+        size <- size + (Binary.sizeString t) // topic name size
         size <- size + 4 // partition array size
-        for (_,_,_) in ps do
-          size <- size + 4 // partition
-          size <- size + 8 // offset
-          size <- size + 4 // maxBytes
+        for (_,_,_,_) in ps do
+          size <- size + 16 // partition (4) + fetch offset (8) + maxBytes (4)
+          if ver >= 5s then size <- size + 8 // log start offset
       size
 
-    static member internal Write (x:FetchRequest, buf:BinaryZipper) =
-      buf.WriteInt32 x.replicaId
-      buf.WriteInt32 x.maxWaitTime
-      buf.WriteInt32 x.minBytes
-      buf.WriteInt32 x.topics.Length
-      for i = 0 to x.topics.Length - 1 do
-        let (t,ps) = x.topics.[i]
-        buf.WriteString t
-        buf.WriteInt32 ps.Length
-        for j = 0 to ps.Length - 1 do
-          let (p,o,mb) = ps.[j]
+    static member internal Write (ver:ApiVersion, req:FetchRequest, buf:BinaryZipper) =
+      buf.WriteInt32 req.replicaId
+      buf.WriteInt32 req.maxWaitTime
+      buf.WriteInt32 req.minBytes
+      if ver >= 3s then buf.WriteInt32 req.maxBytes
+      if ver >= 4s then buf.WriteInt8 req.isolationLevel
+      buf.WriteInt32 req.topics.Length
+      for i = 0 to req.topics.Length - 1 do
+        let (topic, partitions) = req.topics.[i]
+        buf.WriteString topic
+        buf.WriteInt32 partitions.Length
+        for j = 0 to partitions.Length - 1 do
+          let (p,offset,logStartOffset,maxBytes) = partitions.[j]
           buf.WriteInt32 p
-          buf.WriteInt64 o
-          buf.WriteInt32 mb
+          buf.WriteInt64 offset
+          if ver >= 5s then buf.WriteInt64 logStartOffset
+          buf.WriteInt32 maxBytes
 
   [<NoEquality;NoComparison>]
   type FetchResponse =
@@ -1595,7 +1605,7 @@ module Protocol =
       match x with
       | Heartbeat x -> HeartbeatRequest.Size (ver,x)
       | Metadata x -> MetadataRequest.Size (ver,x)
-      | Fetch x -> FetchRequest.Size x
+      | Fetch x -> FetchRequest.Size (ver,x)
       | Produce x -> ProduceRequest.Size x
       | Offset x -> OffsetRequest.Size (ver,x)
       | GroupCoordinator x -> GroupCoordinatorRequest.Size (ver,x)
@@ -1612,7 +1622,7 @@ module Protocol =
       match x with
       | Heartbeat x -> HeartbeatRequest.Write (ver,x,buf)
       | Metadata x -> MetadataRequest.Write (ver,x,buf)
-      | Fetch x -> FetchRequest.Write (x,buf)
+      | Fetch x -> FetchRequest.Write (ver,x,buf)
       | Produce x -> ProduceRequest.Write (ver,x,buf)
       | Offset x -> OffsetRequest.Write (ver,x,buf)
       | GroupCoordinator x -> GroupCoordinatorRequest.Write (ver,x,buf)
