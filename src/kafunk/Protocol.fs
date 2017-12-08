@@ -123,6 +123,8 @@ module Protocol =
   /// A Kafka error code.
   type ErrorCode = int16
 
+  type ErrorMessage = string
+
   type TopicErrorCode = ErrorCode
 
   type PartitionErrorCode = ErrorCode
@@ -1000,34 +1002,59 @@ module Protocol =
   type GroupCoordinatorRequest =
     struct
       val groupId : GroupId
-      new (groupId) = { groupId = groupId }
+      val coordinatorType: int8
+      new (groupId) = {groupId = groupId; coordinatorType = 0y }
+      new (groupId, coordinatorType) = { groupId = groupId ; coordinatorType = coordinatorType }
     end
   with
-
-    static member internal size (x:GroupCoordinatorRequest) =
-      Binary.sizeString x.groupId
-
-    static member internal write (x:GroupCoordinatorRequest) buf =
-      Binary.writeString x.groupId buf
+    static member internal Size (ver:ApiVersion, req:GroupCoordinatorRequest) =
+      match ver with
+      | 0s -> 
+        Binary.sizeString req.groupId
+      | 1s ->
+        Binary.sizeString req.groupId + Binary.sizeInt8 req.coordinatorType
+      | _ -> 
+        failwithf "Unsupported FindCoordinator API Request Version: %i" ver
+     
+    static member internal Write (ver:ApiVersion, req:GroupCoordinatorRequest, buf:BinaryZipper) =
+      match ver with
+      | 0s ->
+        buf.WriteString req.groupId
+      | 1s ->
+        buf.WriteString req.groupId
+        buf.WriteInt8 req.coordinatorType
+      | _ -> 
+        failwithf "Unsupported FindCoordinator API Request Version: %i" ver
 
   type GroupCoordinatorResponse =
     struct
       val errorCode : ErrorCode
+      val errorMessage : ErrorMessage
       val coordinatorId : CoordinatorId
       val coordinatorHost : CoordinatorHost
       val coordinatorPort : CoordinatorPort
-      new (errorCode, coordinatorId, coordinatorHost, coordinatorPort) =
-        { errorCode = errorCode; coordinatorId = coordinatorId; coordinatorHost = coordinatorHost;
-          coordinatorPort = coordinatorPort }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, errorMessage, coordinatorId, coordinatorHost, coordinatorPort, throttleTimeMs) =
+        { errorCode = errorCode; errorMessage = errorMessage; coordinatorId = coordinatorId; coordinatorHost = coordinatorHost;
+          coordinatorPort = coordinatorPort; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      if ver > 1s then failwithf "Unsupported FindCoordinator Response Version: %i" ver
 
-    static member internal read buf =
-      let ec, buf = Binary.readInt16 buf
-      let cid, buf = Binary.readInt32 buf
-      let ch, buf = Binary.readString buf
-      let cp, buf = Binary.readInt32 buf
-      (GroupCoordinatorResponse(ec, cid, ch, cp), buf)
+      let throttleTimeMs = 
+        match ver with 
+        | 1s -> buf.ReadInt32() 
+        | _ -> 0
+      let errorCode = buf.ReadInt16()
+      let errorMessage = 
+        match ver with 
+        | 1s -> buf.ReadString() 
+        | _ -> null
+      let coordinatorId = buf.ReadInt32()
+      let host = buf.ReadString()
+      let port = buf.ReadInt32()
+      GroupCoordinatorResponse(errorCode, errorMessage, coordinatorId, host, port, throttleTimeMs)
 
   type SessionTimeout = int32
 
@@ -1528,7 +1555,7 @@ module Protocol =
       | Fetch x -> FetchRequest.Size x
       | Produce x -> ProduceRequest.Size x
       | Offset x -> OffsetRequest.Size (ver,x)
-      | GroupCoordinator x -> GroupCoordinatorRequest.size x
+      | GroupCoordinator x -> GroupCoordinatorRequest.Size (ver,x)
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
       | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
       | JoinGroup x -> JoinGroup.Size (ver,x)
@@ -1545,7 +1572,7 @@ module Protocol =
       | Fetch x -> FetchRequest.Write (x,buf)
       | Produce x -> ProduceRequest.Write (ver,x,buf)
       | Offset x -> OffsetRequest.Write (ver,x,buf)
-      | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
+      | GroupCoordinator x -> GroupCoordinatorRequest.Write (ver,x,buf)
       | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
       | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
       | JoinGroup x -> JoinGroup.Write (ver,x,buf) 
@@ -1627,8 +1654,7 @@ module Protocol =
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
       | ApiKey.Produce -> ProduceResponse.Read (apiVer,buf) |> ResponseMessage.ProduceResponse
       | ApiKey.Offset -> OffsetResponse.Read (apiVer, buf) |> ResponseMessage.OffsetResponse
-      | ApiKey.GroupCoordinator ->
-        let x, _ = GroupCoordinatorResponse.read buf.Buffer in (ResponseMessage.GroupCoordinatorResponse x)
+      | ApiKey.GroupCoordinator -> GroupCoordinatorResponse.Read (apiVer, buf) |> ResponseMessage.GroupCoordinatorResponse 
       | ApiKey.OffsetCommit ->
         let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
       | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
