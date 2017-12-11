@@ -318,12 +318,12 @@ module internal Printers =
       sprintf "GroupCoordinatorResponse|coordinator_id=%i host=%s port=%i error_code=%i" 
         x.coordinatorId x.coordinatorHost x.coordinatorPort x.errorCode
 
-  type JoinGroup.Request with
-    static member Print (x:JoinGroup.Request) =
+  type JoinGroupRequest with
+    static member Print (x:JoinGroupRequest) =
       sprintf "JoinGroupRequest|group_id=%s member_id=%s" x.groupId x.memberId
 
-  type JoinGroup.Response with
-    static member Print (x:JoinGroup.Response) =
+  type JoinGroupResponse with
+    static member Print (x:JoinGroupResponse) =
       sprintf "JoinGroupResponse|generation_id=%i error_code=%i member_id=%s leader_id=%s" x.generationId x.errorCode x.memberId x.leaderId
 
   type SyncGroupRequest with
@@ -349,7 +349,7 @@ module internal Printers =
       | RequestMessage.OffsetFetch x -> OffsetFetchRequest.Print x
       | RequestMessage.Offset x -> OffsetRequest.Print x
       | RequestMessage.Heartbeat x -> HeartbeatRequest.Print x
-      | RequestMessage.JoinGroup x -> JoinGroup.Request.Print x
+      | RequestMessage.JoinGroup x -> JoinGroupRequest.Print x
       | RequestMessage.SyncGroup x -> SyncGroupRequest.Print x
       | _ ->  sprintf "%A" x
 
@@ -364,7 +364,7 @@ module internal Printers =
       | ResponseMessage.OffsetResponse x -> OffsetResponse.Print x
       | ResponseMessage.HeartbeatResponse x -> HeartbeatResponse.Print x
       | ResponseMessage.GroupCoordinatorResponse x -> GroupCoordinatorResponse.Print x
-      | ResponseMessage.JoinGroupResponse x -> JoinGroup.Response.Print x
+      | ResponseMessage.JoinGroupResponse x -> JoinGroupResponse.Print x
       | ResponseMessage.SyncGroupResponse x -> SyncGroupResponse.Print x
       | x -> sprintf "%A" x
 

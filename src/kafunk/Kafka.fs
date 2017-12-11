@@ -987,7 +987,7 @@ module Kafka =
   let offsetFetch (c:KafkaConn) : OffsetFetchRequest -> Async<OffsetFetchResponse> =
     AsyncFunc.dimap RequestMessage.OffsetFetch ResponseMessage.toOffsetFetch c.Send
 
-  let joinGroup (c:KafkaConn) : JoinGroup.Request -> Async<JoinGroup.Response> =
+  let joinGroup (c:KafkaConn) : JoinGroupRequest -> Async<JoinGroupResponse> =
     AsyncFunc.dimap RequestMessage.JoinGroup ResponseMessage.toJoinGroup c.Send
 
   let syncGroup (c:KafkaConn) : SyncGroupRequest -> Async<SyncGroupResponse> =

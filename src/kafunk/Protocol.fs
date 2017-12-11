@@ -1600,18 +1600,21 @@ module Protocol =
   type ApiVersionsResponse =
     struct
       val errorCode : ErrorCode
+      val throttleTimeMs : ThrottleTime
       val apiVersions : (ApiKey * MinVersion * MaxVersion)[]
-      new (ec,apiVersions) = { errorCode = ec ; apiVersions = apiVersions }
+      new (ec,apiVersions, throttleTimeMs) = { errorCode = ec ; apiVersions = apiVersions ; throttleTimeMs = throttleTimeMs }
     end
     with
-      static member internal Read (_:ApiVersion, buf:BinaryZipper) =
-        let ec = buf.ReadInt16 ()
+      static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+        let errorCode = buf.ReadInt16 ()
         let apiVersions = buf.ReadArray (fun buf ->
           let apiKey : ApiKey = enum<ApiKey> (int (buf.ReadInt16 ()))
           let min = buf.ReadInt16 ()
           let max = buf.ReadInt16 ()
           apiKey,min,max)
-        ApiVersionsResponse(ec,apiVersions)
+        let throttleTimeMs =
+          if ver >= 1s then buf.ReadInt32 () else 0
+        ApiVersionsResponse(errorCode,apiVersions, throttleTimeMs)
         
 
   /// A Kafka request message.
@@ -1623,7 +1626,7 @@ module Protocol =
     | GroupCoordinator of GroupCoordinatorRequest
     | OffsetCommit of OffsetCommitRequest
     | OffsetFetch of OffsetFetchRequest
-    | JoinGroup of JoinGroup.Request
+    | JoinGroup of JoinGroupRequest
     | SyncGroup of SyncGroupRequest
     | Heartbeat of HeartbeatRequest
     | LeaveGroup of LeaveGroupRequest
@@ -1642,7 +1645,7 @@ module Protocol =
       | GroupCoordinator x -> GroupCoordinatorRequest.Size (ver,x)
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
       | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
-      | JoinGroup x -> JoinGroup.Size (ver,x)
+      | JoinGroup x -> JoinGroupRequest.Size (ver,x)
       | SyncGroup x -> SyncGroupRequest.Size (ver,x)
       | LeaveGroup x -> LeaveGroupRequest.Size (ver,x)
       | ListGroups x -> ListGroupsRequest.Size (ver,x)
@@ -1659,7 +1662,7 @@ module Protocol =
       | GroupCoordinator x -> GroupCoordinatorRequest.Write (ver,x,buf)
       | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
       | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
-      | JoinGroup x -> JoinGroup.Write (ver,x,buf) 
+      | JoinGroup x -> JoinGroupRequest.Write (ver,x,buf) 
       | SyncGroup x -> SyncGroupRequest.Write (ver,x,buf)
       | LeaveGroup x -> LeaveGroupRequest.Write (ver,x,buf)
       | ListGroups x -> ListGroupsRequest.Write (ver,x,buf)
@@ -1720,7 +1723,7 @@ module Protocol =
     | GroupCoordinatorResponse of GroupCoordinatorResponse
     | OffsetCommitResponse of OffsetCommitResponse
     | OffsetFetchResponse of OffsetFetchResponse
-    | JoinGroupResponse of JoinGroup.Response
+    | JoinGroupResponse of JoinGroupResponse
     | SyncGroupResponse of SyncGroupResponse
     | HeartbeatResponse of HeartbeatResponse
     | LeaveGroupResponse of LeaveGroupResponse
@@ -1740,7 +1743,7 @@ module Protocol =
       | ApiKey.GroupCoordinator -> GroupCoordinatorResponse.Read (apiVer, buf) |> ResponseMessage.GroupCoordinatorResponse 
       | ApiKey.OffsetCommit -> OffsetCommitResponse.Read (apiVer,buf) |> ResponseMessage.OffsetCommitResponse 
       | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
-      | ApiKey.JoinGroup -> JoinGroup.Read (apiVer,buf) |> ResponseMessage.JoinGroupResponse
+      | ApiKey.JoinGroup -> JoinGroupResponse.Read (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
       | ApiKey.LeaveGroup -> LeaveGroupResponse.Read (apiVer,buf) |> ResponseMessage.LeaveGroupResponse
       | ApiKey.ListGroups -> ListGroupsResponse.Read (apiVer,buf) |> ResponseMessage.ListGroupsResponse

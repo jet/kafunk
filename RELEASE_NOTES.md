@@ -5,6 +5,8 @@
 
 ### 0.1.12 - 13.12.2017
 * Buffering producer
+* Added versioning support for Kafka APIs for Produce, Fetch, Offset, Metadata, OffsetCommit, OffsetFetch, GroupCoordinator, JoinGroup, Heartbeat, LeaveGroup, 
+SyncGroup, DescribeGroups, ListGroups, ApiVersions
 
 ### 0.1.11 - 12.12.2017
 * Added support for all versions of the OffsetFetch API in the Kafka protocol.
