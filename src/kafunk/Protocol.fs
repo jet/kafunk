@@ -1182,11 +1182,9 @@ module Protocol =
           mid,md)
       Members(ms)
 
-  module JoinGroup =
-
-    [<Struct>]
-    [<NoEquality;NoComparison>]
-    type Request =
+  [<NoEquality;NoComparison>]
+  type JoinGroupRequest =
+    struct
       val groupId : GroupId
       val sessionTimeout : SessionTimeout
       val rebalanceTimeout : SessionTimeout
@@ -1196,10 +1194,27 @@ module Protocol =
       new (groupId, sessionTimeout, rebalanceTimeout, memberId, protocolType, groupProtocols) =
         { groupId = groupId; sessionTimeout = sessionTimeout; rebalanceTimeout = rebalanceTimeout ; memberId = memberId;
           protocolType = protocolType; groupProtocols = groupProtocols }
+    end
+  with
+    static member internal Size(ver:ApiVersion, req:JoinGroupRequest) =
+      Binary.sizeString req.groupId +
+      Binary.sizeInt32 req.sessionTimeout +
+      (if ver >= 1s then 4 else 0) +
+      Binary.sizeString req.memberId +
+      Binary.sizeString req.protocolType +
+      GroupProtocols.Size(ver,req.groupProtocols)
 
-    [<Struct>]
-    [<NoEquality;NoComparison>]
-    type Response =
+    static member internal Write (ver:ApiVersion, req:JoinGroupRequest, buf:BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.sessionTimeout
+      (if ver >= 1s then buf.WriteInt32 req.rebalanceTimeout)
+      buf.WriteString req.memberId
+      buf.WriteString req.protocolType
+      GroupProtocols.Write(ver, req.groupProtocols, buf)
+
+  [<NoEquality;NoComparison>]
+  type JoinGroupResponse =
+    struct
       val throttleTime : ThrottleTime
       val errorCode : ErrorCode
       val generationId : GenerationId
@@ -1210,24 +1225,9 @@ module Protocol =
       new (throttleTimeMs,errorCode, generationId, groupProtocol, leaderId, memberId, members) =
         { throttleTime = throttleTimeMs ; errorCode = errorCode; generationId = generationId; 
           groupProtocol = groupProtocol; leaderId = leaderId; memberId = memberId; members = members }
-
-    let internal Size(ver:ApiVersion, req:Request) =
-      Binary.sizeString req.groupId +
-      Binary.sizeInt32 req.sessionTimeout +
-      (if ver >= 1s then 4 else 0) +
-      Binary.sizeString req.memberId +
-      Binary.sizeString req.protocolType +
-      GroupProtocols.Size(ver,req.groupProtocols)
-
-    let internal Write (ver:ApiVersion, req:Request, buf:BinaryZipper) =
-      buf.WriteString req.groupId
-      buf.WriteInt32 req.sessionTimeout
-      (if ver >= 1s then buf.WriteInt32 req.rebalanceTimeout)
-      buf.WriteString req.memberId
-      buf.WriteString req.protocolType
-      GroupProtocols.Write(ver, req.groupProtocols, buf)
-
-    let internal Read (ver:ApiVersion, buf:BinaryZipper) =
+    end
+  with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTimeMs = 
         if ver >= 2s then buf.ReadInt32 ()
         else 0
@@ -1237,7 +1237,7 @@ module Protocol =
       let leaderId = buf.ReadString ()
       let memberId = buf.ReadString ()
       let members = Members.Read buf
-      Response(throttleTimeMs, errorCode, groupId, groupProtocol, leaderId, memberId, members)
+      JoinGroupResponse(throttleTimeMs, errorCode, groupId, groupProtocol, leaderId, memberId, members)
         
 
   [<NoEquality;NoComparison>]
