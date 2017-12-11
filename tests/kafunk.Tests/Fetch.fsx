@@ -28,20 +28,20 @@ let ps =
   |> Seq.choose (fun kvp -> 
     let p = kvp.Key
     let e,l = kvp.Value
-    if l - e > 0L then Some (p,e,1000000)
+    if l - e > 0L then Some (p,e,0L,1000000)
     else None)
   |> Seq.truncate 10
   |> Seq.toArray
 
-let fetchReq = FetchRequest(-1, 0, 0, [| topic, ps |])
+let fetchReq = FetchRequest(-1, 0, 0, [| topic, ps |], 0, 0y)
 
 let fetchRes = 
   Kafka.fetch conn fetchReq
   |> Async.RunSynchronously
 
 for (tn,pmds) in fetchRes.topics do
-  for (p,ec,hmo,mss,ms) in pmds do
-    printfn "topic=%s partition=%i error=%i hwm=%i message_set_size=%i messages=%i" tn p ec hmo mss ms.messages.Length
+  for (p,ec,hmo,_,logStartOffset,_,mss,ms) in pmds do
+    printfn "topic=%s partition=%i error=%i logStartOffset=%i hwm=%i message_set_size=%i messages=%i" tn p ec logStartOffset hmo mss ms.messages.Length
     for x in ms.messages do
       let o,ms,m = x.offset, x.messageSize, x.message
       printfn "message offset=%i size=%i timestamp=%O key=%s" 

@@ -5,11 +5,11 @@ open FSharp.Control
 open Kafunk
 open Refs
 
-let host = argiDefault 2 "localhost"
+let host = "shared.kafka.eastus2.qa.jet.network:9092" //argiDefault 2 "localhost"
 
 let conn = Kafka.connHost host
 
-let metadata = Kafka.metadata conn (Metadata.Request([||])) |> Async.RunSynchronously
+let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchronously
 
 for b in metadata.brokers do
   printfn "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId

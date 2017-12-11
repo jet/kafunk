@@ -370,12 +370,12 @@ type private RetryAction =
 
       | ResponseMessage.FetchResponse r ->
         r.topics 
-        |> Seq.tryPick (fun (tn,pmd) -> 
-          pmd 
-          |> Seq.tryPick (fun (_p,ec,_,_,_) -> 
+        |> Seq.tryPick (fun (topicName,partitionMetadata) -> 
+          partitionMetadata 
+          |> Seq.tryPick (fun (_,ec,_,_,_,_,_,_) -> 
             match ec with
             | ErrorCode.NoError -> None
-            | ErrorCode.NotLeaderForPartition -> Some (ec, RetryAction.RefreshMetadataAndRetry [|tn|])
+            | ErrorCode.NotLeaderForPartition -> Some (ec, RetryAction.RefreshMetadataAndRetry [|topicName|])
             | ec ->
               RetryAction.errorRetryAction ec
               |> Option.map (fun action -> ec, action)))

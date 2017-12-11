@@ -211,10 +211,13 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,ec,hwmo,mss,ms) ->
+            |> Seq.map (fun (partition,errorCode,highWatermark,_,logStartOffset,_,messageSetSize,messageSet) ->
               //let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " o=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
-              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (hwmo - x.offset)) |> Option.getOr ""
-              sprintf "(p=%i error_code=%i hwo=%i mss=%i%s)" p ec hwmo mss offsetInfo)
+              let offsetInfo = 
+                messageSet.messages 
+                |> Seq.tryItem 0 
+                |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (highWatermark - x.offset)) |> Option.getOr ""
+              sprintf "(p=%i error_code=%i lso=%i hwo=%i mss=%i%s)" partition errorCode logStartOffset highWatermark messageSetSize offsetInfo)
             |> String.concat ";"
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "

@@ -256,7 +256,7 @@ module Protocol =
   /// The offset to begin this fetch from.
   type FetchOffset = int64
 
-  /// The earliest available offset of the follower replica (only used when sent by follower).
+  /// The earliest available offset for a partition.
   type LogStartOffset = int64
 
   /// The maximum bytes to include in the message set for this partition. This
@@ -271,6 +271,18 @@ module Protocol =
   /// the client to determine how many messages behind the end of the log they
   /// are.
   type HighwaterMarkOffset = int64
+
+  /// The last offset such that the state of all transactional records prior to this offset 
+  /// have been decided (ABORTED or COMMITTED)
+  type LastStableOffset = int64
+
+  /// Producer id associated with an AbortedTransaction
+  type ProducerId = int64
+
+  /// First offset in an AbortedTransaction
+  type FirstOffset = int64
+
+  type AbortedTransaction = ProducerId * FirstOffset
 
   /// Used to ask for all messages before a certain time (ms).
   type Time = int64
@@ -799,30 +811,38 @@ module Protocol =
   type FetchResponse =
     struct
       val throttleTime : ThrottleTime
-      val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * MessageSetSize * MessageSet)[])[]
+      val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * LastStableOffset * LogStartOffset * AbortedTransaction[] * MessageSetSize * MessageSet)[])[]
       new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
-
+    // Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
     static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTime =
         match ver with
-        | v when v >= 1s -> buf.ReadInt32 ()
-        | _ -> 0
-      let nt = buf.ReadInt32()
-      let topics = Array.zeroCreate nt
+        | 0s -> 0 
+        | _ -> buf.ReadInt32 ()
+      let numTopics = buf.ReadInt32()
+      let topics = Array.zeroCreate numTopics
       for i = 0 to topics.Length - 1 do
-        let t = buf.ReadString ()
-        let nps = buf.ReadInt32 ()
-        let ps = Array.zeroCreate nps
-        for j = 0 to ps.Length - 1 do
+        let topic = buf.ReadString ()
+        let numPartitions = buf.ReadInt32 ()
+        let partitions = Array.zeroCreate numPartitions
+        for j = 0 to partitions.Length - 1 do
           let partition = buf.ReadInt32 ()
           let errorCode = buf.ReadInt16 ()
-          let hwo = buf.ReadInt64 ()
-          let mss = buf.ReadInt32 ()
-          let ms = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,mss,false,buf)
-          ps.[j] <-  partition, errorCode, hwo, mss, ms
-        topics.[i] <- (t,ps)
+          let highWatermark = buf.ReadInt64 ()
+          let lastStableOffset = if ver >= 4s then buf.ReadInt64() else -1L
+          let logStartOffset = if ver >= 5s then buf.ReadInt64() else -1L
+          let numAbortedTxns = if ver >= 4s then buf.ReadInt32 () else 0
+          let abortedTxns = Array.zeroCreate numAbortedTxns
+          for k = 0 to abortedTxns.Length - 1 do
+            let producerId = buf.ReadInt64 ()
+            let firstOffset = buf.ReadInt64 ()
+            abortedTxns.[k] <- (producerId, firstOffset)
+          let messageSetSize = buf.ReadInt32 ()
+          let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+          partitions.[j] <-  partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet
+        topics.[i] <- (topic,partitions)
       let res = FetchResponse(throttleTime, topics)
       res
 
