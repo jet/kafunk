@@ -284,6 +284,8 @@ module Protocol =
 
   type AbortedTransaction = ProducerId * FirstOffset
 
+  type TransactionalId = string
+
   /// Used to ask for all messages before a certain time (ms).
   type Time = int64
 
@@ -677,30 +679,35 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type ProduceRequest =
     struct
+      val transactionalId : TransactionalId
       val requiredAcks : RequiredAcks
       val timeout : Timeout
       val topics : ProduceRequestTopicMessageSet[]
       new (requiredAcks, timeout, topics) =
-        { requiredAcks = requiredAcks; timeout = timeout; topics = topics }
+        { requiredAcks = requiredAcks; timeout = timeout; topics = topics; transactionalId = null }
+      new (requiredAcks, timeout, topics, transactionalId) =
+        { requiredAcks = requiredAcks; timeout = timeout; topics = topics; transactionalId = transactionalId }
     end
   with
 
-    static member internal Size (x:ProduceRequest) =
+    static member internal Size (ver:ApiVersion, x:ProduceRequest) =
       let mutable size = 0
-      size <- size + 2 // requiredAcks
-      size <- size + 4 // timeout
-      size <- size + 4 // topics array size
+      if ver >= 3s then 
+        size <- size + Binary.sizeString x.transactionalId
+      size <- size + 10 // requiredAcks (2), timeout (4), topics array size (4)
       for i = 0 to x.topics.Length - 1 do
         let y = x.topics.[i]
         size <- size + (Binary.sizeString y.topic)
         size <- size + 4 // partition array size
         for z in y.partitions do
           let mss = z.messageSetSize
-          size <- size + 4 + 4 + mss
+          size <- size + 8 + mss // partitionId (4), message set size (4), message set  
       size
 
     static member internal Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
       let messageVer = MessageVersions.produceReqMessage ver
+      if ver >= 3s then 
+        buf.WriteString x.transactionalId
       buf.WriteInt16 x.requiredAcks
       buf.WriteInt32 x.timeout
       buf.WriteInt32 x.topics.Length
@@ -719,7 +726,8 @@ module Protocol =
       val errorCode : ErrorCode
       val offset : Offset
       val timestamp : Timestamp
-      new (p,ec,o,ts) = { partition = p ; errorCode = ec ; offset = o ; timestamp = ts }
+      val logStartOffset : Offset
+      new (p,ec,o,ts,lso) = { partition = p ; errorCode = ec ; offset = o ; timestamp = ts ; logStartOffset = lso }
     end
 
   and [<NoEquality;NoComparison>] ProduceResponseTopicItem =
@@ -739,21 +747,24 @@ module Protocol =
   with
 
     static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
-      let tn = buf.ReadInt32 ()
-      let topics = Array.zeroCreate tn
+      let numTopics = buf.ReadInt32 ()
+      let topics = Array.zeroCreate numTopics
       for i = 0 to topics.Length - 1 do
-        let t = buf.ReadString ()
-        let psn = buf.ReadInt32 ()
-        let ps = Array.zeroCreate psn
-        for j = 0 to ps.Length - 1 do
-          let p = buf.ReadInt32 ()
-          let ec = buf.ReadInt16 ()
-          let o = buf.ReadInt64 ()
-          let ts = 
+        let topicName = buf.ReadString ()
+        let numPartitions = buf.ReadInt32 ()
+        let partitions = Array.zeroCreate numPartitions
+        for j = 0 to partitions.Length - 1 do
+          let partition = buf.ReadInt32 ()
+          let errorCode = buf.ReadInt16 ()
+          let baseoffset = buf.ReadInt64 ()
+          let logAppendTime = 
             if ver >= 2s then buf.ReadInt64 ()
             else 0L
-          ps.[j] <- ProduceResponsePartitionItem(p,ec,o,ts)
-        topics.[i] <- ProduceResponseTopicItem(t,ps)
+          let logStartOffset = 
+            if ver >= 5s then buf.ReadInt64 ()
+            else 0L
+          partitions.[j] <- ProduceResponsePartitionItem(partition,errorCode,baseoffset,logAppendTime, logStartOffset)
+        topics.[i] <- ProduceResponseTopicItem(topicName,partitions)
       let throttleTime = 
         if ver >= 1s then buf.ReadInt32 ()
         else 0
@@ -1626,7 +1637,7 @@ module Protocol =
       | Heartbeat x -> HeartbeatRequest.Size (ver,x)
       | Metadata x -> MetadataRequest.Size (ver,x)
       | Fetch x -> FetchRequest.Size (ver,x)
-      | Produce x -> ProduceRequest.Size x
+      | Produce x -> ProduceRequest.Size (ver,x)
       | Offset x -> OffsetRequest.Size (ver,x)
       | GroupCoordinator x -> GroupCoordinatorRequest.Size (ver,x)
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
