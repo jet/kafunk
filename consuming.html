@@ -165,18 +165,18 @@ the critical path.</p>
 <span class="l">13: </span>
 </pre></td>
 <td class="snippet"><pre class="fssnip highlighted"><code lang="fsharp"><span class="c">/// Create a commit queue.</span>
-<span class="k">let</span> (<span class="i">commitQueue</span>,<span class="i">commitProccess</span>) <span class="o">=</span> 
+<span class="k">let</span> <span class="i">commitQueue</span> <span class="o">=</span> 
   <span class="i">Consumer</span><span class="o">.</span><span class="i">periodicOffsetCommitter</span> <span class="i">consumer</span> (<span class="i">TimeSpan</span><span class="o">.</span><span class="i">FromSeconds</span> <span class="n">60.0</span>)
   <span class="o">|&gt;</span> <span class="i">Async</span><span class="o">.</span><span class="i">RunSynchronously</span>
 
-<span class="c">/// Start the background commit process.</span>
+<span class="c">/// Start the commit process.</span>
 <span class="c">/// You may wish to trap exceptions in this process in order to crash.</span>
-<span class="i">Async</span><span class="o">.</span><span class="i">Start</span> <span class="i">commitProccess</span>
+<span class="i">Async</span><span class="o">.</span><span class="i">Start</span> (<span class="i">PeriodicCommitQueue</span><span class="o">.</span><span class="i">proccess</span> <span class="i">commitQueue</span>)
 
 <span class="k">let</span> <span class="i">ms</span> <span class="o">:</span> <span class="i">ConsumerMessageSet</span> <span class="o">=</span> <span class="i">failwith</span> <span class="s">&quot;some message set&quot;</span>
 
 <span class="c">/// Asynchronously enqueue offsets to be committed.</span>
-<span class="i">Offsets</span><span class="o">.</span><span class="i">enqueuePeriodicCommit</span> <span class="i">commitQueue</span> (<span class="i">ConsumerMessageSet</span><span class="o">.</span><span class="i">commitPartitionOffsets</span> <span class="i">ms</span>)
+<span class="i">PeriodicCommitQueue</span><span class="o">.</span><span class="i">enqueue</span> <span class="i">commitQueue</span> (<span class="i">ConsumerMessageSet</span><span class="o">.</span><span class="i">commitPartitionOffsets</span> <span class="i">ms</span>)
 </code></pre></td>
 </tr>
 </table>

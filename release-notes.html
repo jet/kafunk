@@ -32,6 +32,13 @@
       <div class="row">
         <div class="span9" id="main">
           
+<h3><a name="0-1-11-12-12-2017" class="anchor" href="#0-1-11-12-12-2017">0.1.11 - 12.12.2017</a></h3>
+<ul>
+<li>Added support for all versions of the OffsetFetch API in the Kafka protocol.</li>
+<li>BREAKING: Offset commit queue is moved to module <code>PeriodicCommitQueue</code>. See: <a href="https://jet.github.io/kafunk/consuming.html#Periodic-Offset-Commit.">https://jet.github.io/kafunk/consuming.html#Periodic-Offset-Commit.</a></li>
+<li>Producer performance improvements.</li>
+<li>Fixed bug with producing using version &gt;= 0.10.0 wherein empty key/value would be written</li>
+</ul>
 <h3><a name="0-1-10-15-11-2017" class="anchor" href="#0-1-10-15-11-2017">0.1.10 - 15.11.2017</a></h3>
 <ul>
 <li>Fix another scenario referenced in 0.1.9 producer batching fix.</li>

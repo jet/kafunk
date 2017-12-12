@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <title>ConsumerGroupMemberInfo - Kafunk</title>
+    <title>PeriodicCommitQueue - Kafunk</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description" content=""/>
     <meta name="author" content="Jet.com"/>
@@ -35,36 +35,41 @@
 
 
 
-<h1>ConsumerGroupMemberInfo</h1>
+<h1>PeriodicCommitQueue</h1>
 <p>
   <span>Namespace: Kafunk</span><br />
 </p>
 <div class="xmldoc">
-<p>Information about a consumer group member.</p>
+<p>Operations on periodic commit queues.</p>
 
 </div>
-  <h3>Record Fields</h3>
+
+<!-- Render nested types and modules, if there are any -->
+
+  <h3>Functions and values</h3>
   <table class="table table-bordered member-list">
     <thead>
-      <tr><td>Record Field</td><td>Description</td></tr>
+      <tr><td>Function or value</td><td>Description</td></tr>
     </thead>
     <tbody>
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '560', 560)" onmouseover="showTip(event, '560', 560)">
-            assignments
+          <code onmouseout="hideTip(event, '123', 123)" onmouseover="showTip(event, '123', 123)">
+            create interval rebalance commit
           </code>
-          <div class="tip" id="560">
-            <strong>Signature:</strong> (TopicName * Partition []) []<br />
+          <div class="tip" id="123">
+            <strong>Signature:</strong> interval:TimeSpan -&gt; rebalance:AsyncSeq&lt;(Partition * Offset) []&gt; -&gt; commit:((Partition * Offset) [] -&gt; Async&lt;unit&gt;) -&gt; Async&lt;PeriodicCommitQueue&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L91-91" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Offsets.fs#L21-21" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The topics and partitions assigned to this member.</p>
+          <p>Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
+Commits the current offsets assigned to the consumer upon creation.
+Returns a pair consisting of the commit queue and a process which commits offsets and reacts to rebalancing.</p>
 
 
         </td>
@@ -72,19 +77,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '561', 561)" onmouseover="showTip(event, '561', 561)">
-            client_host
+          <code onmouseout="hideTip(event, '124', 124)" onmouseover="showTip(event, '124', 124)">
+            enqueue q os
           </code>
-          <div class="tip" id="561">
-            <strong>Signature:</strong> ClientHost<br />
+          <div class="tip" id="124">
+            <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; os:seq&lt;Partition * Offset&gt; -&gt; unit<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L85-85" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Offsets.fs#L57-57" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The client's host name.</p>
+          <p>Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.</p>
 
 
         </td>
@@ -92,19 +97,19 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '562', 562)" onmouseover="showTip(event, '562', 562)">
-            client_id
+          <code onmouseout="hideTip(event, '125', 125)" onmouseover="showTip(event, '125', 125)">
+            flush q
           </code>
-          <div class="tip" id="562">
-            <strong>Signature:</strong> ClientId<br />
+          <div class="tip" id="125">
+            <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L82-82" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Offsets.fs#L61-61" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The client-provided id.</p>
+          <p>Commits whatever remains in the queue.</p>
 
 
         </td>
@@ -112,39 +117,20 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '563', 563)" onmouseover="showTip(event, '563', 563)">
-            member_id
+          <code onmouseout="hideTip(event, '126', 126)" onmouseover="showTip(event, '126', 126)">
+            proccess q
           </code>
-          <div class="tip" id="563">
-            <strong>Signature:</strong> MemberId<br />
+          <div class="tip" id="126">
+            <strong>Signature:</strong> q:PeriodicCommitQueue -&gt; Async&lt;unit&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L79-79" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Offsets.fs#L68-68" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
-          <p>The unique member id.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '564', 564)" onmouseover="showTip(event, '564', 564)">
-            member_metadata
-          </code>
-          <div class="tip" id="564">
-            <strong>Signature:</strong> MemberMetadata<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/ConsumerInfo.fs#L88-88" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Member specific metadata.</p>
+          <p>Returns the commit proccess, which must be explicitly started by the caller.
+This way, the caller can handle exceptions in the commit process.</p>
 
 
         </td>
