@@ -5,7 +5,7 @@ open FSharp.Control
 open Kafunk
 open Refs
 
-let host = "shared.kafka.eastus2.qa.jet.network:9092" //argiDefault 2 "localhost"
+let host = argiDefault 2 "localhost"
 
 let conn = Kafka.connHost host
 
