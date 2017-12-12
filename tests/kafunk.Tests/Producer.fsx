@@ -168,7 +168,7 @@ let go = async {
       Seq.init batchCount id
       |> Seq.map (fun batchNo -> async {
         try
-          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)          
+          let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes (payload, key="k"B))
           let! res = produceBatched msgs
           //let count = res |> Seq.sumBy (fun x -> x.count)
           //Interlocked.Add(&completed, int64 count) |> ignore

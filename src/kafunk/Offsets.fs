@@ -32,7 +32,9 @@ module PeriodicCommitQueue =
       |> AsyncSeq.scanAsync (fun offsets event -> async {
         match event with
         | Choice1Of4 _ ->
-          do! commit (offsets |> Map.toArray)
+          let os = offsets |> Map.toArray
+          if os.Length > 0 then
+            do! commit os
           return offsets
         | Choice2Of4 queued ->
           return offsets |> Map.addMany queued
@@ -40,7 +42,9 @@ module PeriodicCommitQueue =
           return assigned |> Map.ofArray
         | Choice4Of4 (rep:IVar<unit>) ->
           try
-            do! commit (offsets |> Map.toArray)
+            let os = offsets |> Map.toArray
+            if os.Length > 0 then
+              do! commit os
             IVar.put () rep
           with ex ->
             IVar.error ex rep
