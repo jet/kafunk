@@ -261,13 +261,6 @@ module Async =
   let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) =
     parallelThrottledIgnoreThread true parallelism xs
 
-  let parallelThrottled (startOnCallingThread:bool) (parallelism:int) (xs:seq<Async<'a>>) : Async<'a[]> = async { 
-    let mutable rs : 'a[] = Unchecked.defaultof<_>
-    let xs = xs |> Seq.toArray |> Array.mapi (fun i comp -> comp |> map (fun a -> rs.[i] <- a))    
-    rs <- Array.zeroCreate xs.Length
-    do! parallelThrottledIgnoreThread startOnCallingThread parallelism xs
-    return rs }
-
   /// Creates an async computation which completes when any of the argument computations completes.
   /// The other computation is cancelled.
   let choose (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {

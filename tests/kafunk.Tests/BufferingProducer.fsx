@@ -1,10 +1,4 @@
-﻿//ignore this, this is for test purpose
-#r "system.net.http.dll"
-#r "bin/Debug/FSharp.Control.AsyncSeq.dll"
-#r "bin/Debug/Kafunk.dll"
-#load "../../tests/kafunk.Tests/Refs.fsx"
-
-//test code below
+﻿#load "Refs.fsx"
 #time "on"
 
 open FSharp.Control
@@ -13,7 +7,6 @@ open System
 open System.Diagnostics
 open System.Threading
 open Refs
-open Kafunk.AsyncEx.Async
 
 let Log = Log.create "buffering_producer_test"
 
@@ -50,19 +43,34 @@ let producerCfg =
     //batchSizeBytes = 0,
     batchLingerMs = ProducerConfig.DefaultBatchLingerMs,
     compression = CompressionCodec.None
-    //maxInFlightRequests = 1
     )
 
 let producer = Producer.create conn producerCfg
-let bufConfig = {BufferConfig.buftype = Discarding; capacity = 1000; batchSize = 100; batchTimeMs = 1000; timeIntervalMs = 90}
+
+let bufConfig = { 
+  BufferingProducerConfig.bufferType = ProducerBufferType.Blocking
+  capacity = 100000
+  batchSize = 100
+  batchTimeMs = 1000
+  timeIntervalMs = 90 }
+
 let buffer = BufferingProducer.create producer bufConfig
 let produce = BufferingProducer.produce buffer
 
-// Handle overflow with log
-BufferingProducer.subscribeDiscarding buffer (Log.warn "buffering_producer_overflow_warning|cap=%d, size=%d" bufConfig.capacity)
+// subscribe to discarding event
+buffer
+|> BufferingProducer.discarding  
+|> Event.add (Log.warn "buffering_producer_discarding_warning|cap=%d, size=%d" bufConfig.capacity)
 
-// Handle error with retry
-BufferingProducer.subscribeError buffer (Seq.map produce >> ignore)
+// subscribe to blocking event
+buffer
+|> BufferingProducer.blocking  
+|> Event.add (Log.warn "buffering_producer_blocking_warning|cap=%d, size=%d" bufConfig.capacity)
+
+// subscribe to error event
+buffer
+|> BufferingProducer.errors 
+|> Event.add (fun (e,_) -> Log.error "buffering_producer_error|error=%O" e)
 
 let sw = Stopwatch.StartNew()
 let timer = Metrics.timer Log 5000
@@ -75,26 +83,31 @@ let countLatency (_:ProducerResult[]) =
   prev <- current
 
 // Subscribe result to show the time interval of writting to Kafka
-BufferingProducer.subsribeProduceResult buffer countLatency
+buffer
+|> BufferingProducer.results 
+|> Event.add countLatency
 
 let mutable completed = 0L
 
-let x =   
-  Array.init batchCount id
-  |> Array.map (fun batchNo ->
-    try
-      sleep (TimeSpan.FromMilliseconds <| 100.0) |> Async.RunSynchronously
-      let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-      let res =
-        msgs
-        |> Seq.map (fun m -> produce m)
-      let (total: int) = Seq.fold (fun s x -> if x then (s + 1) else s) 0 res
-      Interlocked.Add(&completed, int64 total) |> ignore
-      Log.info "Completed is %O, total is %O" completed total
-      res
-    with ex ->
-      Log.error "produce_error|%O" ex
-      raise ex )
+Seq.init batchCount id
+|> Seq.map (fun batchNo -> async {
+  //do! Async.Sleep 10
+  let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
+  let res =
+    msgs
+    |> Seq.map (fun m -> produce m)
+  let (total: int) = Seq.fold (fun s x -> if x then (s + 1) else s) 0 res
+  Interlocked.Add(&completed, int64 total) |> ignore
+  //Log.info "completed=%i total=%i" completed total 
+})
+|> Async.parallelThrottledIgnore parallelism
+|> Async.RunSynchronously
+
+Log.info "awaiting_flush"
+
+BufferingProducer.close buffer
+(BufferingProducer.flushTask buffer).Wait ()
+
 sw.Stop ()
 
 let missing = N - completed

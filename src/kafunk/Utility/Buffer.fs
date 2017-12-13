@@ -6,7 +6,7 @@ open FSharp.Control
 open System
 
 /// A bounded asynchronous buffer.
-type Buffer<'a> internal (bound:BufferBound) =
+type Buffer<'a> (bound:BufferBound) =
 
   let queue = 
     match bound with
@@ -52,7 +52,7 @@ type Buffer<'a> internal (bound:BufferBound) =
     |> AsyncSeq.bufferByCountAndTimeAndTimeInterval batchSize batchTimeMs timeInterval
     |> AsyncSeq.iterAsync f
     
-  /// Closes the buffer.
+  /// Closes the buffer, allowing the consumer to complete.
   member __.Close () =
     queue.CompleteAdding ()
 
