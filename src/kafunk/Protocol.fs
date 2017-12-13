@@ -368,23 +368,22 @@ module Protocol =
     end
   with
 
-    static member Size (_ver:ApiVersion, m:Message) =
+    static member Size (_messageVer:ApiVersion, m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
-      //(if ver >= 1s then Binary.sizeInt64 m.timestamp else 0) +
+      (if m.magicByte >= 1y then Binary.sizeInt64 m.timestamp else 0) +
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-    static member internal Write (_ver:ApiVersion, m:Message, buf:BinaryZipper) =
+    static member internal Write (_messageVer:ApiVersion, m:Message, buf:BinaryZipper) =
       
       buf.ShiftOffset 4 // CRC
       let offsetAfterCrc = buf.Buffer.Offset
       buf.WriteInt8 m.magicByte
       buf.WriteInt8 m.attributes
-      //TODO: depending on timestamp type, timestamp may have to be written
-      //if ver >= 1s then
-      //  buf.WriteInt64 m.timestamp
+      if m.magicByte >= 1y then
+        buf.WriteInt64 m.timestamp
       buf.WriteBytes m.key
       buf.WriteBytes m.value
       let crc = Crc.crc32 buf.Buffer.Array offsetAfterCrc (buf.Buffer.Offset - offsetAfterCrc)
