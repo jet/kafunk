@@ -108,6 +108,7 @@
     <None Include="CommitOffsets.fsx" />
     <None Include="GroupInfo.fsx" />
     <None Include="Confluent.fsx" />
+    <None Include="BufferingProducer.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>

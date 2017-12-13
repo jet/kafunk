@@ -261,13 +261,6 @@ module Async =
   let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) =
     parallelThrottledIgnoreThread true parallelism xs
 
-  let parallelThrottled (startOnCallingThread:bool) (parallelism:int) (xs:seq<Async<'a>>) : Async<'a[]> = async { 
-    let mutable rs : 'a[] = Unchecked.defaultof<_>
-    let xs = xs |> Seq.toArray |> Array.mapi (fun i comp -> comp |> map (fun a -> rs.[i] <- a))    
-    rs <- Array.zeroCreate xs.Length
-    do! parallelThrottledIgnoreThread startOnCallingThread parallelism xs
-    return rs }
-
   /// Creates an async computation which completes when any of the argument computations completes.
   /// The other computation is cancelled.
   let choose (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {
@@ -382,8 +375,29 @@ module Async =
         if i = 0 then return (Choice1Of2 (a.Result, b))
         elif i = 1 then return (Choice2Of2 (b.Result, a)) 
         else return! failwith (sprintf "unreachable, i = %d" i) }
-    
 
+  let chooseTasksAsync (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> = async {
+    let ta, tb = a :> Task, b :> Task
+    let! i = Task.WhenAny( ta, tb ) |> awaitTaskCancellationAsError
+    if i = ta then return (Choice1Of2 (a.Result, b))
+    elif i = tb then return (Choice2Of2 (b.Result, a)) 
+    else return! failwith "unreachable" }
+
+  let chooseTasksUnit (a:Task<'T>) (b:Task) : Async<Choice<'T * Task, unit * Task<'T>>> = async {
+    let ta, tb = a :> Task, b
+    let! i = Task.WhenAny( ta, tb ) |> awaitTaskCancellationAsError
+    if i = ta then return (Choice1Of2 (a.Result, b))
+    elif i = tb then return (Choice2Of2 ((), a)) 
+    else return! failwith "unreachable" }
+    
+  let chooseTasks3 (a:Task<'T>) (b:Task<'U>) (c:Task<'O>): Async<Choice<'T * Task<'U> * Task<'O>, 'U * Task<'T> * Task<'O>, 'O * Task<'T> * Task<'U>>> =
+    async { 
+        let! ct = Async.CancellationToken
+        let i = Task.WaitAny( [| (a :> Task);(b :> Task); (c :> Task) |],ct)
+        if i = 0 then return (Choice1Of3 (a.Result, b, c))
+        elif i = 1 then return (Choice2Of3 (b.Result, a, c)) 
+        elif i = 2 then return (Choice3Of3 (c.Result, a, b))
+        else return! failwith (sprintf "unreachable, i = %d" i) }    
 
 /// Operations on functions of the form 'a -> Async<'b>.
 module AsyncFunc =
