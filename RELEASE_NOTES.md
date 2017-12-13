@@ -1,3 +1,6 @@
+### 0.1.13 
+* Consumers will continue to run if not assigned partitions.
+
 ### 0.1.12 - 13.12.2017
 * Buffering producer
 
