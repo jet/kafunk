@@ -1,6 +1,6 @@
 source https://api.nuget.org/v3/index.json
 
-nuget FSharp.Control.AsyncSeq >= 2.0.16
+nuget FSharp.Control.AsyncSeq >= 2.0.18
 nuget Snappy.NET
 
 group Build
