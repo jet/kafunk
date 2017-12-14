@@ -251,11 +251,11 @@ let consumer = async {
         
     let values = 
       ms.messageSet.messages
-      |> Seq.choose (fun (o,_,m) ->
-        let key = Binary.toString m.key
+      |> Seq.choose (fun m ->
+        let key = Binary.toString m.message.key 
         if key = messageKey then
-          let i,_ = Binary.readInt32 m.value
-          Some (i,(ms.partition,o))
+          let i,_ = Binary.readInt32 m.message.value
+          Some (i,(ms.partition,m.offset))
         else
           None)
       |> Seq.toArray
