@@ -843,12 +843,17 @@ module Protocol =
           let highWatermark = buf.ReadInt64 ()
           let lastStableOffset = if ver >= 4s then buf.ReadInt64() else -1L
           let logStartOffset = if ver >= 5s then buf.ReadInt64() else -1L
-          let numAbortedTxns = if ver >= 4s then buf.ReadInt32 () else 0
-          let abortedTxns = Array.zeroCreate numAbortedTxns
-          for k = 0 to abortedTxns.Length - 1 do
-            let producerId = buf.ReadInt64 ()
-            let firstOffset = buf.ReadInt64 ()
-            abortedTxns.[k] <- (producerId, firstOffset)
+          let numAbortedTxns = if ver >= 4s then buf.ReadInt32() else -1
+          let abortedTxns =
+            if numAbortedTxns >= 0 then
+              let abortedTxns = Array.zeroCreate numAbortedTxns
+              for k = 0 to abortedTxns.Length - 1 do
+                let producerId = buf.ReadInt64 ()
+                let firstOffset = buf.ReadInt64 ()
+                abortedTxns.[k] <- (producerId, firstOffset)
+              abortedTxns
+            else
+              null
           let messageSetSize = buf.ReadInt32 ()
           let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
           partitions.[j] <-  partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet

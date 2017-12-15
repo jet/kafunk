@@ -176,7 +176,7 @@ module internal Printers =
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" x.topic ps)
         |> String.concat " ; "
-      sprintf "ProduceRequest|required_acks=%i timeout=%i topics=[%s]" x.requiredAcks x.timeout ts
+      sprintf "ProduceRequest|required_acks=%i timeout=%i topics=[%s] transactionalId=%s" x.requiredAcks x.timeout ts x.transactionalId
 
   type ProduceResponse with
     static member Print (x:ProduceResponse) =
