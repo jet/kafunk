@@ -603,6 +603,27 @@ module Consumer =
     | Some _, _ -> r1
     | _, Some _ -> r2
     | _ -> None
+  
+  let private processPartitionFetchResponse 
+    (cfg: ConsumerConfig)
+    (messageVer: ApiVersion)
+    (topic: TopicName)
+    (partition,errorCode,highWatermark,_,_,_,messageSetSize,ms) =
+    match errorCode with
+    | ErrorCode.NoError ->
+      if messageSetSize = 0 then Choice2Of4 (partition,highWatermark)
+      else 
+        let ms = Compression.decompress messageVer ms
+        if cfg.checkCrc then
+          MessageSet.CheckCrc (messageVer, ms)
+        Choice1Of4 (ConsumerMessageSet(topic, partition, ms, highWatermark))
+    | ErrorCode.OffsetOutOfRange -> 
+      Choice3Of4 (partition,highWatermark)
+    | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition | ErrorCode.ReplicaNotAvailable ->
+          
+      Choice4Of4 (partition)
+    | _ -> 
+      failwithf "unsupported fetch error_code=%i" errorCode
 
   /// Fetches the specified offsets.
   /// Returns a set of message sets and an end of topic list.
@@ -622,32 +643,15 @@ module Consumer =
       (fun _ -> None)
       (async {
         let req = 
-          let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,cfg.fetchMaxBytes) |]
-          FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os)
+          let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,0L,cfg.fetchMaxBytes) |]
+          FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os, 0, 0y)
         let! res = fetch req
         match res with
         | Success res ->
               
           let oks,ends,outOfRange,staleMetadata =
             res.topics
-            |> Seq.collect (fun (t,ps) ->
-              ps 
-              |> Seq.map (fun (p,ec,hwmo,mss,ms) -> 
-                match ec with
-                | ErrorCode.NoError ->
-                  if mss = 0 then Choice2Of4 (p,hwmo)
-                  else 
-                    let ms = Compression.decompress messageVer ms
-                    if cfg.checkCrc then
-                      MessageSet.CheckCrc (messageVer, ms)
-                    Choice1Of4 (ConsumerMessageSet(t, p, ms, hwmo))
-                | ErrorCode.OffsetOutOfRange -> 
-                  Choice3Of4 (p,hwmo)
-                | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition | ErrorCode.ReplicaNotAvailable ->
-                      
-                  Choice4Of4 (p)
-                | _ -> 
-                  failwithf "unsupported fetch error_code=%i" ec))
+            |> Seq.collect (fun (t,ps) -> ps |> Seq.map (processPartitionFetchResponse cfg messageVer t))
             |> Seq.partitionChoices4
 
           let oksAndEnds = Some (oks,ends)

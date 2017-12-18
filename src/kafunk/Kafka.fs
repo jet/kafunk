@@ -193,15 +193,15 @@ module internal Routing =
   /// Partitions a fetch request by topic/partition and wraps each one in a request.
   let private partitionFetchReq (state:ClusterState) (req:FetchRequest) =
     req.topics
-    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, mb) -> (tn, p, o, mb)))
+    |> Seq.collect (fun (tn, ps) -> ps |> Array.map (fun (p, o, _, mb) -> (tn, p, o, mb)))
     |> Seq.groupBy (fun (tn, p, _, _) -> ClusterState.tryFindTopicPartitionBroker (tn, p) state |> Result.ofOptionMap (fun () -> tn))
     |> Seq.map (fun (ch,reqs) ->
       let topics =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
-        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, mb)) |> Seq.toArray)
+        |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, 0L, mb)) |> Seq.toArray)
         |> Seq.toArray
-      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics)
+      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics, 0, 0y)
       ch, RequestMessage.Fetch req)
     |> Seq.toArray
 
@@ -252,13 +252,13 @@ module internal Routing =
     |> (fun rs -> 
       let res =
         if rs.Length = 0 then 
-          new ListGroupsResponse (ErrorCode.NoError, [||])
+          new ListGroupsResponse (ErrorCode.NoError, [||], 0)
         else
           let ec = 
             rs 
             |> Seq.tryPick (fun r -> if r.errorCode <> ErrorCode.NoError then Some r.errorCode else None)
             |> Option.getOr ErrorCode.NoError
-          new ListGroupsResponse (ec, rs |> Array.collect (fun r -> r.groups))
+          new ListGroupsResponse (ec, rs |> Array.collect (fun r -> r.groups), 0)
       ResponseMessage.ListGroupsResponse res)
 
   let concatOffsetResponses (rs:ResponseMessage[]) =
@@ -370,12 +370,12 @@ type private RetryAction =
 
       | ResponseMessage.FetchResponse r ->
         r.topics 
-        |> Seq.tryPick (fun (tn,pmd) -> 
-          pmd 
-          |> Seq.tryPick (fun (_p,ec,_,_,_) -> 
+        |> Seq.tryPick (fun (topicName,partitionMetadata) -> 
+          partitionMetadata 
+          |> Seq.tryPick (fun (_,ec,_,_,_,_,_,_) -> 
             match ec with
             | ErrorCode.NoError -> None
-            | ErrorCode.NotLeaderForPartition -> Some (ec, RetryAction.RefreshMetadataAndRetry [|tn|])
+            | ErrorCode.NotLeaderForPartition -> Some (ec, RetryAction.RefreshMetadataAndRetry [|topicName|])
             | ec ->
               RetryAction.errorRetryAction ec
               |> Option.map (fun action -> ec, action)))
@@ -664,7 +664,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
       routeToBrokerWithRecovery true RetryState.init state
       |> AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
     
-    let! metadata = send (Metadata.Request(topics))
+    let! metadata = send (MetadataRequest(topics))
     Log.info "received_cluster_metadata|%s" (MetadataResponse.Print metadata)
 
     /// TODO: spin on missing leader?
@@ -966,7 +966,7 @@ module Kafka =
   let connHost host =
     connHostAsync host |> Async.RunSynchronously
 
-  let metadata (c:KafkaConn) : Metadata.Request -> Async<MetadataResponse> =
+  let metadata (c:KafkaConn) : MetadataRequest -> Async<MetadataResponse> =
     AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata c.Send
 
   let fetch (c:KafkaConn) : FetchRequest -> Async<FetchResponse> =
@@ -987,7 +987,7 @@ module Kafka =
   let offsetFetch (c:KafkaConn) : OffsetFetchRequest -> Async<OffsetFetchResponse> =
     AsyncFunc.dimap RequestMessage.OffsetFetch ResponseMessage.toOffsetFetch c.Send
 
-  let joinGroup (c:KafkaConn) : JoinGroup.Request -> Async<JoinGroup.Response> =
+  let joinGroup (c:KafkaConn) : JoinGroupRequest -> Async<JoinGroupResponse> =
     AsyncFunc.dimap RequestMessage.JoinGroup ResponseMessage.toJoinGroup c.Send
 
   let syncGroup (c:KafkaConn) : SyncGroupRequest -> Async<SyncGroupResponse> =

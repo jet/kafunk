@@ -43,10 +43,18 @@ let internal byApiVersionResponse (x:ApiVersionsResponse) : ApiKey -> ApiVersion
   fun (key:ApiKey) -> 
     let (_,_,v) = x.apiVersions.[int key]
     match key with
-    | ApiKey.Fetch -> min 2s v
-    | ApiKey.Produce -> min 2s v
-    | ApiKey.Metadata -> min 0s v
-    | ApiKey.Offset -> min 1s v
-    | ApiKey.JoinGroup -> min 2s v
+    | ApiKey.Produce -> min 2s v // TODO: any higher version for produce is currently crashing
+    | ApiKey.Fetch -> min 6s v
+    | ApiKey.Offset -> min 1s v // TODO: any higher version for offset is currently crashing
+    | ApiKey.Metadata -> min 5s v
+    | ApiKey.OffsetCommit -> min 3s v
+    | ApiKey.OffsetFetch -> min 3s v
+    | ApiKey.GroupCoordinator -> min 1s v
+    | ApiKey.JoinGroup -> min 2s v 
+    | ApiKey.Heartbeat -> min 1s v
+    | ApiKey.LeaveGroup -> min 1s v
     | ApiKey.SyncGroup -> min 1s v
-    | _ -> v
+    | ApiKey.DescribeGroups -> min 1s v
+    | ApiKey.ListGroups -> min 1s v
+    | ApiKey.ApiVersions -> min 1s v
+    | _ -> 0s

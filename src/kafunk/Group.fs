@@ -184,7 +184,7 @@ module Group =
 
     /// Attempts the initial group handshake.
     let join (prevMemberId:MemberId option) = async {      
-      let req = JoinGroup.Request(groupId, sessionTimeout, rebalanceTimeout, defaultArg prevMemberId "", protocolType, GroupProtocols(protocols))
+      let req = JoinGroupRequest(groupId, sessionTimeout, rebalanceTimeout, defaultArg prevMemberId "", protocolType, GroupProtocols(protocols))
       let! res = Kafka.joinGroup conn req
       match res.errorCode with
       | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode 
@@ -196,7 +196,7 @@ module Group =
         return failwithf "unknown_join_group_error=%i" res.errorCode  }
   
     /// Synchronizes the group after all members have joined.
-    let syncGroupLeader (joinGroupRes:JoinGroup.Response) = async {                   
+    let syncGroupLeader (joinGroupRes:JoinGroupResponse) = async {                   
       let! memberAssignments = cfg.protocol.assign gm prevState joinGroupRes.groupProtocol joinGroupRes.members.members
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment(memberAssignments))
       let! res = Kafka.syncGroup conn req
@@ -209,7 +209,7 @@ module Group =
       | _ -> 
         return failwithf "unknown syncgroup error_code=%i" res.errorCode }
 
-    let syncGroupFollower (joinGroupRes:JoinGroup.Response) = async {
+    let syncGroupFollower (joinGroupRes:JoinGroupResponse) = async {
       let req = SyncGroupRequest(groupId, joinGroupRes.generationId, joinGroupRes.memberId, GroupAssignment([||]))
       let! res = Kafka.syncGroup conn req
       match res.errorCode with
@@ -222,7 +222,7 @@ module Group =
         return failwithf "unknown syncgroup error_code=%i" res.errorCode }
     
     /// Starts the heartbeating process to remain in the group.
-    let hearbeat (groupCoord:Broker, joinGroupRes:JoinGroup.Response, syncGroupRes:SyncGroupResponse) = async {
+    let hearbeat (groupCoord:Broker, joinGroupRes:JoinGroupResponse, syncGroupRes:SyncGroupResponse) = async {
 
       let heartbeatSleepMs = cfg.sessionTimeout / cfg.heartbeatFrequency
 

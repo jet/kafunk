@@ -123,6 +123,8 @@ module Protocol =
   /// A Kafka error code.
   type ErrorCode = int16
 
+  type ErrorMessage = string
+
   type TopicErrorCode = ErrorCode
 
   type PartitionErrorCode = ErrorCode
@@ -254,14 +256,35 @@ module Protocol =
   /// The offset to begin this fetch from.
   type FetchOffset = int64
 
+  /// The earliest available offset for a partition.
+  type LogStartOffset = int64
+
   /// The maximum bytes to include in the message set for this partition. This
   /// helps bound the size of the response.
   type MaxBytes = int32
+
+  /// This controls visibility of transactional records. If set to 0, makes all records
+  /// visible. If set to 1, separates aborted transactions so they can be discarded.
+  type IsolationLevel = int8
 
   /// The offset at the end of the log for this partition. This can be used by
   /// the client to determine how many messages behind the end of the log they
   /// are.
   type HighwaterMarkOffset = int64
+
+  /// The last offset such that the state of all transactional records prior to this offset 
+  /// have been decided (ABORTED or COMMITTED)
+  type LastStableOffset = int64
+
+  /// Producer id associated with an AbortedTransaction
+  type ProducerId = int64
+
+  /// First offset in an AbortedTransaction
+  type FirstOffset = int64
+
+  type AbortedTransaction = ProducerId * FirstOffset
+
+  type TransactionalId = string
 
   /// Used to ask for all messages before a certain time (ms).
   type Time = int64
@@ -345,23 +368,22 @@ module Protocol =
     end
   with
 
-    static member Size (_ver:ApiVersion, m:Message) =
+    static member Size (_messageVer:ApiVersion, m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
-      //(if ver >= 1s then Binary.sizeInt64 m.timestamp else 0) +
+      (if m.magicByte >= 1y then Binary.sizeInt64 m.timestamp else 0) +
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-    static member internal Write (_ver:ApiVersion, m:Message, buf:BinaryZipper) =
+    static member internal Write (_messageVer:ApiVersion, m:Message, buf:BinaryZipper) =
       
       buf.ShiftOffset 4 // CRC
       let offsetAfterCrc = buf.Buffer.Offset
       buf.WriteInt8 m.magicByte
       buf.WriteInt8 m.attributes
-      //TODO: depending on timestamp type, timestamp may have to be written
-      //if ver >= 1s then
-      //  buf.WriteInt64 m.timestamp
+      if m.magicByte >= 1y then
+        buf.WriteInt64 m.timestamp
       buf.WriteBytes m.key
       buf.WriteBytes m.value
       let crc = Crc.crc32 buf.Buffer.Array offsetAfterCrc (buf.Buffer.Offset - offsetAfterCrc)
@@ -494,24 +516,6 @@ module Protocol =
         Message.CheckCrc (ver,x.message)
 
 
-
-  // Metadata API
-  module Metadata =
-
-    /// Request metadata on all or a specific set of topics.
-    /// Can be routed to any node in the bootstrap list.
-    type Request =
-      struct
-        val topicNames : TopicName[]
-        new (topicNames) = { topicNames = topicNames }
-      end
-
-    let sizeRequest (x:Request) =
-        Binary.sizeArray x.topicNames Binary.sizeString
-
-    let writeRequest (x:Request) =
-        Binary.writeArray x.topicNames Binary.writeString
-
   /// A Kafka broker consists of a node id, host name and TCP port.
   [<AutoSerializable(false);StructuralEquality;StructuralComparison>]
   type Broker =
@@ -519,13 +523,27 @@ module Protocol =
       val nodeId : NodeId
       val host : Host
       val port : Port
-      new (nodeId, host, port) = { nodeId = nodeId; host = host; port = port }
+      val rack : string
+      new (nodeId, host, port) = { nodeId = nodeId; host = host; port = port; rack = null }
+      new (nodeId, host, port, rack) = { nodeId = nodeId; host = host; port = port; rack = rack }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      match ver with
+      | 0s ->
+        let nodeId = buf.ReadInt32()
+        let host = buf.ReadString()
+        let port = buf.ReadInt32()
+        Broker(nodeId, host, port)
+      | 1s ->
+        let nodeId = buf.ReadInt32()
+        let host = buf.ReadString()
+        let port = buf.ReadInt32()
+        let rack = buf.ReadString()
+        Broker(nodeId, host, port, rack)
+      | _ ->
+        failwithf "Unsupported Broker Format for Metadata Api Response Version: %i" ver
 
-    static member internal read buf =
-      let (nodeId, host, port), buf = Binary.read3 Binary.readInt32 Binary.readString Binary.readInt32 buf
-      (Broker(nodeId, host, port), buf)
 
   [<NoEquality;NoComparison;AutoSerializable(false)>]
   type PartitionMetadata =
@@ -535,19 +553,23 @@ module Protocol =
       val leader : Leader
       val replicas : Replicas
       val isr : Isr
-      new (partitionErrorCode, partitionId, leader, replicas, isr) =
+      val offlineReplicas : Replicas
+      new (partitionErrorCode, partitionId, leader, replicas, isr, offlineReplicas) =
         { partitionErrorCode = partitionErrorCode; partitionId = partitionId;
-          leader = leader; replicas = replicas; isr = isr }
+          leader = leader; replicas = replicas; isr = isr; offlineReplicas = offlineReplicas }
     end
   with
-
-    static member internal read buf =
-      let partitionErrorCode, buf = Binary.readInt16 buf
-      let partitionId, buf = Binary.readInt32 buf
-      let leader, buf = Binary.readInt32 buf
-      let replicas, buf = Binary.readArray Binary.readInt32 buf
-      let isr, buf = Binary.readArray Binary.readInt32 buf
-      (PartitionMetadata(partitionErrorCode, partitionId, leader, replicas, isr), buf)
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let errorCode = buf.ReadInt16()
+      let partition = buf.ReadInt32()
+      let leader = buf.ReadInt32()
+      let replicas = buf.ReadArray (fun b -> b.ReadInt32())
+      let inSyncReplicas = buf.ReadArray (fun b -> b.ReadInt32())
+      let offlineReplicas = 
+        match ver with 
+        | 5s -> buf.ReadArray (fun b -> b.ReadInt32()) 
+        | _ -> [||]
+      PartitionMetadata(errorCode, partition, leader, replicas, inSyncReplicas, offlineReplicas)
 
   /// Metadata for a specific topic consisting of a set of partition-to-broker assignments.
   [<NoEquality;NoComparison>]
@@ -556,16 +578,51 @@ module Protocol =
       val topicErrorCode : TopicErrorCode
       val topicName : TopicName
       val partitionMetadata : PartitionMetadata[]
-      new (topicErrorCode, topicName, partitionMetadata) =
-        { topicErrorCode = topicErrorCode; topicName = topicName; partitionMetadata = partitionMetadata }
+      val isInternal : bool
+      new (topicErrorCode, topicName, partitionMetadata, isInternal) =
+        { topicErrorCode = topicErrorCode; topicName = topicName; partitionMetadata = partitionMetadata; isInternal = isInternal }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let errorCode = buf.ReadInt16()
+      let topic = buf.ReadString()
+      let isInternal = match ver with | 0s -> false | _ -> buf.ReadBool()
+      let partitionMetadata = buf.ReadArray (fun b -> PartitionMetadata.Read(ver, b))
+      TopicMetadata(errorCode, topic, partitionMetadata, isInternal)
+    
+  /// Request metadata on all or a specific set of topics.
+  /// Can be routed to any node in the bootstrap list.
+  [<NoEquality;NoComparison>]
+  type MetadataRequest =
+    struct
+      val topics : TopicName[]
+      val autoTopicCreation : bool
+      new (topics) =  { topics = topics ; autoTopicCreation = false }
+      new (topics, autoTopicCreation) =  { topics = topics ; autoTopicCreation = autoTopicCreation }
+    end
+  with
+    static member internal Size (ver:ApiVersion, req:MetadataRequest) =
+      let topicSize = Binary.sizeArray req.topics Binary.sizeString
+      match ver with
+      | 0s | 1s | 2s | 3s ->
+        topicSize
+      | 4s | 5s ->
+        topicSize + Binary.sizeBool req.autoTopicCreation
+      | _ ->
+        failwithf "Unsupported MetadataRequest API Version %i" ver
 
-    static member internal read buf =
-      let errorCode, buf = Binary.readInt16 buf
-      let topicName, buf = Binary.readString buf
-      let partitionMetadata, buf = Binary.readArray PartitionMetadata.read buf
-      (TopicMetadata(errorCode, topicName, partitionMetadata), buf)
+    static member internal Write (ver:ApiVersion, req:MetadataRequest, buf:BinaryZipper) =
+      let writeTopics (buf:BinaryZipper, t:TopicName) =
+        buf.WriteString t
+        
+      match ver with
+      | 0s | 1s | 2s | 3s ->
+        buf.WriteArray(req.topics, writeTopics)
+      | 4s | 5s ->
+        buf.WriteArray(req.topics, writeTopics)
+        buf.WriteBool req.autoTopicCreation
+      | _ ->
+        failwithf "Unsupported MetadataRequest API Version %i" ver
 
   /// Contains a list of all brokers (node id, host, post) and assignment of topic/partitions to brokers.
   /// The assignment consists of a leader, a set of replicas and a set of in-sync replicas.
@@ -574,14 +631,30 @@ module Protocol =
     struct
       val brokers : Broker[]
       val topicMetadata : TopicMetadata[]
-      new (brokers, topicMetadata) =  { brokers = brokers; topicMetadata = topicMetadata }
+      val controllerId : int
+      val clusterId: string
+      val throttleTimeMs: ThrottleTime
+      new (brokers, topicMetadata, controllerId, clusterId, throttleTimeMs) =  
+        { brokers = brokers; topicMetadata = topicMetadata; controllerId = controllerId; clusterId = clusterId;
+          throttleTimeMs = throttleTimeMs }
     end
   with
-
-    static member internal read buf =
-      let brokers, buf = Binary.readArray Broker.read buf
-      let topicMetadata, buf = Binary.readArray TopicMetadata.read buf
-      (MetadataResponse(brokers, topicMetadata), buf)
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let throttleTimeMs =
+        match ver with
+        | 0s | 1s | 2s -> 0
+        | _ -> buf.ReadInt32()
+      let brokers = buf.ReadArray (fun b -> Broker.Read(ver, b))
+      let clusterId =
+        match ver with
+        | 0s | 1s -> null
+        | _ -> buf.ReadString()
+      let controllerId = 
+        match ver with 
+        | 0s -> -1 
+        | _ -> buf.ReadInt32()
+      let topicMetadata = buf.ReadArray (fun b -> TopicMetadata.Read(ver,b))
+      MetadataResponse(brokers, topicMetadata, controllerId, clusterId, throttleTimeMs)
 
   // Produce API
 
@@ -605,30 +678,35 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type ProduceRequest =
     struct
+      val transactionalId : TransactionalId
       val requiredAcks : RequiredAcks
       val timeout : Timeout
       val topics : ProduceRequestTopicMessageSet[]
       new (requiredAcks, timeout, topics) =
-        { requiredAcks = requiredAcks; timeout = timeout; topics = topics }
+        { requiredAcks = requiredAcks; timeout = timeout; topics = topics; transactionalId = null }
+      new (requiredAcks, timeout, topics, transactionalId) =
+        { requiredAcks = requiredAcks; timeout = timeout; topics = topics; transactionalId = transactionalId }
     end
   with
 
-    static member internal Size (x:ProduceRequest) =
+    static member internal Size (ver:ApiVersion, x:ProduceRequest) =
       let mutable size = 0
-      size <- size + 2 // requiredAcks
-      size <- size + 4 // timeout
-      size <- size + 4 // topics array size
+      if ver >= 3s then 
+        size <- size + Binary.sizeString x.transactionalId
+      size <- size + 10 // requiredAcks (2), timeout (4), topics array size (4)
       for i = 0 to x.topics.Length - 1 do
         let y = x.topics.[i]
         size <- size + (Binary.sizeString y.topic)
         size <- size + 4 // partition array size
         for z in y.partitions do
           let mss = z.messageSetSize
-          size <- size + 4 + 4 + mss
+          size <- size + 8 + mss // partitionId (4), message set size (4), message set  
       size
 
     static member internal Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
       let messageVer = MessageVersions.produceReqMessage ver
+      if ver >= 3s then 
+        buf.WriteString x.transactionalId
       buf.WriteInt16 x.requiredAcks
       buf.WriteInt32 x.timeout
       buf.WriteInt32 x.topics.Length
@@ -647,7 +725,8 @@ module Protocol =
       val errorCode : ErrorCode
       val offset : Offset
       val timestamp : Timestamp
-      new (p,ec,o,ts) = { partition = p ; errorCode = ec ; offset = o ; timestamp = ts }
+      val logStartOffset : Offset
+      new (p,ec,o,ts,lso) = { partition = p ; errorCode = ec ; offset = o ; timestamp = ts ; logStartOffset = lso }
     end
 
   and [<NoEquality;NoComparison>] ProduceResponseTopicItem =
@@ -667,21 +746,24 @@ module Protocol =
   with
 
     static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
-      let tn = buf.ReadInt32 ()
-      let topics = Array.zeroCreate tn
+      let numTopics = buf.ReadInt32 ()
+      let topics = Array.zeroCreate numTopics
       for i = 0 to topics.Length - 1 do
-        let t = buf.ReadString ()
-        let psn = buf.ReadInt32 ()
-        let ps = Array.zeroCreate psn
-        for j = 0 to ps.Length - 1 do
-          let p = buf.ReadInt32 ()
-          let ec = buf.ReadInt16 ()
-          let o = buf.ReadInt64 ()
-          let ts = 
+        let topicName = buf.ReadString ()
+        let numPartitions = buf.ReadInt32 ()
+        let partitions = Array.zeroCreate numPartitions
+        for j = 0 to partitions.Length - 1 do
+          let partition = buf.ReadInt32 ()
+          let errorCode = buf.ReadInt16 ()
+          let baseoffset = buf.ReadInt64 ()
+          let logAppendTime = 
             if ver >= 2s then buf.ReadInt64 ()
             else 0L
-          ps.[j] <- ProduceResponsePartitionItem(p,ec,o,ts)
-        topics.[i] <- ProduceResponseTopicItem(t,ps)
+          let logStartOffset = 
+            if ver >= 5s then buf.ReadInt64 ()
+            else 0L
+          partitions.[j] <- ProduceResponsePartitionItem(partition,errorCode,baseoffset,logAppendTime, logStartOffset)
+        topics.[i] <- ProduceResponseTopicItem(topicName,partitions)
       let throttleTime = 
         if ver >= 1s then buf.ReadInt32 ()
         else 0
@@ -695,71 +777,87 @@ module Protocol =
       val replicaId : ReplicaId
       val maxWaitTime : MaxWaitTime
       val minBytes : MinBytes
-      val topics : (TopicName * (Partition * FetchOffset * MaxBytes)[])[]
-      new (replicaId, maxWaitTime, minBytes, topics) =
-        { replicaId = replicaId; maxWaitTime = maxWaitTime; minBytes = minBytes; topics = topics }
+      val maxBytes : MaxBytes
+      val isolationLevel : IsolationLevel
+      val topics : (TopicName * (Partition * FetchOffset * LogStartOffset * MaxBytes)[])[]
+      new (replicaId, maxWaitTime, minBytes, topics, maxBytes, isolationLevel) =
+        { replicaId = replicaId; maxWaitTime = maxWaitTime; minBytes = minBytes; topics = topics; 
+          maxBytes = maxBytes; isolationLevel = isolationLevel }
     end
   with
-
-    static member internal Size (x:FetchRequest) =
-      let mutable size = 0
-      size <- size + 4 // replicaId
-      size <- size + 4 // maxWaitTime
-      size <- size + 4 // minBytes
-      size <- size + 4 // topic array size
-      for i = 0 to x.topics.Length - 1 do
-        let (t,ps) = x.topics.[i]
-        size <- size + (Binary.sizeString t)
+    // leverages mutability to reduce performance overhead
+    static member internal Size (ver:ApiVersion, req:FetchRequest) =
+      let mutable size = 16 // replicaId + maxWaitTime + minBytes + topic array size (4 bytes each)
+      if ver >= 3s then size <- size + 4 // maxBytes
+      if ver >= 4s then size <- size + 1 // isolation level
+      for i = 0 to req.topics.Length - 1 do 
+        let (t,ps) = req.topics.[i]
+        size <- size + (Binary.sizeString t) // topic name size
         size <- size + 4 // partition array size
-        for (_,_,_) in ps do
-          size <- size + 4 // partition
-          size <- size + 8 // offset
-          size <- size + 4 // maxBytes
+        for (_,_,_,_) in ps do
+          size <- size + 16 // partition (4) + fetch offset (8) + maxBytes (4)
+          if ver >= 5s then size <- size + 8 // log start offset
       size
 
-    static member internal Write (x:FetchRequest, buf:BinaryZipper) =
-      buf.WriteInt32 x.replicaId
-      buf.WriteInt32 x.maxWaitTime
-      buf.WriteInt32 x.minBytes
-      buf.WriteInt32 x.topics.Length
-      for i = 0 to x.topics.Length - 1 do
-        let (t,ps) = x.topics.[i]
-        buf.WriteString t
-        buf.WriteInt32 ps.Length
-        for j = 0 to ps.Length - 1 do
-          let (p,o,mb) = ps.[j]
+    static member internal Write (ver:ApiVersion, req:FetchRequest, buf:BinaryZipper) =
+      buf.WriteInt32 req.replicaId
+      buf.WriteInt32 req.maxWaitTime
+      buf.WriteInt32 req.minBytes
+      if ver >= 3s then buf.WriteInt32 req.maxBytes
+      if ver >= 4s then buf.WriteInt8 req.isolationLevel
+      buf.WriteInt32 req.topics.Length
+      for i = 0 to req.topics.Length - 1 do
+        let (topic, partitions) = req.topics.[i]
+        buf.WriteString topic
+        buf.WriteInt32 partitions.Length
+        for j = 0 to partitions.Length - 1 do
+          let (p,offset,logStartOffset,maxBytes) = partitions.[j]
           buf.WriteInt32 p
-          buf.WriteInt64 o
-          buf.WriteInt32 mb
+          buf.WriteInt64 offset
+          if ver >= 5s then buf.WriteInt64 logStartOffset
+          buf.WriteInt32 maxBytes
 
   [<NoEquality;NoComparison>]
   type FetchResponse =
     struct
       val throttleTime : ThrottleTime
-      val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * MessageSetSize * MessageSet)[])[]
+      val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * LastStableOffset * LogStartOffset * AbortedTransaction[] * MessageSetSize * MessageSet)[])[]
       new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
-
+    // Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
     static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTime =
         match ver with
-        | v when v >= 1s -> buf.ReadInt32 ()
-        | _ -> 0
-      let nt = buf.ReadInt32()
-      let topics = Array.zeroCreate nt
+        | 0s -> 0 
+        | _ -> buf.ReadInt32 ()
+      let numTopics = buf.ReadInt32()
+      let topics = Array.zeroCreate numTopics
       for i = 0 to topics.Length - 1 do
-        let t = buf.ReadString ()
-        let nps = buf.ReadInt32 ()
-        let ps = Array.zeroCreate nps
-        for j = 0 to ps.Length - 1 do
+        let topic = buf.ReadString ()
+        let numPartitions = buf.ReadInt32 ()
+        let partitions = Array.zeroCreate numPartitions
+        for j = 0 to partitions.Length - 1 do
           let partition = buf.ReadInt32 ()
           let errorCode = buf.ReadInt16 ()
-          let hwo = buf.ReadInt64 ()
-          let mss = buf.ReadInt32 ()
-          let ms = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,mss,false,buf)
-          ps.[j] <-  partition, errorCode, hwo, mss, ms
-        topics.[i] <- (t,ps)
+          let highWatermark = buf.ReadInt64 ()
+          let lastStableOffset = if ver >= 4s then buf.ReadInt64() else -1L
+          let logStartOffset = if ver >= 5s then buf.ReadInt64() else -1L
+          let numAbortedTxns = if ver >= 4s then buf.ReadInt32() else -1
+          let abortedTxns =
+            if numAbortedTxns >= 0 then
+              let abortedTxns = Array.zeroCreate numAbortedTxns
+              for k = 0 to abortedTxns.Length - 1 do
+                let producerId = buf.ReadInt64 ()
+                let firstOffset = buf.ReadInt64 ()
+                abortedTxns.[k] <- (producerId, firstOffset)
+              abortedTxns
+            else
+              null
+          let messageSetSize = buf.ReadInt32 ()
+          let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+          partitions.[j] <-  partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet
+        topics.[i] <- (topic,partitions)
       let res = FetchResponse(throttleTime, topics)
       res
 
@@ -848,30 +946,6 @@ module Protocol =
           consumerId = consumerId; retentionTime = retentionTime; topics = topics }
     end
   with
-
-//    static member internal size (x:OffsetCommitRequest) =
-//      let partitionSize (part, offset, ts, metadata) =
-//        Binary.sizeInt32 part + Binary.sizeInt64 offset + Binary.sizeString metadata
-//      let topicSize (name, partitions) =
-//        Binary.sizeString name + Binary.sizeArray partitions partitionSize
-//      Binary.sizeString x.consumerGroup +
-//      Binary.sizeInt32 x.consumerGroupGenerationId +
-//      Binary.sizeString x.consumerId +
-//      Binary.sizeInt64 x.retentionTime +
-//      Binary.sizeArray x.topics topicSize
-
-//    static member internal write (x:OffsetCommitRequest) buf =
-//      let writePartition =
-//        Binary.write3 Binary.writeInt32 Binary.writeInt64 Binary.writeString
-//      let writeTopic =
-//        Binary.write2 Binary.writeString (fun ps -> Binary.writeArray ps writePartition)
-//      buf
-//      |> Binary.writeString x.consumerGroup
-//      |> Binary.writeInt32 x.consumerGroupGenerationId
-//      |> Binary.writeString x.consumerId
-//      |> Binary.writeInt64 x.retentionTime
-//      |> Binary.writeArray x.topics writeTopic
-
     static member internal Size (ver:ApiVersion, x:OffsetCommitRequest) =
       let partitionSize (part, offset, ts, metadata) =
         Binary.sizeInt32 part + 
@@ -904,18 +978,34 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type OffsetCommitResponse =
     struct
+      val throttleTimeMs : ThrottleTime
       val topics : (TopicName * (Partition * ErrorCode)[])[]
-      new (topics) = { topics = topics }
+      new (topics) = { throttleTimeMs = 0; topics = topics }
+      new (throttleTime, topics) = { throttleTimeMs = throttleTime; topics = topics }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let readPartitions (buf:BinaryZipper) =
+        let partition = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        partition, errorCode
 
-    static member internal read buf =
-      let readPartition =
-        Binary.read2 Binary.readInt32 Binary.readInt16
-      let readTopic =
-        Binary.read2 Binary.readString (Binary.readArray readPartition)
-      let topics, buf = buf |> Binary.readArray readTopic
-      (OffsetCommitResponse(topics), buf)
+      let readTopic (buf:BinaryZipper) =
+        let topicName = buf.ReadString()
+        let partitions = buf.ReadArray readPartitions
+        topicName, partitions
+           
+      match ver with
+      | 0s | 1s | 2s ->
+        let topics = buf.ReadArray readTopic
+        OffsetCommitResponse(topics)
+      | 3s ->
+        let throttleTimeMs = buf.ReadInt32()
+        let topics = buf.ReadArray readTopic
+        OffsetCommitResponse(throttleTimeMs, topics)
+      | _ ->
+        failwithf "Unsupported OffsetCommit Response API Version: %i" ver
+
 
   type OffsetFetchRequest =
     struct
@@ -1000,34 +1090,59 @@ module Protocol =
   type GroupCoordinatorRequest =
     struct
       val groupId : GroupId
-      new (groupId) = { groupId = groupId }
+      val coordinatorType: int8
+      new (groupId) = {groupId = groupId; coordinatorType = 0y }
+      new (groupId, coordinatorType) = { groupId = groupId ; coordinatorType = coordinatorType }
     end
   with
-
-    static member internal size (x:GroupCoordinatorRequest) =
-      Binary.sizeString x.groupId
-
-    static member internal write (x:GroupCoordinatorRequest) buf =
-      Binary.writeString x.groupId buf
+    static member internal Size (ver:ApiVersion, req:GroupCoordinatorRequest) =
+      match ver with
+      | 0s -> 
+        Binary.sizeString req.groupId
+      | 1s ->
+        Binary.sizeString req.groupId + Binary.sizeInt8 req.coordinatorType
+      | _ -> 
+        failwithf "Unsupported FindCoordinator API Request Version: %i" ver
+     
+    static member internal Write (ver:ApiVersion, req:GroupCoordinatorRequest, buf:BinaryZipper) =
+      match ver with
+      | 0s ->
+        buf.WriteString req.groupId
+      | 1s ->
+        buf.WriteString req.groupId
+        buf.WriteInt8 req.coordinatorType
+      | _ -> 
+        failwithf "Unsupported FindCoordinator API Request Version: %i" ver
 
   type GroupCoordinatorResponse =
     struct
       val errorCode : ErrorCode
+      val errorMessage : ErrorMessage
       val coordinatorId : CoordinatorId
       val coordinatorHost : CoordinatorHost
       val coordinatorPort : CoordinatorPort
-      new (errorCode, coordinatorId, coordinatorHost, coordinatorPort) =
-        { errorCode = errorCode; coordinatorId = coordinatorId; coordinatorHost = coordinatorHost;
-          coordinatorPort = coordinatorPort }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, errorMessage, coordinatorId, coordinatorHost, coordinatorPort, throttleTimeMs) =
+        { errorCode = errorCode; errorMessage = errorMessage; coordinatorId = coordinatorId; coordinatorHost = coordinatorHost;
+          coordinatorPort = coordinatorPort; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      if ver > 1s then failwithf "Unsupported FindCoordinator Response Version: %i" ver
 
-    static member internal read buf =
-      let ec, buf = Binary.readInt16 buf
-      let cid, buf = Binary.readInt32 buf
-      let ch, buf = Binary.readString buf
-      let cp, buf = Binary.readInt32 buf
-      (GroupCoordinatorResponse(ec, cid, ch, cp), buf)
+      let throttleTimeMs = 
+        match ver with 
+        | 1s -> buf.ReadInt32() 
+        | _ -> 0
+      let errorCode = buf.ReadInt16()
+      let errorMessage = 
+        match ver with 
+        | 1s -> buf.ReadString() 
+        | _ -> null
+      let coordinatorId = buf.ReadInt32()
+      let host = buf.ReadString()
+      let port = buf.ReadInt32()
+      GroupCoordinatorResponse(errorCode, errorMessage, coordinatorId, host, port, throttleTimeMs)
 
   type SessionTimeout = int32
 
@@ -1043,13 +1158,17 @@ module Protocol =
     end
   with
 
-    static member internal size (x:GroupProtocols) =
+    static member internal Size (_:ApiVersion, x:GroupProtocols) =
       let protocolSize (name, metadata) =
         Binary.sizeString name + Binary.sizeBytes metadata
       Binary.sizeArray x.protocols protocolSize
 
-    static member internal write (x:GroupProtocols) buf =
-      buf |> Binary.writeArray x.protocols (Binary.write2 Binary.writeString Binary.writeBytes)
+    static member internal Write (_:ApiVersion, x:GroupProtocols, buf:BinaryZipper) =
+      let writeProtocol (buf:BinaryZipper, (protocolName, protocolMetadata)) =
+        buf.WriteString protocolName
+        buf.WriteBytes protocolMetadata
+
+      buf.WriteArray(x.protocols, writeProtocol)
 
   [<NoEquality;NoComparison>]
   type Members =
@@ -1067,11 +1186,9 @@ module Protocol =
           mid,md)
       Members(ms)
 
-  module JoinGroup =
-
-    [<Struct>]
-    [<NoEquality;NoComparison>]
-    type Request =
+  [<NoEquality;NoComparison>]
+  type JoinGroupRequest =
+    struct
       val groupId : GroupId
       val sessionTimeout : SessionTimeout
       val rebalanceTimeout : SessionTimeout
@@ -1081,10 +1198,27 @@ module Protocol =
       new (groupId, sessionTimeout, rebalanceTimeout, memberId, protocolType, groupProtocols) =
         { groupId = groupId; sessionTimeout = sessionTimeout; rebalanceTimeout = rebalanceTimeout ; memberId = memberId;
           protocolType = protocolType; groupProtocols = groupProtocols }
+    end
+  with
+    static member internal Size(ver:ApiVersion, req:JoinGroupRequest) =
+      Binary.sizeString req.groupId +
+      Binary.sizeInt32 req.sessionTimeout +
+      (if ver >= 1s then 4 else 0) +
+      Binary.sizeString req.memberId +
+      Binary.sizeString req.protocolType +
+      GroupProtocols.Size(ver,req.groupProtocols)
 
-    [<Struct>]
-    [<NoEquality;NoComparison>]
-    type Response =
+    static member internal Write (ver:ApiVersion, req:JoinGroupRequest, buf:BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.sessionTimeout
+      (if ver >= 1s then buf.WriteInt32 req.rebalanceTimeout)
+      buf.WriteString req.memberId
+      buf.WriteString req.protocolType
+      GroupProtocols.Write(ver, req.groupProtocols, buf)
+
+  [<NoEquality;NoComparison>]
+  type JoinGroupResponse =
+    struct
       val throttleTime : ThrottleTime
       val errorCode : ErrorCode
       val generationId : GenerationId
@@ -1095,37 +1229,19 @@ module Protocol =
       new (throttleTimeMs,errorCode, generationId, groupProtocol, leaderId, memberId, members) =
         { throttleTime = throttleTimeMs ; errorCode = errorCode; generationId = generationId; 
           groupProtocol = groupProtocol; leaderId = leaderId; memberId = memberId; members = members }
-
-    let internal sizeRequest (ver:ApiVersion, req:Request) =
-      Binary.sizeString req.groupId +
-      Binary.sizeInt32 req.sessionTimeout +
-      (if ver >= 1s then 4 else 0) +
-      Binary.sizeString req.memberId +
-      Binary.sizeString req.protocolType +
-      GroupProtocols.size req.groupProtocols
-
-    let internal writeRequest (ver:ApiVersion, req:Request) buf =
-      let buf = Binary.writeString req.groupId buf
-      let buf = Binary.writeInt32 req.sessionTimeout buf
-      let buf = 
-        if ver >= 1s then Binary.writeInt32 req.rebalanceTimeout buf
-        else buf
-      let buf = Binary.writeString req.memberId buf
-      let buf = Binary.writeString req.protocolType buf
-      let buf = GroupProtocols.write req.groupProtocols buf
-      buf
-
-    let internal ReadResponse (ver:ApiVersion, buf:BinaryZipper) =
-      let tt = 
+    end
+  with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let throttleTimeMs = 
         if ver >= 2s then buf.ReadInt32 ()
         else 0
-      let ec = buf.ReadInt16 ()
-      let gid = buf.ReadInt32 ()
-      let gp = buf.ReadString ()
-      let lid = buf.ReadString ()
-      let mid = buf.ReadString ()
-      let ms = Members.Read buf
-      Response(tt, ec, gid, gp, lid, mid, ms)
+      let errorCode = buf.ReadInt16 ()
+      let groupId = buf.ReadInt32 ()
+      let groupProtocol = buf.ReadString ()
+      let leaderId = buf.ReadString ()
+      let memberId = buf.ReadString ()
+      let members = Members.Read buf
+      JoinGroupResponse(throttleTimeMs, errorCode, groupId, groupProtocol, leaderId, memberId, members)
         
 
   [<NoEquality;NoComparison>]
@@ -1136,11 +1252,15 @@ module Protocol =
     end
   with
 
-    static member internal size (x:GroupAssignment) =
-      Binary.sizeArray x.members (fun (memId, memAssign) -> Binary.sizeString memId + Binary.sizeBytes memAssign)
+    static member internal Size (_:ApiVersion, req:GroupAssignment) =
+      Binary.sizeArray req.members (fun (memId, memAssign) -> Binary.sizeString memId + Binary.sizeBytes memAssign)
 
-    static member internal write (x:GroupAssignment) buf =
-      buf |> Binary.writeArray x.members (Binary.write2 Binary.writeString Binary.writeBytes)
+    static member internal Write (_:ApiVersion, req:GroupAssignment, buf:BinaryZipper) =
+      let writeMember (buf: BinaryZipper, (memberId, memberAssignment)) =
+        buf.WriteString memberId
+        buf.WriteBytes memberAssignment
+
+      buf.WriteArray(req.members, writeMember)
 
   /// The sync group request is used by the group leader to assign state (e.g.
   /// partition assignments) to all members of the current generation. All
@@ -1157,20 +1277,17 @@ module Protocol =
         { groupId = groupId; generationId = generationId; memberId = memberId; groupAssignment = groupAssignment }
     end
   with
+    static member internal Size (ver:ApiVersion, req: SyncGroupRequest) =
+      Binary.sizeString req.groupId +
+      Binary.sizeInt32 req.generationId +
+      Binary.sizeString req.memberId +
+      GroupAssignment.Size(ver, req.groupAssignment)
 
-    static member internal size (x:SyncGroupRequest) =
-      Binary.sizeString x.groupId +
-      Binary.sizeInt32 x.generationId +
-      Binary.sizeString x.memberId +
-      GroupAssignment.size x.groupAssignment
-
-    static member internal write (x:SyncGroupRequest) buf =
-      let buf =
-        buf
-        |> Binary.writeString x.groupId
-        |> Binary.writeInt32 x.generationId
-        |> Binary.writeString x.memberId
-      GroupAssignment.write x.groupAssignment buf
+    static member internal Write (ver:ApiVersion, req:SyncGroupRequest, buf:BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.generationId
+      buf.WriteString req.memberId
+      GroupAssignment.Write(ver, req.groupAssignment, buf)
 
   [<NoEquality;NoComparison>]
   type SyncGroupResponse =
@@ -1182,7 +1299,6 @@ module Protocol =
         { throttleTime = throttleTime ; errorCode = errorCode; memberAssignment = memberAssignment }
     end
   with
-
     static member internal Read (ver:ApiVersion,buf:BinaryZipper) =
       let tt = 
         if ver >= 1s then buf.ReadInt32 ()
@@ -1190,6 +1306,7 @@ module Protocol =
       let errorCode = buf.ReadInt16 ()
       let ma = buf.ReadBytes ()
       SyncGroupResponse(tt, errorCode, ma)
+
 
   /// Sent by a consumer to the group coordinator.
   [<NoEquality;NoComparison>]
@@ -1202,30 +1319,37 @@ module Protocol =
         { groupId = groupId; generationId = generationId; memberId = memberId }
     end
   with
+    static member internal Size (_:ApiVersion, req:HeartbeatRequest) =
+      Binary.sizeString req.groupId + Binary.sizeInt32 req.generationId + Binary.sizeString req.memberId
 
-    static member internal size (x:HeartbeatRequest) =
-      Binary.sizeString x.groupId + Binary.sizeInt32 x.generationId + Binary.sizeString x.memberId
-
-    static member internal write (x:HeartbeatRequest) buf =
-      buf
-      |> Binary.writeString x.groupId
-      |> Binary.writeInt32 x.generationId
-      |> Binary.writeString x.memberId
+    static member internal Write (_:ApiVersion, req:HeartbeatRequest, buf: BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteInt32 req.generationId
+      buf.WriteString req.memberId
 
   /// Heartbeat response from the group coordinator.
   [<NoEquality;NoComparison>]
   type HeartbeatResponse =
     struct
       val errorCode : ErrorCode
-      new (errorCode) = { errorCode = errorCode }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, throttleTimeMs) = { errorCode = errorCode ; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver: ApiVersion, buf: BinaryZipper) =
+      match ver with
+      | 0s ->
+        let errorCode = buf.ReadInt16()
+        HeartbeatResponse(errorCode, 0)
+      | 1s ->
+        let throttleTimeMs = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        HeartbeatResponse(errorCode, throttleTimeMs)
+      | _ ->
+        failwithf "Unsupported Heartbeat Response API Version: %i" ver
+        
 
-    static member internal read buf =
-      let errorCode, buf = Binary.readInt16 buf
-      (HeartbeatResponse(errorCode), buf)
-
-  /// An explciti request to leave a group. Preferred over session timeout.
+  /// An explicit request to leave a group. Preferred over session timeout.
   [<NoEquality;NoComparison>]
   type LeaveGroupRequest =
     struct
@@ -1234,24 +1358,33 @@ module Protocol =
       new (groupId, memberId) = { groupId = groupId; memberId = memberId }
     end
   with
+    static member internal Size (_:ApiVersion, req:LeaveGroupRequest) =
+      Binary.sizeString req.groupId + Binary.sizeString req.memberId
 
-    static member internal size (x:LeaveGroupRequest) =
-      Binary.sizeString x.groupId + Binary.sizeString x.memberId
-
-    static member internal write (x:LeaveGroupRequest) buf =
-      buf |> Binary.writeString x.groupId |> Binary.writeString x.memberId
+    static member internal Write (_:ApiVersion, req:LeaveGroupRequest, buf: BinaryZipper) =
+      buf.WriteString req.groupId
+      buf.WriteString req.memberId
 
   [<NoEquality;NoComparison>]
   type LeaveGroupResponse =
     struct
       val errorCode : ErrorCode
-      new (errorCode) = { errorCode = errorCode }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, throttleTimeMs) = { errorCode = errorCode ; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver: ApiVersion, buf:BinaryZipper) =
+      match ver with
+      | 0s ->
+        let errorCode = buf.ReadInt16()
+        LeaveGroupResponse(errorCode, 0)
+      | 1s ->
+        let throttleMs = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        LeaveGroupResponse(errorCode, throttleMs)
+      | _ ->
+        failwithf "Unsupported LeaveGroup Response API Version: %i" ver
 
-    static member internal Read (buf:BinaryZipper) =
-      let errorCode = buf.ReadInt16 ()
-      LeaveGroupResponse(errorCode)
 
   // Consumer groups
   // https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Client-side+Assignment+Proposal
@@ -1355,25 +1488,36 @@ module Protocol =
     struct
     end
   with
-
-    static member size (_:ListGroupsRequest) = 0
-
-    static member write (_:ListGroupsRequest) buf = buf
+    static member Size (_:ApiVersion, _:ListGroupsRequest) = 0
+    static member Write (_:ApiVersion, _:ListGroupsRequest, _:BinaryZipper) = ()
 
   type ListGroupsResponse =
     struct
       val errorCode : ErrorCode
       val groups : (GroupId * ProtocolType)[]
-      new (errorCode, groups) = { errorCode = errorCode; groups = groups }
+      val throttleTimeMs : ThrottleTime
+      new (errorCode, groups, throttleTimeMs) = { errorCode = errorCode; groups = groups ; throttleTimeMs = throttleTimeMs }
     end
   with
+    static member internal Read (ver: ApiVersion, buf: BinaryZipper) =
+      let readGroup (buf: BinaryZipper) =
+        let groupId = buf.ReadString()
+        let protocolType = buf.ReadString()
+        groupId, protocolType
 
-    static member internal read buf =
-      let readGroup =
-        Binary.read2 Binary.readString Binary.readString
-      let errorCode, buf = Binary.readInt16 buf
-      let gs, buf = buf |> Binary.readArray readGroup
-      (ListGroupsResponse(errorCode, gs), buf)
+      match ver with
+      | 0s ->
+        let errorCode = buf.ReadInt16()
+        let groups = buf.ReadArray readGroup
+        ListGroupsResponse(errorCode, groups, 0)
+      | 1s ->
+        let throttleTime = buf.ReadInt32()
+        let errorCode = buf.ReadInt16()
+        let groups = buf.ReadArray readGroup
+        ListGroupsResponse(errorCode, groups, throttleTime)
+      | _ ->
+        failwithf "Unsupported ListGroups Response API Version: %i" ver
+
 
   type State = string
 
@@ -1388,12 +1532,17 @@ module Protocol =
       new (members) = { members = members }
     end
   with
-
-    static member internal read buf =
-      let readGroupMember =
-        Binary.read5 Binary.readString Binary.readString Binary.readString Binary.readBytes Binary.readBytes
-      let xs, buf = buf |> Binary.readArray readGroupMember
-      (GroupMembers(xs), buf)
+    static member internal Read (_:ApiVersion, buf: BinaryZipper) =
+      let readGroupMember (buf: BinaryZipper) =
+        let memberId = buf.ReadString()
+        let clientId = buf.ReadString()
+        let clientHost = buf.ReadString()
+        let memberMetadata = buf.ReadBytes()
+        let memberAssignment = buf.ReadBytes()
+        memberId, clientId, clientHost, memberMetadata, memberAssignment
+      
+      let members = buf.ReadArray readGroupMember
+      GroupMembers(members)
 
   [<NoEquality;NoComparison>]
   type DescribeGroupsRequest =
@@ -1402,33 +1551,44 @@ module Protocol =
       new (groupIds) = { groupIds = groupIds }
     end
   with
+    static member internal Size (_: ApiVersion, req: DescribeGroupsRequest) =
+      Binary.sizeArray req.groupIds Binary.sizeString
+    
+    static member internal Write (_: ApiVersion, req:DescribeGroupsRequest, buf:BinaryZipper) =
+      let writeGroup (buf: BinaryZipper, groupId) =
+        buf.WriteString groupId
 
-    static member internal size (x:DescribeGroupsRequest) =
-      Binary.sizeArray x.groupIds Binary.sizeString
-
-    static member internal write (x:DescribeGroupsRequest) buf =
-      buf |> Binary.writeArray x.groupIds Binary.writeString
-
+      buf.WriteArray (req.groupIds, writeGroup)
 
   [<NoEquality;NoComparison>]
   type DescribeGroupsResponse =
     struct
+      val throttleTime : ThrottleTime
       val groups : (ErrorCode * GroupId * State * ProtocolType * Protocol * GroupMembers)[]
-      new (groups) = { groups = groups }
+      new (groups, throttleTime) = { groups = groups; throttleTime = throttleTime }
     end
   with
+    static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+      let readGroup (buf: BinaryZipper) =
+        let errorCode = buf.ReadInt16()
+        let groupId = buf.ReadString()
+        let state = buf.ReadString()
+        let protocolType = buf.ReadString()
+        let protocol = buf.ReadString()
+        let members = GroupMembers.Read(ver, buf)
+        errorCode, groupId, state, protocolType, protocol, members
 
-    static member internal read buf =
-      let readGroup =
-        Binary.read6
-          Binary.readInt16
-          Binary.readString
-          Binary.readString
-          Binary.readString
-          Binary.readString
-          GroupMembers.read
-      let xs, buf = buf |> Binary.readArray readGroup
-      (DescribeGroupsResponse(xs), buf)
+      match ver with
+      | 0s ->
+        let groups = buf.ReadArray readGroup
+        DescribeGroupsResponse(groups, 0)
+      | 1s ->
+        let throttleTimeMs = buf.ReadInt32()
+        let groups = buf.ReadArray readGroup
+        DescribeGroupsResponse(groups, throttleTimeMs)
+      | _ -> 
+        failwithf "Unsupported DescribeGroups API Response Version: %i" ver
+            
 
   [<NoEquality;NoComparison>]
   type ApiVersionsRequest =
@@ -1444,30 +1604,33 @@ module Protocol =
   type ApiVersionsResponse =
     struct
       val errorCode : ErrorCode
+      val throttleTimeMs : ThrottleTime
       val apiVersions : (ApiKey * MinVersion * MaxVersion)[]
-      new (ec,apiVersions) = { errorCode = ec ; apiVersions = apiVersions }
+      new (ec,apiVersions, throttleTimeMs) = { errorCode = ec ; apiVersions = apiVersions ; throttleTimeMs = throttleTimeMs }
     end
     with
-      static member internal Read (_:ApiVersion, buf:BinaryZipper) =
-        let ec = buf.ReadInt16 ()
+      static member internal Read (ver:ApiVersion, buf:BinaryZipper) =
+        let errorCode = buf.ReadInt16 ()
         let apiVersions = buf.ReadArray (fun buf ->
           let apiKey : ApiKey = enum<ApiKey> (int (buf.ReadInt16 ()))
           let min = buf.ReadInt16 ()
           let max = buf.ReadInt16 ()
           apiKey,min,max)
-        ApiVersionsResponse(ec,apiVersions)
+        let throttleTimeMs =
+          if ver >= 1s then buf.ReadInt32 () else 0
+        ApiVersionsResponse(errorCode,apiVersions, throttleTimeMs)
         
 
   /// A Kafka request message.
   type RequestMessage =
-    | Metadata of Metadata.Request
+    | Metadata of MetadataRequest
     | Fetch of FetchRequest
     | Produce of ProduceRequest
     | Offset of OffsetRequest
     | GroupCoordinator of GroupCoordinatorRequest
     | OffsetCommit of OffsetCommitRequest
     | OffsetFetch of OffsetFetchRequest
-    | JoinGroup of JoinGroup.Request
+    | JoinGroup of JoinGroupRequest
     | SyncGroup of SyncGroupRequest
     | Heartbeat of HeartbeatRequest
     | LeaveGroup of LeaveGroupRequest
@@ -1478,36 +1641,36 @@ module Protocol =
 
     static member internal size (ver:ApiVersion, x:RequestMessage) =
       match x with
-      | Heartbeat x -> HeartbeatRequest.size x
-      | Metadata x -> Metadata.sizeRequest x
-      | Fetch x -> FetchRequest.Size x
-      | Produce x -> ProduceRequest.Size x
+      | Heartbeat x -> HeartbeatRequest.Size (ver,x)
+      | Metadata x -> MetadataRequest.Size (ver,x)
+      | Fetch x -> FetchRequest.Size (ver,x)
+      | Produce x -> ProduceRequest.Size (ver,x)
       | Offset x -> OffsetRequest.Size (ver,x)
-      | GroupCoordinator x -> GroupCoordinatorRequest.size x
+      | GroupCoordinator x -> GroupCoordinatorRequest.Size (ver,x)
       | OffsetCommit x -> OffsetCommitRequest.Size (ver,x)
       | OffsetFetch x -> OffsetFetchRequest.Size (ver,x)
-      | JoinGroup x -> JoinGroup.sizeRequest (ver,x)
-      | SyncGroup x -> SyncGroupRequest.size x
-      | LeaveGroup x -> LeaveGroupRequest.size x
-      | ListGroups x -> ListGroupsRequest.size x
-      | DescribeGroups x -> DescribeGroupsRequest.size x
+      | JoinGroup x -> JoinGroupRequest.Size (ver,x)
+      | SyncGroup x -> SyncGroupRequest.Size (ver,x)
+      | LeaveGroup x -> LeaveGroupRequest.Size (ver,x)
+      | ListGroups x -> ListGroupsRequest.Size (ver,x)
+      | DescribeGroups x -> DescribeGroupsRequest.Size (ver,x)
       | ApiVersions x -> ApiVersionsRequest.Size x
 
     static member internal Write (ver:ApiVersion, x:RequestMessage, buf:BinaryZipper) =
       match x with
-      | Heartbeat x -> HeartbeatRequest.write x buf.Buffer |> ignore
-      | Metadata x -> Metadata.writeRequest x buf.Buffer |> ignore
-      | Fetch x -> FetchRequest.Write (x,buf)
+      | Heartbeat x -> HeartbeatRequest.Write (ver,x,buf)
+      | Metadata x -> MetadataRequest.Write (ver,x,buf)
+      | Fetch x -> FetchRequest.Write (ver,x,buf)
       | Produce x -> ProduceRequest.Write (ver,x,buf)
       | Offset x -> OffsetRequest.Write (ver,x,buf)
-      | GroupCoordinator x -> GroupCoordinatorRequest.write x buf.Buffer |> ignore
+      | GroupCoordinator x -> GroupCoordinatorRequest.Write (ver,x,buf)
       | OffsetCommit x -> OffsetCommitRequest.Write (ver,x,buf)
       | OffsetFetch x -> OffsetFetchRequest.Write (ver, x, buf)
-      | JoinGroup x -> JoinGroup.writeRequest (ver,x) buf.Buffer |> ignore
-      | SyncGroup x -> SyncGroupRequest.write x buf.Buffer |> ignore
-      | LeaveGroup x -> LeaveGroupRequest.write x buf.Buffer |> ignore
-      | ListGroups x -> ListGroupsRequest.write x buf.Buffer |> ignore
-      | DescribeGroups x -> DescribeGroupsRequest.write x buf.Buffer |> ignore
+      | JoinGroup x -> JoinGroupRequest.Write (ver,x,buf) 
+      | SyncGroup x -> SyncGroupRequest.Write (ver,x,buf)
+      | LeaveGroup x -> LeaveGroupRequest.Write (ver,x,buf)
+      | ListGroups x -> ListGroupsRequest.Write (ver,x,buf)
+      | DescribeGroups x -> DescribeGroupsRequest.Write (ver,x,buf) 
       | ApiVersions x -> ApiVersionsRequest.Write (x,buf)
 
     member x.ApiKey =
@@ -1564,7 +1727,7 @@ module Protocol =
     | GroupCoordinatorResponse of GroupCoordinatorResponse
     | OffsetCommitResponse of OffsetCommitResponse
     | OffsetFetchResponse of OffsetFetchResponse
-    | JoinGroupResponse of JoinGroup.Response
+    | JoinGroupResponse of JoinGroupResponse
     | SyncGroupResponse of SyncGroupResponse
     | HeartbeatResponse of HeartbeatResponse
     | LeaveGroupResponse of LeaveGroupResponse
@@ -1576,25 +1739,19 @@ module Protocol =
     /// Decodes the response given the specified ApiKey corresponding to the request.
     static member internal Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
       match apiKey with
-      | ApiKey.Heartbeat ->
-        let x, _ = HeartbeatResponse.read buf.Buffer in (ResponseMessage.HeartbeatResponse x)
-      | ApiKey.Metadata ->
-        let x, _ = MetadataResponse.read buf.Buffer in (ResponseMessage.MetadataResponse x)
+      | ApiKey.Heartbeat -> HeartbeatResponse.Read (apiVer,buf) |> ResponseMessage.HeartbeatResponse 
+      | ApiKey.Metadata -> MetadataResponse.Read (apiVer,buf) |> ResponseMessage.MetadataResponse 
       | ApiKey.Fetch -> FetchResponse.Read (apiVer,buf) |> ResponseMessage.FetchResponse
       | ApiKey.Produce -> ProduceResponse.Read (apiVer,buf) |> ResponseMessage.ProduceResponse
-      | ApiKey.Offset -> OffsetResponse.Read (apiVer, buf) |> ResponseMessage.OffsetResponse
-      | ApiKey.GroupCoordinator ->
-        let x, _ = GroupCoordinatorResponse.read buf.Buffer in (ResponseMessage.GroupCoordinatorResponse x)
-      | ApiKey.OffsetCommit ->
-        let x, _ = OffsetCommitResponse.read buf.Buffer in (ResponseMessage.OffsetCommitResponse x)
+      | ApiKey.Offset -> OffsetResponse.Read (apiVer,buf) |> ResponseMessage.OffsetResponse
+      | ApiKey.GroupCoordinator -> GroupCoordinatorResponse.Read (apiVer, buf) |> ResponseMessage.GroupCoordinatorResponse 
+      | ApiKey.OffsetCommit -> OffsetCommitResponse.Read (apiVer,buf) |> ResponseMessage.OffsetCommitResponse 
       | ApiKey.OffsetFetch -> OffsetFetchResponse.Read(apiVer,buf) |> ResponseMessage.OffsetFetchResponse
-      | ApiKey.JoinGroup -> JoinGroup.ReadResponse (apiVer,buf) |> ResponseMessage.JoinGroupResponse
+      | ApiKey.JoinGroup -> JoinGroupResponse.Read (apiVer,buf) |> ResponseMessage.JoinGroupResponse
       | ApiKey.SyncGroup -> SyncGroupResponse.Read (apiVer,buf) |> ResponseMessage.SyncGroupResponse
-      | ApiKey.LeaveGroup -> LeaveGroupResponse.Read buf |> ResponseMessage.LeaveGroupResponse
-      | ApiKey.ListGroups ->
-        let x, _ = ListGroupsResponse.read buf.Buffer in (ResponseMessage.ListGroupsResponse x)
-      | ApiKey.DescribeGroups ->
-        let x, _ = DescribeGroupsResponse.read buf.Buffer in (ResponseMessage.DescribeGroupsResponse x)
+      | ApiKey.LeaveGroup -> LeaveGroupResponse.Read (apiVer,buf) |> ResponseMessage.LeaveGroupResponse
+      | ApiKey.ListGroups -> ListGroupsResponse.Read (apiVer,buf) |> ResponseMessage.ListGroupsResponse
+      | ApiKey.DescribeGroups -> DescribeGroupsResponse.Read (apiVer,buf) |> ResponseMessage.DescribeGroupsResponse 
       | ApiKey.ApiVersions -> ApiVersionsResponse.Read (apiVer,buf) |> ResponseMessage.ApiVersionsResponse
       | x -> 
         failwith (sprintf "Unsupported ApiKey=%A" x)

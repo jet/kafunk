@@ -9,7 +9,7 @@ let host = argiDefault 2 "localhost"
 
 let conn = Kafka.connHost host
 
-let metadata = Kafka.metadata conn (Metadata.Request([||])) |> Async.RunSynchronously
+let metadata = Kafka.metadata conn (MetadataRequest([||])) |> Async.RunSynchronously
 
 for b in metadata.brokers do
   printfn "broker|host=%s port=%i nodeId=%i" b.host b.port b.nodeId

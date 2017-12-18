@@ -176,7 +176,7 @@ module internal Printers =
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" x.topic ps)
         |> String.concat " ; "
-      sprintf "ProduceRequest|required_acks=%i timeout=%i topics=[%s]" x.requiredAcks x.timeout ts
+      sprintf "ProduceRequest|required_acks=%i timeout=%i topics=[%s] transactionalId=%s" x.requiredAcks x.timeout ts x.transactionalId
 
   type ProduceResponse with
     static member Print (x:ProduceResponse) =
@@ -198,7 +198,7 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps = 
             ps
-            |> Seq.map (fun (p,o,_mb) -> sprintf "(p=%i o=%i)" p o)
+            |> Seq.map (fun (p,o,_,_mb) -> sprintf "(p=%i o=%i)" p o)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -211,10 +211,13 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (p,ec,hwmo,mss,ms) ->
+            |> Seq.map (fun (partition,errorCode,highWatermark,_,logStartOffset,_,messageSetSize,messageSet) ->
               //let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " o=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
-              let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (hwmo - x.offset)) |> Option.getOr ""
-              sprintf "(p=%i error_code=%i hwo=%i mss=%i%s)" p ec hwmo mss offsetInfo)
+              let offsetInfo = 
+                messageSet.messages 
+                |> Seq.tryItem 0 
+                |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (highWatermark - x.offset)) |> Option.getOr ""
+              sprintf "(p=%i error_code=%i lso=%i hwo=%i mss=%i%s)" partition errorCode logStartOffset highWatermark messageSetSize offsetInfo)
             |> String.concat ";"
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
@@ -315,12 +318,12 @@ module internal Printers =
       sprintf "GroupCoordinatorResponse|coordinator_id=%i host=%s port=%i error_code=%i" 
         x.coordinatorId x.coordinatorHost x.coordinatorPort x.errorCode
 
-  type JoinGroup.Request with
-    static member Print (x:JoinGroup.Request) =
+  type JoinGroupRequest with
+    static member Print (x:JoinGroupRequest) =
       sprintf "JoinGroupRequest|group_id=%s member_id=%s" x.groupId x.memberId
 
-  type JoinGroup.Response with
-    static member Print (x:JoinGroup.Response) =
+  type JoinGroupResponse with
+    static member Print (x:JoinGroupResponse) =
       sprintf "JoinGroupResponse|generation_id=%i error_code=%i member_id=%s leader_id=%s" x.generationId x.errorCode x.memberId x.leaderId
 
   type SyncGroupRequest with
@@ -346,7 +349,7 @@ module internal Printers =
       | RequestMessage.OffsetFetch x -> OffsetFetchRequest.Print x
       | RequestMessage.Offset x -> OffsetRequest.Print x
       | RequestMessage.Heartbeat x -> HeartbeatRequest.Print x
-      | RequestMessage.JoinGroup x -> JoinGroup.Request.Print x
+      | RequestMessage.JoinGroup x -> JoinGroupRequest.Print x
       | RequestMessage.SyncGroup x -> SyncGroupRequest.Print x
       | _ ->  sprintf "%A" x
 
@@ -361,7 +364,7 @@ module internal Printers =
       | ResponseMessage.OffsetResponse x -> OffsetResponse.Print x
       | ResponseMessage.HeartbeatResponse x -> HeartbeatResponse.Print x
       | ResponseMessage.GroupCoordinatorResponse x -> GroupCoordinatorResponse.Print x
-      | ResponseMessage.JoinGroupResponse x -> JoinGroup.Response.Print x
+      | ResponseMessage.JoinGroupResponse x -> JoinGroupResponse.Print x
       | ResponseMessage.SyncGroupResponse x -> SyncGroupResponse.Print x
       | x -> sprintf "%A" x
 
