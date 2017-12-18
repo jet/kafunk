@@ -107,8 +107,9 @@
     <None Include="StreamRange.fsx" />
     <None Include="CommitOffsets.fsx" />
     <None Include="GroupInfo.fsx" />
-    <None Include="ConfluentProducer.fsx" />
     <None Include="BufferingProducer.fsx" />
+    <None Include="ConfluentProducer.fsx" />
+    <None Include="ConfluentConsumer.fsx" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>
