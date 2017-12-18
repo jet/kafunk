@@ -37,13 +37,13 @@ let connCfg =
   let chanConfig = 
     ChanConfig.create (
       requestTimeout = TimeSpan.FromSeconds 10.0,
-      sendBufferSize = ChanConfig.DefaultSendBufferSize,
+      sendBufferSize = 8092 * 50, // ChanConfig.DefaultSendBufferSize,
       connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
-      bufferPool = BufferPool.bufferManager 100000000L 1000000
-      //bufferPool = BufferPool.GC
+      //bufferPool = BufferPool.bufferManager 100000000L 1000000
+      bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (
@@ -66,10 +66,10 @@ let producerCfg =
     requiredAcks = RequiredAcks.AllInSync,
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
-    batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
-    batchLingerMs = 100,
+    batchSizeBytes = 100000, //ProducerConfig.DefaultBatchSizeBytes,
+    batchLingerMs = 5000,
     compression = CompressionCodec.None,
-    maxInFlightRequests = 1
+    maxInFlightRequests = 2
     )
 
 let producer =

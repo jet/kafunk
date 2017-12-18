@@ -555,6 +555,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
   
+  do Log.info "created_conn|api_version=%O auto_api_versions=%b client_version=%O client_id=%s" 
+        cfg.version cfg.autoApiVersions (Assembly.executingAssemblyVersion ()) cfg.clientId
+
   let apiVersion = ref (Versions.byVersion cfg.version)
   let stateCell : MVar<ClusterState> = MVar.createFull (ClusterState.Zero)
   let cts = new CancellationTokenSource()

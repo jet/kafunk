@@ -92,6 +92,15 @@ module BufferingProducer =
   /// Queues a message into the buffer, returning a value indicating whether it was added.
   let produce (producer:BufferingProducer) (m:ProducerMessage) : bool = 
     producer.buffer.Add m
+
+  /// Queues a message into the buffer, returning an int indicating the number of messages 
+  /// which were added.
+  let produceBatched (producer:BufferingProducer) (ms:ProducerMessage seq) : int =
+    let mutable added = 0
+    for m in ms do
+      if producer.buffer.Add m then
+        added <- added + 1
+    added
   
   /// Returns the corresponding producer.
   let producer (bp:BufferingProducer) : Producer =
