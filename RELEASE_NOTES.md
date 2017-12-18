@@ -1,12 +1,15 @@
-### 0.1.13 
+### 0.1.13-alpha01 - 18.12.2017 
 * Consumers will continue to run if not assigned partitions.
 * Fixed 'Consumer.fetchOffsets' returning no offsets when Array.empty is passed in as partitions per topic
 * Fixed 'Consumer.stream' function that sometimes causes starvation when AsyncSeq.mergeAll would prioritize first few tasks rather than later
-* Added versioning support for Kafka APIs for Produce, Fetch, Offset, Metadata, OffsetCommit, OffsetFetch, GroupCoordinator, JoinGroup, Heartbeat, LeaveGroup, 
-SyncGroup, DescribeGroups, ListGroups, ApiVersions
+* Added auto versioning support for Kafka APIs for Produce, Fetch, Offset, Metadata, OffsetCommit, OffsetFetch, GroupCoordinator, JoinGroup, Heartbeat, LeaveGroup, 
+SyncGroup, DescribeGroups, ListGroups, ApiVersions.
+* Added an INFO message printed by connection to show protocol and client versions.
+* Adjusted ConsumerConfig.[fetchMaxWaitMs, fetchMinBytes] to match Kafka native client defaults.
+* BufferingProducer.produceBatched
 
 ### 0.1.12 - 13.12.2017
-* Buffering producer
+* Buffering producer experimental module.
 
 ### 0.1.11 - 12.12.2017
 * Added support for all versions of the OffsetFetch API in the Kafka protocol.

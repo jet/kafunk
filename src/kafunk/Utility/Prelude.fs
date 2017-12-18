@@ -23,6 +23,16 @@ type Compile = CompilationRepresentationAttribute
 let [<Literal>] Module = CompilationRepresentationFlags.ModuleSuffix
 
 
+[<Compile(Module)>]
+module Assembly =
+  
+  let executingAssemblyVersion () =
+    let assembly = System.Reflection.Assembly.GetExecutingAssembly()
+    let name = assembly.GetName()
+    let version = name.Version
+    version
+
+
 /// Operations on IDisposable.
 module Disposable =
   

@@ -237,11 +237,11 @@ type ConsumerConfig = {
     /// Gets the default heartbeat frequency = 3.
     static member DefaultHeartbeatFrequency = 3
 
-    /// Gets the default fetch min bytes = 0.
-    static member DefaultFetchMinBytes = 0
+    /// Gets the default fetch min bytes = 1.
+    static member DefaultFetchMinBytes = 1
     
-    /// Gets the default fetch max wait = 0.
-    static member DefaultFetchMaxWait = 0
+    /// Gets the default fetch max wait = 500.
+    static member DefaultFetchMaxWait = 500
 
     /// Gets the default fetch max bytes = 1048576.
     static member DefaultFetchMaxBytes = 1048576
