@@ -30,21 +30,21 @@ let go = async {
         //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-        version = Versions.V_0_10_1,
+        version = Versions.V_0_9_0,
         autoApiVersions = false)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
       groupId = group, 
       topic = topic, 
-      autoOffsetReset = AutoOffsetReset.StartFromTime Time.LatestOffset,
-      fetchMaxBytes = 500000,
+      autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
+      fetchMaxBytes = 5000000,
       fetchMinBytes = 1,
-      fetchMaxWaitMs = 1000,
+      //fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,
       sessionTimeout = 30000,
       heartbeatFrequency = 3,
-      checkCrc = true,
+      checkCrc = false,
       endOfTopicPollPolicy = RetryPolicy.constantMs 1000
     )
   let! consumer = 
