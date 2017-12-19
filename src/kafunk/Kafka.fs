@@ -394,8 +394,8 @@ type private RetryAction =
 
       | ResponseMessage.OffsetFetchResponse r -> 
         match r.errorCode with
-        | Some eCode -> Some (eCode, RetryAction.PassThru)
-        | None ->
+        | ec when ec <> ErrorCode.NoError -> Some (ec, RetryAction.PassThru)
+        | _ ->
             r.topics
             |> Seq.tryPick (fun (_t,ps) ->
               ps
@@ -512,10 +512,10 @@ type KafkaConfig = {
 
 } with
 
-  /// The default Kafka server version = 0.9.0.
-  static member DefaultVersion = Version.Parse "0.9.0"
+  /// The default Kafka server version = 0.10.1.
+  static member DefaultVersion = Version.Parse "0.10.1"
 
-  /// The default setting for supporting auto API versions.
+  /// The default setting for supporting auto API versions = false.
   static member DefaultAutoApiVersions = false
 
   /// The default broker channel configuration.
@@ -555,8 +555,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   static let Log = Log.create "Kafunk.Conn"
   
-  do Log.info "created_conn|api_version=%O auto_api_versions=%b client_version=%O client_id=%s" 
-        cfg.version cfg.autoApiVersions (Assembly.executingAssemblyVersion ()) cfg.clientId
+  do Log.info "created_conn|api_version=%O auto_api_versions=%b client_version=%O client_id=%s conn_id=%s" 
+        cfg.version cfg.autoApiVersions (Assembly.executingAssemblyVersion ()) cfg.clientId cfg.connId
 
   let apiVersion = ref (Versions.byVersion cfg.version)
   let stateCell : MVar<ClusterState> = MVar.createFull (ClusterState.Zero)

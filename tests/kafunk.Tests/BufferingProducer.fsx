@@ -36,12 +36,12 @@ let producerCfg =
   ProducerConfig.create (
     topic, 
     Partitioner.roundRobin, 
-    requiredAcks = RequiredAcks.AllInSync,
+    requiredAcks = RequiredAcks.Local,
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
-    batchSizeBytes = ProducerConfig.DefaultBatchSizeBytes,
+    batchSizeBytes = 100000, //ProducerConfig.DefaultBatchSizeBytes,
     //batchSizeBytes = 0,
-    batchLingerMs = ProducerConfig.DefaultBatchLingerMs,
+    batchLingerMs = 100, //ProducerConfig.DefaultBatchLingerMs,
     compression = CompressionCodec.None
     )
 
@@ -50,12 +50,11 @@ let producer = Producer.create conn producerCfg
 let bufConfig = { 
   BufferingProducerConfig.bufferType = ProducerBufferType.Blocking
   capacity = 100000
-  batchSize = 100
+  batchSize = 10000
   batchTimeMs = 1000
   timeIntervalMs = 90 }
 
 let buffer = BufferingProducer.create producer bufConfig
-let produce = BufferingProducer.produce buffer
 
 // subscribe to discarding event
 buffer
@@ -64,8 +63,12 @@ buffer
 
 // subscribe to blocking event
 buffer
-|> BufferingProducer.blocking  
-|> Event.add (Log.warn "buffering_producer_blocking_warning|cap=%d, size=%d" bufConfig.capacity)
+|> BufferingProducer.blocking
+|> Observable.bufferByTime (TimeSpan.FromSeconds 1.0)
+|> Observable.filter (fun batch -> batch.Length > 0)
+|> Observable.subscribe (fun batch ->
+  Log.warn "buffering_producer_blocking_warning|capacity=%d count=%i" bufConfig.capacity batch.Length)
+|> ignore
 
 // subscribe to error event
 buffer
@@ -73,40 +76,75 @@ buffer
 |> Event.add (fun (e,_) -> Log.error "buffering_producer_error|error=%O" e)
 
 let sw = Stopwatch.StartNew()
-let timer = Metrics.timer Log 5000
 
-let mutable prev = sw.ElapsedMilliseconds
+//let timer = Metrics.timer Log 5000
 
-let countLatency (_:ProducerResult[]) = 
-  let current = sw.ElapsedMilliseconds
-  timer.Record(int(current - prev))
-  prev <- current
+//let mutable prev = sw.ElapsedMilliseconds
+
+//let countLatency (_:ProducerResult[]) = 
+//  let current = sw.ElapsedMilliseconds
+//  timer.Record(int(current - prev))
+//  prev <- current
+
+//// Subscribe result to show the time interval of writting to Kafka
+//buffer
+//|> BufferingProducer.results 
+//|> Event.add countLatency
 
 // Subscribe result to show the time interval of writting to Kafka
 buffer
 |> BufferingProducer.results 
-|> Event.add countLatency
+|> Observable.bufferByTime (TimeSpan.FromSeconds 1.0)
+|> Observable.filter (fun batch -> batch.Length > 0)
+|> Observable.choose (fun batch -> 
+  let batch = batch |> Array.concat in 
+  if batch.Length > 0 then Some batch
+  else None)
+|> Observable.subscribe (fun batch -> 
+  let str =
+    batch
+    |> Seq.groupBy (fun r -> r.partition)
+    |> Seq.map (fun (p,xs) -> 
+      let o = xs |> Seq.map (fun r -> r.offset) |> Seq.max
+      sprintf "[p=%i o=%i]" p o)
+    |> String.concat " ; "
+  Log.info "produced_batch|offsets=[%s]" str)
+|> ignore
 
 let mutable completed = 0L
 
-Seq.init batchCount id
-|> Seq.map (fun batchNo -> async {
-  //do! Async.Sleep 10
-  let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
-  let res =
-    msgs
-    |> Seq.map (fun m -> produce m)
-  let (total: int) = Seq.fold (fun s x -> if x then (s + 1) else s) 0 res
-  Interlocked.Add(&completed, int64 total) |> ignore
-  //Log.info "completed=%i total=%i" completed total 
-})
-|> Async.parallelThrottledIgnore parallelism
-|> Async.RunSynchronously
+let go = async {
 
-Log.info "awaiting_flush"
+  let monitor = async {
+    while true do
+      do! Async.Sleep (1000 * 5)
+      let completed = completed
+      let mb = (int64 completed * int64 messageSize) / int64 1000000
+      Log.info "completed=%i elapsed_sec=%f MB=%i" completed sw.Elapsed.TotalSeconds mb }
 
-BufferingProducer.close buffer
-(BufferingProducer.flushTask buffer).Wait ()
+  let! _ = Async.StartChild monitor
+  
+  do!
+    Seq.init batchCount id
+    |> Seq.map (fun batchNo -> async {
+      do! Async.Sleep 10
+      let msgs = Array.init batchSize (fun i -> ProducerMessage.ofBytes payload)
+      for m in msgs do
+        BufferingProducer.produce buffer m |> ignore      
+      Interlocked.Add(&completed, int64 batchSize) |> ignore
+    })
+    |> Async.parallelThrottledIgnore parallelism
+
+  BufferingProducer.close buffer
+
+  Log.info "awaiting_flush"
+
+  do! BufferingProducer.flushTask buffer |> Async.awaitTaskCancellationAsError
+
+}
+
+try Async.RunSynchronously go
+with ex -> Log.error "ERROR|%O" ex
 
 sw.Stop ()
 
@@ -116,5 +154,4 @@ let ratePerSec = float completed / sw.Elapsed.TotalSeconds
 Log.info "producer_run_completed|messages=%i missing=%i batch_size=%i message_size=%i parallelism=%i elapsed_sec=%f rate_per_sec=%f MB=%i" 
   completed missing batchSize messageSize parallelism sw.Elapsed.TotalSeconds ratePerSec volumeMB
 
-
-Thread.Sleep 60000
+//Thread.Sleep 60000

@@ -7,9 +7,6 @@ open System.Threading.Tasks
 /// A buffering producer.
 type BufferingProducer = private {
 
-  /// The producer
-  producer : Producer
-
   /// The buffer
   buffer : Buffer<ProducerMessage> 
   
@@ -63,10 +60,11 @@ module BufferingProducer =
     
     let errorHandlingEvent = Event<exn * ProducerMessage seq>()
     let resultHandlingEvent = Event<ProducerResult[]>()
+    let produceBatched = Producer.produceBatched producer
 
-    let consume (producer:Producer) (batch:ProducerMessage seq): Async<unit> = async {
+    let consumeBuffer (batch:ProducerMessage seq) : Async<unit> = async {
       try
-        let! res = Producer.produceBatched producer batch
+        let! res = produceBatched batch
         resultHandlingEvent.Trigger res
         return ()
       with ex ->
@@ -80,9 +78,13 @@ module BufferingProducer =
     
     let buf = new Buffer<ProducerMessage> (bound)
 
-    let flushTask = buf.Consume (config.batchSize, config.batchTimeMs, config.timeIntervalMs, (consume producer)) |> Async.StartAsTask
+    let flushTask = 
+      buf.ToAsyncSeq ()
+      |> AsyncSeq.bufferByCountAndTimeAndTimeInterval config.batchSize config.batchTimeMs config.timeIntervalMs
+      |> AsyncSeq.iterAsync consumeBuffer
+      |> Async.StartAsTask
 
-    { producer = producer ; buffer = buf ; errorEvent = errorHandlingEvent.Publish 
+    { buffer = buf ; errorEvent = errorHandlingEvent.Publish 
       resultEvent = resultHandlingEvent.Publish ; flushTask = flushTask }
   
   /// Get the current size of buffer.
@@ -102,10 +104,6 @@ module BufferingProducer =
         added <- added + 1
     added
   
-  /// Returns the corresponding producer.
-  let producer (bp:BufferingProducer) : Producer =
-    bp.producer
-
   /// Returns an event raised when messages are blocked due to buffer overflow.
   let blocking (producer:BufferingProducer) : IEvent<int> = 
     producer.buffer.Blocking

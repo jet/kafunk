@@ -44,13 +44,10 @@ type Buffer<'a> (bound:BufferBound) =
       queue.Add a
       true
  
-  /// Returns an async computation which consumes the buffer using the specified function, 
-  /// batched by time and space.
-  member __.Consume (batchSize:int, batchTimeMs:int, timeInterval:int,  f:'a[] -> Async<unit>) : Async<unit> =
+  /// Returns an async sequence consuming messages from the buffer.
+  member __.ToAsyncSeq () =
     queue.GetConsumingEnumerable ()
     |> AsyncSeq.ofSeq
-    |> AsyncSeq.bufferByCountAndTimeAndTimeInterval batchSize batchTimeMs timeInterval
-    |> AsyncSeq.iterAsync f
     
   /// Closes the buffer, allowing the consumer to complete.
   member __.Close () =
