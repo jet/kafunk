@@ -8,7 +8,7 @@ open System.Diagnostics
 open System.Threading
 open Refs
 
-Log.MinLevel <- LogLevel.Trace
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let host = argiDefault 1 "localhost"
@@ -42,8 +42,8 @@ let connCfg =
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
-      //bufferPool = BufferPool.bufferManager 100000000L 1000000
-      bufferPool = BufferPool.GC
+      bufferPool = BufferPool.bufferManager 100000000L 1000000
+      //bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (
@@ -54,7 +54,8 @@ let connCfg =
     //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
     bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy,
     //bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
-    version = Versions.V_0_9_0
+    version = Versions.V_0_10_1,
+    autoApiVersions = true
     )
 
 let conn = Kafka.conn connCfg

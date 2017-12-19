@@ -15,11 +15,11 @@ let group = argiDefault 3 "absurd-group"
 let go = async {
   
   let connOld = 
-    let connCfgOld = KafkaConfig.create ([KafkaUri.parse host], version = Protocol.Versions.V_0_8_2)
+    let connCfgOld = KafkaConfig.create ([KafkaUri.parse host], version = Versions.V_0_8_2)
     Kafka.conn connCfgOld
   
   let! metadata = 
-    Kafka.metadata connOld (Metadata.Request([|topic|]))
+    Kafka.metadata connOld (MetadataRequest([|topic|]))
 
   let partitions = 
     metadata.topicMetadata
@@ -43,7 +43,7 @@ let go = async {
   let conn = Kafka.connHost host
 
   let! offsetCommitRes =
-    Kafka.offsetCommit conn (OffsetCommitRequest(group, -1, "", -1L, [| topic, zkOffsets |> Array.map (fun (p,o) -> p,o,"") |]))
+    Kafka.offsetCommit conn (OffsetCommitRequest(group, -1, "", -1L, [| topic, zkOffsets |> Array.map (fun (p,o) -> p,o,0L,"") |]))
 
   Log.info "migrated_offsets|topic=%s offsets=[%s]"
     topic

@@ -1,3 +1,7 @@
+### 0.1.13-alpha02 - 19.12.2017 
+* WARN: Default to use v0.10.1 of broker protocol.
+* Print client and protocol version.
+
 ### 0.1.13-alpha01 - 18.12.2017 
 * Consumers will continue to run if not assigned partitions.
 * Fixed 'Consumer.fetchOffsets' returning no offsets when Array.empty is passed in as partitions per topic

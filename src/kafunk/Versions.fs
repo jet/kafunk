@@ -44,17 +44,17 @@ let internal byApiVersionResponse (x:ApiVersionsResponse) : ApiKey -> ApiVersion
     let (_,_,v) = x.apiVersions.[int key]
     match key with
     | ApiKey.Produce -> min 2s v // TODO: any higher version for produce is currently crashing
-    | ApiKey.Fetch -> min 6s v
+    | ApiKey.Fetch -> min 3s v // TODO: any higher version for offset is currently crashing
     | ApiKey.Offset -> min 1s v // TODO: any higher version for offset is currently crashing
     | ApiKey.Metadata -> min 5s v
-    | ApiKey.OffsetCommit -> min 3s v
-    | ApiKey.OffsetFetch -> min 3s v
+    | ApiKey.OffsetCommit -> min 2s v
+    | ApiKey.OffsetFetch -> min 2s v
     | ApiKey.GroupCoordinator -> min 1s v
     | ApiKey.JoinGroup -> min 2s v 
-    | ApiKey.Heartbeat -> min 1s v
-    | ApiKey.LeaveGroup -> min 1s v
-    | ApiKey.SyncGroup -> min 1s v
-    | ApiKey.DescribeGroups -> min 1s v
-    | ApiKey.ListGroups -> min 1s v
-    | ApiKey.ApiVersions -> min 1s v
-    | _ -> 0s
+    | ApiKey.Heartbeat -> min 0s v
+    | ApiKey.LeaveGroup -> min 0s v
+    | ApiKey.SyncGroup -> min 0s v
+    | ApiKey.DescribeGroups -> min 0s v
+    | ApiKey.ListGroups -> min 0s v
+    | ApiKey.ApiVersions -> min 0s v
+    | _ -> failwithf "unsupported key=%O" key
