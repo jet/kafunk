@@ -55,11 +55,109 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '82', 82)" onmouseover="showTip(event, '82', 82)">
+          <code onmouseout="hideTip(event, '97', 97)" onmouseover="showTip(event, '97', 97)">
             apiVersions c
           </code>
-          <div class="tip" id="82">
+          <div class="tip" id="97">
             <strong>Signature:</strong> c:KafkaConn -&gt; Async&lt;ApiVersionsResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L1011-1011" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '98', 98)" onmouseover="showTip(event, '98', 98)">
+            conn cfg
+          </code>
+          <div class="tip" id="98">
+            <strong>Signature:</strong> cfg:KafkaConfig -&gt; KafkaConn<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L959-959" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Connects to a Kafka cluster.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '99', 99)" onmouseover="showTip(event, '99', 99)">
+            connAsync cfg
+          </code>
+          <div class="tip" id="99">
+            <strong>Signature:</strong> cfg:KafkaConfig -&gt; Async&lt;KafkaConn&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L953-953" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Connects to a Kafka cluster.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '100', 100)" onmouseover="showTip(event, '100', 100)">
+            connHost host
+          </code>
+          <div class="tip" id="100">
+            <strong>Signature:</strong> host:string -&gt; KafkaConn<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L969-969" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Connects to a Kafka cluster given a default configuration.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '101', 101)" onmouseover="showTip(event, '101', 101)">
+            connHostAsync host
+          </code>
+          <div class="tip" id="101">
+            <strong>Signature:</strong> host:string -&gt; Async&lt;KafkaConn&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L963-963" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          <p>Connects to a Kafka cluster given a default configuration.</p>
+
+
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '102', 102)" onmouseover="showTip(event, '102', 102)">
+            describeGroups c
+          </code>
+          <div class="tip" id="102">
+            <strong>Signature:</strong> c:KafkaConn -&gt; DescribeGroupsRequest -&gt; Async&lt;DescribeGroupsResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -73,289 +171,11 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '83', 83)" onmouseover="showTip(event, '83', 83)">
-            conn cfg
-          </code>
-          <div class="tip" id="83">
-            <strong>Signature:</strong> cfg:KafkaConfig -&gt; KafkaConn<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L956-956" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Connects to a Kafka cluster.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '84', 84)" onmouseover="showTip(event, '84', 84)">
-            connAsync cfg
-          </code>
-          <div class="tip" id="84">
-            <strong>Signature:</strong> cfg:KafkaConfig -&gt; Async&lt;KafkaConn&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L950-950" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Connects to a Kafka cluster.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '85', 85)" onmouseover="showTip(event, '85', 85)">
-            connHost host
-          </code>
-          <div class="tip" id="85">
-            <strong>Signature:</strong> host:string -&gt; KafkaConn<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L966-966" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Connects to a Kafka cluster given a default configuration.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '86', 86)" onmouseover="showTip(event, '86', 86)">
-            connHostAsync host
-          </code>
-          <div class="tip" id="86">
-            <strong>Signature:</strong> host:string -&gt; Async&lt;KafkaConn&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L960-960" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          <p>Connects to a Kafka cluster given a default configuration.</p>
-
-
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '87', 87)" onmouseover="showTip(event, '87', 87)">
-            describeGroups c
-          </code>
-          <div class="tip" id="87">
-            <strong>Signature:</strong> c:KafkaConn -&gt; DescribeGroupsRequest -&gt; Async&lt;DescribeGroupsResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L1005-1005" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '88', 88)" onmouseover="showTip(event, '88', 88)">
+          <code onmouseout="hideTip(event, '103', 103)" onmouseover="showTip(event, '103', 103)">
             fetch c
           </code>
-          <div class="tip" id="88">
+          <div class="tip" id="103">
             <strong>Signature:</strong> c:KafkaConn -&gt; FetchRequest -&gt; Async&lt;FetchResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L972-972" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '89', 89)" onmouseover="showTip(event, '89', 89)">
-            groupCoordinator c
-          </code>
-          <div class="tip" id="89">
-            <strong>Signature:</strong> c:KafkaConn -&gt; GroupCoordinatorRequest -&gt; Async&lt;GroupCoordinatorResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L981-981" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '90', 90)" onmouseover="showTip(event, '90', 90)">
-            heartbeat c
-          </code>
-          <div class="tip" id="90">
-            <strong>Signature:</strong> c:KafkaConn -&gt; HeartbeatRequest -&gt; Async&lt;HeartbeatResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L996-996" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '91', 91)" onmouseover="showTip(event, '91', 91)">
-            joinGroup c
-          </code>
-          <div class="tip" id="91">
-            <strong>Signature:</strong> c:KafkaConn -&gt; Request -&gt; Async&lt;Response&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L990-990" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '92', 92)" onmouseover="showTip(event, '92', 92)">
-            leaveGroup c
-          </code>
-          <div class="tip" id="92">
-            <strong>Signature:</strong> c:KafkaConn -&gt; LeaveGroupRequest -&gt; Async&lt;LeaveGroupResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L999-999" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '93', 93)" onmouseover="showTip(event, '93', 93)">
-            listGroups c
-          </code>
-          <div class="tip" id="93">
-            <strong>Signature:</strong> c:KafkaConn -&gt; ListGroupsRequest -&gt; Async&lt;ListGroupsResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L1002-1002" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '94', 94)" onmouseover="showTip(event, '94', 94)">
-            metadata c
-          </code>
-          <div class="tip" id="94">
-            <strong>Signature:</strong> c:KafkaConn -&gt; Request -&gt; Async&lt;MetadataResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L969-969" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '95', 95)" onmouseover="showTip(event, '95', 95)">
-            offset c
-          </code>
-          <div class="tip" id="95">
-            <strong>Signature:</strong> c:KafkaConn -&gt; OffsetRequest -&gt; Async&lt;OffsetResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L978-978" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '96', 96)" onmouseover="showTip(event, '96', 96)">
-            offsetCommit c
-          </code>
-          <div class="tip" id="96">
-            <strong>Signature:</strong> c:KafkaConn -&gt; OffsetCommitRequest -&gt; Async&lt;OffsetCommitResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L984-984" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '97', 97)" onmouseover="showTip(event, '97', 97)">
-            offsetFetch c
-          </code>
-          <div class="tip" id="97">
-            <strong>Signature:</strong> c:KafkaConn -&gt; OffsetFetchRequest -&gt; Async&lt;OffsetFetchResponse&gt;<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L987-987" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '98', 98)" onmouseover="showTip(event, '98', 98)">
-            produce c
-          </code>
-          <div class="tip" id="98">
-            <strong>Signature:</strong> c:KafkaConn -&gt; ProduceRequest -&gt; Async&lt;ProduceResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -369,15 +189,195 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '99', 99)" onmouseover="showTip(event, '99', 99)">
-            syncGroup c
+          <code onmouseout="hideTip(event, '104', 104)" onmouseover="showTip(event, '104', 104)">
+            groupCoordinator c
           </code>
-          <div class="tip" id="99">
-            <strong>Signature:</strong> c:KafkaConn -&gt; SyncGroupRequest -&gt; Async&lt;SyncGroupResponse&gt;<br />
+          <div class="tip" id="104">
+            <strong>Signature:</strong> c:KafkaConn -&gt; GroupCoordinatorRequest -&gt; Async&lt;GroupCoordinatorResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L984-984" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '105', 105)" onmouseover="showTip(event, '105', 105)">
+            heartbeat c
+          </code>
+          <div class="tip" id="105">
+            <strong>Signature:</strong> c:KafkaConn -&gt; HeartbeatRequest -&gt; Async&lt;HeartbeatResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L999-999" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '106', 106)" onmouseover="showTip(event, '106', 106)">
+            joinGroup c
+          </code>
+          <div class="tip" id="106">
+            <strong>Signature:</strong> c:KafkaConn -&gt; JoinGroupRequest -&gt; Async&lt;JoinGroupResponse&gt;<br />
                       </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L993-993" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '107', 107)" onmouseover="showTip(event, '107', 107)">
+            leaveGroup c
+          </code>
+          <div class="tip" id="107">
+            <strong>Signature:</strong> c:KafkaConn -&gt; LeaveGroupRequest -&gt; Async&lt;LeaveGroupResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L1002-1002" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '108', 108)" onmouseover="showTip(event, '108', 108)">
+            listGroups c
+          </code>
+          <div class="tip" id="108">
+            <strong>Signature:</strong> c:KafkaConn -&gt; ListGroupsRequest -&gt; Async&lt;ListGroupsResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L1005-1005" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '109', 109)" onmouseover="showTip(event, '109', 109)">
+            metadata c
+          </code>
+          <div class="tip" id="109">
+            <strong>Signature:</strong> c:KafkaConn -&gt; MetadataRequest -&gt; Async&lt;MetadataResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L972-972" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '110', 110)" onmouseover="showTip(event, '110', 110)">
+            offset c
+          </code>
+          <div class="tip" id="110">
+            <strong>Signature:</strong> c:KafkaConn -&gt; OffsetRequest -&gt; Async&lt;OffsetResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L981-981" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '111', 111)" onmouseover="showTip(event, '111', 111)">
+            offsetCommit c
+          </code>
+          <div class="tip" id="111">
+            <strong>Signature:</strong> c:KafkaConn -&gt; OffsetCommitRequest -&gt; Async&lt;OffsetCommitResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L987-987" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '112', 112)" onmouseover="showTip(event, '112', 112)">
+            offsetFetch c
+          </code>
+          <div class="tip" id="112">
+            <strong>Signature:</strong> c:KafkaConn -&gt; OffsetFetchRequest -&gt; Async&lt;OffsetFetchResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L990-990" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '113', 113)" onmouseover="showTip(event, '113', 113)">
+            produce c
+          </code>
+          <div class="tip" id="113">
+            <strong>Signature:</strong> c:KafkaConn -&gt; ProduceRequest -&gt; Async&lt;ProduceResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L978-978" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '114', 114)" onmouseover="showTip(event, '114', 114)">
+            syncGroup c
+          </code>
+          <div class="tip" id="114">
+            <strong>Signature:</strong> c:KafkaConn -&gt; SyncGroupRequest -&gt; Async&lt;SyncGroupResponse&gt;<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Kafka.fs#L996-996" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

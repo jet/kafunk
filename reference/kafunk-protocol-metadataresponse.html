@@ -54,15 +54,15 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '340', 340)" onmouseover="showTip(event, '340', 340)">
+          <code onmouseout="hideTip(event, '387', 387)" onmouseover="showTip(event, '387', 387)">
             brokers
           </code>
-          <div class="tip" id="340">
+          <div class="tip" id="387">
             <strong>Signature:</strong> Broker []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L573-573" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L632-632" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -72,15 +72,69 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '341', 341)" onmouseover="showTip(event, '341', 341)">
+          <code onmouseout="hideTip(event, '388', 388)" onmouseover="showTip(event, '388', 388)">
+            clusterId
+          </code>
+          <div class="tip" id="388">
+            <strong>Signature:</strong> string<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L635-635" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '389', 389)" onmouseover="showTip(event, '389', 389)">
+            controllerId
+          </code>
+          <div class="tip" id="389">
+            <strong>Signature:</strong> int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L634-634" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '390', 390)" onmouseover="showTip(event, '390', 390)">
+            throttleTimeMs
+          </code>
+          <div class="tip" id="390">
+            <strong>Signature:</strong> ThrottleTime<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L636-636" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '391', 391)" onmouseover="showTip(event, '391', 391)">
             topicMetadata
           </code>
-          <div class="tip" id="341">
+          <div class="tip" id="391">
             <strong>Signature:</strong> TopicMetadata []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L574-574" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L633-633" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -98,15 +152,15 @@ The assignment consists of a leader, a set of replicas and a set of in-sync repl
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '342', 342)" onmouseover="showTip(event, '342', 342)">
-            new(brokers, topicMetadata)
+          <code onmouseout="hideTip(event, '392', 392)" onmouseover="showTip(event, '392', 392)">
+            new(...)
           </code>
-          <div class="tip" id="342">
-            <strong>Signature:</strong> (brokers:Broker [] * topicMetadata:TopicMetadata []) -&gt; MetadataResponse<br />
+          <div class="tip" id="392">
+            <strong>Signature:</strong> (brokers:Broker [] * topicMetadata:TopicMetadata [] * controllerId:int * clusterId:string * throttleTimeMs:ThrottleTime) -&gt; MetadataResponse<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L575-575" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L637-637" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>

@@ -54,6 +54,12 @@
     <tbody>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-abortedtransaction.html">AbortedTransaction</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-apikey.html">ApiKey</a>
           </td>
           <td class="xmldoc"></td>
@@ -233,6 +239,12 @@ Each member in the group will receive the assignment from the leader in the sync
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-errormessage.html">ErrorMessage</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-fetchoffset.html">FetchOffset</a>
           </td>
           <td class="xmldoc"><p>The offset to begin this fetch from.</p>
@@ -250,6 +262,14 @@ Each member in the group will receive the assignment from the leader in the sync
             <a href="kafunk-protocol-fetchresponse.html">FetchResponse</a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-protocol-firstoffset.html">FirstOffset</a>
+          </td>
+          <td class="xmldoc"><p>First offset in an AbortedTransaction</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -345,6 +365,15 @@ are.</p>
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-isolationlevel.html">IsolationLevel</a>
+          </td>
+          <td class="xmldoc"><p>This controls visibility of transactional records. If set to 0, makes all records
+visible. If set to 1, separates aborted transactions so they can be discarded.</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-isr.html">Isr</a>
           </td>
           <td class="xmldoc"><p>Node ids of in-sync replicas.</p>
@@ -353,9 +382,30 @@ are.</p>
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-joingrouprequest.html">JoinGroupRequest</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-protocol-joingroupresponse.html">JoinGroupResponse</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-key.html">Key</a>
           </td>
           <td class="xmldoc"><p>A Kafka message key (bytes).</p>
+
+</td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-protocol-laststableoffset.html">LastStableOffset</a>
+          </td>
+          <td class="xmldoc"><p>The last offset such that the state of all transactional records prior to this offset
+have been decided (ABORTED or COMMITTED)</p>
 
 </td>
         </tr>
@@ -379,7 +429,7 @@ are.</p>
           <td class="type-name">
             <a href="kafunk-protocol-leavegrouprequest.html">LeaveGroupRequest</a>
           </td>
-          <td class="xmldoc"><p>An explciti request to leave a group. Preferred over session timeout.</p>
+          <td class="xmldoc"><p>An explicit request to leave a group. Preferred over session timeout.</p>
 
 </td>
         </tr>
@@ -400,6 +450,14 @@ are.</p>
             <a href="kafunk-protocol-listgroupsresponse.html">ListGroupsResponse</a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-protocol-logstartoffset.html">LogStartOffset</a>
+          </td>
+          <td class="xmldoc"><p>The earliest available offset for a partition.</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -515,6 +573,15 @@ issued.</p>
             <a href="kafunk-protocol-meta.html">Meta</a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-protocol-metadatarequest.html">MetadataRequest</a>
+          </td>
+          <td class="xmldoc"><p>Request metadata on all or a specific set of topics.
+Can be routed to any node in the bootstrap list.</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -669,6 +736,14 @@ give a response.</p>
             <a href="kafunk-protocol-produceresponsetopicitem.html">ProduceResponseTopicItem</a>
           </td>
           <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
+            <a href="kafunk-protocol-producerid.html">ProducerId</a>
+          </td>
+          <td class="xmldoc"><p>Producer id associated with an AbortedTransaction</p>
+
+</td>
         </tr>
         <tr>
           <td class="type-name">
@@ -850,6 +925,12 @@ receipt of the number of acknowledgements in RequiredAcks.</p>
         </tr>
         <tr>
           <td class="type-name">
+            <a href="kafunk-protocol-transactionalid.html">TransactionalId</a>
+          </td>
+          <td class="xmldoc"></td>
+        </tr>
+        <tr>
+          <td class="type-name">
             <a href="kafunk-protocol-value.html">Value</a>
           </td>
           <td class="xmldoc"><p>A Kafka message value (bytes).</p>
@@ -872,18 +953,6 @@ receipt of the number of acknowledgements in RequiredAcks.</p>
         <tr>
           <td class="module-name">
             <a href="kafunk-protocol-errorcodemodule.html">ErrorCode</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-protocol-joingroup.html">JoinGroup</a>
-          </td>
-          <td class="xmldoc"></td>
-        </tr>
-        <tr>
-          <td class="module-name">
-            <a href="kafunk-protocol-metadata.html">Metadata</a>
           </td>
           <td class="xmldoc"></td>
         </tr>

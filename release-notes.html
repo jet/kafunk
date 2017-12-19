@@ -32,6 +32,28 @@
       <div class="row">
         <div class="span9" id="main">
           
+<h3><a name="0-1-13-alpha02-19-12-2017" class="anchor" href="#0-1-13-alpha02-19-12-2017">0.1.13-alpha02 - 19.12.2017</a></h3>
+<ul>
+<li>WARN: Default to use v0.10.1 of broker protocol.</li>
+<li>Print client and protocol version.</li>
+</ul>
+<h3><a name="0-1-13-alpha01-18-12-2017" class="anchor" href="#0-1-13-alpha01-18-12-2017">0.1.13-alpha01 - 18.12.2017</a></h3>
+<ul>
+<li>Consumers will continue to run if not assigned partitions.</li>
+<li>Fixed 'Consumer.fetchOffsets' returning no offsets when Array.empty is passed in as partitions per topic</li>
+<li>Fixed 'Consumer.stream' function that sometimes causes starvation when AsyncSeq.mergeAll would prioritize first few tasks rather than later</li>
+<li>
+Added auto versioning support for Kafka APIs for Produce, Fetch, Offset, Metadata, OffsetCommit, OffsetFetch, GroupCoordinator, JoinGroup, Heartbeat, LeaveGroup, 
+SyncGroup, DescribeGroups, ListGroups, ApiVersions.
+</li>
+<li>Added an INFO message printed by connection to show protocol and client versions.</li>
+<li>Adjusted ConsumerConfig.[fetchMaxWaitMs, fetchMinBytes] to match Kafka native client defaults.</li>
+<li>BufferingProducer.produceBatched</li>
+</ul>
+<h3><a name="0-1-12-13-12-2017" class="anchor" href="#0-1-12-13-12-2017">0.1.12 - 13.12.2017</a></h3>
+<ul>
+<li>Buffering producer experimental module.</li>
+</ul>
 <h3><a name="0-1-11-12-12-2017" class="anchor" href="#0-1-11-12-12-2017">0.1.11 - 12.12.2017</a></h3>
 <ul>
 <li>Added support for all versions of the OffsetFetch API in the Kafka protocol.</li>

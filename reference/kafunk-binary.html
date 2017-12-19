@@ -159,64 +159,10 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '5', 5)" onmouseover="showTip(event, '5', 5)">
-            peekInt16 buf
+            peekBool buf
           </code>
           <div class="tip" id="5">
-            <strong>Signature:</strong> buf:Segment -&gt; int16<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L65-65" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '6', 6)" onmouseover="showTip(event, '6', 6)">
-            peekInt32 buf
-          </code>
-          <div class="tip" id="6">
-            <strong>Signature:</strong> buf:Segment -&gt; int32<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L85-85" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '7', 7)" onmouseover="showTip(event, '7', 7)">
-            peekInt64 buf
-          </code>
-          <div class="tip" id="7">
-            <strong>Signature:</strong> buf:Segment -&gt; int64<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L110-110" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '8', 8)" onmouseover="showTip(event, '8', 8)">
-            peekInt8 buf
-          </code>
-          <div class="tip" id="8">
-            <strong>Signature:</strong> buf:Segment -&gt; int8<br />
+            <strong>Signature:</strong> buf:Segment -&gt; bool<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -230,15 +176,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '9', 9)" onmouseover="showTip(event, '9', 9)">
-            pokeInt16 x buf
+          <code onmouseout="hideTip(event, '6', 6)" onmouseover="showTip(event, '6', 6)">
+            peekInt16 buf
           </code>
-          <div class="tip" id="9">
-            <strong>Signature:</strong> x:int16 -&gt; buf:Segment -&gt; Segment<br />
+          <div class="tip" id="6">
+            <strong>Signature:</strong> buf:Segment -&gt; int16<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L73-73" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L80-80" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -248,15 +194,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '10', 10)" onmouseover="showTip(event, '10', 10)">
-            pokeInt32 x buf
+          <code onmouseout="hideTip(event, '7', 7)" onmouseover="showTip(event, '7', 7)">
+            peekInt32 buf
           </code>
-          <div class="tip" id="10">
-            <strong>Signature:</strong> x:int32 -&gt; buf:Segment -&gt; Segment<br />
+          <div class="tip" id="7">
+            <strong>Signature:</strong> buf:Segment -&gt; int32<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L96-96" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L100-100" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -266,11 +212,11 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '11', 11)" onmouseover="showTip(event, '11', 11)">
-            pokeInt64 x buf
+          <code onmouseout="hideTip(event, '8', 8)" onmouseover="showTip(event, '8', 8)">
+            peekInt64 buf
           </code>
-          <div class="tip" id="11">
-            <strong>Signature:</strong> x:int64 -&gt; buf:Segment -&gt; Segment<br />
+          <div class="tip" id="8">
+            <strong>Signature:</strong> buf:Segment -&gt; int64<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -284,11 +230,29 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '12', 12)" onmouseover="showTip(event, '12', 12)">
-            pokeInt8 x buf
+          <code onmouseout="hideTip(event, '9', 9)" onmouseover="showTip(event, '9', 9)">
+            peekInt8 buf
           </code>
-          <div class="tip" id="12">
-            <strong>Signature:</strong> x:int8 -&gt; buf:Segment -&gt; Segment<br />
+          <div class="tip" id="9">
+            <strong>Signature:</strong> buf:Segment -&gt; int8<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L65-65" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '10', 10)" onmouseover="showTip(event, '10', 10)">
+            pokeBool x buf
+          </code>
+          <div class="tip" id="10">
+            <strong>Signature:</strong> x:bool -&gt; buf:Segment -&gt; Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -302,15 +266,51 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '13', 13)" onmouseover="showTip(event, '13', 13)">
-            read2 readA readB buf
+          <code onmouseout="hideTip(event, '11', 11)" onmouseover="showTip(event, '11', 11)">
+            pokeInt16 x buf
           </code>
-          <div class="tip" id="13">
-            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b) * Segment<br />
-                          <strong>Type parameters:</strong> 'a, 'b          </div>
+          <div class="tip" id="11">
+            <strong>Signature:</strong> x:int16 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L141-141" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L88-88" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '12', 12)" onmouseover="showTip(event, '12', 12)">
+            pokeInt32 x buf
+          </code>
+          <div class="tip" id="12">
+            <strong>Signature:</strong> x:int32 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L111-111" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '13', 13)" onmouseover="showTip(event, '13', 13)">
+            pokeInt64 x buf
+          </code>
+          <div class="tip" id="13">
+            <strong>Signature:</strong> x:int64 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L140-140" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -321,14 +321,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '14', 14)" onmouseover="showTip(event, '14', 14)">
-            read3 readA readB readC buf
+            pokeInt8 x buf
           </code>
           <div class="tip" id="14">
-            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c) * Segment<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
+            <strong>Signature:</strong> x:int8 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L150-150" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L71-71" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -339,14 +339,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '15', 15)" onmouseover="showTip(event, '15', 15)">
-            read4 readA readB readC readD buf
+            read2 readA readB buf
           </code>
           <div class="tip" id="15">
-            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; readD:Reader&lt;&#39;d&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c * &#39;d) * Segment<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd          </div>
+            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b) * Segment<br />
+                          <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L161-161" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L156-156" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -357,14 +357,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '16', 16)" onmouseover="showTip(event, '16', 16)">
-            read5 readA readB readC readD readE buf
+            read3 readA readB readC buf
           </code>
           <div class="tip" id="16">
-            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; readD:Reader&lt;&#39;d&gt; -&gt; readE:Reader&lt;&#39;e&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c * &#39;d * &#39;e) * Segment<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd, 'e          </div>
+            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c) * Segment<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L174-174" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L165-165" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -375,11 +375,29 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '17', 17)" onmouseover="showTip(event, '17', 17)">
-            read6 (...)
+            read4 readA readB readC readD buf
           </code>
           <div class="tip" id="17">
-            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; readD:Reader&lt;&#39;d&gt; -&gt; readE:Reader&lt;&#39;e&gt; -&gt; readF:Reader&lt;&#39;f&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c * &#39;d * &#39;e * &#39;f) * Segment<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd, 'e, 'f          </div>
+            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; readD:Reader&lt;&#39;d&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c * &#39;d) * Segment<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd          </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L176-176" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '18', 18)" onmouseover="showTip(event, '18', 18)">
+            read5 readA readB readC readD readE buf
+          </code>
+          <div class="tip" id="18">
+            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; readD:Reader&lt;&#39;d&gt; -&gt; readE:Reader&lt;&#39;e&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c * &#39;d * &#39;e) * Segment<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd, 'e          </div>
         </td>
         <td class="xmldoc">
             <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L189-189" class="github-link">
@@ -392,33 +410,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '18', 18)" onmouseover="showTip(event, '18', 18)">
-            readArray read buf
-          </code>
-          <div class="tip" id="18">
-            <strong>Signature:</strong> read:Reader&lt;&#39;a&gt; -&gt; buf:Segment -&gt; &#39;a [] * Segment<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L279-279" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
           <code onmouseout="hideTip(event, '19', 19)" onmouseover="showTip(event, '19', 19)">
-            readArrayByteSize expectedSize buf read
+            read6 (...)
           </code>
           <div class="tip" id="19">
-            <strong>Signature:</strong> expectedSize:int -&gt; buf:Segment -&gt; read:(int -&gt; Segment -&gt; Choice&lt;(&#39;a * Segment),Segment&gt;) -&gt; &#39;a [] * Segment<br />
-                          <strong>Type parameters:</strong> 'a          </div>
+            <strong>Signature:</strong> readA:Reader&lt;&#39;a&gt; -&gt; readB:Reader&lt;&#39;b&gt; -&gt; readC:Reader&lt;&#39;c&gt; -&gt; readD:Reader&lt;&#39;d&gt; -&gt; readE:Reader&lt;&#39;e&gt; -&gt; readF:Reader&lt;&#39;f&gt; -&gt; buf:Segment -&gt; (&#39;a * &#39;b * &#39;c * &#39;d * &#39;e * &#39;f) * Segment<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c, 'd, 'e, 'f          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L295-295" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L204-204" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -429,14 +429,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '20', 20)" onmouseover="showTip(event, '20', 20)">
-            readBytes buf
+            readArray read buf
           </code>
           <div class="tip" id="20">
-            <strong>Signature:</strong> buf:Segment -&gt; Segment * Segment<br />
-                      </div>
+            <strong>Signature:</strong> read:Reader&lt;&#39;a&gt; -&gt; buf:Segment -&gt; &#39;a [] * Segment<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L234-234" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L294-294" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -447,14 +447,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '21', 21)" onmouseover="showTip(event, '21', 21)">
-            readInt16 buf
+            readArrayByteSize expectedSize buf read
           </code>
           <div class="tip" id="21">
-            <strong>Signature:</strong> buf:Segment -&gt; int16 * Segment<br />
-                      </div>
+            <strong>Signature:</strong> expectedSize:int -&gt; buf:Segment -&gt; read:(int -&gt; Segment -&gt; Choice&lt;(&#39;a * Segment),Segment&gt;) -&gt; &#39;a [] * Segment<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L70-70" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L310-310" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -465,46 +465,10 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '22', 22)" onmouseover="showTip(event, '22', 22)">
-            readInt32 buf
+            readBool buf
           </code>
           <div class="tip" id="22">
-            <strong>Signature:</strong> buf:Segment -&gt; int32 * Segment<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L93-93" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '23', 23)" onmouseover="showTip(event, '23', 23)">
-            readInt64 buf
-          </code>
-          <div class="tip" id="23">
-            <strong>Signature:</strong> buf:Segment -&gt; int64 * Segment<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L122-122" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '24', 24)" onmouseover="showTip(event, '24', 24)">
-            readInt8 buf
-          </code>
-          <div class="tip" id="24">
-            <strong>Signature:</strong> buf:Segment -&gt; int8 * Segment<br />
+            <strong>Signature:</strong> buf:Segment -&gt; bool * Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -518,15 +482,51 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '25', 25)" onmouseover="showTip(event, '25', 25)">
-            readString buf
+          <code onmouseout="hideTip(event, '23', 23)" onmouseover="showTip(event, '23', 23)">
+            readBytes buf
           </code>
-          <div class="tip" id="25">
-            <strong>Signature:</strong> buf:Segment -&gt; string * Segment<br />
+          <div class="tip" id="23">
+            <strong>Signature:</strong> buf:Segment -&gt; Segment * Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L258-258" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L249-249" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '24', 24)" onmouseover="showTip(event, '24', 24)">
+            readInt16 buf
+          </code>
+          <div class="tip" id="24">
+            <strong>Signature:</strong> buf:Segment -&gt; int16 * Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L85-85" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '25', 25)" onmouseover="showTip(event, '25', 25)">
+            readInt32 buf
+          </code>
+          <div class="tip" id="25">
+            <strong>Signature:</strong> buf:Segment -&gt; int32 * Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L108-108" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -537,9 +537,63 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '26', 26)" onmouseover="showTip(event, '26', 26)">
-            resize count a
+            readInt64 buf
           </code>
           <div class="tip" id="26">
+            <strong>Signature:</strong> buf:Segment -&gt; int64 * Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L137-137" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '27', 27)" onmouseover="showTip(event, '27', 27)">
+            readInt8 buf
+          </code>
+          <div class="tip" id="27">
+            <strong>Signature:</strong> buf:Segment -&gt; int8 * Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L68-68" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '28', 28)" onmouseover="showTip(event, '28', 28)">
+            readString buf
+          </code>
+          <div class="tip" id="28">
+            <strong>Signature:</strong> buf:Segment -&gt; string * Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L273-273" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '29', 29)" onmouseover="showTip(event, '29', 29)">
+            resize count a
+          </code>
+          <div class="tip" id="29">
             <strong>Signature:</strong> count:int -&gt; a:Segment -&gt; ArraySegment&lt;byte&gt;<br />
                       </div>
         </td>
@@ -556,10 +610,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '27', 27)" onmouseover="showTip(event, '27', 27)">
+          <code onmouseout="hideTip(event, '30', 30)" onmouseover="showTip(event, '30', 30)">
             shiftOffset d a
           </code>
-          <div class="tip" id="27">
+          <div class="tip" id="30">
             <strong>Signature:</strong> d:int -&gt; a:Segment -&gt; Segment<br />
                       </div>
         </td>
@@ -576,69 +630,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '28', 28)" onmouseover="showTip(event, '28', 28)">
+          <code onmouseout="hideTip(event, '31', 31)" onmouseover="showTip(event, '31', 31)">
             sizeArray a size
           </code>
-          <div class="tip" id="28">
+          <div class="tip" id="31">
             <strong>Signature:</strong> a:&#39;a [] -&gt; size:(&#39;a -&gt; int) -&gt; int<br />
                           <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L267-267" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '29', 29)" onmouseover="showTip(event, '29', 29)">
-            sizeBytes bytes
-          </code>
-          <div class="tip" id="29">
-            <strong>Signature:</strong> bytes:Segment -&gt; int<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L223-223" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '30', 30)" onmouseover="showTip(event, '30', 30)">
-            sizeInt16 arg1
-          </code>
-          <div class="tip" id="30">
-            <strong>Signature:</strong> int16 -&gt; int<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L63-63" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '31', 31)" onmouseover="showTip(event, '31', 31)">
-            sizeInt32 arg1
-          </code>
-          <div class="tip" id="31">
-            <strong>Signature:</strong> int32 -&gt; int<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L83-83" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L282-282" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -649,28 +649,10 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '32', 32)" onmouseover="showTip(event, '32', 32)">
-            sizeInt64 arg1
+            sizeBool arg1
           </code>
           <div class="tip" id="32">
-            <strong>Signature:</strong> int64 -&gt; int<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L108-108" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '33', 33)" onmouseover="showTip(event, '33', 33)">
-            sizeInt8 arg1
-          </code>
-          <div class="tip" id="33">
-            <strong>Signature:</strong> int8 -&gt; int<br />
+            <strong>Signature:</strong> bool -&gt; int<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -684,15 +666,33 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '34', 34)" onmouseover="showTip(event, '34', 34)">
-            sizeString str
+          <code onmouseout="hideTip(event, '33', 33)" onmouseover="showTip(event, '33', 33)">
+            sizeBytes bytes
           </code>
-          <div class="tip" id="34">
-            <strong>Signature:</strong> str:string -&gt; int<br />
+          <div class="tip" id="33">
+            <strong>Signature:</strong> bytes:Segment -&gt; int<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L246-246" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L238-238" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '34', 34)" onmouseover="showTip(event, '34', 34)">
+            sizeInt16 arg1
+          </code>
+          <div class="tip" id="34">
+            <strong>Signature:</strong> int16 -&gt; int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L78-78" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -703,9 +703,81 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '35', 35)" onmouseover="showTip(event, '35', 35)">
-            toArray s
+            sizeInt32 arg1
           </code>
           <div class="tip" id="35">
+            <strong>Signature:</strong> int32 -&gt; int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L98-98" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '36', 36)" onmouseover="showTip(event, '36', 36)">
+            sizeInt64 arg1
+          </code>
+          <div class="tip" id="36">
+            <strong>Signature:</strong> int64 -&gt; int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L123-123" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '37', 37)" onmouseover="showTip(event, '37', 37)">
+            sizeInt8 arg1
+          </code>
+          <div class="tip" id="37">
+            <strong>Signature:</strong> int8 -&gt; int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L63-63" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '38', 38)" onmouseover="showTip(event, '38', 38)">
+            sizeString str
+          </code>
+          <div class="tip" id="38">
+            <strong>Signature:</strong> str:string -&gt; int<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L261-261" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '39', 39)" onmouseover="showTip(event, '39', 39)">
+            toArray s
+          </code>
+          <div class="tip" id="39">
             <strong>Signature:</strong> s:Segment -&gt; byte []<br />
                       </div>
         </td>
@@ -720,10 +792,10 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '36', 36)" onmouseover="showTip(event, '36', 36)">
+          <code onmouseout="hideTip(event, '40', 40)" onmouseover="showTip(event, '40', 40)">
             toString buf
           </code>
-          <div class="tip" id="36">
+          <div class="tip" id="40">
             <strong>Signature:</strong> buf:Segment -&gt; string<br />
                       </div>
         </td>
@@ -738,87 +810,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '37', 37)" onmouseover="showTip(event, '37', 37)">
+          <code onmouseout="hideTip(event, '41', 41)" onmouseover="showTip(event, '41', 41)">
             write2 writeA writeB (arg3, arg4) buf
           </code>
-          <div class="tip" id="37">
+          <div class="tip" id="41">
             <strong>Signature:</strong> writeA:Writer&lt;&#39;a&gt; -&gt; writeB:Writer&lt;&#39;b&gt; -&gt; (&#39;a * &#39;b) -&gt; buf:Segment -&gt; Segment<br />
                           <strong>Type parameters:</strong> 'a, 'b          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L206-206" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '38', 38)" onmouseover="showTip(event, '38', 38)">
-            write3 (...)
-          </code>
-          <div class="tip" id="38">
-            <strong>Signature:</strong> writeA:Writer&lt;&#39;a&gt; -&gt; writeB:Writer&lt;&#39;b&gt; -&gt; writeC:Writer&lt;&#39;c&gt; -&gt; (&#39;a * &#39;b * &#39;c) -&gt; buf:Segment -&gt; Segment<br />
-                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L214-214" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '39', 39)" onmouseover="showTip(event, '39', 39)">
-            writeArray arr write buf
-          </code>
-          <div class="tip" id="39">
-            <strong>Signature:</strong> arr:&#39;a [] -&gt; write:Writer&lt;&#39;a&gt; -&gt; buf:Segment -&gt; Segment<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L270-270" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '40', 40)" onmouseover="showTip(event, '40', 40)">
-            writeArrayNoSize buf arr write
-          </code>
-          <div class="tip" id="40">
-            <strong>Signature:</strong> buf:Segment -&gt; arr:seq&lt;&#39;a&gt; -&gt; write:Writer&lt;&#39;a&gt; -&gt; Segment<br />
-                          <strong>Type parameters:</strong> 'a          </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L289-289" class="github-link">
-              <img src="../content/img/github.png" class="normal" />
-              <img src="../content/img/github-blue.png" class="hover" />
-            </a>
-          
-        </td>
-      </tr>
-      <tr>
-        <td class="member-name">
-
-          <code onmouseout="hideTip(event, '41', 41)" onmouseover="showTip(event, '41', 41)">
-            writeBytes bytes buf
-          </code>
-          <div class="tip" id="41">
-            <strong>Signature:</strong> bytes:Segment -&gt; buf:Segment -&gt; Segment<br />
-                      </div>
-        </td>
-        <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L226-226" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L221-221" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -829,14 +829,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '42', 42)" onmouseover="showTip(event, '42', 42)">
-            writeInt16 x buf
+            write3 (...)
           </code>
           <div class="tip" id="42">
-            <strong>Signature:</strong> x:int16 -&gt; buf:Segment -&gt; Segment<br />
-                      </div>
+            <strong>Signature:</strong> writeA:Writer&lt;&#39;a&gt; -&gt; writeB:Writer&lt;&#39;b&gt; -&gt; writeC:Writer&lt;&#39;c&gt; -&gt; (&#39;a * &#39;b * &#39;c) -&gt; buf:Segment -&gt; Segment<br />
+                          <strong>Type parameters:</strong> 'a, 'b, 'c          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L80-80" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L229-229" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -847,14 +847,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '43', 43)" onmouseover="showTip(event, '43', 43)">
-            writeInt32 x buf
+            writeArray arr write buf
           </code>
           <div class="tip" id="43">
-            <strong>Signature:</strong> x:int32 -&gt; buf:Segment -&gt; Segment<br />
-                      </div>
+            <strong>Signature:</strong> arr:&#39;a [] -&gt; write:Writer&lt;&#39;a&gt; -&gt; buf:Segment -&gt; Segment<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L105-105" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L285-285" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -865,14 +865,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '44', 44)" onmouseover="showTip(event, '44', 44)">
-            writeInt64 x buf
+            writeArrayNoSize buf arr write
           </code>
           <div class="tip" id="44">
-            <strong>Signature:</strong> x:int64 -&gt; buf:Segment -&gt; Segment<br />
-                      </div>
+            <strong>Signature:</strong> buf:Segment -&gt; arr:seq&lt;&#39;a&gt; -&gt; write:Writer&lt;&#39;a&gt; -&gt; Segment<br />
+                          <strong>Type parameters:</strong> 'a          </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L138-138" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L304-304" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -883,10 +883,10 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '45', 45)" onmouseover="showTip(event, '45', 45)">
-            writeInt8 x buf
+            writeBool x buf
           </code>
           <div class="tip" id="45">
-            <strong>Signature:</strong> x:int8 -&gt; buf:Segment -&gt; Segment<br />
+            <strong>Signature:</strong> x:bool -&gt; buf:Segment -&gt; Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
@@ -901,14 +901,14 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '46', 46)" onmouseover="showTip(event, '46', 46)">
-            writeString str buf
+            writeBytes bytes buf
           </code>
           <div class="tip" id="46">
-            <strong>Signature:</strong> str:string -&gt; buf:Segment -&gt; Segment<br />
+            <strong>Signature:</strong> bytes:Segment -&gt; buf:Segment -&gt; Segment<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L250-250" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L241-241" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -919,9 +919,99 @@
         <td class="member-name">
 
           <code onmouseout="hideTip(event, '47', 47)" onmouseover="showTip(event, '47', 47)">
-            zeros count
+            writeInt16 x buf
           </code>
           <div class="tip" id="47">
+            <strong>Signature:</strong> x:int16 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L95-95" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '48', 48)" onmouseover="showTip(event, '48', 48)">
+            writeInt32 x buf
+          </code>
+          <div class="tip" id="48">
+            <strong>Signature:</strong> x:int32 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L120-120" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '49', 49)" onmouseover="showTip(event, '49', 49)">
+            writeInt64 x buf
+          </code>
+          <div class="tip" id="49">
+            <strong>Signature:</strong> x:int64 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L153-153" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '50', 50)" onmouseover="showTip(event, '50', 50)">
+            writeInt8 x buf
+          </code>
+          <div class="tip" id="50">
+            <strong>Signature:</strong> x:int8 -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L75-75" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '51', 51)" onmouseover="showTip(event, '51', 51)">
+            writeString str buf
+          </code>
+          <div class="tip" id="51">
+            <strong>Signature:</strong> str:string -&gt; buf:Segment -&gt; Segment<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Utility/Binary.fs#L265-265" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '52', 52)" onmouseover="showTip(event, '52', 52)">
+            zeros count
+          </code>
+          <div class="tip" id="52">
             <strong>Signature:</strong> count:int -&gt; Segment<br />
                       </div>
         </td>

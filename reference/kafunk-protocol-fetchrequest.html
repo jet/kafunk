@@ -51,15 +51,51 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '262', 262)" onmouseover="showTip(event, '262', 262)">
+          <code onmouseout="hideTip(event, '281', 281)" onmouseover="showTip(event, '281', 281)">
+            isolationLevel
+          </code>
+          <div class="tip" id="281">
+            <strong>Signature:</strong> IsolationLevel<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L781-781" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '282', 282)" onmouseover="showTip(event, '282', 282)">
+            maxBytes
+          </code>
+          <div class="tip" id="282">
+            <strong>Signature:</strong> MaxBytes<br />
+                      </div>
+        </td>
+        <td class="xmldoc">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L780-780" class="github-link">
+              <img src="../content/img/github.png" class="normal" />
+              <img src="../content/img/github-blue.png" class="hover" />
+            </a>
+          
+        </td>
+      </tr>
+      <tr>
+        <td class="member-name">
+
+          <code onmouseout="hideTip(event, '283', 283)" onmouseover="showTip(event, '283', 283)">
             maxWaitTime
           </code>
-          <div class="tip" id="262">
+          <div class="tip" id="283">
             <strong>Signature:</strong> MaxWaitTime<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L694-694" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L778-778" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -69,15 +105,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '263', 263)" onmouseover="showTip(event, '263', 263)">
+          <code onmouseout="hideTip(event, '284', 284)" onmouseover="showTip(event, '284', 284)">
             minBytes
           </code>
-          <div class="tip" id="263">
+          <div class="tip" id="284">
             <strong>Signature:</strong> MinBytes<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L695-695" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L779-779" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -87,15 +123,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '264', 264)" onmouseover="showTip(event, '264', 264)">
+          <code onmouseout="hideTip(event, '285', 285)" onmouseover="showTip(event, '285', 285)">
             replicaId
           </code>
-          <div class="tip" id="264">
+          <div class="tip" id="285">
             <strong>Signature:</strong> ReplicaId<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L693-693" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L777-777" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -105,15 +141,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '265', 265)" onmouseover="showTip(event, '265', 265)">
+          <code onmouseout="hideTip(event, '286', 286)" onmouseover="showTip(event, '286', 286)">
             topics
           </code>
-          <div class="tip" id="265">
-            <strong>Signature:</strong> (TopicName * (Partition * FetchOffset * MaxBytes) []) []<br />
+          <div class="tip" id="286">
+            <strong>Signature:</strong> (TopicName * (Partition * FetchOffset * LogStartOffset * MaxBytes) []) []<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L696-696" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L782-782" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
@@ -131,15 +167,15 @@
       <tr>
         <td class="member-name">
 
-          <code onmouseout="hideTip(event, '266', 266)" onmouseover="showTip(event, '266', 266)">
+          <code onmouseout="hideTip(event, '287', 287)" onmouseover="showTip(event, '287', 287)">
             new(...)
           </code>
-          <div class="tip" id="266">
-            <strong>Signature:</strong> (replicaId:ReplicaId * maxWaitTime:MaxWaitTime * minBytes:MinBytes * topics:(TopicName * (Partition * FetchOffset * MaxBytes) []) []) -&gt; FetchRequest<br />
+          <div class="tip" id="287">
+            <strong>Signature:</strong> (replicaId:ReplicaId * maxWaitTime:MaxWaitTime * minBytes:MinBytes * topics:(TopicName * (Partition * FetchOffset * LogStartOffset * MaxBytes) []) [] * maxBytes:MaxBytes * isolationLevel:IsolationLevel) -&gt; FetchRequest<br />
                       </div>
         </td>
         <td class="xmldoc">
-            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L697-697" class="github-link">
+            <a href="http://github.com/jet/kafunk/tree/master/src/kafunk/Protocol.fs#L783-783" class="github-link">
               <img src="../content/img/github.png" class="normal" />
               <img src="../content/img/github-blue.png" class="hover" />
             </a>
