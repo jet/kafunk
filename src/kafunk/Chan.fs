@@ -139,7 +139,7 @@ module internal Chan =
   let private Log = Log.create "Kafunk.Chan"
 
   /// Sends a request.
-  let send (ch:Chan) req = ch.send req
+  let inline send (ch:Chan) req = ch.send req
   
   /// Gets the endpoint.
   let endpoint (ch:Chan) = ch.ep
@@ -200,7 +200,8 @@ module internal Chan =
         try
           let! received = Socket.receive s buf
           if received = 0 then 
-            Log.warn "received_empty_buffer|conn_id=%s remote_endpoint=%O" connId ep
+            //Log.warn "received_empty_buffer|conn_id=%s remote_endpoint=%O" connId ep
+            Log.warn "tcp_connection_closed_by_broker|conn_id=%s remote_endpoint=%O" connId ep
             return Failure (ResourceErrorAction.RecoverResume (exn("received_empty_buffer"),0))
           else 
             return Success received

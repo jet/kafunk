@@ -1,3 +1,6 @@
+### 0.1.13 - 20.12.2017
+* Roll-up of 0.1.13-alpha builds after testing
+
 ### 0.1.13-alpha02 - 19.12.2017 
 * WARN: Default to use v0.10.1 of broker protocol.
 * Print client and protocol version.

@@ -360,9 +360,9 @@ type ReqRepSession<'a, 'b, 's> internal
 
   let rec receiveProcess = async {
     try
-      Log.info "starting_receive_loop|remote_endpoint=%O" remoteEndpoint
+      Log.trace "starting_receive_loop|remote_endpoint=%O" remoteEndpoint
       do! receive |> AsyncSeq.iter demux
-      Log.warn "restarting_receive_loop|remote_endpoint=%O" remoteEndpoint
+      Log.trace "restarting_receive_loop|remote_endpoint=%O" remoteEndpoint
       //do! Async.SwitchToThreadPool ()
       return! receiveProcess
     with ex ->
