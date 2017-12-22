@@ -40,7 +40,7 @@ let conn = Kafka.connHost "existential-host"
 // metadata
 
 let metadata = 
-  Kafka.metadata conn (Metadata.Request([|"absurd-topic"|])) 
+  Kafka.metadata conn (MetadataRequest([|"absurd-topic"|])) 
   |> Async.RunSynchronously
 
 for b in metadata.brokers do
