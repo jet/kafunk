@@ -45,9 +45,6 @@ module internal Exn =
   let inline captureEdi (e:exn) =
     ExceptionDispatchInfo.Capture e
 
-  let inline upCast (e:#exn) : exn = upcast e
-
-
 /// The state of a retry workflow.
 [<StructuredFormatDisplay("RetryState({attempt})")>]
 type RetryState =
@@ -86,6 +83,16 @@ module RetryPolicy =
   /// Returns the delay for the specified retry state.
   let delayAt (s:RetryState) (b:RetryPolicy) : TimeSpan option =
     (un b) s
+
+  /// Returns a sequence of delays resulting from the specified retry policy, starting
+  /// at the specified retry state.
+  let delaysFrom (s:RetryState) (p:RetryPolicy) : seq<TimeSpan> =
+    s |> Seq.unfold (fun s -> delayAt s p |> Option.map (fun d -> d, RetryState.next s))
+
+  /// Returns a sequence of delays resulting from the specified retry policy, starting
+  /// at the initial retry state.
+  let delays (p:RetryPolicy) : seq<TimeSpan> =
+    delaysFrom RetryState.init p
 
   /// Returns a backoff strategy where no wait time is greater than the specified value.
   let maxDelay (maxDelay:TimeSpan) (b:RetryPolicy) : RetryPolicy =
@@ -152,28 +159,52 @@ module RetryPolicy =
   let linearBounded (init:TimeSpan) (increment:TimeSpan) (attempts:int) = 
     linear init increment |> maxAttempts attempts
    
-  let randomize r = 
+  let private randomizeMs r = 
     let rand = System.Random()
     let hi, lo = 1.0 + r, 1.0 - r
-    fun (s: TimeSpan) -> (float s.Milliseconds) * (rand.NextDouble() * (hi - lo) + lo) |> TimeSpan.FromMilliseconds
+    fun (ms:int) -> (float ms) * (rand.NextDouble() * (hi - lo) + lo)
   
-  let private checkOverflow (x: TimeSpan) =
-    let millis = x.Milliseconds
-    if millis = System.Int32.MinValue then 2000000000 |> TimeSpan.FromMilliseconds
-    else millis |> TimeSpan.FromMilliseconds
+  let private checkOverflowMs (ms:int) =
+    if ms = System.Int32.MinValue then 2000000000
+    else ms
 
-  // exponentially backs off after every retry
-  let exp (init: TimeSpan) (multiplier) limit : RetryPolicy = 
-    create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> (fun s -> min limit s) |> Some)
+  /// A retry policy with exponential, randomized and limited backoff.
+  /// @init - the initial delay
+  /// @multiplier - exponential multiplier taken to the power of the attempt number
+  /// @limitMs - the maximum delay
+  /// @attempts - the maximum number of attempts
+  let expLimitBoundedMs (initDelayMs:int) (multiplier:float) (delayLimitMs:int) (attempts:int) : RetryPolicy = 
+    create (fun s ->
+      let x = int (float initDelayMs * pown multiplier (s.attempt - 1))
+      let x = checkOverflowMs x
+      let x = max (min delayLimitMs (int x)) initDelayMs
+      TimeSpan.FromMilliseconds x |> Some)
+    |> maxAttempts attempts
 
-  // exponential backoff after retry with randomized backoff times (helps spread out retries for multiple clients
-  let expRand init multiplier limit = 
-    let randomize = randomize 0.1
-    create <| (fun s -> (TimeSpan.Mutiply init (pown multiplier s.attempt)) |> checkOverflow |> randomize |> (fun s -> min limit s) |> Some)
+  /// A retry policy with exponential, randomized and limited backoff.
+  /// @init - the initial delay
+  /// @multiplier - exponential multiplier taken to the power of the attempt number
+  /// @randFactor - the randomization factor
+  /// @limitMs - the maximum delay
+  /// @attempts - the maximum number of attempts
+  let expRandLimitBoundedMs (initDelayMs:int) (multiplier:float) (randFactor:float) (delayLimitMs:int) (attempts:int) : RetryPolicy = 
+    let randomize = randomizeMs randFactor
+    create (fun s ->
+      let x = int (float initDelayMs * pown multiplier (s.attempt - 1))
+      let x = checkOverflowMs x
+      let x = randomize x
+      let x = max (min delayLimitMs (int x)) initDelayMs
+      TimeSpan.FromMilliseconds x |> Some)
+    |> maxAttempts attempts
 
-  // default exponential backoff retry strategy with jitter
-  let defaultExpRetry init = 
-    expRand init 2
+  /// A retry policy with exponential, randomized and limited backoff.
+  /// @init - the initial delay
+  /// @multiplier - exponential multiplier taken to the power of the attempt number
+  /// @randFactor - the randomization factor
+  /// @limitMs - the maximum delay
+  /// @attempts - the maximum number of attempts
+  let expRandLimitBounded (init:TimeSpan) (multiplier:float) (randFactor:float) (limit:TimeSpan) (attempts:int) : RetryPolicy = 
+    expRandLimitBoundedMs (int init.TotalMilliseconds) multiplier randFactor (int limit.TotalMilliseconds) attempts
 
 /// A retry queue.
 [<StructuredFormatDisplay("RetryQueue({items})")>]
