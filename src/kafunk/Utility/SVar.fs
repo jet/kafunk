@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal Kafunk.SVar
+module Kafunk.SVar
 
 open FSharp.Control
 open System.Threading

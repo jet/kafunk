@@ -1,5 +1,7 @@
 ﻿module AssignmentStrategyTests
 
+let () = ()
+
 open NUnit.Framework
 open FSharp.Control
 open Kafunk

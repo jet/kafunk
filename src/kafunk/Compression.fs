@@ -1,5 +1,5 @@
 [<Compile(Module)>]
-module internal Kafunk.Compression
+module Kafunk.Compression
 
 open System.IO
 open System.IO.Compression
@@ -52,6 +52,8 @@ module GZip =
       ver 
       m
     
+#if SNAPPY_NET
+
 [<Compile(Module)>]
 module Snappy = 
   
@@ -152,12 +154,18 @@ module Snappy =
   let decompress (messageVer:ApiVersion) (m:Message) =
     let buf = CompressedMessage.decompress m.value 
     MessageSet.Read (messageVer, 0, 0s, buf.Count, true, BinaryZipper(buf))
+
+#endif
   
 let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   match compression with
   | CompressionCodec.None -> ms
   | CompressionCodec.GZIP -> MessageSet.ofMessage messageVer (GZip.compress messageVer ms)
+
+#if SNAPPY_NET
   | CompressionCodec.Snappy -> MessageSet.ofMessage messageVer (Snappy.compress messageVer ms)
+#endif
+
   | _ -> failwithf "Incorrect compression codec %A" compression
   
 let decompress (messageVer:int16) (ms:MessageSet) =
@@ -170,9 +178,13 @@ let decompress (messageVer:int16) (ms:MessageSet) =
       | CompressionCodec.GZIP ->
         let decompressed = GZip.decompress messageVer msi.message
         decompressed.messages
+
+#if SNAPPY_NET    
       | CompressionCodec.Snappy ->
         let decompressed = Snappy.decompress messageVer msi.message
         decompressed.messages
+#endif
+
       | c -> failwithf "compression_code=%i not supported" c)
     |> MessageSet
     
