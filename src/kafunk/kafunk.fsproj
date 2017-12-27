@@ -14,6 +14,9 @@
     <RepositoryUrl>https://github.com/fsprojects/FSharp.Control.AsyncSeq</RepositoryUrl>
     <AssemblyName>Kafunk</AssemblyName>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net45'">
+    <DefineConstants>NET45</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" Version="3.1.2" Condition="'$(TargetFramework)' == 'net45'" />
     <PackageReference Include="Snappy.NET" Version="1.1.1.4" Condition="'$(TargetFramework)' == 'net45'" />

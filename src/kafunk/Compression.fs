@@ -52,7 +52,7 @@ module GZip =
       ver 
       m
     
-#if SNAPPY_NET
+#if NET45
 
 [<Compile(Module)>]
 module Snappy = 
@@ -162,7 +162,7 @@ let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
   | CompressionCodec.None -> ms
   | CompressionCodec.GZIP -> MessageSet.ofMessage messageVer (GZip.compress messageVer ms)
 
-#if SNAPPY_NET
+#if NET45
   | CompressionCodec.Snappy -> MessageSet.ofMessage messageVer (Snappy.compress messageVer ms)
 #endif
 
@@ -179,7 +179,7 @@ let decompress (messageVer:int16) (ms:MessageSet) =
         let decompressed = GZip.decompress messageVer msi.message
         decompressed.messages
 
-#if SNAPPY_NET    
+#if NET45    
       | CompressionCodec.Snappy ->
         let decompressed = Snappy.decompress messageVer msi.message
         decompressed.messages

@@ -17,4 +17,7 @@ group Test
 
   nuget NUnit
   nuget NUnit.Runners
+  nuget NUnit3TestAdapter
   nuget Confluent.Kafka
+  nuget Microsoft.NET.Test.Sdk
+  
