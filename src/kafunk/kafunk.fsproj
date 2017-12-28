@@ -54,5 +54,4 @@
     <Compile Include="Consumer.fs" />
     <Compile Include="ConsumerInfo.fs" />
   </ItemGroup>
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

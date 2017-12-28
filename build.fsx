@@ -31,6 +31,7 @@ let project = "kafunk"
 let summary = "F# client for Kafka"
 let solutionFile  = "kafunk.sln"
 let buildDir = "bin"
+let projDir = "src/kafunk"
 let testDir = "tests/kafunk.Tests"
 let gitOwner = environVarOrDefault "gitOwner" "jet"
 let gitHome = "https://github.com/" + gitOwner
@@ -144,7 +145,7 @@ Target "SourceLink" (fun _ ->
 Target "NuGet" (fun _ ->    
     DotNetCli.Pack (fun p ->
         { p with
-            Project = project
+            Project = projDir
             OutputPath = buildDir
             AdditionalArgs =
               [ "--no-build"
