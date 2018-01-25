@@ -14,6 +14,7 @@ and SVarNode<'a> = {
 
 /// Operations on stream variables.
 module SVar =
+  open Kafunk.MVar.MVar
   
   let private createNode () =
     { ivar = IVar.create () }
@@ -42,6 +43,14 @@ module SVar =
       return a' })
 
   /// Atomically updates a value in a stream variable.
+  let putOrUpdateAsync (f:'a option -> Async<'a>) (s:SVar<'a>) : Async<'a> =
+    s.state
+    |> MVar.putOrUpdateAsync (fun a -> async {
+      let! a' = f a
+      do putNode s a'
+      return a' })
+
+  /// Atomically updates a value in a stream variable.
   let updateStateAsync (f:'a -> Async<'a * 's>) (s:SVar<'a>) : Async<'s> =
     s.state
     |> MVar.updateStateAsync (fun a -> async {
@@ -52,6 +61,9 @@ module SVar =
   /// Gets the current value of the stream variable.
   let get (s:SVar<'a>) : Async<'a> =
     MVar.get s.state
+
+  let getFastUnsafe (s:SVar<'a>) : 'a option =
+    MVar.getFastUnsafe s.state
 
   let rec private tapImpl (s:SVarNode<'a>) : AsyncSeq<'a> = 
     asyncSeq {
@@ -74,3 +86,6 @@ module SVar =
   let error ex (s:SVar<'a>) =
     let tail = !s.tail
     IVar.error ex tail.ivar
+
+  //let map (f:'a -> Async<'b>) (g:'b -> 'a -> Async<'a>) (s:SVar<'a>) : SVar<'b> =
+  //  failwith ""

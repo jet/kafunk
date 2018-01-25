@@ -15,6 +15,8 @@ type PeriodicCommitQueue = private {
 [<Compile(Module)>]
 module PeriodicCommitQueue =
 
+  let private Log = Log.create "Kafunk.Offsets"
+
   /// Creates a period offset committer, which commits at the specified interval (even if no new offsets are enqueued).
   /// Commits the current offsets assigned to the consumer upon creation.
   /// Returns a pair consisting of the commit queue and a process which commits offsets and reacts to rebalancing.
@@ -29,7 +31,7 @@ module PeriodicCommitQueue =
     let ticks = AsyncSeq.intervalMs (int interval.TotalMilliseconds)
     let commitProc =
       AsyncSeq.mergeChoice4 ticks queuedOffsets rebalance flushes
-      |> AsyncSeq.scanAsync (fun offsets event -> async {
+      |> AsyncSeq.foldAsync (fun offsets event -> async {
         match event with
         | Choice1Of4 _ ->
           let os = offsets |> Map.toArray
@@ -37,8 +39,8 @@ module PeriodicCommitQueue =
             do! commit os
           return offsets
         | Choice2Of4 queued ->
-          return offsets |> Map.addMany queued
-        | Choice3Of4 assigned ->          
+          return offsets |> Map.updateMany queued
+        | Choice3Of4 assigned ->
           return assigned |> Map.ofArray
         | Choice4Of4 (rep:IVar<unit>) ->
           try
@@ -50,7 +52,7 @@ module PeriodicCommitQueue =
             IVar.error ex rep
           return offsets
         }) Map.empty  
-      |> AsyncSeq.iter ignore
+      |> Async.Ignore
     return { proc = commitProc ; queuedOffsets = queuedOffsetsMb ; flushes = flushesMb } }
 
   /// Asynchronously enqueues offsets to commit, replacing any existing commits for the specified topic-partitions.

@@ -1,10 +1,12 @@
 namespace Kafunk
 
-open FSharp.Control
-open Kafunk
+open System.Threading
 open System
 open System.Text
 open System.Collections.Generic
+open System.Threading.Tasks
+open FSharp.Control
+open Kafunk
 
 /// A producer message.
 type ProducerMessage =
@@ -187,7 +189,7 @@ type ProducerConfig = {
 
 /// Producer state corresponding to the state of a cluster.
 [<NoEquality;NoComparison;AutoSerializable(false)>]
-type private ProducerState = {
+type ProducerState = private {
 
   /// The current set of routes.
   routes : ProducerRoutes
@@ -250,8 +252,6 @@ and [<NoEquality;NoComparison;AutoSerializable(false)>] Producer = private {
 /// High-level producer API.
 [<Compile(Module)>]
 module Producer =
-
-  open System.Threading
 
   let private Log = Log.create "Kafunk.Producer"
 
@@ -415,13 +415,14 @@ module Producer =
       partitionCount = partitionCount } }
 
   /// Fetches cluster state and initializes a per-broker produce queue.
-  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (ct:CancellationToken) (_prevState:ProducerState option) = async {
+  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (closed:Task<unit>) (_prevState:ResourceEpoch<ProducerState> option) = async {
 
     let! routes = getProducerRoutes conn cfg.topic
     let partitionCount = routes.partitionCount
     let messageVer = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
 
     let! ct' = Async.CancellationToken
+    let ct = Task.asCancellationToken closed
     let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
 
     let startBrokerQueue (b:Broker) =
@@ -450,9 +451,6 @@ module Producer =
       let batchedProduceStream =
         produceStream
         |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
-        //|> AsyncSeq.toObservable
-        //|> Observable.bufferByTimeAndCondition (TimeSpan.FromMilliseconds (float cfg.batchLingerMs)) batchCond
-        //|> AsyncSeq.ofObservableBuffered
       let sendProcess =
         if cfg.maxInFlightRequests > 1 then        
           batchedProduceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
@@ -461,11 +459,11 @@ module Producer =
       Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i batch_linger=%i"
         cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes cfg.batchLingerMs
       sendProcess
-      |> Async.tryCancelled (fun _ ->
-        Log.info "produce_process_cancelled|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
-        let buffer = flush |> Async.RunSynchronously
-        for batch in buffer do
-          IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
+      //|> Async.tryCancelled (fun _ ->
+      //  //Log.info "produce_process_cancelled|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
+      //  let buffer = flush |> Async.RunSynchronously
+      //  for batch in buffer do
+      //    IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
       |> Async.tryFinally (fun _ ->
         Log.info "produce_process_stopping|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
         let buffer = flush |> Async.RunSynchronously
@@ -495,7 +493,7 @@ module Producer =
       partitionQueues = partitionQueues
       partition = partition } }
 
-  let private sendBatch (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
+  let private enqueueBatchAndWait (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
     if state.partitionQueues.Length < batch.partition then 
       return failwithf "unable to find broker queue for partition=%i" batch.partition 
     else
@@ -539,10 +537,9 @@ module Producer =
             let rs = Array.zeroCreate partitionBatches.Length
             for i = 0 to rs.Length - 1 do
               let partitionBatch = partitionBatches.[i]
-              let rep = IVar.create ()
               let batchSize = messageBatchSizeBytes partitionBatch
-              let b = ProducerMessageBatch(p,partitionBatch,rep,batchSize)
-              let! r = sendBatch producer state b
+              let b = ProducerMessageBatch(p,partitionBatch,(IVar.create()),batchSize)
+              let! r = enqueueBatchAndWait producer state b
               rs.[i] <- r
             return rs }
           yield req }
@@ -564,7 +561,7 @@ module Producer =
         |> Seq.partitionChoices
       if recovers.Length > 0 then
         let ex = Exn.ofSeq (Seq.append recovers retries)
-        return Failure (Resource.ResourceErrorAction.RecoverRetry ex)
+        return Failure (Resource.ResourceErrorAction.CloseRetry ex)
       else
         let ex = Exn.ofSeq retries
         return Failure (Resource.ResourceErrorAction.Retry ex)
@@ -574,15 +571,14 @@ module Producer =
   let private produceBatchWithState (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
       let p,ms = createBatch state.routes.partitionCount
-      let rep = IVar.create ()
-      ProducerMessageBatch(p,ms,rep,messageBatchSizeBytes ms)
-    let! res = sendBatch p state batch
+      ProducerMessageBatch(p,ms,(IVar.create ()),messageBatchSizeBytes ms)
+    let! res = enqueueBatchAndWait p state batch
     match res with
     | Success res -> return Success res
     | Failure err ->
       match producerErrorToRetryAction err with
       | Choice1Of2 ex -> return Failure <| Resource.ResourceErrorAction.Retry ex
-      | Choice2Of2 ex -> return Failure <| Resource.ResourceErrorAction.RecoverRetry ex }
+      | Choice2Of2 ex -> return Failure <| Resource.ResourceErrorAction.CloseRetry ex }
 
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
@@ -594,11 +590,12 @@ module Producer =
       let slack = TimeSpan.FromMilliseconds 5000 // TODO: configurable?
       [ (tcpReqTimeout + batchLinger + slack) ; (prodReqTimeout + batchLinger + slack) ] |> List.max
     let! resource =
-      Resource.recoverableRecreate
+      Resource.create
+        (config.topic)
         (initProducer conn config)
-        (fun (s,v,_,ex) -> async {
+        (fun (s,ex) -> async {
           Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=\"%O\""
-            v config.topic (Printers.partitionCount s.routes.partitionCount) ex
+            s.version config.topic (Printers.partitionCount s.resource.routes.partitionCount) (ex |> Option.getOr null)
           return () })
     let! state = Resource.get resource
     let p = { state = resource ; config = config ; conn = conn ; batchTimeout = batchTimeout }
@@ -616,19 +613,18 @@ module Producer =
   /// selected here will override the partition function that is configured
   /// in ProducerConfig value passed in when connecting to Kafka.
   let produceBatch (p:Producer) (createBatch:PartitionCount -> Partition * ProducerMessage[]) =
-    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchWithState p) createBatch
+    Resource.injectWithRecovery p.conn.Config.requestRetryPolicy (produceBatchWithState p) p.state createBatch
 
   /// Produces a batch of messages, by assigning a partition to each message,
   /// grouping messages by partitions and sending batches by partition in
   /// parallel and collecting the results.
   let produceBatched (p:Producer) (batch:ProducerMessage seq) : Async<ProducerResult[]> =
-    Resource.injectWithRecovery p.state p.conn.Config.requestRetryPolicy (produceBatchedWithState p) batch
+    Resource.injectWithRecovery  p.conn.Config.requestRetryPolicy (produceBatchedWithState p) p.state batch
 
   /// Produces a message. The message will be sent as part of a batch and the
   /// result will correspond to the offset produced by the entire batch.
   let produce (p:Producer) (m:ProducerMessage) =
     produceBatch p (fun ps -> Partitioner.partition p.config.partitioner p.config.topic ps m, [|m|])
-    //produceBatched p [|m|] |> Async.map (Array.item 0)
 
   /// Gets the configuration for the producer.
   let configuration (p:Producer) =

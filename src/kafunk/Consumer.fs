@@ -480,7 +480,6 @@ module Consumer =
             async { return ps }
         return t,partitions })
       |> Async.Parallel
-
     let req = OffsetFetchRequest(groupId, topics)
     let! res = Kafka.offsetFetch conn req
     let oks,errors =
@@ -792,9 +791,9 @@ module Consumer =
     let assignment = Array.map fst initOffsets
     let cfg = c.config
     let topic = cfg.topic
-    use! _cnc = Async.OnCancel (fun () -> 
-      Log.warn "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
-        cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
+    //use! _cnc = Async.OnCancel (fun () -> 
+    //  Log.info "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
+    //    cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
     Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
       cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
     return!
