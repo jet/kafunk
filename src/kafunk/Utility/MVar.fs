@@ -155,8 +155,6 @@ module MVar =
     async.Delay (c.Take)
   
   /// Returns the last known value, if any, without serialization.
-  /// NB: unsafe because the value may be null, but helpful for supporting overlapping
-  /// operations.
   let getFastUnsafe (c:MVar<'a>) : 'a option =
     c.GetFast ()
 

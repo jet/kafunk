@@ -10,6 +10,7 @@ open System.Net.Sockets
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
+open Kafunk.AsyncEx.IVar
   
 type IPAddress with
   static member tryParse (ipString:string) =
@@ -291,8 +292,7 @@ with
 /// Send failures are propagated to the caller who is responsible for recreating the session.
 [<NoEquality;NoComparison;AutoSerializable(false)>]
 type ReqRepSession<'a, 'b, 's> internal
-  (
-    
+  (    
     /// The remote endpoint.
     remoteEndpoint:IPEndPoint,
 
@@ -312,12 +312,13 @@ type ReqRepSession<'a, 'b, 's> internal
     receive:AsyncSeq<Binary.Segment>,
 
     /// Sends a message to the remote host.
-    send:Binary.Segment -> Async<int>) =
+    send:Binary.Segment -> Async<int>,
+    
+    requestTimeout : TimeSpan) =
 
   static let Log = Log.create "Kafunk.TcpSession"
 
-  let txs = new ConcurrentDictionary<CorrelationId, DateTime * 's * TaskCompletionSource<'b>>()
-  let cts = new CancellationTokenSource()
+  let txs = new ConcurrentDictionary<CorrelationId, DateTime * 's * TaskCompletionSource<'b option>>()
 
   let demux (data:Binary.Segment) =
     let sessionData = SessionMessage.decode (data)
@@ -328,7 +329,7 @@ type ReqRepSession<'a, 'b, 's> internal
       let _dt,state,reply = token
       try
         let res = decode (correlationId,state,sessionData.payload)
-        if not (reply.TrySetResult res) then
+        if not (reply.TrySetResult (Some res)) then
           Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
         Log.error "response_decode_exception|correlation_id=%i error=\"%O\"" correlationId ex
@@ -336,55 +337,62 @@ type ReqRepSession<'a, 'b, 's> internal
     else
       Log.trace "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
-  let mux (ct:CancellationToken) (req:'a) =
+  let [<VolatileField>] mutable ctr = CancellationToken.None
+
+  let mux (req:'a) =
     let startTime = DateTime.UtcNow
     let correlationId = correlationId ()
-    let rep = TaskCompletionSource<_>()
+    let rep = TaskCompletionSource<_>()    
     let sessionReq,state = encode (req,correlationId)
     let cancel () =
-      if rep.TrySetException (TimeoutException("The timeout expired before a response was received from the TCP stream.")) then
+      //if rep.TrySetResult None then
+      if rep.TrySetException (OperationCanceledException()) then
         let endTime = DateTime.UtcNow
         let elapsed = endTime - startTime
-        Log.trace "request_cancelled|correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
+        Log.trace "request_cancelled|remote_endpoint=%O correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" 
+          remoteEndpoint correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
         let mutable token = Unchecked.defaultof<_>
         txs.TryRemove(correlationId, &token) |> ignore
+      //else
+      //  let endTime = DateTime.UtcNow
+      //  let elapsed = endTime - startTime
+      //  Log.trace "request_already_completed|remote_endpoint=%O correlation_id=%i elapsed_sec=%f"
+      //    remoteEndpoint correlationId elapsed.TotalSeconds
+        
+    let ct = ctr
     ct.Register (Action(cancel)) |> ignore
+    Task.Delay(requestTimeout).ContinueWith(fun _ -> cancel ()) |> ignore
+
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (startTime,state,rep))) then
         Log.error "clash_of_the_sessions"
         invalidOp (sprintf "clash_of_the_sessions|correlation_id=%i" correlationId)
     | Some res ->
-      rep.SetResult res
+      rep.SetResult (Some res)
     correlationId,sessionReq,rep
 
-  let rec receiveProcess = async {
+  /// Starts the session.
+  member internal __.Start () = async {
+    let! ct = Async.CancellationToken
+    ctr <- ct
     try
-      Log.trace "starting_receive_loop|remote_endpoint=%O" remoteEndpoint
+      Log.trace "starting_session|remote_endpoint=%O" remoteEndpoint
       do! receive |> AsyncSeq.iter demux
-      Log.trace "restarting_receive_loop|remote_endpoint=%O" remoteEndpoint
-      //do! Async.SwitchToThreadPool ()
-      return! receiveProcess
+      //Log.info "session_closed2|remote_endpoint=%O" remoteEndpoint
     with ex ->
-      Log.error "receive_loop_faiure|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
+      Log.error "session_exception|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
       return raise ex }
 
-  let receiveTask : Task<unit> = 
-    Async.StartAsTask (receiveProcess, cancellationToken = cts.Token)
-
-  member internal __.Task = receiveTask
+  member internal __.Close () = async {
+    Log.info "session_closed|remote_endpoint=%O" remoteEndpoint
+    ctr <- CancellationToken.None
+    return () }
 
   member internal __.Send (req:'a) = async {
-    if receiveTask.IsFaulted then return raise receiveTask.Exception else
-    let! ct = Async.CancellationToken
-    let _correlationId,sessionData,rep = mux ct req
-    //Log.trace "sending_request|correlation_id=%i bytes=%i" correlationId sessionData.Count
+    let _correlationId,sessionData,rep = mux req
     let! _sent = send sessionData
-    //Log.trace "request_sent|correlation_id=%i bytes=%i" correlationId sent
     return! rep.Task |> Async.awaitTaskCancellationAsError }
-
-  interface IDisposable with
-    member x.Dispose() = cts.Dispose()
 
 
 /// Operations on network sessions (layer 5).
@@ -407,12 +415,9 @@ module Session =
     (decode:CorrelationId * 's * Binary.Segment -> 'b)
     (awaitResponse:'a -> 'b option)
     (receive:AsyncSeq<Binary.Segment>)
-    (send:Binary.Segment -> Async<int>) =
-      new ReqRepSession<'a, 'b, 's>(remoteEndpoint, correlationId, encode, decode, awaitResponse, receive, send)
+    (send:Binary.Segment -> Async<int>)
+    (requestTimeout:TimeSpan)=
+      new ReqRepSession<'a, 'b, 's>(remoteEndpoint, correlationId, encode, decode, awaitResponse, receive, send, requestTimeout)
 
   /// Sends a request on the session and awaits the response.
   let send (session:ReqRepSession<_, _, _>) req = session.Send req
-
-  /// Gets the Task corresponding to the lifecycle of the session.
-  /// The Task completes with error when the session fails.
-  let task (session:ReqRepSession<_, _, _>) = session.Task

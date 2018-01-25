@@ -8,7 +8,7 @@ open System.Diagnostics
 open System.Threading
 open Refs
 
-//Log.MinLevel <- LogLevel.Trace
+Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let host = argiDefault 1 "localhost"
@@ -36,7 +36,7 @@ let connCfg =
   
   let chanConfig = 
     ChanConfig.create (
-      requestTimeout = TimeSpan.FromSeconds 10.0,
+      requestTimeout = TimeSpan.FromSeconds 15.0,
       sendBufferSize = 8092 * 50, // ChanConfig.DefaultSendBufferSize,
       connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
@@ -47,15 +47,15 @@ let connCfg =
       )
 
   KafkaConfig.create (
-    [KafkaUri.parse host], 
-    //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
+    //[KafkaUri.parse host], 
+    [KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
     requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
     //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
     bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy,
     //bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
     version = Versions.V_0_10_1,
-    autoApiVersions = true
+    autoApiVersions = false
     )
 
 let conn = Kafka.conn connCfg
@@ -68,9 +68,9 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 100000, //ProducerConfig.DefaultBatchSizeBytes,
-    batchLingerMs = 5000,
+    batchLingerMs = 100,
     compression = CompressionCodec.None,
-    maxInFlightRequests = 2
+    maxInFlightRequests = 1
     )
 
 let producer =
