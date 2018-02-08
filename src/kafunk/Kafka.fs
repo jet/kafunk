@@ -530,6 +530,9 @@ type KafkaConfig = {
   /// The default request retry policy = RetryPolicy.constantBoundedMs 1000 20.
   static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 20
 
+  ///// The default request retry policy = RetryPolicy.expRandLimitBoundedMs 100 1.5 0.2 1000 2.
+  //static member DefaultRequestRetryPolicy = RetryPolicy.expRandLimitBoundedMs 100 1.5 0.2 1000 2
+
   /// Creates a Kafka configuration object.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, 
                         ?version, ?autoApiVersions) =
