@@ -1,6 +1,8 @@
 source https://api.nuget.org/v3/index.json
+framework: net40, net45
 
-nuget FSharp.Control.AsyncSeq >= 2.0.18
+nuget FSharp.Core
+nuget FSharp.Control.AsyncSeq
 nuget Snappy.NET
 
 group Build
@@ -15,6 +17,8 @@ group Build
 group Test
   source https://api.nuget.org/v3/index.json
 
+  nuget FSharp.Core
+  nuget FSharp.Control.AsyncSeq
   nuget NUnit
   nuget NUnit.Runners
   nuget Confluent.Kafka

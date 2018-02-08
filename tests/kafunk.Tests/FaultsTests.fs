@@ -151,26 +151,17 @@ let ``Faults.AsyncFunc.retry should retry with condition and retry policy`` () =
 
       shouldEqual expected actual None
 
-//[<Test>]
-//let ``Resource`` () = 
-//  
-//  let go = async {
-//
-//    let! r = 
-//      Resource.recoverableRecreate 
-//        (fun ct prev -> async { return () })
-//        (fun (r,v,s,ex) -> async { return () })
-//
-//    let! op =
-//      r
-//      |> Resource.injectResult
-//        (fun r a -> async {
-//          return Failure (ResourceErrorAction.RecoverResume (exn(""), a))
-//          })
-//
-//
-//    return ()
-//
-//  }
-//
-//  ()
+[<Test>]
+let ``RetryPolicy should work`` () = 
+  
+  let p = RetryPolicy.expLimitBoundedMs 50 1.5 1000 100
+
+  let actual = 
+    RetryPolicy.delays p 
+    |> Seq.map (fun ts -> ts.TotalMilliseconds |> int) 
+    |> Seq.truncate 10
+    |> Seq.toList
+
+  let expected = [50; 75; 112; 168; 253; 379; 569; 854; 1000; 1000]
+
+  shouldEqual expected actual None
