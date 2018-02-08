@@ -2,19 +2,10 @@ RESTRICTION: || (== net40) (== net45)
 NUGET
   remote: https://api.nuget.org/v3/index.json
     Crc32C.NET (1.0.5)
-    FSharp.Control.AsyncSeq (2.0.20)
-      FSharp.Core (>= 3.1.2) - restriction: || (&& (== net40) (>= net45)) (== net45)
-      System.ValueTuple (>= 4.4) - restriction: || (&& (== net40) (>= net45)) (== net45)
+    FSharp.Control.AsyncSeq (2.0.16)
     FSharp.Core (4.3.3)
-    Microsoft.NETCore.Platforms (2.0.1) - restriction: || (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (&& (== net40) (>= net461)) (== net45)
-    NETStandard.Library (2.0.1) - restriction: || (&& (== net40) (>= net45)) (== net45)
-      Microsoft.NETCore.Platforms (>= 1.1) - restriction: || (&& (== net40) (>= monoandroid)) (&& (== net40) (>= monotouch)) (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (&& (== net40) (>= net461)) (&& (== net40) (>= netcoreapp2.0)) (&& (== net40) (>= netstandard1.0)) (&& (== net40) (>= netstandard1.1)) (&& (== net40) (>= netstandard1.2)) (&& (== net40) (>= netstandard1.3)) (&& (== net40) (>= netstandard1.4)) (&& (== net40) (>= netstandard1.5)) (&& (== net40) (>= netstandard1.6)) (&& (== net40) (>= netstandard2.0)) (&& (== net40) (>= portable-net45+win8+wp8+wpa81)) (&& (== net40) (>= portable-net45+win8+wpa81)) (&& (== net40) (>= portable-net451+win81+wpa81)) (&& (== net40) (>= uap10.0)) (&& (== net40) (>= wpa81)) (&& (== net40) (>= xamarinios)) (&& (== net40) (>= xamarinmac)) (&& (== net40) (>= xamarintvos)) (&& (== net40) (>= xamarinwatchos)) (== net45)
-      System.Runtime.InteropServices.RuntimeInformation (>= 4.3) - restriction: || (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (&& (== net40) (>= netstandard1.1)) (&& (== net40) (>= netstandard1.2)) (&& (== net40) (>= netstandard1.3)) (&& (== net40) (>= netstandard1.4)) (&& (== net40) (>= netstandard1.5)) (&& (== net40) (>= netstandard1.6)) (&& (== net40) (>= portable-net45+win8+wpa81)) (&& (== net40) (>= portable-net451+win81+wpa81)) (&& (== net40) (>= uap10.0)) (&& (== net40) (>= wpa81)) (== net45)
     Snappy.NET (1.1.1.8)
       Crc32C.NET (>= 1.0.5)
-    System.Runtime.InteropServices.RuntimeInformation (4.3) - restriction: || (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (== net45)
-    System.ValueTuple (4.4) - restriction: || (&& (== net40) (>= net45)) (== net45)
-      NETStandard.Library (>= 1.6.1) - restriction: || (&& (== net40) (>= netstandard1.0)) (== net45)
 
 GROUP Build
 NUGET
