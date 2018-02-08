@@ -1,5 +1,6 @@
-FSharp.Control.AsyncSeq
 group Test
+FSharp.Core
+FSharp.Control.AsyncSeq
 NUnit
 NUnit.Runners
 Confluent.Kafka
