@@ -62,8 +62,11 @@ module Binary =
 
   let inline sizeInt8 (_:int8) = 1
 
+  let inline peekInt8Offset (buf : Segment) (offset: int) : int8 =
+    int8 buf.Array.[buf.Offset + offset]
+
   let inline peekInt8 (buf : Segment) : int8 =
-    int8 buf.Array.[buf.Offset]
+    peekInt8Offset buf 0
 
   let inline readInt8 (buf : Segment) : int8 * Segment =
     (peekInt8 buf, (buf |> shiftOffset 1))
@@ -342,6 +345,9 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   
   member __.WriteBool (x:bool) =
     buf <- Binary.writeBool x buf
+
+  member __.PeekIn8Offset (offset:int) : int8 =
+    Binary.peekInt8Offset buf offset
 
   member __.ReadInt8 () : int8 =
     let r = Binary.peekInt8 buf
