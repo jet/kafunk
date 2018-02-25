@@ -45,6 +45,14 @@ module internal Exn =
   let inline captureEdi (e:exn) =
     ExceptionDispatchInfo.Capture e
 
+  let rec tryFindByType<'t when 't :> exn> (e:exn) =
+    if e.GetType () = typeof<'t> then Some (e :?> 't)
+    else 
+      match e with
+      | :? AggregateException as ae ->
+        ae.InnerExceptions |> Seq.tryPick (tryFindByType<'t>)
+      | _ -> None
+
 /// The state of a retry workflow.
 [<StructuredFormatDisplay("RetryState({attempt})")>]
 type RetryState =

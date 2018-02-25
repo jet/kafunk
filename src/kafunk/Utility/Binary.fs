@@ -346,8 +346,14 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.WriteBool (x:bool) =
     buf <- Binary.writeBool x buf
 
-  member __.PeekIn8Offset (offset:int) : int8 =
+  member __.PeekInt8Offset (offset:int) : int8 =
     Binary.peekInt8Offset buf offset
+
+  member __.TryPeekInt8Offset (offset:int) : int8 =
+    if buf.Array.Length > buf.Offset + offset then
+      Binary.peekInt8Offset buf offset
+    else
+      0y
 
   member __.ReadInt8 () : int8 =
     let r = Binary.peekInt8 buf

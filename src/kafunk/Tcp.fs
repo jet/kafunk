@@ -286,6 +286,9 @@ with
     let payload = Binary.shiftOffset 4 buf
     SessionMessage (txId,payload)
     
+/// An exception raised on failure to decode a raw TCP response.
+/// This is a fatal exception and should be escalated.
+type ResponseDecodeException (ex:exn) = inherit Exception ("There was an error decoding the raw TCP response.", ex)
 
 /// A multiplexed request/reply session.
 /// Maintains state between requests and responses and contains a process reading the input stream.
@@ -318,10 +321,12 @@ type ReqRepSession<'a, 'b, 's> internal
 
   static let Log = Log.create "Kafunk.TcpSession"
 
+  // these fields define the state of the session
   let txs = new ConcurrentDictionary<CorrelationId, DateTime * 's * TaskCompletionSource<'b option>>()
+  let [<VolatileField>] mutable sessionTask : Task<unit> = null
 
-  let demux (data:Binary.Segment) =
-    let sessionData = SessionMessage.decode (data)
+  member private __.Demux (data:Binary.Segment) =
+    let sessionData = SessionMessage.decode data
     let correlationId = sessionData.tx_id
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
@@ -333,36 +338,22 @@ type ReqRepSession<'a, 'b, 's> internal
           Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
         Log.error "response_decode_exception|correlation_id=%i error=\"%O\"" correlationId ex
-        reply.TrySetException ex |> ignore
+        reply.TrySetException (ResponseDecodeException(ex)) |> ignore
     else
       Log.trace "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
 
-  let [<VolatileField>] mutable ctr = CancellationToken.None
-
-  let mux (req:'a) =
+  member private __.Mux (sessionTask,req) =
     let startTime = DateTime.UtcNow
     let correlationId = correlationId ()
     let rep = TaskCompletionSource<_>()    
     let sessionReq,state = encode (req,correlationId)
-    let cancel () =
-      //if rep.TrySetResult None then
-      if rep.TrySetException (OperationCanceledException()) then
-        let endTime = DateTime.UtcNow
-        let elapsed = endTime - startTime
-        Log.trace "request_cancelled|remote_endpoint=%O correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" 
-          remoteEndpoint correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
-        let mutable token = Unchecked.defaultof<_>
-        txs.TryRemove(correlationId, &token) |> ignore
-      //else
-      //  let endTime = DateTime.UtcNow
-      //  let elapsed = endTime - startTime
-      //  Log.trace "request_already_completed|remote_endpoint=%O correlation_id=%i elapsed_sec=%f"
-      //    remoteEndpoint correlationId elapsed.TotalSeconds
-        
-    let ct = ctr
-    ct.Register (Action(cancel)) |> ignore
-    Task.Delay(requestTimeout).ContinueWith(fun _ -> cancel ()) |> ignore
-
+    let timeout = Task.Delay(requestTimeout)
+    Task.WhenAny (timeout, sessionTask, rep.Task)
+    |> Task.extend (fun t ->
+      if obj.ReferenceEquals (t.Result, sessionTask) then __.Cancel (correlationId,true)
+      elif obj.ReferenceEquals (t.Result, timeout) then  __.Cancel (correlationId,false)
+      else ())
+    |> ignore      
     match awaitResponse req with
     | None ->
       if not (txs.TryAdd(correlationId, (startTime,state,rep))) then
@@ -372,25 +363,37 @@ type ReqRepSession<'a, 'b, 's> internal
       rep.SetResult (Some res)
     correlationId,sessionReq,rep
 
+  member private __.Cancel (correlationId,error) = 
+    let mutable token = Unchecked.defaultof<_>
+    if txs.TryRemove(correlationId, &token) then
+      let startTime,state,rep = token
+      let inProgress = 
+        if error then rep.TrySetException (OperationCanceledException())
+        else rep.TrySetResult None 
+      if inProgress then
+        let endTime = DateTime.UtcNow
+        let elapsed = endTime - startTime
+        Log.trace "request_cancelled|remote_endpoint=%O correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" 
+          remoteEndpoint correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
+
   /// Starts the session.
-  member internal __.Start () = async {
-    let! ct = Async.CancellationToken
-    ctr <- ct
+  member internal __.Start (task:Task<unit>) = async {
+    sessionTask <- task
     try
       Log.trace "starting_session|remote_endpoint=%O" remoteEndpoint
-      do! receive |> AsyncSeq.iter demux
+      do! receive |> AsyncSeq.iter __.Demux
       //Log.info "session_closed2|remote_endpoint=%O" remoteEndpoint
     with ex ->
       Log.error "session_exception|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
       return raise ex }
 
   member internal __.Close () = async {
-    Log.info "session_closed|remote_endpoint=%O" remoteEndpoint
-    ctr <- CancellationToken.None
+    Log.trace "session_closed|remote_endpoint=%O" remoteEndpoint
+    sessionTask <- Task.never
     return () }
 
-  member internal __.Send (req:'a) = async {
-    let _correlationId,sessionData,rep = mux req
+  member internal __.Send (req:'a) = async {    
+    let _correlationId,sessionData,rep = __.Mux (sessionTask,req)
     let! _sent = send sessionData
     return! rep.Task |> Async.awaitTaskCancellationAsError }
 

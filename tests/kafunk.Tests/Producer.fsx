@@ -8,7 +8,7 @@ open System.Diagnostics
 open System.Threading
 open Refs
 
-Log.MinLevel <- LogLevel.Trace
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let host = argiDefault 1 "localhost"

@@ -212,7 +212,7 @@ module internal Chan =
     let! socketAgent = 
       Resource.create 
         (ep.ToString())
-        (fun _ _ -> conn ep)
+        (fun _ _ -> conn ep |> Async.map (fun s -> s, async.Return()))
         close
 
     let send =
@@ -261,36 +261,28 @@ module internal Chan =
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
       ResponseMessage.Read (apiKey,apiVer,BinaryZipper(buf))
 
-    let session =
-      Session.requestReply
-        (EndPoint.endpoint ep) Session.corrId encode decode RequestMessage.awaitResponse receiveStream send config.requestTimeout
+    let! sessionAgent = 
+      Resource.create 
+        (ep.ToString())
+        (fun t _ -> async {
+          //let! _socket = Resource.getResource socketAgent
+          let session =
+            Session.requestReply
+              (EndPoint.endpoint ep) Session.corrId encode decode RequestMessage.awaitResponse receiveStream send config.requestTimeout
+          return session,session.Start t })
+        (fun (ep,_err) -> async {
+          do! ep.resource.Close ()
+          return () })
 
-    let _task = 
-      socketAgent
-      |> Resource.states
-      |> AsyncSeq.iterAsync (fun state -> async {
-        try
-          match state with
-          | ResourceState.Open (_,st) -> 
-            let! _ = Async.cancelWithTask st (session.Start ())
-            return ()
-          | ResourceState.Closed -> 
-            do! session.Close ()
-          | ResourceState.Faulted _ ->
-            do! session.Close ()
-        with ex ->
-          Log.error "session_exception|error=\"%O\"" ex
-          do! Resource.fault socketAgent ex })
-      |> Async.StartAsTask
+    let _task = Resource.link socketAgent sessionAgent
 
     let send = 
-      Session.send session
-      |> Faults.AsyncFunc.retryAsyncConditional config.requestRetryPolicy
-          (fun (_,res) -> not <| Option.isSome res)
-          (fun (_,res) -> 
-            match res with
-            | Some res -> Success res
-            | None -> Failure [ChanTimeout])
-          (fun (_,ress) -> Failure (ress |> List.map (konst ChanTimeout)))
+      let send session req = 
+        Session.send session req
+        |> Async.map (function 
+          | None -> Failure (CloseRetry (exn "timeout"))
+          | Some res -> Success (Success res))
+      sessionAgent
+      |> Resource.injectWithRecovery config.requestRetryPolicy send
 
     return  { ep = ep ; send = send ; socket = socketAgent } }

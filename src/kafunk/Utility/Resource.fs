@@ -14,6 +14,8 @@ let private Log = Log.create "Kafunk.Resource"
 type ResourceEpoch<'r> = {
   resource : 'r
   state : IVar<unit>
+  cts : CancellationTokenSource
+  proc : Task<unit>
   version : int
 } with
   member __.isOpen = not __.state.Task.IsCompleted
@@ -42,6 +44,10 @@ type ResourceState<'a> =
   /// The resource is open.
   | Open of resource:'a * state:Task<unit>
 
+//type IResource<'a> =
+//  abstract Get   : unit -> Async<ResourceEpoch<'a>>
+//  abstract Close : ResourceEpoch<'a> option -> exn option -> Async<unit>
+
 /// An exception raised when attempt is made to access a faulted resource.
 type FaultedResourceException (ex:exn) = inherit Exception ("FaultedResourceException", ex)
 
@@ -49,7 +55,7 @@ type FaultedResourceException (ex:exn) = inherit Exception ("FaultedResourceExce
 type FaultedResourceOperationException (msg:string,exn:exn) = inherit Exception (msg, exn)
 
 /// A recoverable resource, supporting resource-dependant operations.
-type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> option -> Async<'r>, close:ResourceEpoch<'r> * exn option -> Async<unit>) =
+type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> option -> Async<'r * Async<unit>>, close:ResourceEpoch<'r> * exn option -> Async<unit>) =
   
   let name = sprintf "%s[%s]" (typeof<'r>.Name) id
   let cell : SVar<ResourceEpoch<'r>> = SVar.create ()
@@ -72,16 +78,24 @@ type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> op
       | _ ->
         Log.trace "opening_resource|type=%s last_version=%i" name lastVersion
         let state = IVar.create ()
+        let cts = new CancellationTokenSource()
+        state |> IVar.intoCancellationToken cts
         let version = lastVersion + 1
         let! res = create state.Task prevEpoch |> Async.Catch
         match res with
-        | Success r ->
-          return { resource = r ; state = state ; version = version }
+        | Success (r,proc) ->
+          let procTask = Async.StartAsTask (proc, TaskCreationOptions.AttachedToParent, cancellationToken = cts.Token)
+          procTask 
+          |> Task.extend (fun t -> 
+            if t.IsFaulted then 
+              Log.trace "resource_loop_failed|type=%s version=%i error=\"%O\"" name version t.Exception
+              IVar.tryError t.Exception state |> ignore)
+          |> ignore
+          return { resource = r ; state = state ; version = version ; proc = procTask ; cts = cts }
         | Failure e ->
           Log.warn "failed_to_open_resource|type=%s version=%i error=\"%O\"" name version e
           state |> IVar.tryError e |> ignore
-          return { resource = Unchecked.defaultof<_> ; state = state ; version = version } })
-          //return raise (FaultedResourceException e) })
+          return { resource = Unchecked.defaultof<_> ; state = state ; version = version ; proc = Task.FromResult () ; cts = cts } })
 
   /// Closes the resource, if not already closed.
   member internal __.Close (callingEpoch:ResourceEpoch<'r>, ex:exn option) =
@@ -90,6 +104,7 @@ type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> op
       try
         if currentEpoch.tryCloseOrFault ex then
           Log.trace "closing_resource|type=%s version=%i" name currentEpoch.version
+          currentEpoch.cts.Dispose ()
           do! close (currentEpoch, ex)
           return { currentEpoch with version = currentEpoch.version + 1 ; resource = Unchecked.defaultof<_> }
         else
@@ -100,9 +115,10 @@ type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> op
         let errMsg = sprintf "resource_close_failed|type=%s version=%i error=\"%O\"" name currentEpoch.version ex
         Log.error "%s" errMsg
         return raise (exn(errMsg, ex)) })
+    |> Async.Ignore
 
   member internal __.Close (callingEpoch:ResourceEpoch<'r>) =
-    __.Close (callingEpoch, None)
+    __.Close (callingEpoch, None) |> Async.Ignore
 
   member internal __.CloseCurrent (ex:exn option) = async {
     let ep = SVar.getFastUnsafe cell
@@ -138,10 +154,6 @@ type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> op
         | Some ex -> ResourceState.Faulted ex
         | None -> ResourceState.Closed)
 
-  member internal __.Extend (f:Resource<'r> -> Async<'b>) =
-    failwith ""
-
-
 /// A result of a resource-dependent operation.
 type ResourceResult<'a, 'e> = Result<'a, ResourceErrorAction<'a, 'e>>
 
@@ -156,7 +168,6 @@ and ResourceErrorAction<'a, 'e> =
 
   /// Retry without closing.
   | Retry of 'e
-
 
 /// Operations on resources.
 module Resource =
@@ -174,27 +185,21 @@ module Resource =
   
   let create 
     (name:string) 
-    (create:Task<unit> -> ResourceEpoch<'r> option -> Async<'r>) 
+    (create:Task<unit> -> ResourceEpoch<'r> option -> Async<'r * Async<unit>>) 
     (close:(ResourceEpoch<'r> * exn option) -> Async<unit>) : Async<Resource<'r>> = async {
     let r = new Resource<'r>(name, create, close)
     do! ensureOpen r
     return r }
 
-  let createChild
-    (name:string) 
-    (parent:Resource<'r>)
-    (create:ResourceEpoch<'r> -> Task<unit> -> 'r option -> Async<'r>) 
-    (close:('b * int * obj * exn) -> Async<unit>) : Async<Resource<'b>> = async {
+  let get (r:Resource<'r>) =
+    r.Get ()
 
-    return failwith "" }
-
-  let get (r:Resource<'r>) : Async<'r> =
+  let getResource (r:Resource<'r>) =
     r.Get () |> Async.map (fun ep -> ep.resource)
 
   let injectWithRecovery (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) (r:Resource<'r>) (a:'a) : Async<'b> =
     let rec go (rs:RetryState) = async {
       let! ep = r.Get ()
-      //let! b = op ep.resource a
       let! b = Async.cancelWithTaskThrow ep.state.Task (op ep.resource a)
       match b with
       | Success b -> 
@@ -213,13 +218,13 @@ module Resource =
       | Failure (CloseResume (ex,b)) ->
         Log.trace "closing_and_resuming_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
           r.Name ep.version rs.attempt ex
-        let! _ = r.Close (ep)
+        do! r.Close (ep)
         return b
       | Failure (CloseRetry ex) ->
         // TODO: collect errors?
         Log.trace "closing_and_retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
           r.Name ep.version rs.attempt ex
-        let! _ = r.Close (ep)
+        do! r.Close (ep)
         let! rs' = RetryPolicy.awaitNextState rp rs
         match rs' with
         | None ->
@@ -231,3 +236,19 @@ module Resource =
     go RetryState.init
 
   let states (r:Resource<'r>) : AsyncSeq<ResourceState<'r>> = r.States
+
+  /// Links resources, such that state changes in the parent are propagated to the child.
+  /// When the parent is closed/faulted, the child resource is also closed/faulted.
+  let link (parent:Resource<'a>) (child:Resource<'b>) = 
+    // TODO: catch error?
+    parent
+    |> states
+    |> AsyncSeq.iterAsync (fun state -> async {
+      match state with
+      | ResourceState.Open (_,_) -> 
+        return ()
+      | ResourceState.Closed -> 
+        do! close child
+      | ResourceState.Faulted ex ->
+        do! fault child ex })
+    |> Async.StartAsTask

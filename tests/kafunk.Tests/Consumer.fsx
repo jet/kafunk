@@ -5,7 +5,7 @@ open FSharp.Control
 open Kafunk
 open System
 
-Log.MinLevel <- LogLevel.Trace
+//Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
 
 let argiDefault i def = fsi.CommandLineArgs |> Seq.tryItem i |> Option.getOr def
@@ -67,7 +67,7 @@ let go = async {
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     
-    do! Async.Sleep 10000
+    //do! Async.Sleep 10000
 
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)

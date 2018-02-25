@@ -34,13 +34,16 @@ module PeriodicCommitQueue =
       |> AsyncSeq.foldAsync (fun offsets event -> async {
         match event with
         | Choice1Of4 _ ->
-          let os = offsets |> Map.toArray
+          let os = offsets |> Map.toArray |> Array.filter (fun (_,o) -> o <> -1L)
           if os.Length > 0 then
             do! commit os
           return offsets
         | Choice2Of4 queued ->
+          //Log.trace "updating_offsets|state=%A queued=%A" offsets queued
           return offsets |> Map.updateMany queued
         | Choice3Of4 assigned ->
+          //Log.info "offsets_reassigned|previous=%s assigned=%s" 
+          //  (Printers.partitionOffsetPairs (offsets |> Map.toSeq)) (Printers.partitionOffsetPairs assigned)
           return assigned |> Map.ofArray
         | Choice4Of4 (rep:IVar<unit>) ->
           try
