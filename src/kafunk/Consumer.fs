@@ -157,7 +157,7 @@ module ConsumerGroup =
               |> String.concat " ; "
             sprintf "[member_id=%s user_data=%s assignments=%s]" memberId (Binary.toString meta.userData) str)
           |> String.concat " ; "
-        Log.info "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
+        Log.trace "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
           gm.conn.Config.connId gm.config.groupId memberAssignmentsStr
 
         let memberAssignments =
@@ -904,7 +904,7 @@ module Consumer =
           currentOffsets 
           |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
           |> Seq.concat
-          |> Seq.where (fun (_,o) -> o <> -1L)
+          //|> Seq.where (fun (_,o) -> o <> -1L)
           |> Seq.toArray })
     return! PeriodicCommitQueue.create commitInterval rebalanced (commitOffsets c) }
 

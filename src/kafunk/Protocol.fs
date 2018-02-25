@@ -518,13 +518,13 @@ module Protocol =
       let firstOffset = buf.ReadInt64()
       do buf.ShiftOffset 8 // Length (int32) + PartitionLeaderEpoch (int32)
       let magicByte = buf.ReadInt8()
-      let crcSum = buf.ReadInt32()
+      let _crcSum = buf.ReadInt32()
       let _batchAttributes = buf.ReadInt16()
       let _lastOffsetDelta = buf.ReadInt32()
       let firstTimestamp = buf.ReadInt64()
       let _maxTimestamp = buf.ReadInt64()
       do buf.ShiftOffset 14 // producer ID (int64) + producer epoch (int16) + first sequence (int32)
-      let numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
+      let _numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
       consumed <- consumed + (buf.Buffer.Offset - o)
 
       while consumed < recordBatchSize && buf.Buffer.Count > 0 do
@@ -901,12 +901,14 @@ module Protocol =
             else
               null
           let messageSetSize = buf.ReadInt32 ()
-          let magicByte = buf.PeekIn8Offset 16
-          let messageSet =
-            if magicByte < 2y then
-              MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-            else
-              MessageSet.ReadFromRecordBatch (messageSetSize, buf)
+          //let magicByte = buf.TryPeekInt8Offset 16
+          //let messageSet =
+          //  if magicByte < 2y then
+          //    MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+          //  else
+          //    //printfn "MessageSet.ReadFromRecordBatch"
+          //    MessageSet.ReadFromRecordBatch (messageSetSize, buf)
+          let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
           partitions.[j] <-  partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet
         topics.[i] <- (topic,partitions)
       let res = FetchResponse(throttleTime, topics)

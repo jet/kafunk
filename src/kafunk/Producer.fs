@@ -415,20 +415,16 @@ module Producer =
       partitionCount = partitionCount } }
 
   /// Fetches cluster state and initializes a per-broker produce queue.
-  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (closed:Task<unit>) (_prevState:ResourceEpoch<ProducerState> option) = async {
+  let private initProducer (conn:KafkaConn) (cfg:ProducerConfig) (_proc:Task<unit>) (_prevState:ResourceEpoch<ProducerState> option) = async {
 
     let! routes = getProducerRoutes conn cfg.topic
     let partitionCount = routes.partitionCount
     let messageVer = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
 
-    let! ct' = Async.CancellationToken
-    let ct = Task.asCancellationToken closed
-    let queueCts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct')
-
-    let startBrokerQueue (b:Broker) =
-      let ep = Broker.endpoint b
+    let startBrokerQueue (b:Broker) =      
       let sendBatch = sendBatchToBroker conn cfg messageVer b
-      if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then Array.singleton >> sendBatch else
+      if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then 
+        (Array.singleton >> sendBatch,async.Return()) else
       let add,flush,produceStream =
         if cfg.bufferSizeBytes > 0 then
           let bufferCond =
@@ -446,52 +442,52 @@ module Producer =
               arr.Add batch
             return arr.ToArray() }
           (buf.Add >> async.Return, flush, produceStream)
-      let batchCond =
-        BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.batchSizeBytes)
-      let batchedProduceStream =
-        produceStream
-        |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
-      let sendProcess =
-        if cfg.maxInFlightRequests > 1 then        
-          batchedProduceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
-        else
-          batchedProduceStream |> AsyncSeq.iterAsync sendBatch
-      Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i batch_linger=%i"
-        cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes cfg.batchLingerMs
-      sendProcess
-      //|> Async.tryCancelled (fun _ ->
-      //  //Log.info "produce_process_cancelled|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
-      //  let buffer = flush |> Async.RunSynchronously
-      //  for batch in buffer do
-      //    IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
-      |> Async.tryFinally (fun _ ->
-        Log.info "produce_process_stopping|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
-        let buffer = flush |> Async.RunSynchronously
-        for batch in buffer do
-          IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
-      |> Async.tryWith (fun ex -> async {
-        Log.error "producer_process_exception|ep=%O topic=%s error=\"%O\"" ep cfg.topic ex })
-      |> (fun x -> Async.Start (x, queueCts.Token))
-      add
+      let proc = async {
+        let ep = Broker.endpoint b
+        Log.info "produce_process_starting|topic=%s node_id=%i ep=%O buffer_size=%i batch_size=%i batch_linger=%i"
+          cfg.topic b.nodeId ep cfg.bufferSizeBytes cfg.batchSizeBytes cfg.batchLingerMs
+        let batchCond =
+          BoundedMbCond.group Group.intAdd (fun (b:ProducerMessageBatch) -> b.size) (fun size -> size >= cfg.batchSizeBytes)
+        let batchedProduceStream =
+          produceStream
+          |> AsyncSeq.bufferByConditionAndTime batchCond cfg.batchLingerMs
+        let sendProcess =
+          if cfg.maxInFlightRequests > 1 then        
+            batchedProduceStream |> AsyncSeq.iterAsyncParallelThrottled cfg.maxInFlightRequests sendBatch
+          else
+            batchedProduceStream |> AsyncSeq.iterAsync sendBatch
+        return!
+          sendProcess
+          |> Async.tryFinally (fun _ ->
+            Log.info "produce_process_stopping|topic=%s node_id=%i ep=%O" cfg.topic b.nodeId ep
+            let buffer = flush |> Async.RunSynchronously
+            for batch in buffer do
+              IVar.tryPut (Failure (ProducerError.BatchTimeoutError batch)) batch.rep |> ignore)
+          |> Async.tryWith (fun ex -> async {
+            Log.error "producer_process_exception|ep=%O topic=%s error=\"%O\"" ep cfg.topic ex }) }
+      (add,proc)
 
-    let partitionQueues =
+    let partitionQueues,queueProcs =
       let qs = Dict.ofSeq []
       routes.borkerByPartition
       |> Seq.mapi (fun _ b ->
         match Dict.tryGet b.nodeId qs with
-        | Some q -> q
+        | Some q -> q,None
         | None ->
-          let q = startBrokerQueue b
+          let q,proc = startBrokerQueue b
           qs.Add (b.nodeId,q)
-          q)
+          q,Some proc)
       |> Seq.toArray
+      |> Array.unzip
 
-    let partition = Partitioner.partition cfg.partitioner cfg.topic partitionCount
+    let queueProcs = queueProcs |> Seq.choose id |> Async.Parallel |> Async.Ignore
 
-    return {
+    let state = {
       routes = routes
       partitionQueues = partitionQueues
-      partition = partition } }
+      partition = Partitioner.partition cfg.partitioner cfg.topic partitionCount } 
+      
+    return state,queueProcs }
 
   let private enqueueBatchAndWait (p:Producer) (state:ProducerState) (batch:ProducerMessageBatch) = async {
     if state.partitionQueues.Length < batch.partition then 
@@ -594,10 +590,15 @@ module Producer =
         (config.topic)
         (initProducer conn config)
         (fun (s,ex) -> async {
-          Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=\"%O\""
-            s.version config.topic (Printers.partitionCount s.resource.routes.partitionCount) (ex |> Option.getOr null)
+          match ex with
+          | Some ex ->
+            Log.warn "closing_producer|version=%i topic=%s partitions=[%s] error=\"%O\""
+              s.version config.topic (Printers.partitionCount s.resource.routes.partitionCount) ex
+          | None ->
+            Log.info "closing_producer|version=%i topic=%s partitions=[%s]"
+              s.version config.topic (Printers.partitionCount s.resource.routes.partitionCount)
           return () })
-    let! state = Resource.get resource
+    let! state = Resource.getResource resource
     let p = { state = resource ; config = config ; conn = conn ; batchTimeout = batchTimeout }
     Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitionCount state.routes.partitionCount)
     return p }
