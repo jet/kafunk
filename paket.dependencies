@@ -16,6 +16,7 @@ group Build
 
 group Test
   source https://api.nuget.org/v3/index.json
+  redirects: force
 
   nuget FSharp.Core
   nuget FSharp.Control.AsyncSeq
