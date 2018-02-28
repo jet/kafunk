@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module internal Kafunk.Tcp
+module Kafunk.Tcp
 
 #nowarn "40"
 

@@ -1,14 +1,23 @@
 source https://api.nuget.org/v3/index.json
-framework: net40, net45
+framework: netstandard2.0
 
-nuget FSharp.Core
-nuget FSharp.Control.AsyncSeq
-nuget Snappy.NET
+nuget FSharp.Core >= 4.3 lowest_matching: true
+nuget FSharp.Control.AsyncSeq >= 2.0.21 lowest_matching: true
+nuget SourceLink.Create.CommandLine copy_local: true
+
+group Legacy
+  source https://api.nuget.org/v3/index.json
+  framework: net45
+
+  nuget FSharp.Core >= 3.1 lowest_matching: true
+  nuget FSharp.Control.AsyncSeq >= 2.0.21 lowest_matching: true
+  nuget Snappy.NET >= 1.1.1.8 lowest_matching: true
+  nuget SourceLink.Create.CommandLine copy_local: true
 
 group Build
   source https://api.nuget.org/v3/index.json
+  framework: net461
 
-  nuget SourceLink.Fake
   nuget FAKE
   nuget FSharp.Formatting  
 
@@ -16,10 +25,13 @@ group Build
 
 group Test
   source https://api.nuget.org/v3/index.json
+  framework: netcoreapp2.0, net461
   redirects: force
 
   nuget FSharp.Core
   nuget FSharp.Control.AsyncSeq
   nuget NUnit
   nuget NUnit.Runners
+  nuget NUnit3TestAdapter
   nuget Confluent.Kafka
+  nuget Microsoft.NET.Test.Sdk

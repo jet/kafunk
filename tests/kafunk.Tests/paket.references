@@ -1,6 +1,8 @@
 group Test
+Microsoft.NET.Test.Sdk
 FSharp.Core
 FSharp.Control.AsyncSeq
 NUnit
 NUnit.Runners
+NUnit3TestAdapter
 Confluent.Kafka

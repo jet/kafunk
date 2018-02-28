@@ -103,7 +103,7 @@ module ConsumerGroup =
   /// Built-in assignment stratgies.
   module AssignmentStratgies =
 
-    let internal RangeAssign (ps:Partition[]) (ms:MemberId[]) =
+    let RangeAssign (ps:Partition[]) (ms:MemberId[]) =
       let asmts =
         ms
         |> Array.map (fun m -> m, ResizeArray<_>()) 

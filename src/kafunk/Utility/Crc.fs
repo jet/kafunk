@@ -1,4 +1,4 @@
-module internal Kafunk.Crc
+module Kafunk.Crc
 
 let private table = [|
   0x00000000u; 0x77073096u; 0xEE0E612Cu; 0x990951BAu; 0x076DC419u; 0x706AF48Fu

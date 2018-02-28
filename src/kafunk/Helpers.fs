@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal Kafunk.Helpers
+module Kafunk.Helpers
 
 open Kafunk
 open System

@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module internal Kafunk.Prelude
+module Kafunk.Prelude
 
 [<assembly: System.Runtime.CompilerServices.InternalsVisibleToAttribute("Kafunk.Tests")>]
 do ()
@@ -636,7 +636,7 @@ module Observable =
   /// Union type that represents different messages that can be sent to the
   /// IObserver interface. The IObserver type is equivalent to a type that has
   /// just OnNext method that gets 'ObservableUpdate' as an argument.
-  type internal ObservableUpdate<'T> = 
+  type ObservableUpdate<'T> = 
       | Next of 'T
       | Error of ExceptionDispatchInfo
       | Completed

@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module internal Kafunk.AsyncSeq
+module Kafunk.AsyncSeq
 
 open FSharp.Control
 open System

@@ -5,7 +5,7 @@ open FSharp.Control
 open Kafunk
 open Refs
 
-let host = argiDefault 2 "localhost"
+let host = argiDefault 1 "localhost"
 
 let conn = Kafka.connHost host
 

@@ -86,7 +86,7 @@ type ChanConfig = {
 
 /// A broker endpoint.
 [<CustomEquality;CustomComparison;StructuredFormatDisplay("{Display}")>]
-type internal EndPoint = 
+type EndPoint = 
   private
   | EndPoint of IPEndPoint
   with

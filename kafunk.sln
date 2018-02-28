@@ -6,14 +6,17 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{63297B
 	ProjectSection(SolutionItems) = preProject
 		paket.dependencies = paket.dependencies
 		paket.lock = paket.lock
+		.paket\Paket.Restore.targets = .paket\Paket.Restore.targets
+		.paket\paket.targets = .paket\paket.targets
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{A6A6AF7D-D6E3-442D-9B1E-58CC91879BE1}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "kafunk", "src\kafunk\kafunk.fsproj", "{18629B6B-ACE4-4C73-B058-EFA494EB42CE}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "kafunk", "src\kafunk\kafunk.fsproj", "{18629B6B-ACE4-4C73-B058-EFA494EB42CE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60BC93-E09B-4E5F-9D85-95A519479D54}"
 	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
 		.travis.yml = .travis.yml
 		appveyor.yml = appveyor.yml
 		build.cmd = build.cmd

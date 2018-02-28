@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal Kafunk.MVar
+module Kafunk.MVar
 
 // TODO: https://github.com/fsprojects/FSharpx.Async
 

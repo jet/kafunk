@@ -1,9 +1,7 @@
 ﻿module CodecTests
 
 open NUnit.Framework
-
 open System.Text
-
 open Kafunk
 
 let arraySegToFSharp (arr:Binary.Segment) =
@@ -117,7 +115,7 @@ let ``FetchResponse.read should decode FetchResponse``() =
 //  let data = FetchResponseBinary
 //  for trim in [1..35] do
 //    let data = Binary.resize (data.Count - trim) data
-//    let (res:FetchResponse), _ = FetchResponse.read data
+//    let (res:FetchResponse), _ = FetchResponse.Read data
 //    let tn,ps = res.topics.[0]
 //    let _p, _ec, _hwo, _mss, ms = ps.[0]
 //    Assert.AreEqual(1, res.topics.Length)
@@ -136,19 +134,19 @@ let ``FetchResponse.read should decode FetchResponse``() =
 
 
 //[<Test>]
-let ``ProduceResponse.read should decode ProduceResponse``() =
-  let data =
-    Binary.ofArray [|
-      0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
-      0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
-  let bz = BinaryZipper(data)
-  let (res:ProduceResponse) = ProduceResponse.Read (1s,bz)
-  let topicName, ps = let x = res.topics.[0] in x.topic, x.partitions
-  let p, ec, off, _ts = let x = ps.[0] in x.partition, x.errorCode, x.offset, x.timestamp
-  Assert.AreEqual("test", topicName)
-  Assert.AreEqual(0, p)
-  Assert.AreEqual(0s, ec)
-  Assert.AreEqual(8L, off)
+//let ``ProduceResponse.read should decode ProduceResponse``() =
+//  let data =
+//    Binary.ofArray [|
+//      0uy;0uy;0uy;1uy;0uy;4uy;116uy;101uy;115uy;116uy;0uy;0uy;0uy;1uy;0uy;0uy;
+//      0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;0uy;8uy; |]
+//  let bz = BinaryZipper(data)
+//  let (res:ProduceResponse) = ProduceResponse.Read (1s,bz)
+//  let topicName, ps = let x = res.topics.[0] in x.topic, x.partitions
+//  let p, ec, off, _ts = let x = ps.[0] in x.partition, x.errorCode, x.offset, x.timestamp
+//  Assert.AreEqual("test", topicName)
+//  Assert.AreEqual(0, p)
+//  Assert.AreEqual(0s, ec)
+//  Assert.AreEqual(8L, off)
 
 //[<Test>]
 //let ``ProduceRequest.write should encode ProduceRequest``() =
