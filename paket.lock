@@ -1,9 +1,9 @@
 RESTRICTION: == netstandard2.0
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    FSharp.Control.AsyncSeq (2.0.21-alpha01)
-      FSharp.Core (>= 3.1.2)
-    FSharp.Core (4.3.1)
+    FSharp.Control.AsyncSeq (2.0.21)
+      FSharp.Core (>= 4.3.2)
+    FSharp.Core (4.3.2)
     SourceLink.Create.CommandLine (2.8) - copy_local: true
 
 GROUP Build
@@ -23,11 +23,11 @@ GITHUB
     modules/Octokit/Octokit.fsx (8f21aabb0974b0f4c7b7dab674b2ea2691a9db8c)
       Octokit (>= 0.20)
 GROUP Legacy
-RESTRICTION: == net452
+RESTRICTION: == net45
 NUGET
   remote: https://api.nuget.org/v3/index.json
     Crc32C.NET (1.0.5)
-    FSharp.Control.AsyncSeq (2.0.21-alpha02)
+    FSharp.Control.AsyncSeq (2.0.21)
       FSharp.Core (>= 3.1.2)
     FSharp.Core (3.1.2)
     Snappy.NET (1.1.1.8)
@@ -47,9 +47,9 @@ NUGET
       System.Runtime.Extensions (>= 4.3) - restriction: || (&& (== net461) (< net45)) (== netcoreapp2.0)
       System.Runtime.InteropServices (>= 4.3) - restriction: || (&& (== net461) (< net45)) (== netcoreapp2.0)
       System.Threading (>= 4.3) - restriction: || (&& (== net461) (< net45)) (== netcoreapp2.0)
-    FSharp.Control.AsyncSeq (2.0.21-alpha02)
-      FSharp.Core (>= 3.1.2) - restriction: || (== net461) (&& (== netcoreapp2.0) (>= net452))
-      FSharp.Core (>= 4.3.2) - restriction: || (&& (== net461) (< net452) (>= netstandard2.0)) (== netcoreapp2.0)
+    FSharp.Control.AsyncSeq (2.0.21)
+      FSharp.Core (>= 3.1.2) - restriction: || (== net461) (&& (== netcoreapp2.0) (>= net45))
+      FSharp.Core (>= 4.3.2) - restriction: || (&& (== net461) (< net45) (>= netstandard2.0)) (== netcoreapp2.0)
     FSharp.Core (4.3.4)
     librdkafka.redist (0.11.3)
     Microsoft.CodeCoverage (1.0.3)
