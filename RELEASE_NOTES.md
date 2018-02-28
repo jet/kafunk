@@ -1,4 +1,4 @@
-### 0.1.14-alpha02 - 8.2.2018
+### 0.1.14-alpha02 - 28.2.2018
 * Adjusting FSharp.Core reference
 
 ### 0.1.14-alpha01 - 27.12.2017
