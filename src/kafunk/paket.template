@@ -3,6 +3,8 @@ owners
     Jet.com
 authors
     Jet.com
+description
+    Kafka client for F#
 projectUrl
     http://github.com/jet/kafunk
 iconUrl
