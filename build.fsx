@@ -119,7 +119,7 @@ Target "RunTests" (fun _ ->
         DotNetCli.Test(fun p ->
             { p with
 #if MONO
-                Framework = "netstandard2.0"
+                Framework = "netcoreapp2.0"
 #endif
                 Project = testDir
                 TimeOut = TimeSpan.FromMinutes 20. })
