@@ -1,3 +1,7 @@
+### 0.1.14-alpha03 - 25.2.2018
+* Improved broker TCP connection lifecycle management.
+* Fixed offset commit bug wherein it would commit offsets for partitions no longer assigned
+
 ### 0.1.14-alpha02 - 8.2.2018
 * Adjusting FSharp.Core reference
 

@@ -26,12 +26,13 @@ let go = async {
           connectRetryPolicy = ChanConfig.DefaultConnectRetryPolicy,
           requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy)
       KafkaConfig.create (
-        [KafkaUri.parse host], 
-        //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
+        //[KafkaUri.parse host], 
+        [KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-        version = Versions.V_0_10_1,
-        autoApiVersions = true)
+        version = Versions.V_0_9_0,
+        //version = Versions.V_0_10_1,
+        autoApiVersions = false)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
@@ -66,19 +67,24 @@ let go = async {
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
     use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
     
+    //do! Async.Sleep 10000
+
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)
 
-    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
-      ms.topic
-      ms.partition
-      (ms.messageSet.messages.Length)
-      (ConsumerMessageSet.size ms)
-      (ConsumerMessageSet.firstOffset ms)
-      (ConsumerMessageSet.lastOffset ms)
-      (ConsumerMessageSet.firstTimestamp ms)
-      (ms.highWatermarkOffset)
-      (ConsumerMessageSet.lag ms) }
+    //Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
+    //  ms.topic
+    //  ms.partition
+    //  (ms.messageSet.messages.Length)
+    //  (ConsumerMessageSet.size ms)
+    //  (ConsumerMessageSet.firstOffset ms)
+    //  (ConsumerMessageSet.lastOffset ms)
+    //  (ConsumerMessageSet.firstTimestamp ms)
+    //  (ms.highWatermarkOffset)
+    //  (ConsumerMessageSet.lag ms) 
+
+    return ()
+  }
 
   use counter = Metrics.counter Log 5000
 
