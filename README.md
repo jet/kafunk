@@ -1,4 +1,8 @@
-# Kafunk [![NuGet Status](http://img.shields.io/nuget/v/kafunk.svg?style=flat)](https://www.nuget.org/packages/kafunk/)
+# Kafunk 
+[![NuGet Status](http://img.shields.io/nuget/v/kafunk.svg?style=flat)](https://www.nuget.org/packages/kafunk/)
+[![Build status](https://ci.appveyor.com/api/projects/status/j61df5g4tbxrmfg5/branch/master?svg=true)](https://ci.appveyor.com/project/Jet/kafunk/branch/master)
+[![Build status](https://travis-ci.org/jet/kafunk.svg?branch=master)](https://travis-ci.org/jet/kafunk)
+
 
 **Kafunk** is a [Kafka](https://kafka.apache.org/) client written in F#.
 

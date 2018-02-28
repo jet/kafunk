@@ -1,2 +1,8 @@
+FSharp.Core
 FSharp.Control.AsyncSeq
-Snappy.NET
+SourceLink.Create.CommandLine
+group Legacy
+  FSharp.Core
+  FSharp.Control.AsyncSeq
+  Snappy.NET
+  SourceLink.Create.CommandLine

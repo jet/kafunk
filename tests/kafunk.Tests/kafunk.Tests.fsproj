@@ -1,51 +1,45 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="paket.references" />
-    <Compile Include="Prelude.fs" />
-    <Compile Include="Async.fs" />
-    <Compile Include="Shared.fs" />
-    <Compile Include="Metrics.fs" />
-    <Compile Include="PreludeTests.fs" />
-    <Compile Include="CodecTests.fs" />
-    <Compile Include="TcpTests.fs" />
-    <Compile Include="RoutingTests.fs" />
-    <Compile Include="CompressionTests.fs" />
-    <Compile Include="AsyncTests.fs" />
-    <Compile Include="FaultsTests.fs" />
-    <Compile Include="AssignmentStrategyTests.fs" />
-    <Compile Include="SVarTests.fs" />
-    <None Include="Refs.fsx" />
-    <Compile Include="Metadata.fsx" />
-    <None Include="Producer.fsx" />
-    <Compile Include="Fetch.fsx" />
-    <None Include="Consumer.fsx" />
-    <None Include="ProducerConsumer.fsx" />
-    <None Include="Offsets.fsx" />
-    <None Include="ConsumerProgress.fsx" />
-    <None Include="MigrateZkOffsets.fsx" />
-    <None Include="AsyncTest.fsx" />
-    <None Include="MVar.fsx" />
-    <None Include="ApiVersions.fsx" />
-    <None Include="StreamRange.fsx" />
-    <None Include="CommitOffsets.fsx" />
-    <None Include="GroupInfo.fsx" />
-    <None Include="BufferingProducer.fsx" />
-    <None Include="ConfluentProducer.fsx" />
-    <None Include="ConfluentConsumer.fsx" />
-    <Content Include="App.config" />
+      <None Include="paket.references" />
+      <Compile Include="Prelude.fs" />
+      <Compile Include="Async.fs" />
+      <Compile Include="Shared.fs" />
+      <Compile Include="Metrics.fs" />
+      <Compile Include="PreludeTests.fs" />
+      <Compile Include="CodecTests.fs" />
+      <Compile Include="TcpTests.fs" />
+      <Compile Include="RoutingTests.fs" />
+      <Compile Include="CompressionTests.fs" />
+      <Compile Include="AsyncTests.fs" />
+      <Compile Include="FaultsTests.fs" />
+      <Compile Include="AssignmentStrategyTests.fs" />
+      <Compile Include="SVarTests.fs" />
+      <None Include="Refs.fsx" />
+      <Compile Include="Metadata.fsx" />
+      <None Include="Producer.fsx" />
+      <Compile Include="Fetch.fsx" />
+      <None Include="Consumer.fsx" />
+      <None Include="ProducerConsumer.fsx" />
+      <None Include="Offsets.fsx" />
+      <None Include="ConsumerProgress.fsx" />
+      <None Include="MigrateZkOffsets.fsx" />
+      <None Include="AsyncTest.fsx" />
+      <None Include="MVar.fsx" />
+      <None Include="ApiVersions.fsx" />
+      <None Include="StreamRange.fsx" />
+      <None Include="CommitOffsets.fsx" />
+      <None Include="GroupInfo.fsx" />
+      <None Include="BufferingProducer.fsx" />
+      <None Include="ConfluentProducer.fsx" />
+      <None Include="ConfluentConsumer.fsx" />
+      <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\kafunk\kafunk.fsproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FSharp.Control.AsyncSeq" Version="2.0.20" />
-    <PackageReference Include="Confluent.Kafka" />
-    <PackageReference Include="Snappy.NET" Version="1.1.1.4" Condition="'$(TargetFramework)' == 'net45'" />
-    <Reference Include="System.ServiceModel" Condition="'$(TargetFramework)' == 'net45'" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

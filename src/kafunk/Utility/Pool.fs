@@ -19,7 +19,7 @@ module BufferPool =
         member __.Alloc s = Binary.zeros s
         member __.Free _ = () }
 
-#if NET45
+#if !NETSTANDARD2_0
   /// A buffer pool using System.ServiceModel.Channels.BufferManager.
   let bufferManager maxPoolSize maxBufferSize =
     let bm = System.ServiceModel.Channels.BufferManager.CreateBufferManager (maxPoolSize,maxBufferSize)

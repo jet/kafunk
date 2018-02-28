@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net452</TargetFrameworks>
     <Authors>Jet.com</Authors>
     <Summary>F# Kafka client</Summary>
     <Description>F# Kafka client</Description>
@@ -14,14 +14,15 @@
     <RepositoryUrl>https://github.com/fsprojects/FSharp.Control.AsyncSeq</RepositoryUrl>
     <AssemblyName>Kafunk</AssemblyName>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net45'">
-    <DefineConstants>NET45</DefineConstants>
+  <PropertyGroup>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\kafunk.xml</DocumentationFile>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="3.1.2" Condition="'$(TargetFramework)' == 'net45'" />
-    <PackageReference Include="Snappy.NET" Version="1.1.1.4" Condition="'$(TargetFramework)' == 'net45'" />
-    <PackageReference Include="FSharp.Control.AsyncSeq" Version="2.0.20" />
-    <Reference Include="System.ServiceModel" Condition="'$(TargetFramework)' == 'net45'" />
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <DefineConstants>NETSTANDARD2_0</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net452'">
+    <Reference Include="System.ServiceModel" />
   </ItemGroup>
   <ItemGroup>
     <None Include="paket.references" />
@@ -54,4 +55,5 @@
     <Compile Include="Consumer.fs" />
     <Compile Include="ConsumerInfo.fs" />
   </ItemGroup>
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

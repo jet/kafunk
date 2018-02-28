@@ -46,22 +46,22 @@ type ChanConfig = {
   /// The default TCP connection timeout = 10s.
   static member DefaultConnectTimeout = TimeSpan.FromSeconds 10
   
-  ///// The default TCP connection retry policy = RetryPolicy.constantBoundedMs 3000 2.
-  //static member DefaultConnectRetryPolicy = RetryPolicy.constantBoundedMs 3000 2
+  /// The default TCP connection retry policy = RetryPolicy.constantBoundedMs 3000 2.
+  static member DefaultConnectRetryPolicy = RetryPolicy.constantBoundedMs 3000 2
 
-  /// The default TCP connection retry policy = RetryPolicy.expRandLimitBoundedMs 50 1.5 0.2 1000 2.
-  static member DefaultConnectRetryPolicy = 
-    RetryPolicy.expRandLimitBoundedMs 50 1.5 0.2 1000 2
+  ///// The default TCP connection retry policy = RetryPolicy.expRandLimitBoundedMs 50 1.5 0.2 1000 2.
+  //static member DefaultConnectRetryPolicy = 
+  //  RetryPolicy.expRandLimitBoundedMs 50 1.5 0.2 1000 2
   
   /// The default TCP request timeout = 30s.
   static member DefaultRequestTimeout = TimeSpan.FromSeconds 30
   
-  ///// The default TCP request retry policy = RetryPolicy.constantBoundedMs 1000 2.
-  //static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2
+  /// The default TCP request retry policy = RetryPolicy.constantBoundedMs 1000 2.
+  static member DefaultRequestRetryPolicy = RetryPolicy.constantBoundedMs 1000 2
   
-  /// The default TCP request retry policy = RetryPolicy.expRandLimitBoundedMs 100 1.5 0.2 1000 2.
-  static member DefaultRequestRetryPolicy = 
-    RetryPolicy.expRandLimitBoundedMs 100 1.5 0.2 1000 2
+  ///// The default TCP request retry policy = RetryPolicy.expRandLimitBoundedMs 100 1.5 0.2 1000 2.
+  //static member DefaultRequestRetryPolicy = 
+  //  RetryPolicy.expRandLimitBoundedMs 100 1.5 0.2 1000 2
 
   /// The default TCP Nagle setting = false.
   static member DefaultUseNagle = false

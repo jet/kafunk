@@ -19,5 +19,18 @@ summary
     F# client for Kafka
 description
     Description not set
-
-
+dependencies
+  framework: netstandard2.0
+	FSharp.Core >= LOCKEDVERSION
+	FSharp.Control.AsyncSeq >= LOCKEDVERSION
+  framework: net452
+    FSharp.Core >= LOCKEDVERSION-Legacy
+	FSharp.Control.AsyncSeq >= LOCKEDVERSION-Legacy
+	Snappy.NET >= LOCKEDVERSION-Legacy
+files
+    bin/Release/net452/kafunk.dll ==> lib/net452
+    bin/Release/net452/kafunk.pdb ==> lib/net452
+    bin/Release/net452/kafunk.xml ==> lib/net452
+    bin/Release/netstandard2.0/kafunk.dll ==> lib/netstandard2.0
+    bin/Release/netstandard2.0/kafunk.pdb ==> lib/netstandard2.0
+    bin/Release/netstandard2.0/kafunk.xml ==> lib/netstandard2.0
