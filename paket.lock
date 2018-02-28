@@ -50,7 +50,7 @@ NUGET
     FSharp.Control.AsyncSeq (2.0.21)
       FSharp.Core (>= 3.1.2) - restriction: || (== net461) (&& (== netcoreapp2.0) (>= net45))
       FSharp.Core (>= 4.3.2) - restriction: || (&& (== net461) (< net45) (>= netstandard2.0)) (== netcoreapp2.0)
-    FSharp.Core (4.3.4)
+    FSharp.Core (4.3.2)
     librdkafka.redist (0.11.3)
     Microsoft.CodeCoverage (1.0.3)
     Microsoft.DotNet.InternalAbstractions (1.0) - restriction: || (&& (== net461) (>= netcoreapp1.0)) (== netcoreapp2.0)

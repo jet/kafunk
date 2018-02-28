@@ -132,6 +132,16 @@ module Task =
       ivar.Task)
     |> join
 
+  /// Returns a cancellation token which is cancelled when the IVar is set.
+  let intoCancellationToken (cts:CancellationTokenSource) (t:Task<_>) =
+    t.ContinueWith (fun (t:Task<_>) -> cts.Cancel ()) |> ignore
+
+  /// Returns a cancellation token which is cancelled when the IVar is set.
+  let asCancellationToken (t:Task<_>) =
+    let cts = new CancellationTokenSource ()
+    intoCancellationToken cts t
+    cts.Token
+
 [<Compile(Module)>]
 module Async =
 
@@ -349,6 +359,33 @@ module Async =
         tcs.TrySetException ex |> ignore }
     Async.Start (a, cts.Token)
     return! tcs.Task |> awaitTaskCancellationAsError }
+
+  let cancelWithTask (t:Task<unit>) (a:Async<'a>) : Async<'a option> = async {
+    let! ct = Async.CancellationToken
+    use cts = CancellationTokenSource.CreateLinkedTokenSource ct
+    let t = t.ContinueWith (fun (_:Task<unit>) -> cts.Cancel () ; None)
+    let at = Async.StartAsTask (a, cancellationToken = cts.Token) |> Task.map Some
+    let! r = Task.WhenAny (t, at) |> awaitTaskCancellationAsError
+    return r.Result }
+
+  let cancelWithTaskThrow (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {
+    let! ct = Async.CancellationToken
+    use cts = CancellationTokenSource.CreateLinkedTokenSource ct
+    let t = 
+      t 
+      |> Task.extend (fun t -> 
+        cts.Cancel () |> ignore
+        raise (OperationCanceledException("", t.Exception)))
+    let at = Async.StartAsTask (a, cancellationToken = cts.Token)
+    let! r = Task.WhenAny (t, at) |> awaitTaskCancellationAsError
+    return r.Result }
+
+  let cancelWithTaskTimeout (timeout:TimeSpan) (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {
+    let timeout = (Task.Delay timeout).ContinueWith (fun (_:Task) -> failwith "task_timedout")
+    let t = t |> Task.extend (fun _ -> failwith "task_cancelled")
+    let! at = Async.StartChildAsTask a
+    let! r = Task.WhenAny (at, t, timeout) |> awaitTaskCancellationAsError
+    return r.Result }
         
   let sleep (s:TimeSpan) : Async<unit> =
     Async.Sleep (int s.TotalMilliseconds)

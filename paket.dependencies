@@ -28,8 +28,8 @@ group Test
   framework: netcoreapp2.0, net461
   redirects: force
 
-  nuget FSharp.Core
-  nuget FSharp.Control.AsyncSeq
+  nuget FSharp.Core >= 4.3 lowest_matching: true
+  nuget FSharp.Control.AsyncSeq >= 2.0.21 lowest_matching: true
   nuget NUnit
   nuget NUnit.Runners
   nuget NUnit3TestAdapter

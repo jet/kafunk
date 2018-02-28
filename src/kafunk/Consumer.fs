@@ -157,7 +157,7 @@ module ConsumerGroup =
               |> String.concat " ; "
             sprintf "[member_id=%s user_data=%s assignments=%s]" memberId (Binary.toString meta.userData) str)
           |> String.concat " ; "
-        Log.info "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
+        Log.trace "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
           gm.conn.Config.connId gm.config.groupId memberAssignmentsStr
 
         let memberAssignments =
@@ -480,7 +480,6 @@ module Consumer =
             async { return ps }
         return t,partitions })
       |> Async.Parallel
-
     let req = OffsetFetchRequest(groupId, topics)
     let! res = Kafka.offsetFetch conn req
     let oks,errors =
@@ -532,8 +531,8 @@ module Consumer =
         return failwithf "fetch_offset_errors|errors=%A" errors
       
       if missing.Length > 0 then
-        Log.warn "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" 
-          cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
+        Log.warn "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s] auto_offset_reset=%A" 
+          cfg.groupId topic (Printers.partitions (missing |> Array.map fst)) cfg.autoOffsetReset
         match cfg.autoOffsetReset with
         | AutoOffsetReset.Stop | AutoOffsetReset.TryStartFromCommittedOffsets ->
           return 
@@ -792,9 +791,9 @@ module Consumer =
     let assignment = Array.map fst initOffsets
     let cfg = c.config
     let topic = cfg.topic
-    use! _cnc = Async.OnCancel (fun () -> 
-      Log.warn "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
-        cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
+    //use! _cnc = Async.OnCancel (fun () -> 
+    //  Log.info "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
+    //    cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
     Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
       cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
     return!
@@ -905,7 +904,7 @@ module Consumer =
           currentOffsets 
           |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
           |> Seq.concat
-          |> Seq.where (fun (_,o) -> o <> -1L)
+          //|> Seq.where (fun (_,o) -> o <> -1L)
           |> Seq.toArray })
     return! PeriodicCommitQueue.create commitInterval rebalanced (commitOffsets c) }
 
@@ -955,4 +954,3 @@ module Consumer =
   /// This causes all underlying streams to complete.
   let close (c:Consumer) = async {
     return! Group.leave c.groupMember }
-

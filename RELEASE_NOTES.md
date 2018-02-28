@@ -1,3 +1,10 @@
+###
+
+* Fixed bug wherein consumer would enter a loop between `offsets_out_of_range` and `resuming_fetch_from_reset_offsets`* Improved logging: received_empty_buffer logged as INFO message as it doesn't indicate an error
+* Improved connection management: ensure only a single TCP connection per broker per Kafka connection
+* Reduce recovery time from broker restarts and rebalancing
+* Fix a deadlock bug
+
 ### 0.1.14-alpha02 - 28.2.2018
 * Adjusting FSharp.Core reference
 

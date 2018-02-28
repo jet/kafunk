@@ -71,27 +71,20 @@ type internal ClusterState = {
         match Map.tryFind nodeId brokersById with
         | Some b -> Some ((t,p),b)
         | None -> None)
-    {
-      s with
+    { s with
           brokersByNodeId = brokersById
           brokersByTopicPartition = s.brokersByTopicPartition |> Map.addMany brokersByPartitions
-          version = s.version + 1
-    }
+          version = s.version + 1 }
 
   static member updateGroupCoordinator (broker:Broker, gid:GroupId) (s:ClusterState) =
-    {
-      s with
+    { s with
         brokersByGroup = s.brokersByGroup |> Map.add gid broker
-        version = s.version + 1
-    }
+        version = s.version + 1 }
 
   static member updateBootstrapBroker (b:Broker) (s:ClusterState) =
-    {
-      s with
+    { s with
         bootstrapBroker = Some b
-        version = s.version + 1
-    }
-
+        version = s.version + 1 }
 
   /// Returns the broker channel for the specified endpoint.
   static member tryFindBrokerChanByEndPoint (ep:EndPoint) (s:ClusterState) =
@@ -103,7 +96,7 @@ type internal ClusterState = {
 
   static member containsBrokerChan (s:ClusterState) (nodeId:NodeId) =
     match s.brokerChansByNodeId |> Map.tryFind nodeId with
-    | Some ch when not ch.task.IsCompleted -> true
+    | Some _ -> true
     | _ -> false
 
   static member addBrokerChan (b:Broker, ch:Chan) (s:ClusterState)=
@@ -114,11 +107,15 @@ type internal ClusterState = {
         version = s.version + 1
     }
   
-  static member removeBroker (b:Broker) (s:ClusterState) =
-    let s = 
-      ClusterState.tryFindBrokerChanById b.nodeId s
-      |> Option.map (fun ch -> ClusterState.removeBrokerChan ch s)
-      |> Option.getOr s
+  static member removeBroker (b:Broker) (s:ClusterState) : Async<ClusterState> = async {    
+    let! s = async {
+      match ClusterState.tryFindBrokerChanById b.nodeId s with
+      | Some ch -> 
+        do! Chan.close ch
+        let ep = Chan.endpoint ch
+        return ClusterState.removeBrokerChan ep s
+      | None ->
+        return s }
     let groupIds = 
       s.brokersByGroup
       |> Seq.choose (fun kvp ->
@@ -129,27 +126,25 @@ type internal ClusterState = {
       |> Seq.choose (fun kvp -> 
         if kvp.Value = b then Some kvp.Key
         else None)
-    {
-      s with
-        bootstrapBroker =
-          match s.bootstrapBroker with
-          | Some b' when b' = b -> None
-          | b -> b
-        brokersByGroup = s.brokersByGroup |> Map.removeAll groupIds
-        brokersByTopicPartition = s.brokersByTopicPartition |> Map.removeAll topicPartitions
-        brokersByNodeId = s.brokersByNodeId |> Map.remove b.nodeId
-        version = s.version + 1
+    return      
+      { s with
+          bootstrapBroker =
+            match s.bootstrapBroker with
+            | Some b' when b' = b -> None
+            | b -> b
+          brokersByGroup = s.brokersByGroup |> Map.removeAll groupIds
+          brokersByTopicPartition = s.brokersByTopicPartition |> Map.removeAll topicPartitions
+          brokersByNodeId = s.brokersByNodeId |> Map.remove b.nodeId
+          version = s.version + 1 }
     }
   
-  // TODO: close connection?
-  static member removeBrokerChan (ch:Chan) (s:ClusterState) =
-    let ep = Chan.endpoint ch
+  static member private removeBrokerChan (ep:EndPoint) (s:ClusterState) =    
     let nodeIds =
       s.brokerChansByNodeId
       |> Seq.choose (fun kvp ->
         let ep' = Chan.endpoint kvp.Value
         if ep' = ep then Some kvp.Key
-        else None)
+        else None)    
     {
       s with
         brokerChansByEndPoint = s.brokerChansByEndPoint |> Map.remove ep
@@ -566,7 +561,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   let cts = new CancellationTokenSource()
 
   // NB: The presence of the critical boolean flag is unfortunate but required to
-  // address reentrancy issues. Fsailures are recovered inside of a critical region
+  // address reentrancy issues. Failures are recovered inside of a critical region
   // to prevent a thundering herd problem where many concurrent requests are failing
   // and attempting to reover. This works well, except in cases where the recovery may
   // itself need recovery (such as when a metadata refresh requires a bootstrap rediscovery).
@@ -575,8 +570,24 @@ type KafkaConn internal (cfg:KafkaConfig) =
   // reconfigure its broker queues. The problem is that the Producer foregoes the routing
   // capabilities provided by the underlying connection.
 
-  /// Connects to the broker at the specified host.
-  let rec connBroker (connState:ClusterState) (b:Broker) : Async<Result<ClusterState, exn>> = async {
+  /// Connects to the broker at the specified endpoint.
+  let rec connBrokerEndPoint (connState:ClusterState) (ep:EndPoint) : Async<Result<Chan, exn>> = async {
+    match connState |> ClusterState.tryFindBrokerChanByEndPoint ep with
+    | Some ch ->
+      try
+        do! Chan.ensureOpen ch
+        return Success ch
+      with ex ->
+        return Failure ex
+    | _ ->
+      try
+        let! ch = Chan.connect (cfg.connId, !apiVersion, cfg.tcpConfig, cfg.clientId) ep
+        return Success ch
+      with ex ->
+        return Failure ex }
+
+  /// Connects to the broker at the specified host, attemping all discovered IPs.
+  and connBroker (connState:ClusterState) (b:Broker) : Async<Result<ClusterState, exn>> = async {
     let! ips = async {
       match IPAddress.tryParse b.host with
       | Some ip ->
@@ -593,45 +604,38 @@ type KafkaConn internal (cfg:KafkaConfig) =
         let! connRes = connBrokerEndPoint connState ep
         match connRes with
         | Success ch ->
+          //Log.info "connected_to_broker|broker=%O" (Broker.endpoint b)
           return connState |> ClusterState.addBrokerChan (b, ch) |> Success
         | Failure ex ->
-          return Failure ex  }) }
-
-  /// Connects to the broker at the specified endpoint.
-  and connBrokerEndPoint (connState:ClusterState) (ep:EndPoint) : Async<Result<Chan, exn>> = async {
-    match connState |> ClusterState.tryFindBrokerChanByEndPoint ep with
-    | Some ch when not ch.task.IsCompleted ->
-      return Success ch
-    | _ ->
-      try
-        let! ch = Chan.connect (cfg.connId, !apiVersion, cfg.tcpConfig, cfg.clientId) ep
-        return Success ch
-      with ex ->
-        return Failure ex }
+          //Log.error "failed_to_connect_to_broker|broker=%O error=\"%O\"" (Broker.endpoint b) ex
+          return Failure ex }) }
 
   /// Connects to the specified broker and stores the connection in the cluster state.
-  and connBrokerAndApply (callingState:ClusterState) (b:Broker) : Async<Result<ClusterState, exn>> = async {
-    return!
-      stateCell
-      |> MVar.updateStateAsync (fun state -> async {
-        if ClusterState.containsBrokerChan state b.nodeId then 
-          return state, Success state
-        else
-          let! ch = connBroker state b
-          match ch with
-          | Success state' -> 
-            return state', Success state'
-          | Failure ex ->
-            return state, Failure ex }) }
+  and connBrokerAndApply (callingState:ClusterState) (b:Broker) : Async<Result<ClusterState, exn>> =
+    stateCell
+    |> MVar.updateStateAsync (fun currentState -> async {
+      if ClusterState.containsBrokerChan currentState b.nodeId then 
+        return currentState, Success currentState
+      else
+        let! ch = connBroker currentState b
+        match ch with
+        | Success state' -> 
+          return state', Success state'
+        | Failure ex ->
+          return currentState, Failure ex })
   
-  /// Removes a broker from the cluster view.
-  and removeBrokerAndApply (b:Broker) (callingState:ClusterState) = async {
-    return! 
-      stateCell 
-      |> MVar.updateAsync (fun currentState -> async {
-        Log.warn "removing_broker|version=%i calling_version=%i node_id=%i ep=%O" 
+  /// Removes a broker from the cluster state view.
+  and removeBrokerAndApply (b:Broker) (callingState:ClusterState) =
+    stateCell 
+    |> MVar.updateAsync (fun currentState -> async {
+      if (currentState.version = callingState.version) then
+        Log.warn "removing_broker|version=%i node_id=%i ep=%O conn_id=%s" 
+          currentState.version b.nodeId (Broker.endpoint b) cfg.connId
+        return! currentState |> ClusterState.removeBroker b
+      else
+        Log.trace "skipping_remove_broker|current_version=%i caller_version=%i node_id=%i ep=%O" 
           currentState.version callingState.version b.nodeId (Broker.endpoint b)
-        return currentState |> ClusterState.removeBroker b }) }
+        return currentState })
 
   /// Connects to the first available bootstrap broker and adds the connection to the cluster state.
   and bootstrap =
@@ -641,27 +645,31 @@ type KafkaConn internal (cfg:KafkaConfig) =
         cfg.bootstrapServers
         |> AsyncSeq.ofSeq
         |> AsyncSeq.traverseAsyncResult Exn.monoid (fun uri -> async {
-          //Log.info "connecting_to_bootstrap_broker|conn_id=%s broker=%O" cfg.connId uri
+          // Log.info "connecting_to_bootstrap_broker|conn_id=%s broker=%O" cfg.connId uri
           // NB: broker with negative id so as to not overlap with brokers where id is known
           let b = Broker(-2, uri.Host, uri.Port) 
           let! state' = connBroker callingState b
           match state' with
-          | Success state' ->
+          | Success state' ->            
             return state' |> ClusterState.updateBootstrapBroker b |> Success
-          | Failure e ->
-            return Failure e }) }
+          | Failure ex ->            
+            return Failure ex }) }
     connect
     |> Faults.AsyncFunc.retryStateResultThrowList 
         (fun errs ->
           let exnInner = Exn.ofSeq errs
-          Log.error "failed_to_connect_bootstrap_broker|brokers=%A error=\"%O\"" cfg.bootstrapServers exnInner
+          Log.error "failed_to_connect_bootstrap_brokers|brokers=%A error=\"%O\"" cfg.bootstrapServers exnInner
           exn("Failed to connect to a bootstrap broker.", exnInner))
         cfg.bootstrapConnectRetryPolicy
     
   /// Connects to the first available broker in the bootstrap list and returns the 
   /// initial routing table.
-  and getAndApplyBootstrap = async {
-    return! stateCell |> MVar.updateAsync bootstrap }
+  and getAndApplyBootstrap =
+    stateCell |> MVar.updateAsync bootstrap
+
+  and refreshBootstrap critical state =
+    if critical then bootstrap state
+    else getAndApplyBootstrap
 
   /// Fetches metadata and returns an updated connection state.
   and metadata (state:ClusterState) (topics:TopicName[]) = async {
@@ -706,7 +714,11 @@ type KafkaConn internal (cfg:KafkaConfig) =
       ClusterState.topicPartitions callerState
       |> Seq.map (fun kvp -> kvp.Key)
       |> Seq.toArray
-    Log.info "refreshing_metadata|conn_id=%s version=%i topics=%A" cfg.connId callerState.version topics
+    refreshMetadataFor critical callerState topics
+
+  and refreshMetadataFor (critical:bool) (callerState:ClusterState) topics =
+    Log.info "refreshing_metadata|conn_id=%s version=%i topics=%A bootstrap_broker=%A" 
+      cfg.connId callerState.version topics (callerState.bootstrapBroker |> Option.map (Broker.endpoint))
     if critical then metadata callerState topics
     else getAndApplyMetadata true callerState topics
 
@@ -726,20 +738,27 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and getAndApplyGroupCoordinator (callerState:ClusterState) (groupId:GroupId) =
     stateCell 
     |> MVar.updateAsync (fun (currentState:ClusterState) -> async {
-      if currentState.version > callerState.version 
-        && ClusterState.containsGroupCoordinator groupId currentState then 
+      //if currentState.version > callerState.version 
+      //  && ClusterState.containsGroupCoordinator groupId currentState then 
+      // TODO: review
+      if false then
         Log.trace "skipping_group_coordinator_update|current_version=%i caller_version=%i group_id=%s" currentState.version callerState.version groupId
         return currentState 
       else
         let! state' = groupCoordinator currentState groupId
         return state' })
 
+  and refreshGroupCoordinator critical (callerState:ClusterState) (groupId:GroupId) =
+    if critical then groupCoordinator callerState groupId
+    else getAndApplyGroupCoordinator callerState groupId
+
   /// Gets a channel for the specified broker.
   and getBrokerChan (critical:bool) (state:ClusterState) (b:Broker) = async {
     match ClusterState.tryFindBrokerChanById b.nodeId state with
-    | Some ch when not ch.task.IsCompleted ->
+    | Some ch ->
+      // TODO: if channel is faulted, return error and force metadata refresh
       return Success ch
-    | _ ->
+    | None ->
       Log.trace "broker_chan_missing|node_id=%i ep=%O version=%i" b.nodeId (Broker.endpoint b) state.version
       let! brokerConn = 
         if critical then connBroker state b
@@ -755,19 +774,27 @@ type KafkaConn internal (cfg:KafkaConfig) =
     let! ch = getBrokerChan critical state b
     match ch with
     | Success ch ->
-      let! chanRes = Chan.send ch req
-      match chanRes with
-      | Success res ->
-        return Success res
-      | Failure errs ->
-        Log.warn "broker_request_failed|node_id=%i ep=%O req=%s error=\"%O\"" 
-          b.nodeId (Broker.endpoint b) (RequestMessage.Print req) (ChanError.printErrors errs)
-        let! _state =
-          if critical then async.Return state
-          else removeBrokerAndApply b state
-        return Failure errs
+      //Log.trace "sending_to_broker|node_id=%i ep=%O req=%s" b.nodeId (Broker.endpoint b) (RequestMessage.Print req)
+      try
+        let! chanRes = Chan.send ch req
+        match chanRes with
+        | Success res ->
+          return Success res
+        | Failure errs ->
+          let! _state =
+            if critical then ClusterState.removeBroker b state
+            else removeBrokerAndApply b state
+          return Failure errs
+       with ex ->
+        match Exn.tryFindByType<ResponseDecodeException> ex with
+        | Some ex ->
+          return raise ex
+        | None ->
+          let! _state =
+            if critical then ClusterState.removeBroker b state
+            else removeBrokerAndApply b state
+          return Failure [ChanError.ChanFailure ex]
     | Failure errs ->
-      Log.warn "broker_chan_connection_failed|node_id=%i ep=%O req=%s error=[%s]" b.nodeId (Broker.endpoint b) (RequestMessage.Print req) (ChanError.printErrors errs)
       return Failure errs }
 
   /// Sends a request to a specific broker and handles failures.
@@ -811,7 +838,6 @@ type KafkaConn internal (cfg:KafkaConfig) =
           let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
           match rs' with
           | Some rs ->
-            // rediscover cluster state, and retry operation
             let! state' = recoverBrokerChanRequestError critical state (b, req, chanErr)
             return! routeToBrokerWithRecovery critical rs state' req 
           | None ->
@@ -848,43 +874,34 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
     | Failure rt ->
       Log.trace "missing_route|route_type=%A request=%s" rt (RequestMessage.Print req)
+      // TODO: should this delay on initial call?
       let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
       match rs' with
       | Some rs -> 
         let! state' = async {
           match rt with
           | RouteType.BootstrapRoute ->
-            if critical then return! bootstrap state
-            else return! getAndApplyBootstrap
+            return! refreshBootstrap critical state
           | RouteType.GroupRoute gid ->
-            if critical then return! groupCoordinator state gid
-            else return! getAndApplyGroupCoordinator state gid
+            return! refreshGroupCoordinator critical state gid
           | RouteType.TopicRoute tns ->
-            if critical then return! metadata state tns
-            else return! getAndApplyMetadata true state tns
+            return! refreshMetadataFor critical state tns
           | RouteType.AllBrokersRoute ->
-            if critical then return! metadata state [||]
-            else return! getAndApplyMetadata true state [||] }
+            return! refreshMetadataFor critical state [||] }
         return! routeToBrokerWithRecovery critical rs state' req
       | None ->
         return failwithf "missing_route|attempts=%i route_type=%A" rs.attempt rt }
 
   /// Handles a failure to communicate with a broker.
   and recoverBrokerChanRequestError (critical:bool) (state:ClusterState) (b:Broker, req:RequestMessage, chanErrs:ChanError list) = async {
-    Log.warn "recovering_broker_chan_error|conn_id=%s node_id=%i endpoint=%O request=%s errors=[%s]" 
-      cfg.connId b.nodeId (Broker.endpoint b) (RequestMessage.Print req) (ChanError.printErrors chanErrs)
-    // TODO: this repeats work done in sendToBroker
-    let! state =
-      if critical then async.Return (ClusterState.removeBroker b state)
-      else removeBrokerAndApply b state
+    Log.warn "handling_broker_chan_error|node_id=%i endpoint=%O request=%s conn_id=%s critical=%b errors=[%s]" 
+      b.nodeId (Broker.endpoint b) (RequestMessage.Print req) cfg.connId critical (ChanError.printErrors chanErrs)
     match RouteType.ofRequest req with
     | RouteType.BootstrapRoute ->
-      let! state' = 
-        if critical then bootstrap state
-        else getAndApplyBootstrap
-      return state'
-    | _ ->
-      // TODO: group metadata?
+      return! refreshBootstrap critical state
+    | RouteType.GroupRoute groupId ->
+      return! refreshGroupCoordinator critical state groupId
+    | RouteType.TopicRoute _ | RouteType.AllBrokersRoute ->
       return! refreshMetadata critical state }
 
   /// Gets the cancellation token triggered when the connection is closed.
