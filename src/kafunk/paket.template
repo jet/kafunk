@@ -19,6 +19,8 @@ summary
     F# client for Kafka
 description
     Description not set
+excludeddependencies
+  SourceLink.Create.CommandLine
 dependencies
   framework: netstandard2.0
 	FSharp.Core >= LOCKEDVERSION
