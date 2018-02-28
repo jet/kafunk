@@ -25,7 +25,7 @@ dependencies
   framework: netstandard2.0
 	FSharp.Core >= LOCKEDVERSION
 	FSharp.Control.AsyncSeq >= LOCKEDVERSION
-  framework: net452
+  framework: net45
     FSharp.Core >= LOCKEDVERSION-Legacy
 	FSharp.Control.AsyncSeq >= LOCKEDVERSION-Legacy
 	Snappy.NET >= LOCKEDVERSION-Legacy

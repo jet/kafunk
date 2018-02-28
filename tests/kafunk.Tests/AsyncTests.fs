@@ -90,7 +90,7 @@ let ``Async.withCancellation should cancel`` () =
   shouldEqual true !cancelled None
 
 
-[<Test>]
+[<Test; Ignore("Flaky Test in CI slaves")>]
 let ``Async.choose should respect ambient cancellation token`` () =
   
   let cancelled0 = ref false
