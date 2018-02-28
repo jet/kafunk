@@ -2,6 +2,7 @@ RESTRICTION: || (== net40) (== net45)
 NUGET
   remote: https://api.nuget.org/v3/index.json
     Crc32C.NET (1.0.5)
+<<<<<<< HEAD
     FSharp.Control.AsyncSeq (2.0.20)
       FSharp.Core (>= 3.1.2) - restriction: || (&& (== net40) (>= net45)) (== net45)
       System.ValueTuple (>= 4.4) - restriction: || (&& (== net40) (>= net45)) (== net45)
@@ -10,6 +11,10 @@ NUGET
     NETStandard.Library (2.0.1) - restriction: || (&& (== net40) (>= net45)) (== net45)
       Microsoft.NETCore.Platforms (>= 1.1) - restriction: || (&& (== net40) (>= monoandroid)) (&& (== net40) (>= monotouch)) (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (&& (== net40) (>= net461)) (&& (== net40) (>= netcoreapp2.0)) (&& (== net40) (>= netstandard1.0)) (&& (== net40) (>= netstandard1.1)) (&& (== net40) (>= netstandard1.2)) (&& (== net40) (>= netstandard1.3)) (&& (== net40) (>= netstandard1.4)) (&& (== net40) (>= netstandard1.5)) (&& (== net40) (>= netstandard1.6)) (&& (== net40) (>= netstandard2.0)) (&& (== net40) (>= portable-net45+win8+wp8+wpa81)) (&& (== net40) (>= portable-net45+win8+wpa81)) (&& (== net40) (>= portable-net451+win81+wpa81)) (&& (== net40) (>= uap10.0)) (&& (== net40) (>= wpa81)) (&& (== net40) (>= xamarinios)) (&& (== net40) (>= xamarinmac)) (&& (== net40) (>= xamarintvos)) (&& (== net40) (>= xamarinwatchos)) (== net45)
       System.Runtime.InteropServices.RuntimeInformation (>= 4.3) - restriction: || (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (&& (== net40) (>= netstandard1.1)) (&& (== net40) (>= netstandard1.2)) (&& (== net40) (>= netstandard1.3)) (&& (== net40) (>= netstandard1.4)) (&& (== net40) (>= netstandard1.5)) (&& (== net40) (>= netstandard1.6)) (&& (== net40) (>= portable-net45+win8+wpa81)) (&& (== net40) (>= portable-net451+win81+wpa81)) (&& (== net40) (>= uap10.0)) (&& (== net40) (>= wpa81)) (== net45)
+=======
+    FSharp.Control.AsyncSeq (2.0.18)
+    FSharp.Core (3.1.2.5)
+>>>>>>> origin/conn_mgmt
     Snappy.NET (1.1.1.8)
       Crc32C.NET (>= 1.0.5)
     System.Runtime.InteropServices.RuntimeInformation (4.3) - restriction: || (&& (== net40) (>= net45)) (&& (== net40) (>= net451)) (&& (== net40) (>= net46)) (== net45)
@@ -525,7 +530,11 @@ NUGET
       System.Xml.ReaderWriter (>= 4.3) - restriction: || (>= dnxcore50) (&& (< monoandroid) (< monotouch) (< net45) (>= netstandard1.3) (< win8) (< wpa81) (< xamarinios) (< xamarinmac) (< xamarintvos) (< xamarinwatchos)) (&& (< monoandroid) (< net45) (>= netstandard1.0) (< netstandard1.3) (< win8) (< wp8) (< wpa81))
 GITHUB
   remote: fsharp/FAKE
+<<<<<<< HEAD
     modules/Octokit/Octokit.fsx (8f21aabb0974b0f4c7b7dab674b2ea2691a9db8c)
+=======
+    modules/Octokit/Octokit.fsx (d383ad81321f728c9a18165a328ab692ec05cc2c)
+>>>>>>> origin/conn_mgmt
       Octokit (>= 0.20)
 GROUP Test
 REDIRECTS: FORCE
