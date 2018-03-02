@@ -62,8 +62,11 @@ module Binary =
 
   let inline sizeInt8 (_:int8) = 1
 
+  let inline peekInt8Offset (buf : Segment) (offset: int) : int8 =
+    int8 buf.Array.[buf.Offset + offset]
+
   let inline peekInt8 (buf : Segment) : int8 =
-    int8 buf.Array.[buf.Offset]
+    peekInt8Offset buf 0
 
   let inline readInt8 (buf : Segment) : int8 * Segment =
     (peekInt8 buf, (buf |> shiftOffset 1))
@@ -343,6 +346,9 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.WriteBool (x:bool) =
     buf <- Binary.writeBool x buf
 
+  member __.PeekIn8Offset (offset:int) : int8 =
+    Binary.peekInt8Offset buf offset
+
   member __.ReadInt8 () : int8 =
     let r = Binary.peekInt8 buf
     __.ShiftOffset 1
@@ -382,6 +388,39 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.WriteInt64 (x:int64) =
     buf <- Binary.writeInt64 x buf
 
+  member __.ReadVarint () : int64 =
+    /// Mutable counter indicating the number of bits that the next 7 bits should
+    /// be shifted by into the final value.
+    let mutable shiftBy = 0
+
+    /// Mutable accumulator to store the final result.
+    let mutable result = 0L
+
+    /// Mutable flag to control the loop.
+    let mutable loop = true
+
+    /// A bitmask used to identify the high bit in a byte
+    let msbMask = 0b1000_0000y
+
+    while loop do
+      let next = __.ReadInt8()
+
+      let valueToShiftIntoResult =
+        if (next &&& msbMask) = 0y then
+          // If the highest bit is not set, then we're done.
+          loop <- false
+          next
+        else
+          // The MSB is only a flag indicating whether or not we should
+          // keep scanning, it should be removed from the final value.
+          next ^^^ msbMask
+
+      result <- result ||| (int64 valueToShiftIntoResult <<< shiftBy)
+      shiftBy <- shiftBy + 7
+
+    // BUG: Kafka is currently doubling all varints?
+    result / 2L
+
   member __.WriteBytes (bytes:ArraySegment<byte>) =
     if isNull bytes.Array then
       __.WriteInt32 -1
@@ -394,6 +433,16 @@ type BinaryZipper (buf:ArraySegment<byte>) =
     let length = __.ReadInt32 ()
     if length = -1 then
       //Binary.empty
+      ArraySegment<byte>(buf.Array, buf.Offset, 0)
+    else
+      let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
+      __.ShiftOffset length
+      arr
+
+  member __.ReadVarintBytes () : ArraySegment<byte> =
+    let length = __.ReadVarint () |> int
+
+    if length = -1 then
       ArraySegment<byte>(buf.Array, buf.Offset, 0)
     else
       let arr = ArraySegment<byte>(buf.Array, buf.Offset, length)
