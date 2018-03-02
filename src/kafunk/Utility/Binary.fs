@@ -423,6 +423,7 @@ type BinaryZipper (buf:ArraySegment<byte>) =
 
   member __.ReadArray (read:BinaryZipper -> 'a) : 'a[] =
     let n = __.ReadInt32 ()
+    //if n = -1 then [||] else
     let arr = Array.zeroCreate n
     for i = 0 to n - 1 do
       arr.[i] <- read __

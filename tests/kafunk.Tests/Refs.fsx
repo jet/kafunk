@@ -1,6 +1,6 @@
-﻿#r "bin/release/net461/fsharp.control.asyncseq.dll"
-#r "bin/Release/net461/kafunk.dll"
-#r "bin/Release/net461/kafunk.Tests.dll"
+﻿#r "bin/release/net45/fsharp.control.asyncseq.dll"
+#r "bin/Release/net45/kafunk.dll"
+#r "bin/Release/net45/kafunk.Tests.dll"
 #load "Prelude.fs"
 #load "Async.fs"
 

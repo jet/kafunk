@@ -920,7 +920,9 @@ module Protocol =
         let ts = 
           if ver >= 1s then buf.ReadInt64 ()
           else 0L
-        let os = buf.ReadArray (fun buf -> buf.ReadInt64 ())
+        let os = 
+          if ver >= 1s then [|buf.ReadInt64 ()|] 
+          else buf.ReadArray (fun buf -> buf.ReadInt64 ())
         PartitionOffsets(p, ec, ts, os)
       let readTopic (buf:BinaryZipper) =
         let t = buf.ReadString ()
