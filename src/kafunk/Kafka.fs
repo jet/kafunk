@@ -594,7 +594,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
         return [|ip|]
       | None ->
         let! ips = Dns.IPv4.getAllAsync b.host
-        Log.info "discovered_dns|conn_id=%s host=%s ips=[%s]" cfg.connId b.host (Printers.stringsCsv ips)
+        Log.info "discovered_dns|host=%s ips=[%s] conn_id=%s" b.host (Printers.stringsCsv ips) cfg.connId
         return ips }
     return!
       ips
@@ -640,7 +640,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
   /// Connects to the first available bootstrap broker and adds the connection to the cluster state.
   and bootstrap =
     let connect (rs:RetryState) (callingState:ClusterState) = async { 
-      Log.info "connecting_to_bootstrap_brokers|conn_id=%s brokers=%A attempt=%i" cfg.connId cfg.bootstrapServers rs.attempt
+      Log.info "connecting_to_bootstrap_brokers|brokers=%A attempt=%i conn_id=%s" cfg.bootstrapServers rs.attempt cfg.connId
       return!
         cfg.bootstrapServers
         |> AsyncSeq.ofSeq
@@ -717,8 +717,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
     refreshMetadataFor critical callerState topics
 
   and refreshMetadataFor (critical:bool) (callerState:ClusterState) topics =
-    Log.info "refreshing_metadata|conn_id=%s version=%i topics=%A bootstrap_broker=%A" 
-      cfg.connId callerState.version topics (callerState.bootstrapBroker |> Option.map (Broker.endpoint))
+    Log.info "refreshing_metadata|topics=%A version=%i bootstrap_broker=%A conn_id=%s" 
+      topics callerState.version (callerState.bootstrapBroker |> Option.map (Broker.endpoint)) cfg.connId
     if critical then metadata callerState topics
     else getAndApplyMetadata true callerState topics
 
@@ -728,8 +728,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
       routeToBrokerWithRecovery true RetryState.init state
       |> AsyncFunc.dimap RequestMessage.GroupCoordinator (ResponseMessage.toGroupCoordinator)
     let! res = send (GroupCoordinatorRequest(groupId))
-    Log.info "received_group_coordinator|conn_id=%s group_id=%s %s" 
-      cfg.connId groupId (GroupCoordinatorResponse.Print res)
+    Log.info "received_group_coordinator|group_id=%s conn_id=%s %s" 
+      groupId cfg.connId (GroupCoordinatorResponse.Print res)
     return 
       state 
       |> ClusterState.updateGroupCoordinator (Broker(res.coordinatorId, res.coordinatorHost, res.coordinatorPort), groupId) }
@@ -808,8 +808,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
           | None -> 
             return res
           | Some (errorCode,action) ->
-            Log.warn "channel_response_errored|conn_id=%s endpoint=%O error_code=%i retry_action=%A req=%s res=%s" 
-              cfg.connId (Broker.endpoint b) errorCode action (RequestMessage.Print req) (ResponseMessage.Print res)
+            Log.warn "channel_response_errored|endpoint=%O error_code=%i retry_action=%A req=%s res=%s conn_id=%s" 
+              (Broker.endpoint b) errorCode action (RequestMessage.Print req) (ResponseMessage.Print res) cfg.connId
             match action with
             | RetryAction.PassThru ->
               return res
@@ -894,8 +894,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   /// Handles a failure to communicate with a broker.
   and recoverBrokerChanRequestError (critical:bool) (state:ClusterState) (b:Broker, req:RequestMessage, chanErrs:ChanError list) = async {
-    Log.warn "handling_broker_chan_error|node_id=%i endpoint=%O request=%s conn_id=%s critical=%b errors=[%s]" 
-      b.nodeId (Broker.endpoint b) (RequestMessage.Print req) cfg.connId critical (ChanError.printErrors chanErrs)
+    Log.warn "handling_broker_chan_error|node_id=%i endpoint=%O req=%s critical=%b errors=[%s] conn_id=%s" 
+      b.nodeId (Broker.endpoint b) (RequestMessage.Print req) critical (ChanError.printErrors chanErrs) cfg.connId
     match RouteType.ofRequest req with
     | RouteType.BootstrapRoute ->
       return! refreshBootstrap critical state

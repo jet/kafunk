@@ -349,9 +349,13 @@ module Protocol =
     new (msg) = new CorruptCrc32Exception (msg, null)
 
   /// Raised when the message is bigger than the message set and therefore can't be received.
-  type MessageTooBigException (msg:string, ex:exn) =
+  type MessageTooBigException (msg:string, ex:exn, magicByte:int8, messageSize:int) =
     inherit System.Exception (msg, ex)
-    new (msg) = new MessageTooBigException (msg, null)
+    member __.MagicByte = magicByte
+    member __.MessageSize = messageSize
+    new (msg) = new MessageTooBigException (msg, null, 0y, 0)
+    new (msg,magicByte) = new MessageTooBigException (msg, null, magicByte, 0)
+    new (msg,magicByte,messageSize) = new MessageTooBigException (msg, null, magicByte, messageSize)
 
   /// A Kafka message type used for producing and fetching.
   [<NoEquality;NoComparison>]
@@ -468,24 +472,15 @@ module Protocol =
         let messageSetRemainder = messageSetSize - consumed
         if messageSetRemainder >= 12 && buf.Buffer.Count >= 12 then
           let (offset:Offset) = buf.ReadInt64 ()
-          let (messageSize:MessageSize) = buf.ReadInt32 ()
-          let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
-          if messageSize > messageSetSize then
-            let errMsg = sprintf "partition=%i offset=%i message_set_size=%i message_size=%i consumed_bytes=%i consumed_count=%i" 
-                                    partition offset messageSetSize messageSize consumed arr.Count
+          let (messageSize:MessageSize) = buf.ReadInt32 ()          
+          if messageSize > messageSetSize then                       
             if not skipTooLarge then
-              raise (MessageTooBigException(errMsg))
-            else
-//              let payload = Binary.toString buf.Buffer
-//              printfn "|WARN|MessageTooBig|%s" errMsg
-//              printfn "|WARN|MessageTooBig|payload=%s" payload
-//              try
-//                let message = Message.Read (messageVer,buf)
-//                printfn "|WARN|MessageTooBig|payload=%s" (Binary.toString message.value)
-//              with ex ->
-//                printfn "ERROR DECODING MESSAGE|%O" ex
-              ()
+              let magicByte = buf.TryPeekIn8AtOffset (4)
+              let errMsg = sprintf "partition=%i offset=%i message_set_size=%i message_size=%i message_set_rem=%i buffer_size=%i consumed_bytes=%i consumed_count=%i magic_byte=%i" 
+                                      partition offset messageSetSize messageSize messageSetRemainder buf.Buffer.Count consumed arr.Count magicByte
+              raise (MessageTooBigException(errMsg,magicByte,messageSize))
           try
+            let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
             if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
               let message = Message.Read (messageVer,buf)
               arr.Add (MessageSetItem(offset,messageSize,message))
@@ -514,11 +509,11 @@ module Protocol =
       let arr = ResizeArray<_>()
       let mutable consumed = 0
       let o = buf.Buffer.Offset
-
       let firstOffset = buf.ReadInt64()
-      do buf.ShiftOffset 8 // Length (int32) + PartitionLeaderEpoch (int32)
+      let _recordBatchLength = buf.ReadInt32 ()      
+      let _partitionLeaderEpoch = buf.ReadInt32 ()
       let magicByte = buf.ReadInt8()
-      let crcSum = buf.ReadInt32()
+      let _crcSum = buf.ReadInt32()
       let _batchAttributes = buf.ReadInt16()
       let _lastOffsetDelta = buf.ReadInt32()
       let firstTimestamp = buf.ReadInt64()
@@ -526,14 +521,13 @@ module Protocol =
       do buf.ShiftOffset 14 // producer ID (int64) + producer epoch (int16) + first sequence (int32)
       let numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
       consumed <- consumed + (buf.Buffer.Offset - o)
-
       while consumed < recordBatchSize && buf.Buffer.Count > 0 do
         let o = buf.Buffer.Offset
         let recordLength = buf.ReadVarint() |> int32
         let recordStart = buf.Buffer.Offset
-
         if recordLength > buf.Buffer.Count then
           // Response does not contain a full message! Skip to the end.
+          //printfn "Response does not contain a full message! Skip to the end."
           buf.ShiftOffset buf.Buffer.Count
         else
           let recordAttrributes = buf.ReadInt8()
@@ -545,6 +539,7 @@ module Protocol =
           let remainder = recordLength - (buf.Buffer.Offset - recordStart)
           if remainder > 0 then
             // Ignore headers for now
+            // printfn "Ignore headers for now"
             buf.ShiftOffset remainder
 
           let offset = firstOffset + offsetDelta
@@ -871,6 +866,70 @@ module Protocol =
       new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
+    //// Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
+    //static member Read (ver:ApiVersion, buf:BinaryZipper) =
+    //  let throttleTime =
+    //    match ver with
+    //    | 0s -> 0 
+    //    | _ -> buf.ReadInt32 ()
+    //  let numTopics = buf.ReadInt32()
+    //  let topics = Array.zeroCreate numTopics
+    //  for i = 0 to topics.Length - 1 do
+    //    let topic = buf.ReadString ()
+    //    let numPartitions = buf.ReadInt32 ()
+    //    let partitions = Array.zeroCreate numPartitions
+    //    let mutable hasRecordBatch = false
+    //    for j = 0 to partitions.Length - 1 do
+    //      try
+    //        let partition = buf.ReadInt32 ()
+    //        let errorCode = buf.ReadInt16 ()
+    //        let highWatermark = buf.ReadInt64 ()
+    //        let lastStableOffset = -1L //if ver >= 4s then buf.ReadInt64() else -1L
+    //        let logStartOffset = -1L // if ver >= 5s then buf.ReadInt64() else -1L
+    //        //let numAbortedTxns = -1 // = if ver >= 4s then buf.ReadInt32() else -1
+    //        let abortedTxns = null
+    //          //if numAbortedTxns >= 0 then
+    //          //  let abortedTxns = Array.zeroCreate numAbortedTxns
+    //          //  for k = 0 to abortedTxns.Length - 1 do
+    //          //    let producerId = buf.ReadInt64 ()
+    //          //    let firstOffset = buf.ReadInt64 ()
+    //          //    abortedTxns.[k] <- (producerId, firstOffset)
+    //          //  abortedTxns
+    //          //else
+    //          //null
+    //        let messageSetSize = buf.ReadInt32 ()
+    //        let magicByte = buf.TryPeekIn8AtOffset 16
+    //        let messageSet =
+    //          if magicByte = 2y then
+    //            //printfn "detected new recordbatch format|partition=%i message_set_size=%i index=%i total=%i" partition messageSetSize j numPartitions
+    //            try 
+    //              hasRecordBatch <- true
+    //              let ms = MessageSet.ReadFromRecordBatch (messageSetSize, buf)              
+    //              printfn "read new recordbatch format|partition=%i message_set_size=%i index=%i total=%i message_count=%i" partition messageSetSize j numPartitions ms.messages.Length
+    //              ms
+    //            with ex ->
+    //              printfn "error on read from batch|error=%O" ex
+    //              reraise ()
+    //          else
+    //            try MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+    //            with :? MessageTooBigException as ex when hasRecordBatch ->
+    //              let bufr = Binary.toString buf.Buffer
+    //              printfn "error when record batch present|index=%i message_set_size=%i error=%O buffer=%s" j messageSetSize ex bufr
+    //              MessageSet([||])
+    //        //let messageSet = 
+    //        //  try MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+    //        //  with :? MessageTooBigException as ex ->
+    //        //    printfn "message_too_large, attempting to read as record batch|magic_byte=%i" ex.MagicByte
+    //        //    if ex.MagicByte = 2y then MessageSet.ReadFromRecordBatch (messageSetSize, buf)
+    //        //    else reraise ()
+    //        //let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+    //        partitions.[j] <- partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet
+    //      with ex ->
+    //        printfn "error reading partition|index=%i total=%i error=%O" j numPartitions ex
+    //    let partitions = partitions |> Array.filter (fun p -> not <| isNull p)
+    //    topics.[i] <- (topic,partitions)
+    //  FetchResponse(throttleTime, topics)
+
     // Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
     static member Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTime =
@@ -887,30 +946,11 @@ module Protocol =
           let partition = buf.ReadInt32 ()
           let errorCode = buf.ReadInt16 ()
           let highWatermark = buf.ReadInt64 ()
-          let lastStableOffset = if ver >= 4s then buf.ReadInt64() else -1L
-          let logStartOffset = if ver >= 5s then buf.ReadInt64() else -1L
-          let numAbortedTxns = if ver >= 4s then buf.ReadInt32() else -1
-          let abortedTxns =
-            if numAbortedTxns >= 0 then
-              let abortedTxns = Array.zeroCreate numAbortedTxns
-              for k = 0 to abortedTxns.Length - 1 do
-                let producerId = buf.ReadInt64 ()
-                let firstOffset = buf.ReadInt64 ()
-                abortedTxns.[k] <- (producerId, firstOffset)
-              abortedTxns
-            else
-              null
           let messageSetSize = buf.ReadInt32 ()
-          let magicByte = buf.PeekIn8Offset 16
-          let messageSet =
-            if magicByte < 2y then
-              MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-            else
-              MessageSet.ReadFromRecordBatch (messageSetSize, buf)
-          partitions.[j] <-  partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet
+          let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+          partitions.[j] <- partition, errorCode, highWatermark, -1L, -1L, null, messageSetSize, messageSet
         topics.[i] <- (topic,partitions)
-      let res = FetchResponse(throttleTime, topics)
-      res
+      FetchResponse(throttleTime, topics)
 
   // Offset API
 

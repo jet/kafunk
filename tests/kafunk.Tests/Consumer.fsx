@@ -39,7 +39,8 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 1000000,
+      fetchMaxBytes = 1000,
+      fetchMaxBytesOverride = 10000,
       fetchMinBytes = 1,
       //fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,
@@ -65,11 +66,9 @@ let go = async {
   let! _ = Async.StartChild showProgress
 
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
-    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
-    
+    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)
-
     Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
       ms.topic
       ms.partition
@@ -87,8 +86,8 @@ let go = async {
     handle
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
-  do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
-  //do! Consumer.consume consumer handle
+  //do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
+  do! Consumer.consume consumer handle
   //do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
 
   Log.info "done_consuming"

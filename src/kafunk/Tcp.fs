@@ -323,7 +323,7 @@ type ReqRepSession<'a, 'b, 's> internal
 
   // these fields define the state of the session
   let txs = new ConcurrentDictionary<CorrelationId, DateTime * 's * TaskCompletionSource<'b option>>()
-  let [<VolatileField>] mutable sessionTask : Task<unit> = null
+  let [<VolatileField>] mutable sessionTask : Task<unit> = Task.never
 
   member private __.Demux (data:Binary.Segment) =
     let sessionData = SessionMessage.decode data
@@ -337,7 +337,11 @@ type ReqRepSession<'a, 'b, 's> internal
         if not (reply.TrySetResult (Some res)) then
           Log.warn "received_response_was_already_cancelled|correlation_id=%i size=%i" correlationId sessionData.payload.Count
       with ex ->
-        Log.error "response_decode_exception|correlation_id=%i error=\"%O\"" correlationId ex
+        //match ex with
+        //| :? MessageTooBigException -> ()
+        //| _ ->
+        //  Log.error "response_decode_exception|correlation_id=%i error=\"%O\"" correlationId ex
+        Log.trace "response_decode_exception|correlation_id=%i error=\"%O\"" correlationId ex
         reply.TrySetException (ResponseDecodeException(ex)) |> ignore
     else
       Log.trace "received_orphaned_response|correlation_id=%i in_flight_requests=%i" correlationId txs.Count
@@ -350,8 +354,8 @@ type ReqRepSession<'a, 'b, 's> internal
     let timeout = Task.Delay(requestTimeout)
     Task.WhenAny (timeout, sessionTask, rep.Task)
     |> Task.extend (fun t ->
-      if obj.ReferenceEquals (t.Result, sessionTask) then __.Cancel (correlationId,true)
-      elif obj.ReferenceEquals (t.Result, timeout) then  __.Cancel (correlationId,false)
+      if obj.ReferenceEquals (t.Result, sessionTask) then __.Cancel (correlationId,Some (sessionTask.Exception :> _))
+      elif obj.ReferenceEquals (t.Result, timeout) then  __.Cancel (correlationId,None)
       else ())
     |> ignore      
     match awaitResponse req with
@@ -363,18 +367,23 @@ type ReqRepSession<'a, 'b, 's> internal
       rep.SetResult (Some res)
     correlationId,sessionReq,rep
 
-  member private __.Cancel (correlationId,error) = 
+  member private __.Cancel (correlationId,error:exn option) = 
     let mutable token = Unchecked.defaultof<_>
     if txs.TryRemove(correlationId, &token) then
       let startTime,state,rep = token
       let inProgress = 
-        if error then rep.TrySetException (OperationCanceledException())
-        else rep.TrySetResult None 
+        match error with
+        | Some ex -> rep.TrySetException ex
+        | None -> rep.TrySetResult None 
       if inProgress then
         let endTime = DateTime.UtcNow
         let elapsed = endTime - startTime
         Log.trace "request_cancelled|remote_endpoint=%O correlation_id=%i in_flight_requests=%i state=%A start_time=%s end_time=%s elapsed_sec=%f" 
           remoteEndpoint correlationId txs.Count state (startTime.ToString("s")) (endTime.ToString("s")) elapsed.TotalSeconds
+
+  member private __.CancelAll (error) =
+    for tx in txs do
+      __.Cancel (tx.Key,error)
 
   /// Starts the session.
   member internal __.Start (task:Task<unit>) = async {
@@ -385,6 +394,7 @@ type ReqRepSession<'a, 'b, 's> internal
       //Log.info "session_closed2|remote_endpoint=%O" remoteEndpoint
     with ex ->
       Log.error "session_exception|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
+      __.CancelAll (Some ex)
       return raise ex }
 
   member internal __.Close () = async {
