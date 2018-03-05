@@ -9,7 +9,7 @@ open System.Threading.Tasks
 open System.Diagnostics
 
 
-let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\FetchResponse_RecordBatch.bin"
+let file = @"C:\code\kafunk\tests\kafunk.Tests\FetchResponse_RecordBatch.bin"
 let buf = System.IO.File.ReadAllBytes(file) |> Binary.ofArray |> BinaryZipper
 let res = FetchResponse.Read (2s, buf)
 
