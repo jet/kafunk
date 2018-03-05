@@ -786,9 +786,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
             else removeBrokerAndApply b state
           return Failure errs
        with ex ->
-        match Exn.tryFindByType<ResponseDecodeException> ex with
+        match Exn.tryFindByTypeT3<ResponseDecodeException, FramingException, OutOfMemoryException> ex with
         | Some ex ->
-          return raise ex
+          return raise ex        
         | None ->
           let! _state =
             if critical then ClusterState.removeBroker b state

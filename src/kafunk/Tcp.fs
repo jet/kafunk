@@ -163,9 +163,10 @@ module Socket =
 
 
 /// An exception thrown when an error occurs during framing.
-type FramingException (msg) =
-  inherit Exception (msg)
-  new () = FramingException(null)
+type FramingException (msg:string,ex:exn) =
+  inherit Exception (msg,ex)
+  new () = FramingException(null,null)
+  new (msg) = FramingException(msg,null)
 
 /// Stream framing
 module Framing =
@@ -180,7 +181,7 @@ module Framing =
 
     let inline allocBuffer size =
       try Binary.zeros size 
-      with ex -> raise (exn(sprintf "Error trying to allocate a buffer of size=%i" size, ex))
+      with ex -> raise (FramingException(sprintf "Error trying to allocate a buffer of size=%i" size, ex))
 
     [<Struct>]
     [<NoEquality;NoComparison;AutoSerializable(false)>]
