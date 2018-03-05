@@ -259,6 +259,11 @@ module internal Chan =
 
     /// Decodes the session layer input and session state into a response.
     let decode (_, (apiKey:ApiKey,apiVer:ApiVersion), buf:Binary.Segment) =
+      //match apiKey with
+      //| ApiKey.Fetch ->
+      //  let path = sprintf "%s_%s.bin" (apiKey.ToString().ToLower()) (Guid.NewGuid().ToString("N"))
+      //  System.IO.File.WriteAllBytes(path, Binary.toArray buf)
+      //| _ -> ()
       ResponseMessage.Read (apiKey,apiVer,BinaryZipper(buf))
 
     let! sessionAgent = 

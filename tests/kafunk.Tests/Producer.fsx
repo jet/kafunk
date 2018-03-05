@@ -21,11 +21,11 @@ let produceType = argiDefault 7 "2" |> Int32.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
 
-let payload = 
-  let bytes = Array.zeroCreate messageSize
-  let rng = Random()
-  rng.NextBytes bytes
-  bytes
+let payload = "hi"B
+  //let bytes = Array.zeroCreate messageSize
+  //let rng = Random()
+  //rng.NextBytes bytes
+  //bytes
 
 let batchCount = int (N / int64 batchSize)
 

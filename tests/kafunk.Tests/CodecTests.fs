@@ -1937,25 +1937,13 @@ let ``FetchResponse.read should decode unexpected RecordBatch response from v2 A
   Assert.AreEqual(135, lastMessage.offset)
   Assert.AreEqual("106010ce8ff6459fb7cf47d4251380d1:21", System.Text.Encoding.UTF8.GetString(firstMessage.message.key.Array, firstMessage.message.key.Offset, firstMessage.message.key.Count))
 
-//[<Test>]
-//let ``FetchResponse.read should decode partial FetchResponse`` () =
-//  let data = FetchResponseBinary
-//  for trim in [1..35] do
-//    let data = Binary.resize (data.Count - trim) data
-//    let (res:FetchResponse), _ = FetchResponse.Read data
-//    let tn,ps = res.topics.[0]
-//    let _p, _ec, _hwo, _mss, ms = ps.[0]
-//    Assert.AreEqual(1, res.topics.Length)
-//    Assert.AreEqual("test", tn)
-//    Assert.AreEqual(0, ms.messages.Length)
-
-//[<Test>]
-//let ``FetchResponse.read should read sample FetchResponse`` () =
-//  let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\sample_fetch_response.bin"
-//  let bytes = System.IO.File.ReadAllBytes file |> Binary.ofArray
-//  let res = FetchResponse.read bytes |> fst
-//  ()
+[<Test>]
+let ``FetchResponse should read v2`` () =
+  let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\FetchResponse_RecordBatch.bin"
+  let buf = System.IO.File.ReadAllBytes(file) |> Binary.ofArray |> BinaryZipper
+  let res = FetchResponse.Read (2s, buf)
   
+  ()
   
   
 

@@ -389,13 +389,27 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.WriteInt64 (x:int64) =
     buf <- Binary.writeInt64 x buf
 
-  member __.ReadVarint () : int64 =
+  member __.ReadVarint2 () : int =
+    let rec go value i =
+      let b = int <| __.ReadInt8 ()
+      if (b &&& 0x80 <> 0) then
+        let value = value ||| ((b &&& 0x7f) <<< i)
+        let i = i + 7
+        if (i > 28) then failwith "invalid varint" 
+        else go value i
+      else
+        value ||| (b <<< i)
+    let value = go 0 0
+    (value >>> 1) ^^^ -(value &&& 1)
+
+
+  member __.ReadVarint () : int =
     /// Mutable counter indicating the number of bits that the next 7 bits should
     /// be shifted by into the final value.
     let mutable shiftBy = 0
 
     /// Mutable accumulator to store the final result.
-    let mutable result = 0L
+    let mutable result = 0
 
     /// Mutable flag to control the loop.
     let mutable loop = true
@@ -416,11 +430,11 @@ type BinaryZipper (buf:ArraySegment<byte>) =
           // keep scanning, it should be removed from the final value.
           next ^^^ msbMask
 
-      result <- result ||| (int64 valueToShiftIntoResult <<< shiftBy)
+      result <- result ||| (int valueToShiftIntoResult <<< shiftBy)
       shiftBy <- shiftBy + 7
 
     // BUG: Kafka is currently doubling all varints?
-    result / 2L
+    result / 2
 
   member __.WriteBytes (bytes:ArraySegment<byte>) =
     if isNull bytes.Array then
@@ -441,8 +455,7 @@ type BinaryZipper (buf:ArraySegment<byte>) =
       arr
 
   member __.ReadVarintBytes () : ArraySegment<byte> =
-    let length = __.ReadVarint () |> int
-
+    let length = __.ReadVarint ()
     if length = -1 then
       ArraySegment<byte>(buf.Array, buf.Offset, 0)
     else
@@ -460,6 +473,15 @@ type BinaryZipper (buf:ArraySegment<byte>) =
       | _ -> ()
       consumed <- consumed + (buf.Offset - o')
     arr.ToArray()
+
+  member __.ReadVarintString () : string =
+    let length = __.ReadVarint ()
+    if length = -1 then
+      null
+    else
+      let str = Encoding.UTF8.GetString (buf.Array, buf.Offset, length)
+      __.ShiftOffset length
+      str
 
   member __.ReadString () : string =
     let length = __.ReadInt16 ()

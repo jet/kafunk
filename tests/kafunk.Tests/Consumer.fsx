@@ -38,9 +38,9 @@ let go = async {
     ConsumerConfig.create (
       groupId = group, 
       topic = topic, 
-      autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
+      autoOffsetReset = AutoOffsetReset.StartFromTime Time.LatestOffset,
       fetchMaxBytes = 1000,
-      fetchMaxBytesOverride = 10000,
+      //fetchMaxBytesOverride = 10000,
       fetchMinBytes = 1,
       //fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,
@@ -86,8 +86,8 @@ let go = async {
     handle
     |> Metrics.throughputAsync2To counter (fun (_,ms,_) -> ms.messageSet.messages.Length)
 
-  //do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
-  do! Consumer.consume consumer handle
+  do! Consumer.consumePeriodicCommit consumer (TimeSpan.FromSeconds 10.0) handle
+  //do! Consumer.consume consumer handle
   //do! Consumer.stream consumer |> AsyncSeq.iterAsync (fun (s,ms) -> handle s ms)
 
   Log.info "done_consuming"

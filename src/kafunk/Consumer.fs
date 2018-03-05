@@ -692,11 +692,11 @@ module Consumer =
                 state.state.generationId topic (Printers.partitionOffsetPairs offsets) cfg.fetchMaxBytes ex.MessageSize cfg.fetchMaxBytesOverride
               return! tryFetch c state offsets (Some cfg.fetchMaxBytesOverride)
             | _ ->
-              Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" 
+              Log.warn "fetch_exception|generation_id=%i topic=%s offsets=%s error=%O" 
                 state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
               return raise ex            
           | _ ->
-            Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" 
+            Log.warn "fetch_exception|generation_id=%i topic=%s offsets=%s error=%O" 
               state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
             return raise ex })
 

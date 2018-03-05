@@ -511,6 +511,7 @@ module Protocol =
       let o = buf.Buffer.Offset
       let firstOffset = buf.ReadInt64()
       let _recordBatchLength = buf.ReadInt32 ()      
+      //printfn "_recordBatchLength=%i recordBatchSize=%i" _recordBatchLength recordBatchSize
       let _partitionLeaderEpoch = buf.ReadInt32 ()
       let magicByte = buf.ReadInt8()
       let _crcSum = buf.ReadInt32()
@@ -519,40 +520,39 @@ module Protocol =
       let firstTimestamp = buf.ReadInt64()
       let _maxTimestamp = buf.ReadInt64()
       do buf.ShiftOffset 14 // producer ID (int64) + producer epoch (int16) + first sequence (int32)
-      let numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
+      let _numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
+      //printfn "_numRecords=%i" _numRecords
       consumed <- consumed + (buf.Buffer.Offset - o)
       while consumed < recordBatchSize && buf.Buffer.Count > 0 do
+        //printfn "count=%i buffer=%i consumed=%i" arr.Count buf.Buffer.Count consumed
         let o = buf.Buffer.Offset
-        let recordLength = buf.ReadVarint() |> int32
-        let recordStart = buf.Buffer.Offset
-        if recordLength > buf.Buffer.Count then
-          // Response does not contain a full message! Skip to the end.
+        let recordLength = buf.ReadVarint()
+        let rem = recordBatchSize - consumed
+        if recordLength > rem then
           //printfn "Response does not contain a full message! Skip to the end."
-          buf.ShiftOffset buf.Buffer.Count
+          buf.ShiftOffset (rem - 1)
+          consumed <- consumed + rem
         else
           let recordAttrributes = buf.ReadInt8()
           let timestampDelta = buf.ReadVarint()
           let offsetDelta = buf.ReadVarint()
           let key = buf.ReadVarintBytes()
           let value = buf.ReadVarintBytes()
-
-          let remainder = recordLength - (buf.Buffer.Offset - recordStart)
-          if remainder > 0 then
-            // Ignore headers for now
-            // printfn "Ignore headers for now"
-            buf.ShiftOffset remainder
-
-          let offset = firstOffset + offsetDelta
-          let timestamp = firstTimestamp + timestampDelta
-          // TODO: Refactor CRC logic instead of hard-coding -1 here
+          let _headersLength = buf.ReadVarint()          
+          //let headers = Array.zeroCreate headersLength
+          //for i = 0 to headers.Length - 1 do
+          //  let k = buf.ReadVarintString ()
+          //  let v = buf.ReadVarintString ()
+          //  headers.[i] <- (k,v)
+          let offset = firstOffset + int64 offsetDelta
+          let timestamp = firstTimestamp + int64 timestampDelta
+          //printfn "key=%s value=%s headers=%i offset=%i length=%i timestamp=%i" (Binary.toString key) (Binary.toString value) headersLength offset recordLength timestamp
           let message = Message(-1 (*crc*), magicByte, recordAttrributes, timestamp, key, value)
           arr.Add (MessageSetItem(offset, recordLength, message))
           consumed <- consumed + (buf.Buffer.Offset - o)
-
       MessageSet(arr.ToArray())
 
     static member CheckCrc (ver:ApiVersion, ms:MessageSet) =
-      //for (_,_,m) in ms.messages do
       for x in ms.messages do
         Message.CheckCrc (ver,x.message)
 
@@ -803,7 +803,7 @@ module Protocol =
           let logStartOffset = 
             if ver >= 5s then buf.ReadInt64 ()
             else 0L
-          partitions.[j] <- ProduceResponsePartitionItem(partition,errorCode,baseoffset,logAppendTime, logStartOffset)
+          partitions.[j] <- ProduceResponsePartitionItem(partition,errorCode,baseoffset,logAppendTime,logStartOffset)
         topics.[i] <- ProduceResponseTopicItem(topicName,partitions)
       let throttleTime = 
         if ver >= 1s then buf.ReadInt32 ()
@@ -866,70 +866,6 @@ module Protocol =
       new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
-    //// Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
-    //static member Read (ver:ApiVersion, buf:BinaryZipper) =
-    //  let throttleTime =
-    //    match ver with
-    //    | 0s -> 0 
-    //    | _ -> buf.ReadInt32 ()
-    //  let numTopics = buf.ReadInt32()
-    //  let topics = Array.zeroCreate numTopics
-    //  for i = 0 to topics.Length - 1 do
-    //    let topic = buf.ReadString ()
-    //    let numPartitions = buf.ReadInt32 ()
-    //    let partitions = Array.zeroCreate numPartitions
-    //    let mutable hasRecordBatch = false
-    //    for j = 0 to partitions.Length - 1 do
-    //      try
-    //        let partition = buf.ReadInt32 ()
-    //        let errorCode = buf.ReadInt16 ()
-    //        let highWatermark = buf.ReadInt64 ()
-    //        let lastStableOffset = -1L //if ver >= 4s then buf.ReadInt64() else -1L
-    //        let logStartOffset = -1L // if ver >= 5s then buf.ReadInt64() else -1L
-    //        //let numAbortedTxns = -1 // = if ver >= 4s then buf.ReadInt32() else -1
-    //        let abortedTxns = null
-    //          //if numAbortedTxns >= 0 then
-    //          //  let abortedTxns = Array.zeroCreate numAbortedTxns
-    //          //  for k = 0 to abortedTxns.Length - 1 do
-    //          //    let producerId = buf.ReadInt64 ()
-    //          //    let firstOffset = buf.ReadInt64 ()
-    //          //    abortedTxns.[k] <- (producerId, firstOffset)
-    //          //  abortedTxns
-    //          //else
-    //          //null
-    //        let messageSetSize = buf.ReadInt32 ()
-    //        let magicByte = buf.TryPeekIn8AtOffset 16
-    //        let messageSet =
-    //          if magicByte = 2y then
-    //            //printfn "detected new recordbatch format|partition=%i message_set_size=%i index=%i total=%i" partition messageSetSize j numPartitions
-    //            try 
-    //              hasRecordBatch <- true
-    //              let ms = MessageSet.ReadFromRecordBatch (messageSetSize, buf)              
-    //              printfn "read new recordbatch format|partition=%i message_set_size=%i index=%i total=%i message_count=%i" partition messageSetSize j numPartitions ms.messages.Length
-    //              ms
-    //            with ex ->
-    //              printfn "error on read from batch|error=%O" ex
-    //              reraise ()
-    //          else
-    //            try MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-    //            with :? MessageTooBigException as ex when hasRecordBatch ->
-    //              let bufr = Binary.toString buf.Buffer
-    //              printfn "error when record batch present|index=%i message_set_size=%i error=%O buffer=%s" j messageSetSize ex bufr
-    //              MessageSet([||])
-    //        //let messageSet = 
-    //        //  try MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-    //        //  with :? MessageTooBigException as ex ->
-    //        //    printfn "message_too_large, attempting to read as record batch|magic_byte=%i" ex.MagicByte
-    //        //    if ex.MagicByte = 2y then MessageSet.ReadFromRecordBatch (messageSetSize, buf)
-    //        //    else reraise ()
-    //        //let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-    //        partitions.[j] <- partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet
-    //      with ex ->
-    //        printfn "error reading partition|index=%i total=%i error=%O" j numPartitions ex
-    //    let partitions = partitions |> Array.filter (fun p -> not <| isNull p)
-    //    topics.[i] <- (topic,partitions)
-    //  FetchResponse(throttleTime, topics)
-
     // Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
     static member Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTime =
@@ -941,13 +877,23 @@ module Protocol =
       for i = 0 to topics.Length - 1 do
         let topic = buf.ReadString ()
         let numPartitions = buf.ReadInt32 ()
+        //printfn "numPartitions=%i" numPartitions
         let partitions = Array.zeroCreate numPartitions
+        let mutable containsRecordBatch = false
         for j = 0 to partitions.Length - 1 do
-          let partition = buf.ReadInt32 ()
+          let partition = buf.ReadInt32 ()          
           let errorCode = buf.ReadInt16 ()
           let highWatermark = buf.ReadInt64 ()
-          let messageSetSize = buf.ReadInt32 ()
-          let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+          let messageSetSize = buf.ReadInt32 ()          
+          //printfn "partition=%i ec=%i hwo=%i" partition errorCode highWatermark
+          let messageSet = 
+            if messageSetSize = 0 then MessageSet([||]) else
+            let magicByte = buf.TryPeekIn8AtOffset 16
+            if containsRecordBatch || magicByte >= 2y then 
+              containsRecordBatch <- true
+              MessageSet.ReadFromRecordBatch (messageSetSize, buf)
+            else MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
+          //let messageSet = MessageSet.ReadFromRecordBatch (messageSetSize, buf)
           partitions.[j] <- partition, errorCode, highWatermark, -1L, -1L, null, messageSetSize, messageSet
         topics.[i] <- (topic,partitions)
       FetchResponse(throttleTime, topics)
@@ -1828,7 +1774,7 @@ module Protocol =
   with
 
     /// Decodes the response given the specified ApiKey corresponding to the request.
-    static member internal Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
+    static member Read (apiKey:ApiKey, apiVer:ApiVersion, buf:BinaryZipper) : ResponseMessage =
       match apiKey with
       | ApiKey.Heartbeat -> HeartbeatResponse.Read (apiVer,buf) |> ResponseMessage.HeartbeatResponse 
       | ApiKey.Metadata -> MetadataResponse.Read (apiVer,buf) |> ResponseMessage.MetadataResponse 
