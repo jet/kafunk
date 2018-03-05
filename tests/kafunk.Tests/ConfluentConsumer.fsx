@@ -31,16 +31,20 @@ let config =
   [ 
       
     "bootstrap.servers", box host 
-    "linger.ms", box 100
+    //"linger.ms", box 100
     "group.id", box group
-    "max.in.flight.requests.per.connection", box 1
-    "default.topic.config", box <| (dict ["auto.offset.reset", box "earliest"])
+    //"max.in.flight.requests.per.connection", box 1
+    "default.topic.config", box <| (dict ["auto.offset.reset", box "latest"])
+    "enable.auto.commit", box false
+    "fetch.message.max.bytes", box 1000
 
   ] |> dict
 
 let go = async {
   
-  let consumer = new Consumer (config)
+  //let consumer = new Consumer (config)
+
+  let consumer = new Consumer<string, string>(config, new StringDeserializer(Encoding.UTF8), new StringDeserializer(Encoding.UTF8))
   
   consumer.OnLog 
   |> Event.add (fun m -> Log.info "log|%O" m)
@@ -53,10 +57,21 @@ let go = async {
   
   consumer.OnPartitionsAssigned 
   |> Event.add (fun m -> Log.info "partitions_assigned|%O" (m |> Seq.map (fun x -> sprintf "p=%i" x.Partition) |> String.concat ";"))
-  
-  consumer.Subscribe (topic)
+
+  consumer.OnPartitionsRevoked 
+  |> Event.add (fun m -> Log.info "partitions_revoked|%O" (m |> Seq.map (fun x -> sprintf "p=%i" x.Partition) |> String.concat ";"))
+
+  consumer.OnPartitionEOF 
+  |> Event.add (fun m -> Log.info "eof|%O" m.Partition)
+ 
+  consumer.Assign([ TopicPartition(topic, 0) ])
+  //consumer.Subscribe (topic)
+
+  let md = consumer.GetMetadata(true)
+  Log.info "metadata|%A" md.Topics
 
   let handle (_:Message) = async {
+    Log.info "handing message"
     return () }
 
   use counter = Metrics.counter Log 5000
@@ -65,14 +80,21 @@ let go = async {
     handle
     |> Metrics.throughputAsyncTo counter (fun _ -> 1)
 
-  let! _ = Async.StartChild (async {
-    while true do
-      consumer.Poll (30000) })
+  while true do
+    let mutable m = Unchecked.defaultof<_>
+    if consumer.Consume(&m, 1000) then
+      Log.info "handing message"
+    else
+      Log.info "skipped"
 
-  do!
-    consumer.OnMessage
-    |> AsyncSeq.ofObservableBuffered
-    |> AsyncSeq.iterAsync handle
+  //let! _ = Async.StartChild (async {
+  //  while true do
+  //    consumer.Poll (1000) })
+
+  //do!
+  //  consumer.OnMessage
+  //  |> AsyncSeq.ofObservableBuffered
+  //  |> AsyncSeq.iterAsync handle
 
   return ()
 }

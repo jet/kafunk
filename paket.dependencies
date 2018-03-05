@@ -16,7 +16,7 @@ group Legacy
 
 group Build
   source https://api.nuget.org/v3/index.json
-  framework: net461
+  framework: net45
 
   nuget FAKE
   nuget FSharp.Formatting  
@@ -25,11 +25,11 @@ group Build
 
 group Test
   source https://api.nuget.org/v3/index.json
-  framework: netcoreapp2.0, net461
+  framework: netcoreapp2.0, net45
   redirects: force
 
-  nuget FSharp.Core
-  nuget FSharp.Control.AsyncSeq
+  nuget FSharp.Core >= 3.1 lowest_matching: true
+  nuget FSharp.Control.AsyncSeq >= 2.0.21 lowest_matching: true
   nuget NUnit
   nuget NUnit.Runners
   nuget NUnit3TestAdapter

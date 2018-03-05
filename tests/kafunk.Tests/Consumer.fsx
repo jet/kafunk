@@ -31,14 +31,16 @@ let go = async {
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
         version = Versions.V_0_10_1,
-        autoApiVersions = true)
+        //version = Versions.V_0_9_0,
+        autoApiVersions = false)
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
       groupId = group, 
       topic = topic, 
-      autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 1000000,
+      autoOffsetReset = AutoOffsetReset.StartFromTime Time.LatestOffset,
+      fetchMaxBytes = 1000,
+      //fetchMaxBytesOverride = 10000,
       fetchMinBytes = 1,
       //fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,
@@ -64,11 +66,9 @@ let go = async {
   let! _ = Async.StartChild showProgress
 
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
-    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")
-    
+    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)
-
     Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
       ms.topic
       ms.partition
