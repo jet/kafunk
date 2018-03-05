@@ -32,6 +32,16 @@
       <div class="row">
         <div class="span9" id="main">
           
+<h3><a name="0-1-15-alpha01-5-3-2018" class="anchor" href="#0-1-15-alpha01-5-3-2018">0.1.15-alpha01 - 5.3.2018</a></h3>
+<ul>
+<li>BUG: consumer would enter an infinite loop between <code>offsets_out_of_range</code> and <code>resuming_fetch_from_reset_offsets</code></li>
+<li>BUG: stalled consumers after TCP connection timeout</li>
+<li>BUG: offsets committed for partitions which are no longer assigned after a rebalance</li>
+<li>FEATURE: ConsumerConfig.fetchMaxBytesOverride allows increasing fetchMaxBytes to a ceiling on message too big exceptions.</li>
+<li>IMPROVE: logging where received<em>empty</em>buffer logged as INFO message as it doesn't indicate an error</li>
+<li>IMPROVE: connection managemeng to ensure only a single TCP connection per broker per Kafka connection</li>
+<li>IMPROVE: Reduce recovery time from broker restarts and rebalancing</li>
+</ul>
 <h3><a name="0-1-14-alpha02-28-2-2018" class="anchor" href="#0-1-14-alpha02-28-2-2018">0.1.14-alpha02 - 28.2.2018</a></h3>
 <ul>
 <li>Adjusting FSharp.Core reference</li>
