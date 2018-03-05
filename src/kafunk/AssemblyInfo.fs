@@ -5,13 +5,13 @@ open System.Reflection
 [<assembly: AssemblyTitleAttribute("kafunk")>]
 [<assembly: AssemblyProductAttribute("kafunk")>]
 [<assembly: AssemblyDescriptionAttribute("F# client for Kafka")>]
-[<assembly: AssemblyVersionAttribute("0.1.14")>]
-[<assembly: AssemblyFileVersionAttribute("0.1.14")>]
+[<assembly: AssemblyVersionAttribute("0.1.15")>]
+[<assembly: AssemblyFileVersionAttribute("0.1.15")>]
 do ()
 
 module internal AssemblyVersionInformation =
     let [<Literal>] AssemblyTitle = "kafunk"
     let [<Literal>] AssemblyProduct = "kafunk"
     let [<Literal>] AssemblyDescription = "F# client for Kafka"
-    let [<Literal>] AssemblyVersion = "0.1.14"
-    let [<Literal>] AssemblyFileVersion = "0.1.14"
+    let [<Literal>] AssemblyVersion = "0.1.15"
+    let [<Literal>] AssemblyFileVersion = "0.1.15"

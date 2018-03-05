@@ -1937,7 +1937,7 @@ let ``FetchResponse.read should decode unexpected RecordBatch response from v2 A
   Assert.AreEqual(135, lastMessage.offset)
   Assert.AreEqual("106010ce8ff6459fb7cf47d4251380d1:21", System.Text.Encoding.UTF8.GetString(firstMessage.message.key.Array, firstMessage.message.key.Offset, firstMessage.message.key.Count))
 
-[<Test>]
+//[<Test>]
 let ``FetchResponse should read v2`` () =
   let file = @"C:\Users\eulerfx\Documents\GitHub\kafunk\tests\kafunk.Tests\FetchResponse_RecordBatch.bin"
   let buf = System.IO.File.ReadAllBytes(file) |> Binary.ofArray |> BinaryZipper
