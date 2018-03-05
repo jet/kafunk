@@ -1,5 +1,4 @@
-### 0.1.14-alpha03 - 5.3.2018
-
+### 0.1.15-alpha01 - 5.3.2018
 * BUG: consumer would enter an infinite loop between `offsets_out_of_range` and `resuming_fetch_from_reset_offsets`
 * BUG: stalled consumers after TCP connection timeout
 * BUG: offsets committed for partitions which are no longer assigned after a rebalance
