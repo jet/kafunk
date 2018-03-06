@@ -13,7 +13,7 @@ module internal Exn =
   open System.Runtime.ExceptionServices
 
   /// Expands all inner exceptions, including for AggregateException.
-  let rec toSeq (e:exn) =
+  let rec private toSeq (e:exn) =
     match e with
     | :? AggregateException as ae -> 
       seq {
@@ -44,6 +44,26 @@ module internal Exn =
 
   let inline captureEdi (e:exn) =
     ExceptionDispatchInfo.Capture e
+
+  let rec tryFindByType (t:Type) (e:exn) =
+    if e.GetType () = t then Some e
+    else 
+      match e with
+      | :? AggregateException as ae ->
+        ae.InnerExceptions |> Seq.tryPick (tryFindByType t)
+      | _ -> None
+
+  let rec tryFindByTypeAny (ts:Type seq) (e:exn) =
+    Seq.tryPick (fun t -> tryFindByType t e) ts
+
+  let tryFindByTypeT<'t when 't :> exn> (e:exn) =
+    tryFindByType typeof<'t> e |> Option.map (fun e -> e :?> 't)
+
+  let tryFindByTypeT2<'t1, 't2 when 't1 :> exn and 't2 :> exn> (e:exn) =
+    tryFindByTypeAny [typeof<'t1>;typeof<'t2>] e
+
+  let tryFindByTypeT3<'t1, 't2, 't3 when 't1 :> exn and 't2 :> exn and 't3 :> exn> (e:exn) =
+    tryFindByTypeAny [typeof<'t1>;typeof<'t2>;typeof<'t3>] e
 
 /// The state of a retry workflow.
 [<StructuredFormatDisplay("RetryState({attempt})")>]
@@ -376,6 +396,22 @@ module Faults =
 
   /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
   /// Returns None when shouldRetry returns false.
+  let retryAsyncConditional (p:RetryPolicy) (shouldRetry:'a -> bool) (f:'a -> 'b) (result:'a list -> 'b) (a:Async<'a>) : Async<'b> =
+    let rec loop i xs = async {
+      let! a = a
+      if shouldRetry a then
+        match RetryPolicy.delayAt i p with
+        | None -> 
+          return result (a::xs)
+        | Some wait ->
+          do! Async.sleep wait
+          return! loop (RetryState.next i) (a::xs)
+      else
+        return (f a) }
+    loop RetryState.init []
+
+  /// Retries an async computation using the specified retry policy until the shouldRetry condition returns false.
+  /// Returns None when shouldRetry returns false.
   let retryAsync (p:RetryPolicy) (shouldRetry:'a -> bool) (a:Async<'a>) : Async<'a option> =
     let a = a |> Async.map (fun a -> if shouldRetry a then Failure (Some a) else Success (Some a))
     retryAsyncResult 
@@ -406,6 +442,9 @@ module Faults =
 
   module AsyncFunc =
 
+    let retryAsyncConditional (p:RetryPolicy) (shouldRetry:'a * 'b -> bool) (m:'a * 'b -> 'c) (result:'a * 'b list -> 'c) (f:'a -> Async<'b>) : 'a -> Async<'c> =
+      fun a -> async.Delay (fun () -> f a) |> retryAsyncConditional p (fun b -> shouldRetry (a,b)) (fun b -> m (a,b)) (fun bs -> result (a,bs))
+
     let retryAsync (shouldRetry:'a * 'b -> bool) (p:RetryPolicy) (f:'a -> Async<'b>) : 'a -> Async<'b option> =
       fun a -> async.Delay (fun () -> f a) |> retryAsync p (fun b -> shouldRetry (a,b))
 
@@ -430,4 +469,3 @@ module Faults =
         let! (b,fb') = f (MVar.take fb) a 
         let! _ = MVar.put fb' fb
         return b }
-

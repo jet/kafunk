@@ -336,8 +336,17 @@ module Map =
   let mergeWith (m:'b -> 'b -> 'b) (a:Map<'a, 'b>) (b:Map<'a, 'b>) : Map<'a, 'b> =
     mergeChoice (fun _ -> function Choice1Of3 (x,y) -> m x y | Choice2Of3 b | Choice3Of3 b -> b) a b
 
+  /// Adds key-value pairs to the map.
   let addMany (kvps:('a * 'b) seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
     kvps |> Seq.fold (fun m (k,v) -> Map.add k v m) m
+
+  /// Updates keys if they already exist in the map.
+  let updateMany (kvps:('a * 'b) seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
+    kvps 
+    |> Seq.fold (fun m (k,v) -> 
+      match Map.containsKey k m with
+      | true -> Map.add k v m
+      | false -> m) m
 
   let onlyKeys (ks:'a seq) (m:Map<'a, 'b>) : Map<'a, 'b> =
     ks 

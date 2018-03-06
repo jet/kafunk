@@ -157,7 +157,7 @@ module ConsumerGroup =
               |> String.concat " ; "
             sprintf "[member_id=%s user_data=%s assignments=%s]" memberId (Binary.toString meta.userData) str)
           |> String.concat " ; "
-        Log.info "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
+        Log.trace "leader_determined_member_assignments|conn_id=%s group_id=%s %s" 
           gm.conn.Config.connId gm.config.groupId memberAssignmentsStr
 
         let memberAssignments =
@@ -203,6 +203,10 @@ type ConsumerConfig = {
   
   /// The maximum bytes to return as part of a partition for a fetch request.
   fetchMaxBytes : MaxBytes
+
+  /// The value to increase fetchMaxBytes to on MessageTooBigException.
+  /// If not specified, will be the same as fetchMaxBytes.
+  fetchMaxBytesOverride : MaxBytes
   
   /// Offset retention time.
   offsetRetentionTime : RetentionTime
@@ -268,7 +272,8 @@ type ConsumerConfig = {
     static member create 
       (groupId:GroupId, topic:TopicName, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
           ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?autoOffsetReset, 
-          ?fetchBufferSize, ?assignmentStrategies, ?checkCrc) =
+          ?fetchBufferSize, ?assignmentStrategies, ?checkCrc, ?fetchMaxBytesOverride) =
+      let fetchMaxBytes = defaultArg fetchMaxBytes ConsumerConfig.DefaultFetchMaxBytes
       {
         groupId = groupId
         topic = topic
@@ -277,7 +282,8 @@ type ConsumerConfig = {
         heartbeatFrequency = defaultArg heartbeatFrequency ConsumerConfig.DefaultHeartbeatFrequency
         fetchMinBytes = defaultArg fetchMinBytes ConsumerConfig.DefaultFetchMinBytes
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs ConsumerConfig.DefaultFetchMaxWait
-        fetchMaxBytes = defaultArg fetchMaxBytes ConsumerConfig.DefaultFetchMaxBytes
+        fetchMaxBytes = fetchMaxBytes
+        fetchMaxBytesOverride = defaultArg fetchMaxBytesOverride fetchMaxBytes
         offsetRetentionTime = defaultArg offsetRetentionTime ConsumerConfig.DefaultOffsetRetentionTime
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy ConsumerConfig.DefaultEndOfTopicPollPolicy
         autoOffsetReset = defaultArg autoOffsetReset ConsumerConfig.DefaultAutoOffsetReset
@@ -480,7 +486,6 @@ module Consumer =
             async { return ps }
         return t,partitions })
       |> Async.Parallel
-
     let req = OffsetFetchRequest(groupId, topics)
     let! res = Kafka.offsetFetch conn req
     let oks,errors =
@@ -532,8 +537,8 @@ module Consumer =
         return failwithf "fetch_offset_errors|errors=%A" errors
       
       if missing.Length > 0 then
-        Log.warn "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s]" 
-          cfg.groupId topic (Printers.partitions (missing |> Array.map fst))
+        Log.warn "offsets_not_available_at_group_coordinator|group_id=%s topic=%s missing_offset_partitions=[%s] auto_offset_reset=%A" 
+          cfg.groupId topic (Printers.partitions (missing |> Array.map fst)) cfg.autoOffsetReset
         match cfg.autoOffsetReset with
         | AutoOffsetReset.Stop | AutoOffsetReset.TryStartFromCommittedOffsets ->
           return 
@@ -631,19 +636,19 @@ module Consumer =
   let rec private tryFetch 
     (c:Consumer) 
     (state:GroupMemberStateWrapper) 
-    (offsets:(Partition * Offset)[]) : Async<(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option> = 
+    (offsets:(Partition * Offset)[])
+    (fetchMaxBytesOverride:int option) : Async<(ConsumerMessageSet[] * (Partition * HighwaterMarkOffset)[]) option> = 
     let cfg = c.config
     let topic = cfg.topic
     let fetch = Kafka.fetch c.conn |> AsyncFunc.catch
-//    let fetch (_:FetchRequest) : Async<Result<FetchResponse, exn>> = async {
-//      return Failure (exn "testing escalation!") }
     let messageVer = MessageVersions.fetchResMessage (c.conn.ApiVersion ApiKey.Fetch)
     Group.tryAsync
       (state)
       (fun _ -> None)
       (async {
-        let req = 
-          let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,0L,cfg.fetchMaxBytes) |]
+        let fetchMaxBytes = fetchMaxBytesOverride |> Option.getOr cfg.fetchMaxBytes
+        let req =           
+          let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,0L,fetchMaxBytes) |]
           FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os, 0, 0y)
         let! res = fetch req
         match res with
@@ -665,7 +670,7 @@ module Consumer =
             Log.warn "fetch_response_indicated_stale_metadata|stale_offsets=%s" (Printers.partitionOffsetPairs staleOffsets)
             let! _ = c.conn.GetMetadataState ([|topic|])
             // TODO: only fetch stale and combine
-            return! tryFetch c state offsets else
+            return! tryFetch c state offsets None else
               
           if outOfRange.Length > 0 then
             let outOfRange = 
@@ -679,10 +684,21 @@ module Consumer =
             return oksAndEnds
 
         | Failure ex ->
-          Log.warn "fetch_exception|generation_id=%i topic=%s partition_offsets=%s error=%O" 
-            state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
-          //do! Group.leaveInternal c.groupMember state
-          return raise ex })
+          match ex with
+          | :? ResponseDecodeException as ex ->
+            match ex.InnerException with
+            | :? MessageTooBigException as ex when fetchMaxBytes < cfg.fetchMaxBytesOverride ->
+              Log.warn "overriding_fetch_max_bytes|generation_id=%i topic=%s offsets=%s fetch_max_bytes=%i message_size=%i fetch_max_bytes_override=%i" 
+                state.state.generationId topic (Printers.partitionOffsetPairs offsets) cfg.fetchMaxBytes ex.MessageSize cfg.fetchMaxBytesOverride
+              return! tryFetch c state offsets (Some cfg.fetchMaxBytesOverride)
+            | _ ->
+              Log.warn "fetch_exception|generation_id=%i topic=%s offsets=%s error=%O" 
+                state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
+              return raise ex            
+          | _ ->
+            Log.warn "fetch_exception|generation_id=%i topic=%s offsets=%s error=%O" 
+              state.state.generationId topic (Printers.partitionOffsetPairs offsets) ex
+            return raise ex })
 
   /// Handles out of range offsets.
   and private offsetsOutOfRange (c:Consumer) (state) (attemptedOffsets:(Partition * Offset)[]) = async {
@@ -716,7 +732,7 @@ module Consumer =
       let missingOffsets = resolvedOffsets |> Array.filter (fun (_,o) -> o = -1L)
       if missingOffsets.Length = 0 then
         Log.info "resuming_fetch_from_committed_offsets|topic=%s committed_offsets=%s" cfg.topic (Printers.partitionOffsetPairs resolvedOffsets)
-        return! tryFetch c state committedOffsets
+        return! tryFetch c state committedOffsets None
       else
         Log.warn "stopping_consumer|topic=%s committed_offsets=%s" cfg.topic (Printers.partitionOffsetPairs resolvedOffsets)
         do! Group.leaveInternal c.groupMember state
@@ -737,7 +753,7 @@ module Consumer =
               a)
         |> Map.toArray
       Log.info "resuming_fetch_from_reset_offsets|topic=%s reset_offsets=%s" topic (Printers.partitionOffsetPairs resetOffsets)
-      return! tryFetch c state resetOffsets }
+      return! tryFetch c state resetOffsets None }
 
   /// multiplexed stream of all fetch responses for this consumer
   let private fetchStream (c:Consumer) state initOffsets =
@@ -757,7 +773,7 @@ module Consumer =
                 return Array.append offsets dueRetries
               else 
                 return offsets }
-          let! res = tryFetch c state offsets
+          let! res = tryFetch c state offsets None
           match res with
           | None ->
             return None
@@ -792,9 +808,9 @@ module Consumer =
     let assignment = Array.map fst initOffsets
     let cfg = c.config
     let topic = cfg.topic
-    use! _cnc = Async.OnCancel (fun () -> 
-      Log.warn "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
-        cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
+    //use! _cnc = Async.OnCancel (fun () -> 
+    //  Log.info "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
+    //    cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
     Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
       cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
     return!
@@ -905,7 +921,7 @@ module Consumer =
           currentOffsets 
           |> Seq.choose (fun (t,os) -> if t = c.config.topic then Some os else None)
           |> Seq.concat
-          |> Seq.where (fun (_,o) -> o <> -1L)
+          //|> Seq.where (fun (_,o) -> o <> -1L)
           |> Seq.toArray })
     return! PeriodicCommitQueue.create commitInterval rebalanced (commitOffsets c) }
 
@@ -955,4 +971,3 @@ module Consumer =
   /// This causes all underlying streams to complete.
   let close (c:Consumer) = async {
     return! Group.leave c.groupMember }
-
