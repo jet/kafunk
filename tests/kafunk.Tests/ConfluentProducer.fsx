@@ -28,11 +28,11 @@ let batchSize = argiDefault 4 "100" |> Int32.Parse
 let messageSize = argiDefault 5 "10" |> Int32.Parse
 let parallelism = argiDefault 6 "1" |> Int32.Parse
 
-let payload = 
-  let bytes = Array.zeroCreate messageSize
-  let rng = Random()
-  rng.NextBytes bytes
-  bytes |> Encoding.UTF8.GetString
+let payload = "v"
+  //let bytes = Array.zeroCreate messageSize
+  //let rng = Random()
+  //rng.NextBytes bytes
+  //bytes |> Encoding.UTF8.GetString
 
 Log.info "running_producer_test|host=%s topic=%s count=%i batch_size=%i message_size=%i parallelism=%i"
   host topic N batchSize messageSize parallelism
@@ -72,14 +72,15 @@ let go = async {
 
   let! _ = Async.StartChild monitor
 
-  use producer = new Producer<Null, string>(config, null, new StringSerializer(Encoding.UTF8))
+  //use producer = new Producer<Null, string>(config, null, new StringSerializer(Encoding.UTF8))
+  use producer = new Producer<string, string>(config, new StringSerializer(Encoding.UTF8), new StringSerializer(Encoding.UTF8))
 
   producer.OnLog |> Event.add (fun e ->
     Log.info "librdkafka|name=%s facility=%s message=%s" e.Name e.Facility e.Message
   )
 
   let produce (m:string) = async {
-    let! res = producer.ProduceAsync(topic, null, m, true) |> Async.awaitTaskCancellationAsError
+    let! res = producer.ProduceAsync(topic, "k", m, true) |> Async.awaitTaskCancellationAsError
     return res }
 
   let produce = 

@@ -26,14 +26,15 @@ let internal byVersion (version:System.Version) : ApiKey -> ApiVersion =
       elif version >= V_0_9_0 then 1s
       else 0s
     | ApiKey.Fetch ->
-      if version >= V_0_10_0 then 2s
+      if version >= V_0_10_0 then 2s //4s //2s
       elif version >= V_0_9_0 then 1s
       else 0s
     | ApiKey.JoinGroup -> 
       if version >= V_0_10_1 then 1s
       else 0s
     | ApiKey.Offset ->
-      if version >= V_0_10_1 then 1s
+      //if version >= V_0_10_1 then 1s
+      if version >= V_0_10_1 then 0s
       else 0s
     | _ -> 
       0s
@@ -43,9 +44,9 @@ let internal byApiVersionResponse (x:ApiVersionsResponse) : ApiKey -> ApiVersion
   fun (key:ApiKey) -> 
     let (_,_,v) = x.apiVersions.[int key]
     match key with
-    | ApiKey.Produce -> min 2s v // TODO: any higher version for produce is currently crashing
-    | ApiKey.Fetch -> min 2s v // TODO: any higher version for offset is currently crashing
-    | ApiKey.Offset -> min 1s v // TODO: any higher version for offset is currently crashing
+    | ApiKey.Produce -> min 3s v
+    | ApiKey.Fetch -> min 5s v
+    | ApiKey.Offset -> min 0s v // TODO: any higher version for offset is currently crashing
     | ApiKey.Metadata -> min 5s v
     | ApiKey.OffsetCommit -> min 2s v
     | ApiKey.OffsetFetch -> min 2s v

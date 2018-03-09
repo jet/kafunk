@@ -207,6 +207,9 @@ type ConsumerConfig = {
   /// The value to increase fetchMaxBytes to on MessageTooBigException.
   /// If not specified, will be the same as fetchMaxBytes.
   fetchMaxBytesOverride : MaxBytes
+
+  /// The maximum bytes to return in the entire FetchResponse.
+  fetchMaxBytesTotal : MaxBytes
   
   /// Offset retention time.
   offsetRetentionTime : RetentionTime
@@ -250,6 +253,9 @@ type ConsumerConfig = {
     /// Gets the default fetch max bytes = 1048576.
     static member DefaultFetchMaxBytes = 1048576
 
+    /// Gets the default fetch max bytes = 52428800.
+    static member DefaultFetchMaxBytesTotal = 52428800
+
     /// Gets the default offset retention time = -1.
     static member DefaultOffsetRetentionTime = -1L
 
@@ -272,7 +278,7 @@ type ConsumerConfig = {
     static member create 
       (groupId:GroupId, topic:TopicName, ?fetchMaxBytes, ?sessionTimeout, ?rebalanceTimeout,
           ?heartbeatFrequency, ?offsetRetentionTime, ?fetchMinBytes, ?fetchMaxWaitMs, ?endOfTopicPollPolicy, ?autoOffsetReset, 
-          ?fetchBufferSize, ?assignmentStrategies, ?checkCrc, ?fetchMaxBytesOverride) =
+          ?fetchBufferSize, ?assignmentStrategies, ?checkCrc, ?fetchMaxBytesOverride, ?fetchMaxBytesTotal) =
       let fetchMaxBytes = defaultArg fetchMaxBytes ConsumerConfig.DefaultFetchMaxBytes
       {
         groupId = groupId
@@ -284,6 +290,7 @@ type ConsumerConfig = {
         fetchMaxWaitMs = defaultArg fetchMaxWaitMs ConsumerConfig.DefaultFetchMaxWait
         fetchMaxBytes = fetchMaxBytes
         fetchMaxBytesOverride = defaultArg fetchMaxBytesOverride fetchMaxBytes
+        fetchMaxBytesTotal = defaultArg fetchMaxBytesTotal ConsumerConfig.DefaultFetchMaxBytesTotal
         offsetRetentionTime = defaultArg offsetRetentionTime ConsumerConfig.DefaultOffsetRetentionTime
         endOfTopicPollPolicy = defaultArg endOfTopicPollPolicy ConsumerConfig.DefaultEndOfTopicPollPolicy
         autoOffsetReset = defaultArg autoOffsetReset ConsumerConfig.DefaultAutoOffsetReset
@@ -610,22 +617,21 @@ module Consumer =
     | _ -> None
   
   let private processPartitionFetchResponse 
-    (cfg: ConsumerConfig)
-    (messageVer: ApiVersion)
-    (topic: TopicName)
+    (cfg:ConsumerConfig)
+    (magicByte:int8)
+    (topic:TopicName)
     (partition,errorCode,highWatermark,_,_,_,messageSetSize,ms) =
     match errorCode with
     | ErrorCode.NoError ->
       if messageSetSize = 0 then Choice2Of4 (partition,highWatermark)
       else 
-        let ms = Compression.decompress messageVer ms
+        let ms = Compression.decompress magicByte ms
         if cfg.checkCrc then
-          MessageSet.CheckCrc (messageVer, ms)
+          MessageSet.CheckCrc (magicByte, ms)
         Choice1Of4 (ConsumerMessageSet(topic, partition, ms, highWatermark))
     | ErrorCode.OffsetOutOfRange -> 
       Choice3Of4 (partition,highWatermark)
-    | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition | ErrorCode.ReplicaNotAvailable ->
-          
+    | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition | ErrorCode.ReplicaNotAvailable ->          
       Choice4Of4 (partition)
     | _ -> 
       failwithf "unsupported fetch error_code=%i" errorCode
@@ -641,7 +647,7 @@ module Consumer =
     let cfg = c.config
     let topic = cfg.topic
     let fetch = Kafka.fetch c.conn |> AsyncFunc.catch
-    let messageVer = MessageVersions.fetchResMessage (c.conn.ApiVersion ApiKey.Fetch)
+    let magicByte = MessageVersions.fetchResMessage (c.conn.ApiVersion ApiKey.Fetch)
     Group.tryAsync
       (state)
       (fun _ -> None)
@@ -649,16 +655,23 @@ module Consumer =
         let fetchMaxBytes = fetchMaxBytesOverride |> Option.getOr cfg.fetchMaxBytes
         let req =           
           let os = [| topic, offsets |> Array.map (fun (p,o) -> p,o,0L,fetchMaxBytes) |]
-          FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os, 0, 0y)
+          FetchRequest(-1, cfg.fetchMaxWaitMs, cfg.fetchMinBytes, os, cfg.fetchMaxBytesTotal, 0y)
         let! res = fetch req
         match res with
         | Success res ->
               
           let oks,ends,outOfRange,staleMetadata =
             res.topics
-            |> Seq.collect (fun (t,ps) -> ps |> Seq.map (processPartitionFetchResponse cfg messageVer t))
+            |> Seq.collect (fun (t,ps) -> ps |> Seq.map (processPartitionFetchResponse cfg magicByte t))
             |> Seq.partitionChoices4
 
+          //let ends =
+          //  (ends |> Map.ofSeq, offsets |> Map.ofSeq)
+          //  ||> Map.mergeChoice (fun _ -> function Choice1Of3 (hwo,o) -> Some (hwo,o) | _ -> None)
+          //  |> Map.toSeq
+          //  |> Seq.choose (fun (p,x) -> x |> Option.map (fun (hwo,o) -> p, min hwo o))
+          //  |> Seq.toArray
+            
           let oksAndEnds = Some (oks,ends)
               
           if staleMetadata.Length > 0 then
@@ -789,13 +802,13 @@ module Consumer =
               mss
               |> Array.map (fun mb -> mb.partition, MessageSet.nextOffset mb.messageSet mb.highWatermarkOffset)
 
-            if ends.Length > 0 then
-              let msg =
-                ends
-                |> Seq.map (fun (p,hwmo) -> sprintf "[partition=%i high_watermark_offset=%i]" p hwmo)
-                |> String.concat " ; "
-              Log.trace "end_of_topic_partition_reached|group_id=%s generation_id=%i member_id=%s topic=%s %s" 
-                cfg.groupId state.state.generationId state.state.memberId topic msg
+            //if ends.Length > 0 then
+            //  let msg =
+            //    ends
+            //    |> Seq.map (fun (p,hwmo) -> sprintf "[p=%i hwo=%i]" p hwmo)
+            //    |> String.concat " ; "
+            //  Log.trace "end_of_topic_partition_reached|group_id=%s generation_id=%i member_id=%s topic=%s %s" 
+            //    cfg.groupId state.state.generationId state.state.memberId topic msg
 
             return Some (mss, (nextOffsets,retryQueue)) })
 

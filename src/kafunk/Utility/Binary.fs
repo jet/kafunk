@@ -78,6 +78,10 @@ module Binary =
   let inline writeInt8 (x : int8) (buf : Segment) =
     pokeInt8 x buf |> shiftOffset 1
 
+  let inline writeByte (x:byte) (buf : Segment) =
+    buf.Array.[buf.Offset] <- x
+    buf |> shiftOffset 1
+
   let inline sizeInt16 (_:int16) = 2
 
   let inline peekInt16 (buf : Segment) : int16 =
@@ -111,14 +115,19 @@ module Binary =
   let inline readInt32 (buf : Segment) : int32 * Segment =
     (peekInt32 buf, (buf |> shiftOffset 4))
 
-  let inline pokeInt32 (x : int32) (buf : Segment) =
-    let offset = buf.Offset
-    let array = buf.Array
+  let inline pokeInt32In (x : int32) (array:byte[]) (offset:int) =
     array.[offset + 0] <- byte (x >>> 24)
     array.[offset + 1] <- byte (x >>> 16)
     array.[offset + 2] <- byte (x >>> 8)
     array.[offset + 3] <- byte x
+   
+  let inline pokeInt32 (x : int32) (buf : Segment) =
+    pokeInt32In x buf.Array buf.Offset
     buf
+
+  /// Writes the int64 as a uint32.
+  let inline pokeUInt32In (x : int64) (array:byte[]) (offset:int) =
+    pokeInt32In (int (x &&& 0xffffffffL)) array offset
 
   let inline writeInt32 (x : int32) (buf : Segment) =
     pokeInt32 x buf |> shiftOffset 4
@@ -156,70 +165,24 @@ module Binary =
   let inline writeInt64 (x : int64) (buf : Segment) =
     pokeInt64 x buf |> shiftOffset 8
 
-  let inline read2
-    (readA : Reader<'a>)
-    (readB : Reader<'b>)
-    (buf : Segment)
-    : ('a * 'b) * Segment =
-    let a, buf = readA buf
-    let b, buf = readB buf
-    ((a, b), buf)
+  let sizeVarint (value:int) =
+    //if value < 128 then 1 else
+    let mutable v = (value <<< 1) ^^^ (value >>> 31)
+    let mutable bytes = 1
+    while ((v &&& 0xffffff80) <> 0) do
+      bytes <- bytes + 1
+      v <- v >>> 7
+    bytes
 
-  let inline read3
-    (readA : Reader<'a>)
-    (readB : Reader<'b>)
-    (readC : Reader<'c>)
-    (buf : Segment)
-    : ('a * 'b * 'c) * Segment =
-    let a, buf = readA buf
-    let b, buf = readB buf
-    let c, buf = readC buf
-    ((a, b, c), buf)
+  let sizeVarint64 (value:int64) =
+    let mutable v = (value <<< 1) ^^^ (value >>> 63)
+    let mutable bytes = 1
+    while ((v &&& 0xffffffffffffff80L) <> 0L) do
+      bytes <- bytes + 1
+      v <- v >>> 7
+    bytes
 
-  let inline read4
-    (readA : Reader<'a>)
-    (readB : Reader<'b>)
-    (readC : Reader<'c>)
-    (readD : Reader<'d>)
-    (buf : Segment)
-    : ('a * 'b * 'c * 'd) * Segment =
-    let a, buf = readA buf
-    let b, buf = readB buf
-    let c, buf = readC buf
-    let d, buf = readD buf
-    ((a, b, c, d), buf)
-
-  let inline read5
-    (readA : Reader<'a>)
-    (readB : Reader<'b>)
-    (readC : Reader<'c>)
-    (readD : Reader<'d>)
-    (readE : Reader<'e>)
-    (buf : Segment)
-    : ('a * 'b * 'c * 'd * 'e) * Segment =
-    let a, buf = readA buf
-    let b, buf = readB buf
-    let c, buf = readC buf
-    let d, buf = readD buf
-    let e, buf = readE buf
-    ((a, b, c, d, e), buf)
-
-  let inline read6
-    (readA : Reader<'a>)
-    (readB : Reader<'b>)
-    (readC : Reader<'c>)
-    (readD : Reader<'d>)
-    (readE : Reader<'e>)
-    (readF : Reader<'f>)
-    (buf : Segment)
-    : ('a * 'b * 'c * 'd * 'e * 'f) * Segment =
-    let a, buf = readA buf
-    let b, buf = readB buf
-    let c, buf = readC buf
-    let d, buf = readD buf
-    let e, buf = readE buf
-    let f, buf = readF buf
-    ((a, b, c, d, e, f), buf)
+  let NULL_SIZE_VARINT = sizeVarint -1
 
   let inline write2
     (writeA : Writer<'a>)
@@ -229,17 +192,12 @@ module Binary =
     : Segment =
     buf |> writeA a |> writeB b
 
-  let inline write3
-    (writeA : Writer<'a>)
-    (writeB : Writer<'b>)
-    (writeC : Writer<'c>)
-    ((a, b, c) : ('a * 'b * 'c))
-    (buf : Segment)
-    : Segment =
-    buf |> writeA a |> writeB b |> writeC c
-
   let inline sizeBytes (bytes:Segment) =
       sizeInt32 bytes.Count + bytes.Count
+
+  let inline sizeBytesVarint (bytes:Segment) =
+    if isNull bytes.Array then NULL_SIZE_VARINT
+    else sizeVarint bytes.Count + bytes.Count
 
   let inline writeBytes (bytes:Segment) buf =
     if isNull bytes.Array then
@@ -304,30 +262,6 @@ module Binary =
       buf <- buf'
     (arr, buf)
 
-  let inline writeArrayNoSize buf arr (write : Writer<'a>) =
-    let mutable buf = buf
-    for a in arr do
-      buf <- write a buf
-    buf
-
-  let readArrayByteSize (expectedSize:int) (buf:Segment) (read:int -> Segment -> Choice<'a * Segment, Segment>) =
-    let mutable buf = buf
-    let mutable consumed = 0
-    let mutable i = 0
-    let arr = ResizeArray<_>()
-    while consumed < expectedSize && buf.Count > 0 do
-      match read consumed buf with
-      | Choice1Of2 (elem,buf') ->
-        arr.Add elem
-        consumed <- consumed + (buf'.Offset - buf.Offset)
-        buf <- buf'
-        i <- i + 1
-      | Choice2Of2 buf' ->
-        consumed <- consumed + (buf'.Offset - buf.Offset)
-        buf <- buf'
-    (arr.ToArray(), buf)
-
-//[<Struct>]
 type BinaryZipper (buf:ArraySegment<byte>) =
   
   let mutable buf = buf
@@ -357,6 +291,9 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   
   member __.WriteInt8 (x:int8) =
     buf <- Binary.writeInt8 x buf
+
+  member __.WriteByte (x:byte) =
+    buf <- Binary.writeByte x buf
 
   member __.PeekIn16 () = 
     Binary.peekInt16 buf
@@ -389,7 +326,7 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   member __.WriteInt64 (x:int64) =
     buf <- Binary.writeInt64 x buf
 
-  member __.ReadVarint2 () : int =
+  member __.ReadVarint () : int =
     let rec go value i =
       let b = int <| __.ReadInt8 ()
       if (b &&& 0x80 <> 0) then
@@ -402,45 +339,51 @@ type BinaryZipper (buf:ArraySegment<byte>) =
     let value = go 0 0
     (value >>> 1) ^^^ -(value &&& 1)
 
+  member __.WriteVarint (value:int) =
+    //if (value < 128) then
+    //  __.WriteByte (byte value)
+    //else
+    let mutable v = (value <<< 1) ^^^ (value >>> 31)
+    while ((v &&& 0xffffff80) <> 0) do
+      let b = byte ((v &&& 0x7f) ||| 0x80)
+      __.WriteByte b
+      v <- v >>> 7
+    __.WriteByte (byte v)
+    
+  member __.WriteVarint64 (value:int64) =
+    let mutable v = (value <<< 1) ^^^ (value >>> 63)
+    while ((v &&& 0xffffffffffffff80L) <> 0L) do
+      let b = byte ((v &&& 0x7fL) ||| 0x80L)
+      __.WriteByte b
+      v <- v >>> 7
+    __.WriteByte (byte v)
 
-  member __.ReadVarint () : int =
-    /// Mutable counter indicating the number of bits that the next 7 bits should
-    /// be shifted by into the final value.
-    let mutable shiftBy = 0
+  member __.ReadVarint64 () : int64 =
+    let rec go value i =
+      let b = int <| __.ReadInt8 ()
+      if (b &&& 0x80 <> 0) then
+        let value = value ||| int64 ((b &&& 0x7f) <<< i)
+        let i = i + 7
+        if (i > 63) then failwith "invalid varint64" 
+        else go value i
+      else
+        value ||| int64 (b <<< i)
+    let value = go 0L 0
+    (value >>> 1) ^^^ -(value &&& 1L)
 
-    /// Mutable accumulator to store the final result.
-    let mutable result = 0
-
-    /// Mutable flag to control the loop.
-    let mutable loop = true
-
-    /// A bitmask used to identify the high bit in a byte
-    let msbMask = 0b1000_0000y
-
-    while loop do
-      let next = __.ReadInt8()
-
-      let valueToShiftIntoResult =
-        if (next &&& msbMask) = 0y then
-          // If the highest bit is not set, then we're done.
-          loop <- false
-          next
-        else
-          // The MSB is only a flag indicating whether or not we should
-          // keep scanning, it should be removed from the final value.
-          next ^^^ msbMask
-
-      result <- result ||| (int valueToShiftIntoResult <<< shiftBy)
-      shiftBy <- shiftBy + 7
-
-    // BUG: Kafka is currently doubling all varints?
-    result / 2
+  member __.WriteBytesVarint (bytes:ArraySegment<byte>) =
+    if isNull bytes.Array then
+      __.WriteVarint -1
+    else
+      __.WriteVarint bytes.Count
+      System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
+      __.ShiftOffset bytes.Count
 
   member __.WriteBytes (bytes:ArraySegment<byte>) =
     if isNull bytes.Array then
       __.WriteInt32 -1
     else
-      __.WriteInt32 bytes.Count |> ignore
+      __.WriteInt32 bytes.Count
       System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
       __.ShiftOffset bytes.Count
 

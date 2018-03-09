@@ -50,3 +50,58 @@ let crc32 (buf:byte[]) (offset:int) (length:int) =
   for i = 0 to length - 1 do
     c <- table.[int ((c ^^^ uint32 buf.[i + offset]) &&& 0xffu)] ^^^ (c >>> 8)
   c ^^^ 0xffffffffu
+
+
+
+// from: https://github.com/force-net/Crc32.NET/blob/develop/Crc32.NET/SafeProxy.cs
+let private _table : uint32[] =    
+  let poly = 0x82F63B78u
+  let table = Array.zeroCreate (16 * 256)
+  for i = 0 to 256 - 1 do  
+    let mutable res = uint32 i
+    for t = 0 to 16 - 1 do
+      for k = 0 to 8 - 1 do
+        res <- if (res &&& 1u) = 1u then poly ^^^ (res >>> 1) else res >>> 1
+      table.[(t * 256) + i] <- res
+  table
+
+let private append (crc:uint32) (input:byte[]) (offset:int) (length:int) =
+  let mutable crcLocal = System.UInt32.MaxValue ^^^ crc  
+  let mutable length = length
+  let mutable offset = offset
+  let table = _table
+  while (length >= 16) do
+    let a = table.[(3 * 256) + int input.[offset + 12]]
+              ^^^ table.[(2 * 256) + int input.[offset + 13]]
+              ^^^ table.[(1 * 256) + int input.[offset + 14]]
+              ^^^ table.[(0 * 256) + int input.[offset + 15]]
+
+    let b = table.[(7 * 256) + int input.[offset + 8]]
+              ^^^ table.[(6 * 256) + int input.[offset + 9]]
+              ^^^ table.[(5 * 256) + int input.[offset + 10]]
+              ^^^ table.[(4 * 256) + int input.[offset + 11]]
+
+    let c = table.[(11 * 256) + int input.[offset + 4]] 
+              ^^^ table.[(10 * 256) + int input.[offset + 5]] 
+              ^^^ table.[(9 * 256) + int input.[offset + 6]] 
+              ^^^ table.[(8 * 256) + int input.[offset + 7]]
+
+    let d = table.[(15 * 256) + int ((crcLocal ^^^ uint32 input.[offset]) &&& 0xffu)]
+              ^^^ table.[(14 * 256) + int (((crcLocal >>> 8) ^^^ uint32 input.[offset + 1]) &&& 0xffu)]
+              ^^^ table.[(13 * 256) + int (((crcLocal >>> 16) ^^^ uint32 input.[offset + 2]) &&& 0xffu)]
+              ^^^ table.[(12 * 256) + int (((crcLocal >>> 24) ^^^ uint32 input.[offset + 3]) &&& 0xffu)]
+    
+    crcLocal <- d ^^^ c ^^^ b ^^^ a
+    offset <- offset + 16
+    length <- length - 16
+
+  length <- length - 1
+  while length >= 0 do    
+    crcLocal <- table.[int ((crcLocal ^^^ uint32 input.[offset])) &&& 0xff] ^^^ (crcLocal >>> 8)
+    length <- length - 1    
+    offset <- offset + 1
+
+  crcLocal ^^^ System.UInt32.MaxValue
+  
+let crc32C (buf:byte[]) (offset:int) (length:int) = append 0u buf offset length
+  

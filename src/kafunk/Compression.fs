@@ -8,30 +8,31 @@ open Kafunk
 
 let private createMessage (value:Value) (compression:byte) =
   let attrs = compression |> int8
-  Message.create value Binary.empty (Some attrs)
+  //Message.create value Binary.empty (Some attrs)
+  Message(0, 0y, attrs, 0L, Binary.empty, value)
 
 [<RequireQualifiedAccess>]
 module internal Stream = 
 
   // The only thing that can be compressed is a MessageSet, not a single Message; this results in a message containing the compressed set
-  let compress (codec:CompressionCodec) (makeStream:MemoryStream -> Stream) (messageVer:ApiVersion) (ms:MessageSet) =
+  let compress (codec:CompressionCodec) (makeStream:MemoryStream -> Stream) (ms:MessageSet) =
     use outputStream = new MemoryStream()
     do
-      let buf = MessageSet.Size (messageVer,ms) |> Binary.zeros
-      MessageSet.Write (messageVer,ms,BinaryZipper(buf))
+      let buf = MessageSet.Size ms |> Binary.zeros
+      MessageSet.Write (ms,BinaryZipper(buf))
       use compStream = makeStream outputStream
       compStream.Write(buf.Array, buf.Offset, buf.Count)
     let value = Binary.Segment(outputStream.GetBuffer(), 0, int outputStream.Length)
     createMessage value codec
 
-  let decompress (makeStream:MemoryStream -> Stream) (messageVer:ApiVersion) (m:Message) =
+  let decompress (makeStream:MemoryStream -> Stream) (magicByte:int8) (m:Message) =
     use outputStream = new MemoryStream()
     do
       use inputStream = new MemoryStream(m.value.Array, m.value.Offset, m.value.Count)
       use compStream = makeStream inputStream
       compStream.CopyTo(outputStream)
     let buf = Binary.Segment(outputStream.GetBuffer(), 0, int outputStream.Length)
-    MessageSet.Read (messageVer, 0, 0s, buf.Count, true, BinaryZipper(buf))
+    MessageSet.Read (magicByte, 0, 0s, buf.Count, true, BinaryZipper(buf))
 
 [<Compile(Module)>]
 module GZip =
@@ -39,11 +40,10 @@ module GZip =
   open System.IO
   open System.IO.Compression
 
-  let compress ver ms =
+  let compress ms =
     Stream.compress 
       CompressionCodec.GZIP 
       (fun memStream -> upcast new GZipStream(memStream, CompressionMode.Compress, true))
-      ver
       ms
 
   let decompress ver m =
@@ -145,30 +145,30 @@ module Snappy =
       let actualLength = SnappyCodec.Uncompress(content.Array, content.Offset, content.Count, buf, 0)
       Binary.truncateIfSmaller actualLength uncompressedLength buf
 
-  let compress (messageVer:ApiVersion) (ms:MessageSet) =
-    let buf = MessageSet.Size (messageVer,ms) |> Binary.zeros
-    MessageSet.Write (messageVer,ms,BinaryZipper(buf))
+  let compress (ms:MessageSet) =
+    let buf = MessageSet.Size ms |> Binary.zeros
+    MessageSet.Write (ms,BinaryZipper(buf))
     let output = CompressedMessage.compress buf 
     createMessage output CompressionCodec.Snappy
     
-  let decompress (messageVer:ApiVersion) (m:Message) =
+  let decompress (magicByte:int8) (m:Message) =
     let buf = CompressedMessage.decompress m.value 
-    MessageSet.Read (messageVer, 0, 0s, buf.Count, true, BinaryZipper(buf))
+    MessageSet.Read (magicByte, 0, 0s, buf.Count, true, BinaryZipper(buf))
 
 #endif
   
-let compress (messageVer:int16) (compression:byte) (ms:MessageSet) =
+let compress (compression:byte) (ms:MessageSet) =
   match compression with
   | CompressionCodec.None -> ms
-  | CompressionCodec.GZIP -> MessageSet.ofMessage messageVer (GZip.compress messageVer ms)
+  | CompressionCodec.GZIP -> MessageSet.ofMessage (GZip.compress ms)
 
 #if !NETSTANDARD2_0
-  | CompressionCodec.Snappy -> MessageSet.ofMessage messageVer (Snappy.compress messageVer ms)
+  | CompressionCodec.Snappy -> MessageSet.ofMessage (Snappy.compress ms)
 #endif
 
   | _ -> failwithf "Incorrect compression codec %A" compression
   
-let decompress (messageVer:int16) (ms:MessageSet) =
+let decompress (magicByte:int8) (ms:MessageSet) =
   if ms.messages.Length = 0 then ms
   else
     ms.messages
@@ -176,12 +176,12 @@ let decompress (messageVer:int16) (ms:MessageSet) =
       match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
       | CompressionCodec.None -> [|msi|]
       | CompressionCodec.GZIP ->
-        let decompressed = GZip.decompress messageVer msi.message
+        let decompressed = GZip.decompress magicByte msi.message
         decompressed.messages
 
 #if !NETSTANDARD2_0    
       | CompressionCodec.Snappy ->
-        let decompressed = Snappy.decompress messageVer msi.message
+        let decompressed = Snappy.decompress magicByte msi.message
         decompressed.messages
 #endif
 

@@ -375,7 +375,7 @@ module Async =
       t 
       |> Task.extend (fun t -> 
         cts.Cancel () |> ignore
-        raise (OperationCanceledException("", t.Exception)))
+        raise (OperationCanceledException("cancelled!", t.Exception)))
     let at = Async.StartAsTask (a, cancellationToken = cts.Token)
     let! r = Task.WhenAny (t, at) |> awaitTaskCancellationAsError
     return r.Result }

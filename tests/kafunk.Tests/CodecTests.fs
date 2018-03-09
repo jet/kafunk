@@ -4,6 +4,11 @@ open NUnit.Framework
 open System.Text
 open Kafunk
 
+module Message =
+
+  let create value key attrs =
+    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
+
 let arraySegToFSharp (arr:Binary.Segment) =
   let sb = StringBuilder()
   sb.Append("[| ") |> ignore
@@ -31,19 +36,19 @@ let toArraySeg (size:'a -> int) (write:'a * BinaryZipper -> unit) (a:'a) =
 let ``Crc.crc32 message``() =
   let messageVer = 0s
   let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
-  let bytes = toArraySeg (fun m -> Message.Size (messageVer,m)) (fun (m,buf) -> Message.Write (messageVer, m,buf)) m
+  let bytes = toArraySeg (fun m -> Message.Size m) (fun (m,buf) -> Message.Write (m,buf)) m
   let crc32 = Crc.crc32 bytes.Array (bytes.Offset + 4) (bytes.Count - 4)
   let expected = 1940715388u
   Assert.AreEqual(expected, crc32)
 
 [<Test>]
 let ``Message.ComputeCrc``() =
-  let messageVer = 0s
+  let magicByte = 0y
   let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
   //let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
-  let bytes = toArraySeg (fun m -> Message.Size (messageVer,m)) (fun (m,buf) -> Message.Write (messageVer, m,buf)) m
-  let m2 = Message.Read (0s, BinaryZipper(bytes))
-  let crc32 = Message.ComputeCrc (messageVer, m2)
+  let bytes = toArraySeg (fun m -> Message.Size m) (fun (m,buf) -> Message.Write (m,buf)) m
+  let m2 = Message.Read (0y, BinaryZipper(bytes))
+  let crc32 = Message.ComputeCrc (magicByte, m2)
   let expected = int 1940715388u
   Assert.AreEqual(expected, m2.crc)
   Assert.AreEqual(expected, crc32)
@@ -74,11 +79,11 @@ let ``MessageSet.write should encode MessageSet``() =
       Message.create (Binary.ofArray "1"B) (Binary.ofArray "1"B) None
       Message.create (Binary.ofArray "2"B) (Binary.ofArray "1"B) None
     ]
-    |> MessageSet.ofMessages 0s
-  let size = MessageSet.Size (0s,ms)
+    |> MessageSet.ofMessages
+  let size = MessageSet.Size (ms)
   let data = Binary.zeros size
   let bz = BinaryZipper (data)
-  MessageSet.Write (0s, ms, bz)
+  MessageSet.Write (ms, bz)
   //let data = toArraySeg (MessageSet.size 0s) (MessageSet.write 0s) ms
   let encoded = data |> Binary.toArray |> Array.toList
   Assert.True ((expected = encoded))

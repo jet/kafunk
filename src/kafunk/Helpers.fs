@@ -5,25 +5,26 @@ open Kafunk
 open System
 open System.Text
 
-module Message =
+//module Message =
 
-  let create value key attrs =
-    // NB: the CRC is computed by the Protocol module during encoding
-    //Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
-    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
+//  let create value key attrs =
+//    // NB: the CRC is computed by the Protocol module during encoding
+//    //Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
+//    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
 
 module MessageSet =
 
-  let ofMessage (messageVer:ApiVersion) (m:Message) =
-    MessageSet([| MessageSetItem(0L, Message.Size (messageVer,m), m) |])
+  let t = DateTime.UtcNowUnixMilliseconds
 
-  let ofMessages (messageVer:ApiVersion) ms =
-    MessageSet(ms |> Seq.map (fun m -> MessageSetItem (0L, Message.Size (messageVer,m), m)) |> Seq.toArray)
+  let ofMessage (m:Message) =
+    MessageSet([| MessageSetItem(0L, Message.Size m, m) |])
+
+  let ofMessages ms =
+    MessageSet(ms |> Seq.map (fun m -> MessageSetItem (0L, Message.Size m, m)) |> Seq.toArray)
 
   /// Returns the frist offset in the message set.
   let firstOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      //let (o,_,_) = ms.messages.[0] in o
        ms.messages.[0].offset
     else
       0L
@@ -31,8 +32,7 @@ module MessageSet =
   /// Returns the last offset in the message set.
   let lastOffset (ms:MessageSet) =
     if ms.messages.Length > 0 then
-      //let (o,_,_) = ms.messages.[ms.messages.Length - 1] in o
-      ms.messages.[ms.messages.Length - 1].offset
+      max ms.lastOffset (ms.messages.[ms.messages.Length - 1].offset)
     else
       0L
 
@@ -185,7 +185,7 @@ module internal Printers =
         |> Seq.map (fun x ->
           let ps =
             x.partitions
-            |> Seq.map (fun y -> sprintf "p=%i o=%i error_code=%i" y.partition y.offset y.errorCode)
+            |> Seq.map (fun y -> sprintf "p=%i o=%i ec=%i" y.partition y.offset y.errorCode)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" x.topic ps)
         |> String.concat " ; "
@@ -198,11 +198,11 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps = 
             ps
-            |> Seq.map (fun (p,o,_,_mb) -> sprintf "(p=%i o=%i)" p o)
+            |> Seq.map (fun (p,o,_,mb) -> sprintf "(p=%i o=%i mb=%i)" p o mb)
             |> String.concat " ; "
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "
-      sprintf "FetchRequest|%s" ts
+      sprintf "FetchRequest|mb=%i %s" x.maxBytes ts
 
   type FetchResponse with
     static member Print (x:FetchResponse) =
@@ -217,7 +217,7 @@ module internal Printers =
                 messageSet.messages 
                 |> Seq.tryItem 0 
                 |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (highWatermark - x.offset)) |> Option.getOr ""
-              sprintf "(p=%i error_code=%i lso=%i hwo=%i mss=%i%s)" partition errorCode logStartOffset highWatermark messageSetSize offsetInfo)
+              sprintf "(p=%i ec=%i lso=%i hwo=%i mss=%i%s)" partition errorCode logStartOffset highWatermark messageSetSize offsetInfo)
             |> String.concat ";"
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "

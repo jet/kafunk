@@ -261,24 +261,29 @@ module Producer =
       size <- size + (ProducerMessage.size m)
     size
 
-  let private toMessageSet (messageVer:ApiVersion) (compression) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
+  let private toMessageSet (magicByte:int8) (compression:byte) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for i = 0 to batch.Length - 1 do
       let b = batch.[i]
       let mutable xs = Unchecked.defaultof<_>
       if not (ps.TryGetValue(b.partition, &xs)) then
         xs <- ResizeArray<_>()
-        ps.Add (b.partition, xs)
+        ps.Add (b.partition, xs)      
       for j = 0 to b.messages.Length - 1 do
         let pm = b.messages.[j]
-        let m = Message.create pm.value pm.key None
-        let ms = Message.Size (messageVer,m)
+        let m = Message(0, magicByte, 0y, 0L, pm.key, pm.value)
+        let ms = 
+          if magicByte < 2y then Message.Size m
+          else Message.SizeRecord 0L 0 m
         xs.Add (MessageSetItem(0L, ms, m))
     let arr = Array.zeroCreate ps.Count
     let mutable i = 0
     for p in ps do
       let ms = MessageSet(p.Value.ToArray())
-      let ms = ms |> Compression.compress messageVer compression
-      arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, MessageSet.Size (messageVer,ms), ms)
+      let ms = ms |> Compression.compress compression
+      let mss = 
+        if magicByte < 2y then MessageSet.Size ms
+        else MessageSet.SizeRecordBatch ms
+      arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, mss, ms)
       i <- i + 1
     arr
 
@@ -286,13 +291,13 @@ module Producer =
   let private sendBatchToBroker
     (conn:KafkaConn)
     (cfg:ProducerConfig)
-    (messageVer:int16)
+    (magicByte:int8)
     (b:Broker)
     (batch:ProducerMessageBatch[]) = async {
     //Log.trace "sending_batch|ep=%O batch_size_bytes=%i" (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size))
 
     let ps = Dictionary<Partition, ResizeArray<_>>()
-    let pms = toMessageSet messageVer cfg.compression batch ps
+    let pms = toMessageSet magicByte cfg.compression batch ps
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
     let! res =
@@ -419,10 +424,10 @@ module Producer =
 
     let! routes = getProducerRoutes conn cfg.topic
     let partitionCount = routes.partitionCount
-    let messageVer = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
+    let magicByte = MessageVersions.produceReqMessage (conn.ApiVersion ApiKey.Produce)
 
     let startBrokerQueue (b:Broker) =      
-      let sendBatch = sendBatchToBroker conn cfg messageVer b
+      let sendBatch = sendBatchToBroker conn cfg magicByte b
       if cfg.batchSizeBytes = 0 || cfg.batchLingerMs = 0 then 
         (Array.singleton >> sendBatch,async.Return()) else
       let add,flush,produceStream =

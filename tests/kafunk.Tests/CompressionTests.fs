@@ -5,6 +5,12 @@ open NUnit.Framework
 open System
 open System.Text
 
+module Message =
+
+  let create value key attrs =
+    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
+
+
 [<Test>]
 [<Category("Compression")>]
 let ``Compression.GZip should work`` () =
@@ -16,10 +22,10 @@ let ``Compression.GZip should work`` () =
     let message2 = Message.create (Binary.ofArray message2Bytes) (Binary.empty) None
     
     let inputMessage =
-        Compression.GZip.compress 0s (MessageSet.ofMessages 0s [message; message2])
+        Compression.GZip.compress (MessageSet.ofMessages [message; message2])
 
     let outputMessageSet =
-        Compression.GZip.decompress 0s inputMessage
+        Compression.GZip.decompress 0y inputMessage
 
     let messages = outputMessageSet.messages
     Assert.IsTrue (messages.Length = 2)

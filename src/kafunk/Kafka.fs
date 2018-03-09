@@ -195,8 +195,8 @@ module internal Routing =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
         |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, 0L, mb)) |> Seq.toArray)
-        |> Seq.toArray
-      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics, 0, 0y)
+        |> Seq.toArray      
+      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics, req.maxBytes, 0y)
       ch, RequestMessage.Fetch req)
     |> Seq.toArray
 
@@ -774,11 +774,13 @@ type KafkaConn internal (cfg:KafkaConfig) =
     let! ch = getBrokerChan critical state b
     match ch with
     | Success ch ->
-      //Log.trace "sending_to_broker|node_id=%i ep=%O req=%s" b.nodeId (Broker.endpoint b) (RequestMessage.Print req)
+      //Log.info "sending_to_broker|node_id=%i ep=%O req=%s" b.nodeId (Broker.endpoint b) (RequestMessage.Print req)
       try
         let! chanRes = Chan.send ch req
         match chanRes with
         | Success res ->
+          //Log.info "received_response|node_id=%i ep=%O req=%s res=%s" 
+          //  b.nodeId (Broker.endpoint b) (RequestMessage.Print req) (ResponseMessage.Print res)
           return Success res
         | Failure errs ->
           let! _state =
