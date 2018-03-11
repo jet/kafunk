@@ -151,6 +151,9 @@ type ProducerConfig = {
   /// If this value is greater than 1, message ordering cannot be guaranteed.
   maxInFlightRequests : int
 
+  /// The queue (network) type.
+  queueType : ProducerQueueType
+
 } with
 
   /// The default required acks = RequiredAcks.AllInSync.
@@ -171,9 +174,12 @@ type ProducerConfig = {
   /// The default maximum number of in-flight requests per broker connection.
   static member DefaultMaxInFlightRequests = 1
 
+  /// The default queue type = ProducerQueueType.QueuePerBroker.
+  static member DefaultQueueType = ProducerQueueType.QueuePerBroker
+
   /// Creates a producer configuration.
   static member create (topic:TopicName, partition:Partitioner, ?requiredAcks:RequiredAcks, ?compression:CompressionCodec,
-                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs, ?maxInFlightRequests) =
+                        ?timeout:Timeout, ?bufferSizeBytes:int, ?batchSizeBytes, ?batchLingerMs, ?maxInFlightRequests, ?queueType) =
     {
       topic = topic
       partitioner = partition
@@ -184,8 +190,17 @@ type ProducerConfig = {
       batchSizeBytes = defaultArg batchSizeBytes ProducerConfig.DefaultBatchSizeBytes
       batchLingerMs = defaultArg batchLingerMs ProducerConfig.DefaultBatchLingerMs
       maxInFlightRequests = defaultArg maxInFlightRequests ProducerConfig.DefaultMaxInFlightRequests
+      queueType = defaultArg queueType ProducerConfig.DefaultQueueType
     }
 
+/// Producer message queue type.
+and ProducerQueueType = 
+
+  /// A message queue per broker.
+  | QueuePerBroker
+  
+  /// A message queue per partition.
+  | QueuePerPartition
 
 /// Producer state corresponding to the state of a cluster.
 [<NoEquality;NoComparison;AutoSerializable(false)>]
@@ -267,19 +282,22 @@ module Producer =
       let mutable xs = Unchecked.defaultof<_>
       if not (ps.TryGetValue(b.partition, &xs)) then
         xs <- ResizeArray<_>()
-        ps.Add (b.partition, xs)      
+        ps.Add (b.partition, xs)
       for j = 0 to b.messages.Length - 1 do
+        let offset = int64 xs.Count // the offset of the message with respect to partition batj
         let pm = b.messages.[j]
         let m = Message(0, magicByte, 0y, 0L, pm.key, pm.value)
         let ms = 
           if magicByte < 2y then Message.Size m
-          else Message.SizeRecord 0L 0 m
-        xs.Add (MessageSetItem(0L, ms, m))
+          else 
+            // the offset delta is simply the offset of this message in the in-memory batch
+            Message.SizeRecord 0L (int offset) m        
+        xs.Add (MessageSetItem(offset, ms, m))
     let arr = Array.zeroCreate ps.Count
     let mutable i = 0
     for p in ps do
       let ms = MessageSet(p.Value.ToArray())
-      let ms = ms |> Compression.compress compression
+      let ms = ms |> Compression.compress magicByte compression
       let mss = 
         if magicByte < 2y then MessageSet.Size ms
         else MessageSet.SizeRecordBatch ms
@@ -294,10 +312,18 @@ module Producer =
     (magicByte:int8)
     (b:Broker)
     (batch:ProducerMessageBatch[]) = async {
-    //Log.trace "sending_batch|ep=%O batch_size_bytes=%i" (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size))
+    //Log.info "sending_batch|ep=%O batch_size_bytes=%i batch_count=%i partition_count=%i" 
+    //  (Broker.endpoint b) (batch |> Seq.sumBy (fun b -> b.size)) batch.Length (batch |> Seq.distinctBy (fun b -> b.partition) |> Seq.length)
 
     let ps = Dictionary<Partition, ResizeArray<_>>()
     let pms = toMessageSet magicByte cfg.compression batch ps
+
+    //Log.info "sending_batch|ep=%O batch_size_bytes=%i batch_count=%i partition_count=%i msg_count=%i" 
+    //  (Broker.endpoint b) 
+    //  (pms |> Seq.sumBy (fun pm -> pm.messageSetSize)) 
+    //  pms.Length 
+    //  (pms |> Seq.distinctBy (fun pm -> pm.partition) |> Seq.length) 
+    //  (pms |> Seq.sumBy (fun pm -> pm.messageSet.messages.Length))
 
     let req = ProduceRequest(cfg.requiredAcks, cfg.timeout, [| ProduceRequestTopicMessageSet (cfg.topic,pms) |])
     let! res =
@@ -473,17 +499,26 @@ module Producer =
       (add,proc)
 
     let partitionQueues,queueProcs =
-      let qs = Dict.ofSeq []
-      routes.borkerByPartition
-      |> Seq.mapi (fun _ b ->
-        match Dict.tryGet b.nodeId qs with
-        | Some q -> q,None
-        | None ->
+      match cfg.queueType with
+      | ProducerQueueType.QueuePerPartition ->
+        routes.borkerByPartition
+        |> Seq.mapi (fun _ b ->
           let q,proc = startBrokerQueue b
-          qs.Add (b.nodeId,q)
           q,Some proc)
-      |> Seq.toArray
-      |> Array.unzip
+        |> Seq.toArray
+        |> Array.unzip
+      | ProducerQueueType.QueuePerBroker ->
+        let qs = Dict.ofSeq []
+        routes.borkerByPartition
+        |> Seq.mapi (fun _ b ->
+          match Dict.tryGet b.nodeId qs with
+          | Some q -> q,None
+          | None ->
+            let q,proc = startBrokerQueue b
+            qs.Add (b.nodeId,q)
+            q,Some proc)
+        |> Seq.toArray
+        |> Array.unzip
 
     let queueProcs = queueProcs |> Seq.choose id |> Async.Parallel |> Async.Ignore
 
@@ -562,10 +597,10 @@ module Producer =
         |> Seq.partitionChoices
       if recovers.Length > 0 then
         let ex = Exn.ofSeq (Seq.append recovers retries)
-        return Failure (Resource.ResourceErrorAction.CloseRetry ex)
+        return Failure (Resource.ResourceErrorAction.CloseRetry (Some ex))
       else
         let ex = Exn.ofSeq retries
-        return Failure (Resource.ResourceErrorAction.Retry ex)
+        return Failure (Resource.ResourceErrorAction.Retry (Some ex))
     else 
       return Success oks }
 
@@ -578,12 +613,13 @@ module Producer =
     | Success res -> return Success res
     | Failure err ->
       match producerErrorToRetryAction err with
-      | Choice1Of2 ex -> return Failure <| Resource.ResourceErrorAction.Retry ex
-      | Choice2Of2 ex -> return Failure <| Resource.ResourceErrorAction.CloseRetry ex }
+      | Choice1Of2 ex -> return Failure <| Resource.ResourceErrorAction.Retry (Some ex)
+      | Choice2Of2 ex -> return Failure <| Resource.ResourceErrorAction.CloseRetry (Some ex) }
 
   /// Creates a producer.
   let createAsync (conn:KafkaConn) (config:ProducerConfig) : Async<Producer> = async {
-    Log.info "initializing_producer|topic=%s" config.topic
+    Log.info "initializing_producer|topic=%s batch_size_bytes=%i batch_linger_ms=%i acks=%i compression=%i" 
+      config.topic config.batchSizeBytes config.batchLingerMs config.requiredAcks config.compression
     let batchTimeout =
       let tcpReqTimeout = conn.Config.tcpConfig.requestTimeout
       let prodReqTimeout = TimeSpan.FromMilliseconds config.timeout

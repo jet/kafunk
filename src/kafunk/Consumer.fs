@@ -620,21 +620,21 @@ module Consumer =
     (cfg:ConsumerConfig)
     (magicByte:int8)
     (topic:TopicName)
-    (partition,errorCode,highWatermark,_,_,_,messageSetSize,ms) =
-    match errorCode with
+    (p:FetchResponsePartitionItem) =
+    match p.errorCode with
     | ErrorCode.NoError ->
-      if messageSetSize = 0 then Choice2Of4 (partition,highWatermark)
+      if p.messageSetSize = 0 then Choice2Of4 (p.partition,p.highWatermarkOffset)
       else 
-        let ms = Compression.decompress magicByte ms
-        if cfg.checkCrc then
-          MessageSet.CheckCrc (magicByte, ms)
-        Choice1Of4 (ConsumerMessageSet(topic, partition, ms, highWatermark))
+        let ms = Compression.decompress magicByte p.messageSet
+        if cfg.checkCrc && magicByte < 2y then
+          MessageSet.CheckCrc ms
+        Choice1Of4 (ConsumerMessageSet(topic, p.partition, ms, p.highWatermarkOffset))
     | ErrorCode.OffsetOutOfRange -> 
-      Choice3Of4 (partition,highWatermark)
+      Choice3Of4 (p.partition,p.highWatermarkOffset)
     | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition | ErrorCode.ReplicaNotAvailable ->          
-      Choice4Of4 (partition)
+      Choice4Of4 (p.partition)
     | _ -> 
-      failwithf "unsupported fetch error_code=%i" errorCode
+      failwithf "unsupported fetch error_code=%i" p.errorCode
 
   /// Fetches the specified offsets.
   /// Returns a set of message sets and an end of topic list.
@@ -771,7 +771,6 @@ module Consumer =
   /// multiplexed stream of all fetch responses for this consumer
   let private fetchStream (c:Consumer) state initOffsets =
     let cfg = c.config
-    let topic = cfg.topic
     let initRetryQueue = RetryQueue.create cfg.endOfTopicPollPolicy fst
     (initOffsets, initRetryQueue)
     |> AsyncSeq.unfoldAsync
@@ -792,15 +791,26 @@ module Consumer =
             return None
           | Some (mss,ends) ->
                 
+            let nextOffsets = 
+              mss
+              |> Array.map (fun ms -> ms.partition, MessageSet.nextOffset ms.messageSet ms.highWatermarkOffset)
+
+            //let ends,mss =
+            //  // if the current offsets match the next offsets, assume we are at the end
+            //  if nextOffsets.Length > 0 && nextOffsets = offsets then
+            //    let firstOffsets = 
+            //      mss
+            //      |> Array.map (fun ms -> ms.partition, MessageSet.firstOffset ms.messageSet)
+            //    Log.warn "same_offsets|last=%A first=%A ends=%A" nextOffsets firstOffsets ends
+            //    nextOffsets,[||]
+            //  else
+            //    ends,mss
+
             let retryQueue = 
               RetryQueue.retryRemoveAll 
                 retryQueue 
                 ends 
                 (mss |> Seq.map (fun ms -> ms.partition))
-                                
-            let nextOffsets = 
-              mss
-              |> Array.map (fun mb -> mb.partition, MessageSet.nextOffset mb.messageSet mb.highWatermarkOffset)
 
             //if ends.Length > 0 then
             //  let msg =
@@ -821,9 +831,6 @@ module Consumer =
     let assignment = Array.map fst initOffsets
     let cfg = c.config
     let topic = cfg.topic
-    //use! _cnc = Async.OnCancel (fun () -> 
-    //  Log.info "cancelling_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i"
-    //    cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length))
     Log.info "starting_fetch_process|group_id=%s generation_id=%i member_id=%s topic=%s partition_count=%i" 
       cfg.groupId state.state.generationId state.state.memberId topic (assignment.Length)
     return!

@@ -11,6 +11,9 @@ let private createMessage (value:Value) (compression:byte) =
   //Message.create value Binary.empty (Some attrs)
   Message(0, 0y, attrs, 0L, Binary.empty, value)
 
+let private ofMessage (m:Message) =
+  MessageSet([| MessageSetItem(0L, Message.Size m, m) |])
+
 [<RequireQualifiedAccess>]
 module internal Stream = 
 
@@ -157,34 +160,45 @@ module Snappy =
 
 #endif
   
-let compress (compression:byte) (ms:MessageSet) =
+let compress (magicByte:int8) (compression:byte) (ms:MessageSet) =
   match compression with
   | CompressionCodec.None -> ms
-  | CompressionCodec.GZIP -> MessageSet.ofMessage (GZip.compress ms)
+  | _ ->
+    if magicByte >= 2y then 
+      failwithf "compression=%i not supported on message_format=%i" compression magicByte else
+    // assign offsets
+    let ms = 
+      ms.messages 
+      |> Array.mapi (fun i msi -> MessageSetItem(int64 i, msi.messageSize, msi.message))
+      |> MessageSet
+    match compression with
+    | CompressionCodec.None -> ms
+    | CompressionCodec.GZIP -> ofMessage (GZip.compress ms)
 
-#if !NETSTANDARD2_0
-  | CompressionCodec.Snappy -> MessageSet.ofMessage (Snappy.compress ms)
-#endif
+  #if !NETSTANDARD2_0
+    | CompressionCodec.Snappy -> ofMessage (Snappy.compress ms)
+  #endif
 
-  | _ -> failwithf "Incorrect compression codec %A" compression
+    | _ -> failwithf "Incorrect compression codec %A" compression
   
 let decompress (magicByte:int8) (ms:MessageSet) =
   if ms.messages.Length = 0 then ms
   else
-    ms.messages
-    |> Array.Parallel.collect (fun msi -> 
-      match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
-      | CompressionCodec.None -> [|msi|]
-      | CompressionCodec.GZIP ->
-        let decompressed = GZip.decompress magicByte msi.message
-        decompressed.messages
+    let msis =
+      ms.messages
+      |> Array.Parallel.collect (fun msi -> 
+        match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
+        | CompressionCodec.None -> [|msi|]
+        | CompressionCodec.GZIP ->
+          let decompressed = GZip.decompress magicByte msi.message
+          decompressed.messages
 
-#if !NETSTANDARD2_0    
-      | CompressionCodec.Snappy ->
-        let decompressed = Snappy.decompress magicByte msi.message
-        decompressed.messages
-#endif
+  #if !NETSTANDARD2_0    
+        | CompressionCodec.Snappy ->
+          let decompressed = Snappy.decompress magicByte msi.message
+          decompressed.messages
+  #endif
 
-      | c -> failwithf "compression_code=%i not supported" c)
-    |> MessageSet
+        | c -> failwithf "compression_code=%i not supported" c)
+    MessageSet (msis, ms.lastOffset) // NB: lastOffset mast be propagated for magicByte>=2y support
     

@@ -5,22 +5,7 @@ open Kafunk
 open System
 open System.Text
 
-//module Message =
-
-//  let create value key attrs =
-//    // NB: the CRC is computed by the Protocol module during encoding
-//    //Message(0, 0y, (defaultArg attrs 0y), DateTime.UtcNowUnixMilliseconds, key, value)
-//    Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
-
 module MessageSet =
-
-  let t = DateTime.UtcNowUnixMilliseconds
-
-  let ofMessage (m:Message) =
-    MessageSet([| MessageSetItem(0L, Message.Size m, m) |])
-
-  let ofMessages ms =
-    MessageSet(ms |> Seq.map (fun m -> MessageSetItem (0L, Message.Size m, m)) |> Seq.toArray)
 
   /// Returns the frist offset in the message set.
   let firstOffset (ms:MessageSet) =
@@ -41,7 +26,7 @@ module MessageSet =
   /// Ensures the next offset is bellow high watermark offset.
   let nextOffset (ms:MessageSet) (hwm:HighwaterMarkOffset) : Offset =
     let lastOffset = lastOffset ms
-    let nextOffset = lastOffset + 1L
+    let nextOffset = lastOffset + 1L    
     if nextOffset <= hwm then
       nextOffset
     else 
@@ -211,13 +196,12 @@ module internal Printers =
         |> Seq.map (fun (tn,ps) ->
           let ps =
             ps
-            |> Seq.map (fun (partition,errorCode,highWatermark,_,logStartOffset,_,messageSetSize,messageSet) ->
-              //let offsetInfo = ms.messages |> Seq.tryItem 0 |> Option.map (fun (o,_,_) -> sprintf " o=%i lag=%i" o (hwmo - o)) |> Option.getOr ""
+            |> Seq.map (fun p ->
               let offsetInfo = 
-                messageSet.messages 
+                p.messageSet.messages 
                 |> Seq.tryItem 0 
-                |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (highWatermark - x.offset)) |> Option.getOr ""
-              sprintf "(p=%i ec=%i lso=%i hwo=%i mss=%i%s)" partition errorCode logStartOffset highWatermark messageSetSize offsetInfo)
+                |> Option.map (fun x -> sprintf " o=%i lag=%i" x.offset (p.highWatermarkOffset - x.offset)) |> Option.getOr ""
+              sprintf "(p=%i ec=%i lso=%i hwo=%i mss=%i%s)" p.partition p.errorCode p.logStartOffset p.highWatermarkOffset p.messageSetSize offsetInfo)
             |> String.concat ";"
           sprintf "topic=%s partitions=[%s]" tn ps)
         |> String.concat " ; "

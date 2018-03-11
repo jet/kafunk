@@ -10,6 +10,9 @@ module Message =
   let create value key attrs =
     Message(0, 0y, (defaultArg attrs 0y), 0L, key, value)
 
+let ofMessages ms =
+  MessageSet(ms |> Seq.map (fun m -> MessageSetItem (0L, Message.Size m, m)) |> Seq.toArray)
+
 
 [<Test>]
 [<Category("Compression")>]
@@ -22,7 +25,7 @@ let ``Compression.GZip should work`` () =
     let message2 = Message.create (Binary.ofArray message2Bytes) (Binary.empty) None
     
     let inputMessage =
-        Compression.GZip.compress (MessageSet.ofMessages [message; message2])
+        Compression.GZip.compress (ofMessages [message; message2])
 
     let outputMessageSet =
         Compression.GZip.decompress 0y inputMessage

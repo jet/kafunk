@@ -12,11 +12,12 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 
 ## Version Support
 
-| Version   | Status   |
-| ----------|----------|
-| 0.9.0     | Complete |
-| 0.10.0    | Complete |
-| 0.10.1    | Complete |
+| Version    | Status   |
+| -----------|----------|
+| 0.9.0      | Complete |
+| 0.10.0     | Complete |
+| 0.10.1     | Complete |
+| 0.11+auto  | Protocol |
 
 ## Feature Support
 
@@ -28,6 +29,7 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 | TLS       | https://github.com/jet/kafunk/issues/66  |
 | SASL      | https://github.com/jet/kafunk/issues/139 |
 | ACL       | https://github.com/jet/kafunk/issues/140 |
+| TXNS      | https://github.com/jet/kafunk/issues/214 |
 
 
 ## Hello World

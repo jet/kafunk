@@ -4,6 +4,9 @@ open NUnit.Framework
 open System.Text
 open Kafunk
 
+let ofMessages ms =
+  MessageSet(ms |> Seq.map (fun m -> MessageSetItem (0L, Message.Size m, m)) |> Seq.toArray)
+
 module Message =
 
   let create value key attrs =
@@ -48,7 +51,7 @@ let ``Message.ComputeCrc``() =
   //let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
   let bytes = toArraySeg (fun m -> Message.Size m) (fun (m,buf) -> Message.Write (m,buf)) m
   let m2 = Message.Read (0y, BinaryZipper(bytes))
-  let crc32 = Message.ComputeCrc (magicByte, m2)
+  let crc32 = Message.ComputeCrc (m2)
   let expected = int 1940715388u
   Assert.AreEqual(expected, m2.crc)
   Assert.AreEqual(expected, crc32)
@@ -79,7 +82,7 @@ let ``MessageSet.write should encode MessageSet``() =
       Message.create (Binary.ofArray "1"B) (Binary.ofArray "1"B) None
       Message.create (Binary.ofArray "2"B) (Binary.ofArray "1"B) None
     ]
-    |> MessageSet.ofMessages
+    |> ofMessages
   let size = MessageSet.Size (ms)
   let data = Binary.zeros size
   let bz = BinaryZipper (data)
@@ -103,7 +106,12 @@ let ``FetchResponse.read should decode FetchResponse``() =
   let data = BinaryZipper(data)
   let (res:FetchResponse) = FetchResponse.Read (0s, data)
   let topicName, ps = res.topics.[0]
-  let p, ec, _hwo, _, _, _, mss, ms = ps.[0]
+  //let p, ec, _hwo, _, _, _, mss, ms = ps.[0]
+  let p = ps.[0]   
+  let ec = p.errorCode
+  let mss = p.messageSetSize
+  let ms = p.messageSet
+  let p = p.partition
   //let o, _ms, m = ms.messages.[0]
   let x = ms.messages.[0]
   let o, m = x.offset, x.message

@@ -368,16 +368,16 @@ module Async =
     let! r = Task.WhenAny (t, at) |> awaitTaskCancellationAsError
     return r.Result }
 
-  let cancelWithTaskThrow (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {
+  let cancelWithTaskThrow (err:exn -> exn) (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {
     let! ct = Async.CancellationToken
     use cts = CancellationTokenSource.CreateLinkedTokenSource ct
     let t = 
       t 
       |> Task.extend (fun t -> 
         cts.Cancel () |> ignore
-        raise (OperationCanceledException("cancelled!", t.Exception)))
+        raise (err t.Exception))
     let at = Async.StartAsTask (a, cancellationToken = cts.Token)
-    let! r = Task.WhenAny (t, at) |> awaitTaskCancellationAsError
+    let! r = Task.WhenAny (at, t) |> awaitTaskCancellationAsError
     return r.Result }
 
   let cancelWithTaskTimeout (timeout:TimeSpan) (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {

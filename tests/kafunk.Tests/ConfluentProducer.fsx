@@ -1,4 +1,4 @@
-﻿#r "bin/release/confluent.kafka.dll"
+﻿#r "bin/release/net45/confluent.kafka.dll"
 #load "Refs.fsx"
 #time "on"
 
@@ -28,11 +28,11 @@ let batchSize = argiDefault 4 "100" |> Int32.Parse
 let messageSize = argiDefault 5 "10" |> Int32.Parse
 let parallelism = argiDefault 6 "1" |> Int32.Parse
 
-let payload = "v"
-  //let bytes = Array.zeroCreate messageSize
-  //let rng = Random()
-  //rng.NextBytes bytes
-  //bytes |> Encoding.UTF8.GetString
+let payload = //"v"
+  let bytes = Array.zeroCreate messageSize
+  let rng = Random()
+  rng.NextBytes bytes
+  bytes |> Encoding.UTF8.GetString
 
 Log.info "running_producer_test|host=%s topic=%s count=%i batch_size=%i message_size=%i parallelism=%i"
   host topic N batchSize messageSize parallelism
@@ -44,8 +44,9 @@ let config =
       
     "bootstrap.servers", box host 
     "acks", box "all"
-    //"batch.size", box 16384
-    "linger.ms", box 100
+    //"batch.size", box 1000000
+    "batch.num.messages", box 100000
+    "linger.ms", box 1000
     "max.in.flight.requests.per.connection", box 1
 
   ] |> toDict

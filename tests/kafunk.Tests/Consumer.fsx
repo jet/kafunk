@@ -30,9 +30,10 @@ let go = async {
         //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-        //version = Versions.V_0_10_1,
-        version = Versions.V_0_9_0,
-        autoApiVersions = false,
+        version = Versions.V_0_10_1,
+        autoApiVersions = true,
+        //version = Versions.V_0_9_0,
+        //autoApiVersions = false,
         clientId = "leo")
     Kafka.connAsync connConfig
   let consumerConfig = 
@@ -40,9 +41,9 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 5000000,
+      fetchMaxBytes = 500000,
       fetchMaxBytesTotal = 50000000,
-      //fetchMaxBytesOverride = 100000,
+      fetchMaxBytesOverride = 1000000,
       //fetchMinBytes = 0,
       //fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,

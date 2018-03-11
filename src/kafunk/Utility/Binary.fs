@@ -340,9 +340,6 @@ type BinaryZipper (buf:ArraySegment<byte>) =
     (value >>> 1) ^^^ -(value &&& 1)
 
   member __.WriteVarint (value:int) =
-    //if (value < 128) then
-    //  __.WriteByte (byte value)
-    //else
     let mutable v = (value <<< 1) ^^^ (value >>> 31)
     while ((v &&& 0xffffff80) <> 0) do
       let b = byte ((v &&& 0x7f) ||| 0x80)
@@ -459,4 +456,10 @@ type BinaryZipper (buf:ArraySegment<byte>) =
       __.WriteInt16 (int16 s.Length)
       let read = Encoding.UTF8.GetBytes(s, 0, s.Length, buf.Array, buf.Offset)
       __.ShiftOffset read
+
+  /// Creates a BinaryZipper and limits the size to the specified value.
+  /// NB: the child BinaryZipper is not linked and the parent must be shifted after the child is consumed.
+  member __.Limit (count:int) =
+    let buf = ArraySegment(__.Buffer.Array, __.Buffer.Offset, count)
+    BinaryZipper(buf)
 

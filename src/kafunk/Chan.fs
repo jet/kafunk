@@ -219,7 +219,7 @@ module internal Chan =
       socketAgent
       |> Resource.injectWithRecovery
           RetryPolicy.none
-          (fun s buf -> Socket.sendAll s buf |> Async.Catch |> Async.map (Result.mapError (ResourceErrorAction.CloseRetry)))
+          (fun s buf -> Socket.sendAll s buf |> Async.Catch |> Async.map (Result.mapError (Some >> ResourceErrorAction.CloseRetry)))
 
     let receive =
       let receive s buf = async {
@@ -298,7 +298,7 @@ module internal Chan =
       let send session req = 
         Session.send session req
         |> Async.map (function 
-          | None -> Failure (CloseRetry (exn "timeout"))
+          | None -> Failure (CloseRetry None)
           | Some res -> Success (Success res))
       sessionAgent
       |> Resource.injectWithRecovery config.requestRetryPolicy send

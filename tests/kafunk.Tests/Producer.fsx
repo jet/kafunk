@@ -55,6 +55,8 @@ let connCfg =
     //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
     bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy,
     //bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
+    //version = Versions.V_0_9_0,
+    //autoApiVersions = false
     version = Versions.V_0_10_1,
     autoApiVersions = true
     )
