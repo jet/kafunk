@@ -1,7 +1,9 @@
 ### 0.1.15-alpha02 - 14.3.2018
 * IMPROVE: support for v0.11 of broker protocol, including v5 of Fetch and v3 of Produce APIs
+* IMPROVE: improved TCP connection logging and log levels to reduce "false positives"
 * BREAKING: FetchResponse item now explicit structure rather than tuple. Breaking only if using low-level Fetch API.
-* FEATURE: ProducerQueueType to allow configuration of producer message queue networks.
+* FEATURE: `ProducerQueueType` to allow configuration of producer message queue networks.
+* BUG: consumer doesn't recover from `leaderless_partition_detected` #204
 
 ### 0.1.15-alpha01 - 5.3.2018
 * BUG: consumer would enter an infinite loop between `offsets_out_of_range` and `resuming_fetch_from_reset_offsets`
