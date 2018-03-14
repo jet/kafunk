@@ -3,6 +3,7 @@ namespace Kafunk
 /// The Kafka RPC protocol.
 [<AutoOpen>]
 module Protocol =
+  open System
 
   type ApiKey =
     | Produce = 0
@@ -26,14 +27,15 @@ module Protocol =
   module internal MessageVersions =
     
     /// Gets the version of Message for a ProduceRequest of the specified API version.
-    let internal produceReqMessage (apiVer:ApiVersion) =
-      if apiVer >= 2s then 1s
-      else 0s
+    let internal produceReqMessage (apiVer:ApiVersion) : int8 =
+      if apiVer >= 3s then 2y 
+      elif apiVer = 2s then 1y
+      else 0y
 
     /// Gets the version of Message for a FetchResponse of the specified API version.
-    let internal fetchResMessage (apiVer:ApiVersion) =
-      if apiVer >= 2s then 1s
-      else 0s
+    let internal fetchResMessage (apiVer:ApiVersion) : int8 =
+      if apiVer >= 2s then 1y
+      else 0y
 
   /// A correlation id of a Kafka request-response transaction.
   type CorrelationId = int32
@@ -357,6 +359,56 @@ module Protocol =
     new (msg,magicByte) = new MessageTooBigException (msg, null, magicByte, 0)
     new (msg,magicByte,messageSize) = new MessageTooBigException (msg, null, magicByte, messageSize)
 
+  module internal TimestampType =
+    
+    let [<Literal>] MASK = 0x80
+    let [<Literal>] CREATE_TIME = 0
+    let [<Literal>] LOG_APPEND_TIME = 1
+
+  module internal Record =
+    
+    /// The minimum bytes overhead for a record in a record batch.
+    /// If less than this value of space is available in the buffer, the record is considered partial and skipped.
+    let MIN_RECORD_OVERHEAD = 1 + 1 + 1 + 1 + 1 + 1 + 1 // length attrs timestamp offset key value headers
+
+  module internal RecordBatch =
+
+    let OFFSET_OFFSET = 0
+    let OFFSET_LENGTH = 8
+    let SIZE_OFFSET = OFFSET_OFFSET + OFFSET_LENGTH
+    let SIZE_LENGTH = 4
+    let LOG_OVERHEAD = SIZE_OFFSET + SIZE_LENGTH
+
+    let BASE_OFFSET_OFFSET = 0;
+    let BASE_OFFSET_LENGTH = 8;
+    let LENGTH_OFFSET = BASE_OFFSET_OFFSET + BASE_OFFSET_LENGTH;
+    let LENGTH_LENGTH = 4
+    let PARTITION_LEADER_EPOCH_OFFSET = LENGTH_OFFSET + LENGTH_LENGTH;
+    let PARTITION_LEADER_EPOCH_LENGTH = 4;
+    let MAGIC_OFFSET = PARTITION_LEADER_EPOCH_OFFSET + PARTITION_LEADER_EPOCH_LENGTH;
+    let MAGIC_LENGTH = 1;
+    let CRC_OFFSET = MAGIC_OFFSET + MAGIC_LENGTH;
+    let CRC_LENGTH = 4;
+    let ATTRIBUTES_OFFSET = CRC_OFFSET + CRC_LENGTH;
+    let ATTRIBUTE_LENGTH = 2;
+    let LAST_OFFSET_DELTA_OFFSET = ATTRIBUTES_OFFSET + ATTRIBUTE_LENGTH;
+    let LAST_OFFSET_DELTA_LENGTH = 4;
+    let FIRST_TIMESTAMP_OFFSET = LAST_OFFSET_DELTA_OFFSET + LAST_OFFSET_DELTA_LENGTH;
+    let FIRST_TIMESTAMP_LENGTH = 8;
+    let MAX_TIMESTAMP_OFFSET = FIRST_TIMESTAMP_OFFSET + FIRST_TIMESTAMP_LENGTH;
+    let MAX_TIMESTAMP_LENGTH = 8;
+    let PRODUCER_ID_OFFSET = MAX_TIMESTAMP_OFFSET + MAX_TIMESTAMP_LENGTH;
+    let PRODUCER_ID_LENGTH = 8;
+    let PRODUCER_EPOCH_OFFSET = PRODUCER_ID_OFFSET + PRODUCER_ID_LENGTH;
+    let PRODUCER_EPOCH_LENGTH = 2;
+    let BASE_SEQUENCE_OFFSET = PRODUCER_EPOCH_OFFSET + PRODUCER_EPOCH_LENGTH;
+    let BASE_SEQUENCE_LENGTH = 4;
+    let RECORDS_COUNT_OFFSET = BASE_SEQUENCE_OFFSET + BASE_SEQUENCE_LENGTH;
+    let RECORDS_COUNT_LENGTH = 4;
+    let RECORDS_OFFSET = RECORDS_COUNT_OFFSET + RECORDS_COUNT_LENGTH;
+    let RECORD_BATCH_OVERHEAD = RECORDS_OFFSET;
+
+
   /// A Kafka message type used for producing and fetching.
   [<NoEquality;NoComparison>]
   type Message =
@@ -372,7 +424,7 @@ module Protocol =
     end
   with
 
-    static member Size (_messageVer:ApiVersion, m:Message) =
+    static member Size (m:Message) =
       Binary.sizeInt32 m.crc +
       Binary.sizeInt8 m.magicByte +
       Binary.sizeInt8 m.attributes +
@@ -380,7 +432,19 @@ module Protocol =
       Binary.sizeBytes m.key +
       Binary.sizeBytes m.value
 
-    static member Write (_messageVer:ApiVersion, m:Message, buf:BinaryZipper) =      
+    /// Returns the size of the record, excluding the size of the length field itself.
+    /// NB: vartint encodings are used on timestamp delta and offset delta
+    static member SizeRecord (timestampDelta:int64) (offsetDelta:int) (m:Message) =
+      let size =
+        1 + // attributes
+        Binary.sizeVarint64 timestampDelta +
+        Binary.sizeVarint offsetDelta +          
+        Binary.sizeBytesVarint m.key +
+        Binary.sizeBytesVarint m.value +
+        Binary.sizeVarint 0 // headers length
+      size
+
+    static member Write (m:Message, buf:BinaryZipper) =      
       buf.ShiftOffset 4 // CRC
       let offsetAfterCrc = buf.Buffer.Offset
       buf.WriteInt8 m.magicByte
@@ -390,15 +454,15 @@ module Protocol =
       buf.WriteBytes m.key
       buf.WriteBytes m.value
       let crc = Crc.crc32 buf.Buffer.Array offsetAfterCrc (buf.Buffer.Offset - offsetAfterCrc)
-      let crcBuf = System.ArraySegment<_>(buf.Buffer.Array, offsetAfterCrc - 4, 4)
-      Binary.pokeInt32 (int crc) crcBuf |> ignore
+      Binary.pokeInt32In (int crc) buf.Buffer.Array (offsetAfterCrc - 4)
+      //Binary.pokeUInt32In (int64 crc) buf.Buffer.Array (offsetAfterCrc - 4)
 
-    static member Read (ver:ApiVersion, buf:BinaryZipper) =
+    static member Read (magicByte:int8, buf:BinaryZipper) =
       let crc = buf.ReadInt32 ()
-      let magicByte = buf.ReadInt8 ()
+      buf.ShiftOffset 1 // magic byte
       let attrs = buf.ReadInt8 ()
       let timestamp = 
-        if ver >= 1s then 
+        if magicByte >= 1y then 
           buf.ReadInt64 ()
         else 
           0L
@@ -407,7 +471,7 @@ module Protocol =
       Message(crc,magicByte,attrs,timestamp,key,value)
 
     // NB: assumes that m.key and m.value use the same underlying array
-    static member ComputeCrc (ver:ApiVersion, m:Message) =
+    static member ComputeCrc (m:Message) =
       let offsetAtKey =
         m.value.Offset
         - 4 // key length
@@ -417,18 +481,17 @@ module Protocol =
         offsetAtKey
         - 1 // magicByte
         - 1 // attrs
-        - (if ver >= 1s then 8 else 0) // timestamp
+        - (if m.magicByte >= 1y then 8 else 0) // timestamp
       let offsetAtEnd = m.value.Offset + m.value.Count
       let readMessageSize = offsetAtEnd - offsetAfterCrc
       let crc32 = Crc.crc32 m.value.Array offsetAfterCrc readMessageSize
       int32 crc32
     
     // NB: assumes that m.key and m.value use the same underlying array
-    static member CheckCrc (ver:ApiVersion, m:Message) =
-      let crc' = Message.ComputeCrc (ver,m)
+    static member CheckCrc (m:Message) =
+      let crc' = Message.ComputeCrc m
       if m.crc <> crc' then
         raise (CorruptCrc32Exception(sprintf "Corrupt message data. Computed CRC32=%i received CRC32=%i|key=%s" crc' m.crc (Binary.toString m.key)))
-
 
   [<NoEquality;NoComparison>]
   type MessageSetItem =
@@ -442,7 +505,7 @@ module Protocol =
   [<NoEquality;NoComparison>]
   type MessageSet =
     struct
-      // when specified, overrides the last offset
+      // when specified (in magic >= v2), overrides the last offset
       val lastOffset : int64
       val messages : MessageSetItem[]
       new (set) = { messages = set ; lastOffset = -1L }
@@ -450,23 +513,25 @@ module Protocol =
     end
   with
 
-    static member Size (ver:ApiVersion, x:MessageSet) =
+    /// Computes the message set size assuming magicByte <= 1y
+    static member Size (x:MessageSet) =
       let mutable size = 0
       for i = 0 to x.messages.Length - 1 do
-        let m = x.messages.[i].message
-        size <- size + 8 + 4 + (Message.Size (ver,m))
+        size <- size + 
+          8 + // offset
+          4 + // message size field
+          x.messages.[i].messageSize
       size
 
-    static member Write (messageVer:ApiVersion, ms:MessageSet, buf:BinaryZipper) =
-      //for (o,ms,m) in ms.messages do
+    static member Write (ms:MessageSet, buf:BinaryZipper) =
       for x in ms.messages do
         buf.WriteInt64 x.offset
         buf.WriteInt32 x.messageSize
-        Message.Write (messageVer, x.message, buf)
+        Message.Write (x.message, buf)
 
     // NB: skipTooLarge=true is for scenarios where decompression is involved and a message set is being decoded from an individual message
     // which was itself too small.
-    static member Read (messageVer:ApiVersion, partition:Partition, ec:ErrorCode, messageSetSize:int, skipTooLarge:bool, buf:BinaryZipper) =
+    static member Read (magicByte:int8, partition:Partition, ec:ErrorCode, messageSetSize:int, skipTooLarge:bool, buf:BinaryZipper) =
       let mutable consumed = 0
       let arr = ResizeArray<_>()
       while consumed < messageSetSize && buf.Buffer.Count > 0 do
@@ -484,7 +549,7 @@ module Protocol =
           try
             let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
             if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
-              let message = Message.Read (messageVer,buf)
+              let message = Message.Read (magicByte,buf)
               arr.Add (MessageSetItem(offset,messageSize,message))
             else
               let rem = min messageSetRemainder buf.Buffer.Count
@@ -507,56 +572,139 @@ module Protocol =
         consumed <- consumed + (buf.Buffer.Offset - o')
       MessageSet(arr.ToArray())
 
-    static member internal ReadFromRecordBatch (recordBatchSize:int, buf:BinaryZipper) =
-      let arr = ResizeArray<_>()
-      let mutable consumed = 0
-      let o = buf.Buffer.Offset
-      let firstOffset = buf.ReadInt64()
-      let _recordBatchLength = buf.ReadInt32 ()            
+    static member SizeRecordBatch (ms:MessageSet) =
+      //if ms.messages.Length = 0 then 0 else
+      let mutable size = RecordBatch.RECORD_BATCH_OVERHEAD
+      for i = 0 to ms.messages.Length - 1 do
+        let msi = ms.messages.[i]
+        size <- size + msi.messageSize + (Binary.sizeVarint msi.messageSize)
+      size
+
+    static member WriteRecordBatch (batchLength:int, ms:MessageSet, buf:BinaryZipper) =
+      let firstOffset = 0L
+      let firstTimestamp = ms.messages.[0].message.timestamp
+      let maxTimestamp = ms.messages.[ms.messages.Length - 1].message.timestamp
+      buf.WriteInt64 firstOffset // first offset
+      buf.WriteInt32 (batchLength - RecordBatch.LOG_OVERHEAD)
+      buf.WriteInt32 0 // partition leader epoch
+      buf.WriteInt8 2y // magic v2
+      let crcOffset = buf.Buffer.Offset
+      buf.ShiftOffset 4 // crc32 (written later)
+      let attributesOffset = buf.Buffer.Offset
+      buf.WriteInt16 0s // ((0s <<< 3) ||| 0s) // attributes (TODO)
+      buf.WriteInt32 (ms.messages.Length - 1) // last offset delta
+      buf.WriteInt64 firstTimestamp // first timestamp
+      buf.WriteInt64 maxTimestamp // max timestamp
+      buf.WriteInt64 -1L // producer id
+      buf.WriteInt16 -1s //0s // producer epoch
+      buf.WriteInt32 -1 // -1  // first sequence
+      buf.WriteInt32 ms.messages.Length // num records
+      for i = 0 to ms.messages.Length - 1 do
+        let msi = ms.messages.[i]
+        let offsetDelta = i
+        let timestampDelta = msi.message.timestamp - firstTimestamp
+        buf.WriteVarint msi.messageSize // length
+        buf.WriteInt8 0y // attributes
+        buf.WriteVarint64 timestampDelta // timestamp delta
+        buf.WriteVarint offsetDelta // offset delta
+        buf.WriteBytesVarint msi.message.key
+        buf.WriteBytesVarint msi.message.value
+        buf.WriteVarint 0 // headers length
+      let crcCount = batchLength - RecordBatch.ATTRIBUTES_OFFSET
+      let crc = Crc.crc32C buf.Buffer.Array attributesOffset crcCount
+      Binary.pokeInt32In (int crc) buf.Buffer.Array crcOffset
+
+    static member internal ReadFromRecordBatches (partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
+      let mss = ResizeArray<MessageSetItem>()
+      let mutable lastOffset = 0L
+      while buf.Buffer.Count > RecordBatch.RECORD_BATCH_OVERHEAD do
+        let lo = MessageSet.ReadFromRecordBatch (partition,ec,messageSetSize,buf,mss)
+        lastOffset <- max lastOffset lo
+      MessageSet(mss.ToArray(),lastOffset)
+
+    static member private ReadFromRecordBatch (partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper, mss:ResizeArray<MessageSetItem>) =
+      let firstOffset = buf.ReadInt64()      
+      let recordBatchLength = buf.ReadInt32 ()
+      let sizeInBytes = recordBatchLength + RecordBatch.LOG_OVERHEAD
+      if sizeInBytes < RecordBatch.RECORD_BATCH_OVERHEAD then
+        failwithf "record_batch_corrupt_size|first_offset=%i size=%i minimum_allowed_size=%i" firstOffset sizeInBytes RecordBatch.RECORD_BATCH_OVERHEAD
+      if recordBatchLength + RecordBatch.LOG_OVERHEAD > messageSetSize then        
+        let errMsg = sprintf "p=%i ec=%i o=%i mss=%i record_batch_length=%i" partition ec firstOffset messageSetSize recordBatchLength
+        raise (MessageTooBigException(errMsg, 2y, messageSetSize)) else
       let _partitionLeaderEpoch = buf.ReadInt32 ()
       let magicByte = buf.ReadInt8()
-      let _crcSum = buf.ReadInt32()
-      let _batchAttributes = buf.ReadInt16()
+      let crcSum = buf.ReadInt32()
+      let attributesOffset = buf.Buffer.Count
+      let batchAttributes = buf.ReadInt16()
+      let compressionType = batchAttributes &&& int16 CompressionCodec.Mask // TODO: handle compression
+      if compressionType <> 0s then failwith "compression not supported" else
+      let timestampType = 
+        if (batchAttributes &&& int16 TimestampType.MASK) = 0s then TimestampType.CREATE_TIME 
+        else TimestampType.LOG_APPEND_TIME
+      let isControl = batchAttributes &&& int16 0x20 > 0s
+      let isTx = batchAttributes &&& int16 0x10 > 0s
       let lastOffsetDelta = buf.ReadInt32()
-      let lastOffset = firstOffset + int64 lastOffsetDelta      
+      let lastOffset = firstOffset + int64 lastOffsetDelta
       let firstTimestamp = buf.ReadInt64()
-      let _maxTimestamp = buf.ReadInt64()
-      do buf.ShiftOffset 14 // producer ID (int64) + producer epoch (int16) + first sequence (int32)
-      let _numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
-      printfn "_recordBatchLength=%i recordBatchSize=%i _numRecords=%i last_offset=%i batch_attrs=%i" _recordBatchLength recordBatchSize _numRecords lastOffset _batchAttributes
-      consumed <- consumed + (buf.Buffer.Offset - o)
-      while consumed < recordBatchSize && buf.Buffer.Count > 0 do
-        //printfn "count=%i buffer=%i consumed=%i" arr.Count buf.Buffer.Count consumed
-        let o = buf.Buffer.Offset
+      let maxTimestamp = buf.ReadInt64()
+      let _producerId = buf.ReadInt64()
+      let _producerEpoch = buf.ReadInt16()
+      let _firstSequence = buf.ReadInt32()
+      let numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
+      if numRecords < 0 then failwithf "invalid record count=%i" numRecords else
+      //let mutable consumed = RecordBatch.RECORD_BATCH_OVERHEAD //buf.Buffer.Offset - recordBatchStart
+      //printfn "p=%i _recordBatchLength=%i mss=%i _numRecords=%i last_offset=%i batch_attrs=%i consumed=%i magic=%i tst=%i payload=%i" partition recordBatchLength messageSetSize numRecords lastOffset batchAttributes consumed magicByte timestampType payloadSize
+      let mutable readCount = 0
+      let minRecordOverhead = Record.MIN_RECORD_OVERHEAD
+      while numRecords > readCount && buf.Buffer.Count > minRecordOverhead do
         let recordLength = buf.ReadVarint()
-        let rem = recordBatchSize - consumed
-        if recordLength > rem then
-          //printfn "Response does not contain a full message! Skip to the end."
-          buf.ShiftOffset (rem - 1)
-          consumed <- consumed + rem
+        let recordStart = buf.Buffer.Offset
+        if buf.Buffer.Count < recordLength then
+          //printfn "skipping|readCount=%i numRecords=%i buffer=%i recLength=%i ct=%i" readCount numRecords buf.Buffer.Count recordLength compressionType
+          buf.ShiftOffset buf.Buffer.Count
         else
+        try          
           let recordAttrributes = buf.ReadInt8()
-          let timestampDelta = buf.ReadVarint()
+          let timestampDelta = buf.ReadVarint64()
           let offsetDelta = buf.ReadVarint()
           let key = buf.ReadVarintBytes()
           let value = buf.ReadVarintBytes()
-          let _headersLength = buf.ReadVarint()          
-          //let headers = Array.zeroCreate headersLength
-          //for i = 0 to headers.Length - 1 do
-          //  let k = buf.ReadVarintString ()
-          //  let v = buf.ReadVarintString ()
-          //  headers.[i] <- (k,v)
+          let headersLength = buf.ReadVarint()          
+          if headersLength < 0 then failwithf "invalid headers length=%i" headersLength else
+          let headers = Array.zeroCreate headersLength
+          for i = 0 to headers.Length - 1 do
+            let k = buf.ReadVarintString ()
+            let v = buf.ReadVarintString ()
+            headers.[i] <- (k,v)
           let offset = firstOffset + int64 offsetDelta
-          let timestamp = firstTimestamp + int64 timestampDelta
-          printfn "key=%s value=%s headers=%i offset=%i length=%i timestamp=%i buffer=%i" (Binary.toString key) (Binary.toString value) _headersLength offset recordLength timestamp buf.Buffer.Count
+          let timestamp = 
+            if timestampType = TimestampType.LOG_APPEND_TIME then maxTimestamp
+            else firstTimestamp + timestampDelta
+          let readRecordLength = buf.Buffer.Offset - recordStart
+          if (readRecordLength <> recordLength) then failwithf "invalid_record_length|actual=%i expected=%i delta=%i offset=%i" readRecordLength recordLength offsetDelta offset
+          //consumed <- consumed + readRecordLength
+          //printfn "key=%s value=%s headers=%i offset=%i length=%i timestamp=%i buffer=%i consumed=%i" (Binary.toString key) (Binary.toString value) _headersLength offset recordLength timestamp buf.Buffer.Count consumed
           let message = Message(-1 (*crc*), magicByte, recordAttrributes, timestamp, key, value)
-          arr.Add (MessageSetItem(offset, recordLength, message))
-          consumed <- consumed + (buf.Buffer.Offset - o)
-      MessageSet(arr.ToArray(),lastOffset)
+          mss.Add (MessageSetItem(offset, recordLength, message))
+          readCount <- readCount + 1
+        with ex ->
+          let msg = sprintf "num_records=%i read_records=%i buffer=%i record_length=%i" numRecords readCount buf.Buffer.Count recordLength
+          raise (Exception(msg, ex))
+      
+      //TODO: run check elsewhere?
+      //let crcCount = buf.Buffer.Count - attributesOffset
+      //let crc = Crc.crc32C buf.Buffer.Array attributesOffset crcCount
+      //if int crc <> crcSum then raise (CorruptCrc32Exception ("")) else
 
-    static member CheckCrc (ver:ApiVersion, ms:MessageSet) =
+      //if numRecords = arr.Count then 
+      //  printfn "matching_record_counts|buffer=%i" buf.Buffer.Count
+      //printfn "p=%i consumed=%i _recordBatchLength=%i recordBatchSize=%i _numRecords=%i last_offset=%i batch_attrs=%i read_count=%i ct=%i" 
+      //  partition consumed recordBatchLength messageSetSize numRecords lastOffset batchAttributes readCount compressionType
+      lastOffset
+
+    static member CheckCrc (ms:MessageSet) =
       for x in ms.messages do
-        Message.CheckCrc (ver,x.message)
+        Message.CheckCrc (x.message)
 
 
   /// A Kafka broker consists of a node id, host name and TCP port.
@@ -742,12 +890,13 @@ module Protocol =
         size <- size + (Binary.sizeString y.topic)
         size <- size + 4 // partition array size
         for z in y.partitions do
-          let mss = z.messageSetSize
-          size <- size + 8 + mss // partitionId (4), message set size (4), message set  
+          size <- size + 
+            4 + // partition
+            4 + // message set size
+            z.messageSetSize // message set
       size
 
     static member Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
-      let messageVer = MessageVersions.produceReqMessage ver
       if ver >= 3s then 
         buf.WriteString x.transactionalId
       buf.WriteInt16 x.requiredAcks
@@ -760,7 +909,8 @@ module Protocol =
         for z in y.partitions do
           buf.WriteInt32 z.partition
           buf.WriteInt32 z.messageSetSize
-          MessageSet.Write (messageVer, z.messageSet, buf)
+          if ver >= 3s then MessageSet.WriteRecordBatch (z.messageSetSize, z.messageSet, buf)
+          else MessageSet.Write (z.messageSet, buf)
 
   and [<NoEquality;NoComparison>] ProduceResponsePartitionItem =
     struct
@@ -830,16 +980,18 @@ module Protocol =
   with
     // leverages mutability to reduce performance overhead
     static member Size (ver:ApiVersion, req:FetchRequest) =
-      let mutable size = 16 // replicaId + maxWaitTime + minBytes + topic array size (4 bytes each)
+      let mutable size = 12 // replicaId + maxWaitTime + minBytes
       if ver >= 3s then size <- size + 4 // maxBytes
       if ver >= 4s then size <- size + 1 // isolation level
+      size <- size + 4 // topic array size (4 bytes each)
       for i = 0 to req.topics.Length - 1 do 
         let (t,ps) = req.topics.[i]
         size <- size + (Binary.sizeString t) // topic name size
         size <- size + 4 // partition array size
         for (_,_,_,_) in ps do
-          size <- size + 16 // partition (4) + fetch offset (8) + maxBytes (4)
+          size <- size + 12 // partition (4) + fetch offset (8)
           if ver >= 5s then size <- size + 8 // log start offset
+          size <- size + 4 // maxBytes (4)
       size
 
     static member Write (ver:ApiVersion, req:FetchRequest, buf:BinaryZipper) =
@@ -861,10 +1013,26 @@ module Protocol =
           buf.WriteInt32 maxBytes
 
   [<NoEquality;NoComparison>]
+  type FetchResponsePartitionItem =
+    struct
+      val partition : Partition
+      val errorCode : ErrorCode
+      val highWatermarkOffset : HighwaterMarkOffset
+      val lastStableOffset : LastStableOffset
+      val logStartOffset : LogStartOffset
+      val abortedTxns : AbortedTransaction[]
+      val messageSetSize : MessageSetSize
+      val messageSet : MessageSet
+      new (p,ec,hwo,lastSo,logSo,txns,mss,ms) =
+        { partition = p ; errorCode = ec ; highWatermarkOffset = hwo ; lastStableOffset = lastSo ; 
+          logStartOffset = logSo ; abortedTxns = txns ; messageSetSize = mss ; messageSet = ms }
+    end
+
+  [<NoEquality;NoComparison>]
   type FetchResponse =
     struct
       val throttleTime : ThrottleTime
-      val topics : (TopicName * (Partition * ErrorCode * HighwaterMarkOffset * LastStableOffset * LogStartOffset * AbortedTransaction[] * MessageSetSize * MessageSet)[])[]
+      val topics : (TopicName * FetchResponsePartitionItem[])[]
       new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
@@ -879,23 +1047,36 @@ module Protocol =
       for i = 0 to topics.Length - 1 do
         let topic = buf.ReadString ()
         let numPartitions = buf.ReadInt32 ()
-        //printfn "numPartitions=%i" numPartitions
         let partitions = Array.zeroCreate numPartitions
-        //let mutable containsRecordBatch = false
         for j = 0 to partitions.Length - 1 do
-          let partition = buf.ReadInt32 ()          
+          let partition = buf.ReadInt32 ()
           let errorCode = buf.ReadInt16 ()
           let highWatermark = buf.ReadInt64 ()
-          let messageSetSize = buf.ReadInt32 ()          
-          //printfn "partition=%i ec=%i hwo=%i" partition errorCode highWatermark
-          //let messageSet = 
-          //  let magicByte = buf.TryPeekIn8AtOffset 16
-          //  if containsRecordBatch || magicByte >= 2y then 
-          //    containsRecordBatch <- true
-          //    MessageSet.ReadFromRecordBatch (messageSetSize, buf)
-          //  else MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-          let messageSet = MessageSet.Read (MessageVersions.fetchResMessage ver,partition,errorCode,messageSetSize,false,buf)
-          partitions.[j] <- partition, errorCode, highWatermark, -1L, -1L, null, messageSetSize, messageSet
+          let lastStableOffset = if ver >= 4s then buf.ReadInt64() else -1L
+          let logStartOffset = if ver >= 5s then buf.ReadInt64() else -1L
+          let numAbortedTxns = if ver >= 4s then buf.ReadInt32() else -1
+          let abortedTxns =
+            if numAbortedTxns >= 0 then
+              let abortedTxns = Array.zeroCreate numAbortedTxns
+              for k = 0 to abortedTxns.Length - 1 do
+                let producerId = buf.ReadInt64 ()
+                let firstOffset = buf.ReadInt64 ()
+                abortedTxns.[k] <- (producerId, firstOffset)
+              abortedTxns
+            else
+              null
+          let messageSetSize = buf.ReadInt32 ()
+          if messageSetSize < 0 then failwithf "corrupt_fetch_response_partition_size|size=%i buffer=%i" messageSetSize buf.Buffer.Count
+          let innerBuf = buf.Limit messageSetSize
+          let messageSet =
+            if messageSetSize = 0 then MessageSet([||]) else
+            let magicByte = innerBuf.TryPeekIn8AtOffset 16
+            if magicByte >= 2y || ver >= 3s then 
+              MessageSet.ReadFromRecordBatches (partition,errorCode,messageSetSize,innerBuf)
+            else 
+              MessageSet.Read (magicByte,partition,errorCode,messageSetSize,false,innerBuf)
+          buf.ShiftOffset messageSetSize
+          partitions.[j] <- FetchResponsePartitionItem(partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet)        
         topics.[i] <- (topic,partitions)
       FetchResponse(throttleTime, topics)
 

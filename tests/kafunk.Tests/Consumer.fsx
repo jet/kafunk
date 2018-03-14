@@ -30,18 +30,21 @@ let go = async {
         //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"],
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-        //version = Versions.V_0_10_1,
-        version = Versions.V_0_9_0,
-        autoApiVersions = false)
+        version = Versions.V_0_10_1,
+        autoApiVersions = true,
+        //version = Versions.V_0_9_0,
+        //autoApiVersions = false,
+        clientId = "leo")
     Kafka.connAsync connConfig
   let consumerConfig = 
     ConsumerConfig.create (
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 1000,
-      fetchMaxBytesOverride = 10000,
-      fetchMinBytes = 1,
+      fetchMaxBytes = 500000,
+      fetchMaxBytesTotal = 50000000,
+      fetchMaxBytesOverride = 1000000,
+      //fetchMinBytes = 0,
       //fetchMaxWaitMs = 1000,
       fetchBufferSize = 1,
       sessionTimeout = 30000,
@@ -66,19 +69,21 @@ let go = async {
   let! _ = Async.StartChild showProgress
 
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
-    use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
+    //use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)
-    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
-      ms.topic
-      ms.partition
-      (ms.messageSet.messages.Length)
-      (ConsumerMessageSet.size ms)
-      (ConsumerMessageSet.firstOffset ms)
-      (ConsumerMessageSet.lastOffset ms)
-      (ConsumerMessageSet.firstTimestamp ms)
-      (ms.highWatermarkOffset)
-      (ConsumerMessageSet.lag ms) }
+    //Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
+    //  ms.topic
+    //  ms.partition
+    //  (ms.messageSet.messages.Length)
+    //  (ConsumerMessageSet.size ms)
+    //  (ConsumerMessageSet.firstOffset ms)
+    //  (ConsumerMessageSet.lastOffset ms)
+    //  (ConsumerMessageSet.firstTimestamp ms)
+    //  (ms.highWatermarkOffset)
+    //  (ConsumerMessageSet.lag ms) 
+    return ()
+  }
 
   use counter = Metrics.counter Log 5000
 

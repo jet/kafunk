@@ -71,9 +71,14 @@ type internal ClusterState = {
         match Map.tryFind nodeId brokersById with
         | Some b -> Some ((t,p),b)
         | None -> None)
+    let removeTopicPartitions =
+      topicNodes |> Seq.choose (fun (t,p,n) -> if n < 0 then Some (t,n) else None)        
     { s with
           brokersByNodeId = brokersById
-          brokersByTopicPartition = s.brokersByTopicPartition |> Map.addMany brokersByPartitions
+          brokersByTopicPartition = 
+            s.brokersByTopicPartition 
+            |> Map.addMany brokersByPartitions
+            |> Map.removeAll removeTopicPartitions
           version = s.version + 1 }
 
   static member updateGroupCoordinator (broker:Broker, gid:GroupId) (s:ClusterState) =
@@ -195,8 +200,8 @@ module internal Routing =
         reqs
         |> Seq.groupBy (fun (t, _, _, _) -> t)
         |> Seq.map (fun (t, ps) -> t, ps |> Seq.map (fun (_, p, o, mb) -> (p, o, 0L, mb)) |> Seq.toArray)
-        |> Seq.toArray
-      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics, 0, 0y)
+        |> Seq.toArray      
+      let req = new FetchRequest(req.replicaId, req.maxWaitTime, req.minBytes, topics, req.maxBytes, 0y)
       ch, RequestMessage.Fetch req)
     |> Seq.toArray
 
@@ -339,6 +344,8 @@ type private RetryAction =
       
       | ErrorCode.UnknownTopicOrPartition ->
         Some (RetryAction.Escalate)
+        //Some (RetryAction.RefreshMetadataAndRetry)
+
       | ErrorCode.InvalidMessage ->
         Some (RetryAction.Escalate)
       | _ ->
@@ -348,9 +355,13 @@ type private RetryAction =
       match res with
       | ResponseMessage.MetadataResponse r ->
         r.topicMetadata
-        |> Seq.tryPick (fun x -> 
-          RetryAction.errorRetryAction x.topicErrorCode
-          |> Option.map (fun action -> x.topicErrorCode,action))
+        |> Seq.tryPick (fun x ->
+          match x.topicErrorCode with
+          | ErrorCode.UnknownTopicOrPartition -> 
+            Some (x.topicErrorCode,RetryAction.RefreshMetadataAndRetry [|x.topicName|])
+          | _ ->
+            RetryAction.errorRetryAction x.topicErrorCode
+            |> Option.map (fun action -> x.topicErrorCode,action))
 
       | ResponseMessage.OffsetResponse r ->
         r.topics
@@ -367,10 +378,12 @@ type private RetryAction =
         r.topics 
         |> Seq.tryPick (fun (topicName,partitionMetadata) -> 
           partitionMetadata 
-          |> Seq.tryPick (fun (_,ec,_,_,_,_,_,_) -> 
+          |> Seq.tryPick (fun p -> 
+            let ec = p.errorCode
             match ec with
             | ErrorCode.NoError -> None
-            | ErrorCode.NotLeaderForPartition -> Some (ec, RetryAction.RefreshMetadataAndRetry [|topicName|])
+            | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition -> 
+              Some (ec, RetryAction.RefreshMetadataAndRetry [|topicName|])
             | ec ->
               RetryAction.errorRetryAction ec
               |> Option.map (fun action -> ec, action)))
@@ -510,8 +523,8 @@ type KafkaConfig = {
   /// The default Kafka server version = 0.10.1.
   static member DefaultVersion = Version.Parse "0.10.1"
 
-  /// The default setting for supporting auto API versions = false.
-  static member DefaultAutoApiVersions = false
+  /// The default setting for supporting auto API versions = true.
+  static member DefaultAutoApiVersions = true
 
   /// The default broker channel configuration.
   static member DefaultChanConfig = ChanConfig.create ()
@@ -555,6 +568,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
   
   do Log.info "created_conn|api_version=%O auto_api_versions=%b client_version=%O client_id=%s conn_id=%s" 
         cfg.version cfg.autoApiVersions (Assembly.executingAssemblyVersion ()) cfg.clientId cfg.connId
+
+  do if String.IsNullOrEmpty cfg.clientId then Log.warn "client_id_unspecified"
 
   let apiVersion = ref (Versions.byVersion cfg.version)
   let stateCell : MVar<ClusterState> = MVar.createFull (ClusterState.Zero)
@@ -672,10 +687,10 @@ type KafkaConn internal (cfg:KafkaConfig) =
     else getAndApplyBootstrap
 
   /// Fetches metadata and returns an updated connection state.
-  and metadata (state:ClusterState) (topics:TopicName[]) = async {
+  and metadata (state:ClusterState) (rs:RetryState) (topics:TopicName[]) = async {
     
     let send =
-      routeToBrokerWithRecovery true RetryState.init state
+      routeToBrokerWithRecovery true rs state
       |> AsyncFunc.dimap RequestMessage.Metadata ResponseMessage.toMetadata
     
     let! metadata = send (MetadataRequest(topics))
@@ -685,7 +700,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
     for tmd in metadata.topicMetadata do
       for pmd in tmd.partitionMetadata do
         if pmd.leader = -1 then
-          Log.error "leaderless_partition_detected|partition=%i error_code=%i" pmd.partitionId pmd.partitionErrorCode
+          Log.error "leaderless_partition_detected|topic=%s partition=%i error_code=%i" tmd.topicName pmd.partitionId pmd.partitionErrorCode
       
     let topicNodes =
       metadata.topicMetadata 
@@ -697,7 +712,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
     return state |> ClusterState.updateMetadata (metadata.brokers, topicNodes) }
 
   /// Fetches and applies metadata to the current connection.
-  and getAndApplyMetadata (requireMatchingCaller:bool) (callerState:ClusterState) (topics:TopicName[]) =
+  and getAndApplyMetadata (requireMatchingCaller:bool) (callerState:ClusterState) (rs:RetryState) (topics:TopicName[]) =
     stateCell
     |> MVar.updateAsync (fun (currentState:ClusterState) -> async {
       if requireMatchingCaller 
@@ -706,7 +721,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
         Log.trace "skipping_metadata_update|current_version=%i caller_version=%i" currentState.version callerState.version
         return currentState 
       else
-        return! metadata currentState topics })
+        return! metadata currentState rs topics })
 
   /// Refreshes metadata for existing topics.
   and refreshMetadata (critical:bool) (callerState:ClusterState) =
@@ -719,8 +734,8 @@ type KafkaConn internal (cfg:KafkaConfig) =
   and refreshMetadataFor (critical:bool) (callerState:ClusterState) topics =
     Log.info "refreshing_metadata|topics=%A version=%i bootstrap_broker=%A conn_id=%s" 
       topics callerState.version (callerState.bootstrapBroker |> Option.map (Broker.endpoint)) cfg.connId
-    if critical then metadata callerState topics
-    else getAndApplyMetadata true callerState topics
+    if critical then metadata callerState RetryState.init topics
+    else getAndApplyMetadata true callerState RetryState.init topics
 
   /// Fetches group coordinator metadata.
   and groupCoordinator (state:ClusterState) (groupId:GroupId) = async {
@@ -774,11 +789,13 @@ type KafkaConn internal (cfg:KafkaConfig) =
     let! ch = getBrokerChan critical state b
     match ch with
     | Success ch ->
-      //Log.trace "sending_to_broker|node_id=%i ep=%O req=%s" b.nodeId (Broker.endpoint b) (RequestMessage.Print req)
+      //Log.info "sending_to_broker|node_id=%i ep=%O req=%s" b.nodeId (Broker.endpoint b) (RequestMessage.Print req)
       try
         let! chanRes = Chan.send ch req
         match chanRes with
         | Success res ->
+          //Log.info "received_response|node_id=%i ep=%O req=%s res=%s" 
+          //  b.nodeId (Broker.endpoint b) (RequestMessage.Print req) (ResponseMessage.Print res)
           return Success res
         | Failure errs ->
           let! _state =
@@ -795,6 +812,9 @@ type KafkaConn internal (cfg:KafkaConfig) =
             else removeBrokerAndApply b state
           return Failure [ChanError.ChanFailure ex]
     | Failure errs ->
+      let! _state =
+        if critical then ClusterState.removeBroker b state
+        else removeBrokerAndApply b state
       return Failure errs }
 
   /// Sends a request to a specific broker and handles failures.
@@ -808,21 +828,21 @@ type KafkaConn internal (cfg:KafkaConfig) =
           | None -> 
             return res
           | Some (errorCode,action) ->
-            Log.warn "channel_response_errored|endpoint=%O error_code=%i retry_action=%A req=%s res=%s conn_id=%s" 
-              (Broker.endpoint b) errorCode action (RequestMessage.Print req) (ResponseMessage.Print res) cfg.connId
+            Log.warn "channel_response_errored|endpoint=%O error_code=%i retry_action=%A attempt=%i req=%s res=%s conn_id=%s" 
+              (Broker.endpoint b) errorCode action rs.attempt (RequestMessage.Print req) (ResponseMessage.Print res) cfg.connId
             match action with
             | RetryAction.PassThru ->
               return res
             | RetryAction.Escalate ->
               return raise (EscalationException (errorCode,req,res,(sprintf "endpoint=%O" (Broker.endpoint b))))
-            | RetryAction.RefreshMetadataAndRetry topics ->
+            | RetryAction.RefreshMetadataAndRetry topics ->              
               let! rs' = RetryPolicy.awaitNextState cfg.requestRetryPolicy rs
               match rs' with
-              | Some rs ->
+              | Some rs' ->
                 let! state' = 
-                  if critical then metadata state topics
-                  else getAndApplyMetadata true state topics
-                return! routeToBrokerWithRecovery critical rs state' req
+                  if critical then metadata state rs' topics
+                  else getAndApplyMetadata true state rs' topics
+                return! routeToBrokerWithRecovery critical rs' state' req
               | None ->
                 return failwithf "request_failure|attempt=%i request=%s response=%s" 
                   rs.attempt (RequestMessage.Print req) (ResponseMessage.Print res)
@@ -947,7 +967,7 @@ type KafkaConn internal (cfg:KafkaConfig) =
 
   member internal __.GetMetadataState (topics:TopicName[]) = async {
     let! state = MVar.get stateCell
-    return! getAndApplyMetadata false state topics }
+    return! getAndApplyMetadata false state RetryState.init topics }
 
   member internal __.GetMetadata (topics:TopicName[]) = async {
     let! state' = __.GetMetadataState topics

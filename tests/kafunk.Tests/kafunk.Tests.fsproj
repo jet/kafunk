@@ -19,6 +19,7 @@
     <Compile Include="AssignmentStrategyTests.fs" />
     <Compile Include="SVarTests.fs" />
     <None Include="Refs.fsx" />
+    <None Include="Produce.fsx" />
     <Compile Include="Metadata.fsx" />
     <None Include="Producer.fsx" />
     <Compile Include="Fetch.fsx" />

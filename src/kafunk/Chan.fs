@@ -219,7 +219,7 @@ module internal Chan =
       socketAgent
       |> Resource.injectWithRecovery
           RetryPolicy.none
-          (fun s buf -> Socket.sendAll s buf |> Async.Catch |> Async.map (Result.mapError (ResourceErrorAction.CloseRetry)))
+          (fun s buf -> Socket.sendAll s buf |> Async.Catch |> Async.map (Result.mapError (Some >> ResourceErrorAction.CloseRetry)))
 
     let receive =
       let receive s buf = async {
@@ -264,7 +264,20 @@ module internal Chan =
       //  let path = sprintf "%s_%s.bin" (apiKey.ToString().ToLower()) (Guid.NewGuid().ToString("N"))
       //  System.IO.File.WriteAllBytes(path, Binary.toArray buf)
       //| _ -> ()
-      ResponseMessage.Read (apiKey,apiVer,BinaryZipper(buf))
+      let res = ResponseMessage.Read (apiKey,apiVer,BinaryZipper(buf))
+      //match res with
+      //| ResponseMessage.FetchResponse res ->
+      //  let ps =           
+      //    res.topics
+      //    |> Seq.map (fun (_t,ps) ->            
+      //      ps
+      //      |> Seq.map (fun (p,_,_,_,_,_,_,_) -> sprintf "p=%i" p)
+      //      |> String.concat "_")
+      //    |> String.concat "_"                      
+      //  let path = sprintf "%s_%s_%s.bin" (apiKey.ToString().ToLower()) ps (Guid.NewGuid().ToString("N"))
+      //  System.IO.File.WriteAllBytes(path, Binary.toArray buf)
+      //| _ -> ()
+      res
 
     let! sessionAgent = 
       Resource.create 
@@ -285,7 +298,7 @@ module internal Chan =
       let send session req = 
         Session.send session req
         |> Async.map (function 
-          | None -> Failure (CloseRetry (exn "timeout"))
+          | None -> Failure (CloseRetry None)
           | Some res -> Success (Success res))
       sessionAgent
       |> Resource.injectWithRecovery config.requestRetryPolicy send

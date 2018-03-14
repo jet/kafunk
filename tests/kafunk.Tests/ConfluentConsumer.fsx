@@ -1,4 +1,4 @@
-﻿#r "bin/release/confluent.kafka.dll"
+﻿#r "bin/release/net45/confluent.kafka.dll"
 #load "Refs.fsx"
 #time "on"
 
@@ -28,23 +28,20 @@ let group = argiDefault 3 "existential-group"
 Log.info "running_consumer|host=%s topic=%s group=%s" host topic group
 
 let config =
-  [ 
-      
+  [       
     "bootstrap.servers", box host 
     //"linger.ms", box 100
     "group.id", box group
     //"max.in.flight.requests.per.connection", box 1
-    "default.topic.config", box <| (dict ["auto.offset.reset", box "latest"])
+    "default.topic.config", box <| (dict ["auto.offset.reset", box "earliest"])
     "enable.auto.commit", box false
-    "fetch.message.max.bytes", box 1000
+    "fetch.message.max.bytes", box 10000
 
   ] |> dict
 
 let go = async {
   
-  //let consumer = new Consumer (config)
-
-  let consumer = new Consumer<string, string>(config, new StringDeserializer(Encoding.UTF8), new StringDeserializer(Encoding.UTF8))
+  let consumer = new Consumer (config)
   
   consumer.OnLog 
   |> Event.add (fun m -> Log.info "log|%O" m)
@@ -56,7 +53,9 @@ let go = async {
   |> Event.add (fun m -> Log.info "consumer_error|%O" m)
   
   consumer.OnPartitionsAssigned 
-  |> Event.add (fun m -> Log.info "partitions_assigned|%O" (m |> Seq.map (fun x -> sprintf "p=%i" x.Partition) |> String.concat ";"))
+  |> Event.add (fun m -> 
+    consumer.Assign m
+    Log.info "partitions_assigned|%O" (m |> Seq.map (fun x -> sprintf "p=%i" x.Partition) |> String.concat ";"))
 
   consumer.OnPartitionsRevoked 
   |> Event.add (fun m -> Log.info "partitions_revoked|%O" (m |> Seq.map (fun x -> sprintf "p=%i" x.Partition) |> String.concat ";"))
@@ -64,14 +63,14 @@ let go = async {
   consumer.OnPartitionEOF 
   |> Event.add (fun m -> Log.info "eof|%O" m.Partition)
  
-  consumer.Assign([ TopicPartition(topic, 0) ])
-  //consumer.Subscribe (topic)
+  //consumer.Assign([ TopicPartition(topic, 0) ])
+  consumer.Subscribe (topic)
 
   let md = consumer.GetMetadata(true)
   Log.info "metadata|%A" md.Topics
 
-  let handle (_:Message) = async {
-    Log.info "handing message"
+  let handle (m:Message) = async {
+    Log.info "handing message|p=%i key=%s" m.Partition (Encoding.UTF8.GetString m.Key)
     return () }
 
   use counter = Metrics.counter Log 5000
@@ -83,7 +82,7 @@ let go = async {
   while true do
     let mutable m = Unchecked.defaultof<_>
     if consumer.Consume(&m, 1000) then
-      Log.info "handing message"
+      do! handle m      
     else
       Log.info "skipped"
 

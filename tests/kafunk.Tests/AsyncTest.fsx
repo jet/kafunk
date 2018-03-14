@@ -9,9 +9,10 @@ open System.Threading.Tasks
 open System.Diagnostics
 
 
-let file = @"C:\code\kafunk\tests\kafunk.Tests\FetchResponse_RecordBatch.bin"
+//let file = @"C:\code\kafunk\tests\kafunk.Tests\FetchResponse_RecordBatch.bin"
+let file = @"C:\code\kafunk\tests\kafunk.Tests\fetch_p=0_p=3_daccd6f71ae945f5afe7cb57a3a7ee28.bin"
 let buf = System.IO.File.ReadAllBytes(file) |> Binary.ofArray |> BinaryZipper
-let res = FetchResponse.Read (2s, buf)
+let res = FetchResponse.Read (5s, buf)
 
 for (t,ps) in res.topics do
   for (p,_,hwo,_,_,_,_,ms) in ps do

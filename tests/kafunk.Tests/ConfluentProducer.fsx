@@ -1,4 +1,4 @@
-﻿#r "bin/release/confluent.kafka.dll"
+﻿#r "bin/release/net45/confluent.kafka.dll"
 #load "Refs.fsx"
 #time "on"
 
@@ -28,7 +28,7 @@ let batchSize = argiDefault 4 "100" |> Int32.Parse
 let messageSize = argiDefault 5 "10" |> Int32.Parse
 let parallelism = argiDefault 6 "1" |> Int32.Parse
 
-let payload = 
+let payload = //"v"
   let bytes = Array.zeroCreate messageSize
   let rng = Random()
   rng.NextBytes bytes
@@ -44,8 +44,9 @@ let config =
       
     "bootstrap.servers", box host 
     "acks", box "all"
-    //"batch.size", box 16384
-    "linger.ms", box 100
+    //"batch.size", box 1000000
+    "batch.num.messages", box 100000
+    "linger.ms", box 1000
     "max.in.flight.requests.per.connection", box 1
 
   ] |> toDict
@@ -72,14 +73,15 @@ let go = async {
 
   let! _ = Async.StartChild monitor
 
-  use producer = new Producer<Null, string>(config, null, new StringSerializer(Encoding.UTF8))
+  //use producer = new Producer<Null, string>(config, null, new StringSerializer(Encoding.UTF8))
+  use producer = new Producer<string, string>(config, new StringSerializer(Encoding.UTF8), new StringSerializer(Encoding.UTF8))
 
   producer.OnLog |> Event.add (fun e ->
     Log.info "librdkafka|name=%s facility=%s message=%s" e.Name e.Facility e.Message
   )
 
   let produce (m:string) = async {
-    let! res = producer.ProduceAsync(topic, null, m, true) |> Async.awaitTaskCancellationAsError
+    let! res = producer.ProduceAsync(topic, "k", m, true) |> Async.awaitTaskCancellationAsError
     return res }
 
   let produce = 

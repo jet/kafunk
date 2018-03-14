@@ -21,11 +21,12 @@ let produceType = argiDefault 7 "2" |> Int32.Parse
 
 let volumeMB = (N * int64 messageSize) / int64 1000000
 
-let payload = "hi"B
-  //let bytes = Array.zeroCreate messageSize
-  //let rng = Random()
-  //rng.NextBytes bytes
-  //bytes
+let payload = 
+  //"v"B
+  let bytes = Array.zeroCreate messageSize
+  let rng = Random()
+  rng.NextBytes bytes
+  bytes
 
 let batchCount = int (N / int64 batchSize)
 
@@ -54,8 +55,10 @@ let connCfg =
     //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
     bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy,
     //bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
+    //version = Versions.V_0_9_0,
+    //autoApiVersions = false
     version = Versions.V_0_10_1,
-    autoApiVersions = false
+    autoApiVersions = true
     )
 
 let conn = Kafka.conn connCfg
