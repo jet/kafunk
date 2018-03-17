@@ -1,8 +1,10 @@
 FSharp.Core
 FSharp.Control.AsyncSeq
 SourceLink.Create.CommandLine
+lz4net
 group Legacy
   FSharp.Core
   FSharp.Control.AsyncSeq
   Snappy.NET
   SourceLink.Create.CommandLine
+  lz4net

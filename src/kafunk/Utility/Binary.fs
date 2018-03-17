@@ -384,6 +384,10 @@ type BinaryZipper (buf:ArraySegment<byte>) =
       System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
       __.ShiftOffset bytes.Count
 
+  member __.WriteBytesNoLengthPrefix (bytes:ArraySegment<byte>) =
+    System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
+    __.ShiftOffset bytes.Count
+
   member __.ReadBytes () : ArraySegment<byte> =
     let length = __.ReadInt32 ()
     if length = -1 then

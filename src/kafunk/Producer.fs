@@ -276,6 +276,37 @@ module Producer =
       size <- size + (ProducerMessage.size m)
     size
 
+  //let private compress (magicByte:int8) (compression:CompressionCodec) (ms:MessageSet) =
+  //  match compression with
+  //  | CompressionCodec.None -> ms
+  //  | _ ->
+
+  //    //if magicByte >= 2y && compression <> CompressionCodec.LZ4 then 
+  //    //  failwithf "compression=%i not supported on message_format=%i" compression magicByte else
+
+  //    let value = 
+  //      match magicByte with
+  //      | 0y | 1y ->
+  //        let buf = MessageSet.Size ms |> Binary.zeros
+  //        MessageSet.Write (ms,BinaryZipper(buf))
+  //        buf
+  //      | 2y ->
+  //        let buf = MessageSet.SizeRecords ms |> Binary.zeros
+  //        let _ = MessageSet.WriteRecords (ms,BinaryZipper(buf))
+  //        buf
+  //      | _ -> failwithf "unsupported_message_format|format=%i" magicByte
+
+  //    // assign offsets
+  //    //let ms = 
+  //    //  ms.messages 
+  //    //  |> Array.mapi (fun i msi -> MessageSetItem(int64 i, msi.messageSize, msi.message))
+  //    //  |> MessageSet
+
+  //    let compressedValue = CompressionCodec.compress compression value
+  //    let attrs = compression |> int8
+  //    let m = Message(0, 0y, attrs, 0L, Binary.empty, compressedValue)
+  //    MessageSet([| MessageSetItem(0L, Message.Size m, m) |], compression)
+
   let private toMessageSet (magicByte:int8) (compression:byte) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for i = 0 to batch.Length - 1 do
       let b = batch.[i]
@@ -296,12 +327,13 @@ module Producer =
     let arr = Array.zeroCreate ps.Count
     let mutable i = 0
     for p in ps do
-      let ms = MessageSet(p.Value.ToArray())
-      let ms = ms |> Compression.compress magicByte compression
+      let ms = MessageSet(p.Value.ToArray(), compression)
+      //let ms = ms |> compress magicByte compression
       let mss = 
         if magicByte < 2y then MessageSet.Size ms
         else MessageSet.SizeRecordBatch ms
       arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, mss, ms)
+      //arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, 0, ms) // TODO: estimate size?
       i <- i + 1
     arr
 
@@ -438,7 +470,7 @@ module Producer =
       |> Seq.map (fun (b,xs) -> b, xs |> Seq.map fst |> Seq.sort |> Seq.toArray)
       |> Map.ofSeq
 
-    Log.info "discovered_topic_partitions|topic=%s partitions=[%s] allocs=[%s]"
+    Log.info "discovered_topic_partitions|topic=%s partitions=[%s] allocations=[%s]"
       topic (Printers.partitionCount partitionCount) (partitionsByBroker |> Map.toSeq |> Seq.map (fun (b,ps) -> sprintf "[n=%i ep=%s ps=[%s]]" b.nodeId (Broker.endpoint b) (Printers.partitions ps)) |> String.concat " ; ")
 
     return {
@@ -639,9 +671,9 @@ module Producer =
             Log.info "closing_producer|version=%i topic=%s partitions=[%s]"
               s.version config.topic (Printers.partitionCount s.resource.routes.partitionCount)
           return () })
-    let! state = Resource.getResource resource
+    //let! state = Resource.getResource resource
     let p = { state = resource ; config = config ; conn = conn ; batchTimeout = batchTimeout }
-    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitionCount state.routes.partitionCount)
+    //Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitionCount state.routes.partitionCount)
     return p }
 
   /// Creates a producer.
