@@ -276,38 +276,7 @@ module Producer =
       size <- size + (ProducerMessage.size m)
     size
 
-  //let private compress (magicByte:int8) (compression:CompressionCodec) (ms:MessageSet) =
-  //  match compression with
-  //  | CompressionCodec.None -> ms
-  //  | _ ->
-
-  //    //if magicByte >= 2y && compression <> CompressionCodec.LZ4 then 
-  //    //  failwithf "compression=%i not supported on message_format=%i" compression magicByte else
-
-  //    let value = 
-  //      match magicByte with
-  //      | 0y | 1y ->
-  //        let buf = MessageSet.Size ms |> Binary.zeros
-  //        MessageSet.Write (ms,BinaryZipper(buf))
-  //        buf
-  //      | 2y ->
-  //        let buf = MessageSet.SizeRecords ms |> Binary.zeros
-  //        let _ = MessageSet.WriteRecords (ms,BinaryZipper(buf))
-  //        buf
-  //      | _ -> failwithf "unsupported_message_format|format=%i" magicByte
-
-  //    // assign offsets
-  //    //let ms = 
-  //    //  ms.messages 
-  //    //  |> Array.mapi (fun i msi -> MessageSetItem(int64 i, msi.messageSize, msi.message))
-  //    //  |> MessageSet
-
-  //    let compressedValue = CompressionCodec.compress compression value
-  //    let attrs = compression |> int8
-  //    let m = Message(0, 0y, attrs, 0L, Binary.empty, compressedValue)
-  //    MessageSet([| MessageSetItem(0L, Message.Size m, m) |], compression)
-
-  let private toMessageSet (magicByte:int8) (compression:byte) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
+  let private toMessageSet (magicByte:MagicByte) (compression:byte) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for i = 0 to batch.Length - 1 do
       let b = batch.[i]
       let mutable xs = Unchecked.defaultof<_>
@@ -318,22 +287,14 @@ module Producer =
         let offset = int64 xs.Count // the offset of the message with respect to partition batj
         let pm = b.messages.[j]
         let m = Message(0, magicByte, 0y, 0L, pm.key, pm.value)
-        let ms = 
-          if magicByte < 2y then Message.Size m
-          else 
-            // the offset delta is simply the offset of this message in the in-memory batch
-            Message.SizeRecord 0L (int offset) m        
+        let ms = 0
         xs.Add (MessageSetItem(offset, ms, m))
     let arr = Array.zeroCreate ps.Count
     let mutable i = 0
     for p in ps do
-      let ms = MessageSet(p.Value.ToArray(), compression)
-      //let ms = ms |> compress magicByte compression
-      let mss = 
-        if magicByte < 2y then MessageSet.Size ms
-        else MessageSet.SizeRecordBatch ms
+      let ms = MessageSet(p.Value.ToArray(), compression, magicByte)
+      let mss = 0 // TODO: estimate?
       arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, mss, ms)
-      //arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, 0, ms) // TODO: estimate size?
       i <- i + 1
     arr
 
@@ -567,6 +528,12 @@ module Producer =
     else
       do! state.partitionQueues.[batch.partition] batch
       return! batch.rep |> IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch)) }
+      //return! 
+      //  batch.rep 
+      //  |> IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch))
+      //  |> Async.tryWith (fun ex -> async { 
+      //    Log.error "exception|error=%O" ex
+      //    return raise ex }) }
 
   let private splitBySize (maxBatchSize:int) (batch:ProducerMessage ResizeArray) =
     // NB: if the size of an individual message is larger than the max, then this
@@ -619,22 +586,28 @@ module Producer =
     | _ -> Choice2Of2 ex
 
   let private produceBatchedWithState (producer:Producer) (state:ProducerState) (batch:ProducerMessage seq) = async {
-    let reqs = formBatchProduceRequests producer state batch
-    let! res = Async.Parallel reqs
-    let oks,errs = res |> Seq.concat |> Seq.partitionChoices
-    if errs.Length > 0 then
-      let retries,recovers =
-        errs 
-        |> Seq.map producerErrorToRetryAction
-        |> Seq.partitionChoices
-      if recovers.Length > 0 then
-        let ex = Exn.ofSeq (Seq.append recovers retries)
-        return Failure (Resource.ResourceErrorAction.CloseRetry (Some ex))
-      else
-        let ex = Exn.ofSeq retries
-        return Failure (Resource.ResourceErrorAction.Retry (Some ex))
-    else 
-      return Success oks }
+    //try
+      let reqs = formBatchProduceRequests producer state batch |> Seq.toArray
+      //let! res = Async.Parallel reqs
+      let! res = Async.parallelThrottledThread false reqs.Length reqs
+      let oks,errs = res |> Seq.concat |> Seq.partitionChoices
+      if errs.Length > 0 then
+        let retries,recovers =
+          errs 
+          |> Seq.map producerErrorToRetryAction
+          |> Seq.partitionChoices
+        if recovers.Length > 0 then
+          let ex = Exn.ofSeq (Seq.append recovers retries)
+          return Failure (Resource.ResourceErrorAction.CloseRetry (Some ex))
+        else
+          let ex = Exn.ofSeq retries
+          return Failure (Resource.ResourceErrorAction.Retry (Some ex))
+      else 
+        return Success oks 
+    //with ex ->
+    //  Log.error "Unhandled:%O" ex
+    //  return raise ex
+    }
 
   let private produceBatchWithState (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =

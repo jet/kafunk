@@ -18,6 +18,7 @@ let key = "k"B |> Binary.ofArray
 let value = "v"B |> Binary.ofArray
 
 let magicByte = 2y
+let compression = CompressionCodec.None
 let ts = 0L
   //if magicByte > 1y then int64 (DateTime.UtcNow - UnixEpoch).TotalMilliseconds
   //else 0L

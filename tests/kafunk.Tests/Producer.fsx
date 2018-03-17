@@ -43,8 +43,8 @@ let connCfg =
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
-      bufferPool = BufferPool.bufferManager 100000000L 1000000
-      //bufferPool = BufferPool.GC
+      //bufferPool = BufferPool.bufferManager 100000000L 1000000
+      bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (

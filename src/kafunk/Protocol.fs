@@ -4,6 +4,7 @@ namespace Kafunk
 [<AutoOpen>]
 module Protocol =
   open System
+  //open Protocol
 
   type ApiKey =
     | Produce = 0
@@ -84,6 +85,16 @@ module Protocol =
       | Snappy -> Compression.Snappy.compress value
     #endif
       | _ -> failwithf "Incorrect compression codec %A" compression
+
+    let decompress compression value =
+      match compression with
+      | None -> value
+      | GZIP -> Compression.GZip.decompress value
+      | LZ4 -> Compression.LZ4.decompress value
+#if !NETSTANDARD2_0    
+      | Snappy -> Compression.Snappy.decompress value
+#endif
+      | c -> failwithf "compression_code=%i not supported" c
 
   /// A Kafka message key (bytes).
   type Key = System.ArraySegment<byte>
@@ -467,21 +478,22 @@ module Protocol =
       buf.WriteBytes m.key
       buf.WriteBytes m.value
       let crc = Crc.crc32 buf.Buffer.Array offsetAfterCrc (buf.Buffer.Offset - offsetAfterCrc)
+      //let crc = Crc.crc32C buf.Buffer.Array offsetAfterCrc (buf.Buffer.Offset - offsetAfterCrc)
       Binary.pokeInt32In (int crc) buf.Buffer.Array (offsetAfterCrc - 4)
       //Binary.pokeUInt32In (int64 crc) buf.Buffer.Array (offsetAfterCrc - 4)
 
-    static member Read (magicByte:int8, buf:BinaryZipper) =
+    static member Read (buf:BinaryZipper) =
       let crc = buf.ReadInt32 ()
-      buf.ShiftOffset 1 // magic byte
+      let mb = buf.ReadInt8 () //       //buf.ShiftOffset 1 // magic byte
       let attrs = buf.ReadInt8 ()
       let timestamp = 
-        if magicByte >= 1y then 
+        if mb >= 1y then 
           buf.ReadInt64 ()
         else 
           0L
       let key = buf.ReadBytes ()
       let value = buf.ReadBytes ()
-      Message(crc,magicByte,attrs,timestamp,key,value)
+      Message(crc,mb,attrs,timestamp,key,value)
 
     // NB: assumes that m.key and m.value use the same underlying array
     static member ComputeCrc (m:Message) =
@@ -517,50 +529,75 @@ module Protocol =
     
   [<NoEquality;NoComparison>]
   type MessageSet =
-    struct
-      // when specified (in magic >= v2), overrides the last offset
-      val lastOffset : int64
+    struct      
+      val lastOffset : int64 // when specified (in magic >= v2), overrides the last offset
       val messages : MessageSetItem[]
       val compression : CompressionCodec
-      new (set) = { messages = set ; lastOffset = -1L ; compression = CompressionCodec.None }
-      new (set,compression) = { messages = set ; lastOffset = -1L ; compression = compression }
-      new (set,lastOffset) = { messages = set ; lastOffset = lastOffset ; compression = CompressionCodec.None }
+      val magicByte : MagicByte
+      new (set) = { messages = set ; lastOffset = -1L ; compression = CompressionCodec.None ; magicByte = 0y }
+      new (set,compression,magicByte) = { messages = set ; lastOffset = -1L ; compression = compression ; magicByte = magicByte }
+      new (set,lastOffset) = { messages = set ; lastOffset = lastOffset ; compression = CompressionCodec.None ; magicByte = 0y }
     end
   with
+
+    static member SizeByMagicByte (x:MessageSet) =
+      match x.magicByte with
+      | 2y -> MessageSet.SizeRecordBatch x
+      | _ -> MessageSet.Size x
+
+    static member WriteByMagicByte (mss, ms:MessageSet, buf) =
+      match ms.magicByte with
+      | 2y -> MessageSet.WriteRecordBatch (mss,ms,buf)
+      | _ -> MessageSet.Write (mss,ms,buf)
 
     /// Computes the message set size assuming magicByte <= 1y
     static member Size (x:MessageSet) =
       let mutable size = 0
       for i = 0 to x.messages.Length - 1 do
+        //let ms = x.messages.[i].messageSize
+        let ms = Message.Size x.messages.[i].message
         size <- size + 
           8 + // offset
           4 + // message size field
-          x.messages.[i].messageSize
+          ms
       size
 
-    static member Write (ms:MessageSet, buf:BinaryZipper) =
+    static member Write (messageSetSize:int, ms:MessageSet, buf:BinaryZipper) =
       match ms.compression with
       | CompressionCodec.None ->
         for x in ms.messages do
           buf.WriteInt64 x.offset
-          buf.WriteInt32 x.messageSize
+          //buf.WriteInt32 x.messageSize
+          buf.WriteInt32 (Message.Size x.message)
           Message.Write (x.message, buf)
-      | compression ->
-        let value = MessageSet.Size ms |> Binary.zeros
+        messageSetSize
+      | _ ->
+        let value = Binary.zeros messageSetSize
+        let innerBuf = BinaryZipper(value)
         for x in ms.messages do
-          buf.WriteInt64 x.offset
-          buf.WriteInt32 x.messageSize
-          Message.Write (x.message, BinaryZipper(value))
-        let compressedValue = CompressionCodec.compress compression value
-        let attrs = compression |> int8
-        let m = Message(0, 0y, attrs, 0L, Binary.empty, compressedValue)
-        //MessageSet([| MessageSetItem(0L, Message.Size m, m) |], compression)
-        Message.Write (m, buf)
+          innerBuf.WriteInt64 x.offset
+          //innerBuf.WriteInt32 x.messageSize
+          innerBuf.WriteInt32 (Message.Size x.message)
+          Message.Write (x.message, innerBuf)
+        let compressedValue = CompressionCodec.compress ms.compression value
+        let attrs = ms.compression |> int8
+        let compressedMessage = Message(0, ms.magicByte, attrs, 0L, Binary.empty, compressedValue)
+        let offset = buf.Buffer.Offset
+        buf.WriteInt64 0L // offset
+        buf.WriteInt32 (Message.Size compressedMessage)
+        Message.Write (compressedMessage, buf)
+        let compressedMessageSize = buf.Buffer.Offset - offset
+        if compressedMessageSize > messageSetSize then 
+          failwithf "compressed_size_larger|codec=%i uncompressed=%i compressed=%i" ms.compression messageSetSize compressedMessageSize
+        compressedMessageSize
 
-        
+    static member ReadByMagicByte (checkCrc:bool, apiVer:ApiVersion, magicByte:MagicByte, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
+      if magicByte = 2y || apiVer >= 3s then MessageSet.ReadFromRecordBatches (checkCrc,partition,ec,messageSetSize,buf)
+      else MessageSet.Read (magicByte,partition,ec,messageSetSize,false,buf)
+
     // NB: skipTooLarge=true is for scenarios where decompression is involved and a message set is being decoded from an individual message
     // which was itself too small.
-    static member Read (magicByte:int8, partition:Partition, ec:ErrorCode, messageSetSize:int, skipTooLarge:bool, buf:BinaryZipper) =
+    static member Read (magicByte:MagicByte, partition:Partition, ec:ErrorCode, messageSetSize:int, skipTooLarge:bool, buf:BinaryZipper) : MessageSet =
       let mutable consumed = 0
       let arr = ResizeArray<_>()
       while consumed < messageSetSize && buf.Buffer.Count > 0 do
@@ -578,8 +615,15 @@ module Protocol =
           try
             let messageSetRemainder = messageSetRemainder - 12 // (Offset + MessageSize)
             if messageSetRemainder >= messageSize && buf.Buffer.Count >= messageSize then
-              let message = Message.Read (magicByte,buf)
-              arr.Add (MessageSetItem(offset,messageSize,message))
+              let message = Message.Read buf
+              match (message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
+              | CompressionCodec.None -> 
+                arr.Add (MessageSetItem(offset,messageSize,message))
+              | compression ->
+                let decompressedValue = CompressionCodec.decompress compression message.value     
+                let ms : MessageSet = MessageSet.Read (magicByte, 0, 0s, decompressedValue.Count, true, BinaryZipper(decompressedValue))
+                for msi in ms.messages do
+                  arr.Add msi
             else
               let rem = min messageSetRemainder buf.Buffer.Count
               buf.ShiftOffset rem
@@ -605,7 +649,9 @@ module Protocol =
       let mutable size = 0
       for i = 0 to ms.messages.Length - 1 do
         let msi = ms.messages.[i]
-        size <- size + msi.messageSize + (Binary.sizeVarint msi.messageSize)
+        //let ms = msi.messageSize
+        let ms = Message.SizeRecord 0L i msi.message
+        size <- size + ms + (Binary.sizeVarint ms)
       size
 
     static member SizeRecordBatch (ms:MessageSet) =
@@ -618,7 +664,8 @@ module Protocol =
         let msi = ms.messages.[i]
         let offsetDelta = i
         let timestampDelta = msi.message.timestamp - firstTimestamp
-        buf.WriteVarint msi.messageSize // length
+        //buf.WriteVarint msi.messageSize // length
+        buf.WriteVarint (Message.SizeRecord timestampDelta offsetDelta msi.message)  // length
         buf.WriteInt8 0y // attributes
         buf.WriteVarint64 timestampDelta // timestamp delta
         buf.WriteVarint offsetDelta // offset delta
@@ -631,17 +678,14 @@ module Protocol =
       let firstTimestamp = ms.messages.[0].message.timestamp
       let maxTimestamp = ms.messages.[ms.messages.Length - 1].message.timestamp
       buf.WriteInt64 firstOffset // first offset
-      buf.WriteInt32 (batchLength - RecordBatch.LOG_OVERHEAD)
+      let batchLengthOffset = buf.Buffer.Offset
+      buf.ShiftOffset 4 // batch length (written later due to compression)
       buf.WriteInt32 0 // partition leader epoch
       buf.WriteInt8 2y // magic v2
       let crcOffset = buf.Buffer.Offset
       buf.ShiftOffset 4 // crc32 (written later)
       let attributesOffset = buf.Buffer.Offset
-      let attributes = 
-        0s 
-        ||| int16 (CompressionCodec.Mask &&& ms.compression)
-        ||| int16 (TimestampType.MASK &&& 0) //TimestampType.LOG_APPEND_TIME
-      buf.WriteInt16 attributes // attributes
+      buf.ShiftOffset 2 // attributes
       buf.WriteInt32 (ms.messages.Length - 1) // last offset delta
       buf.WriteInt64 firstTimestamp // first timestamp
       buf.WriteInt64 maxTimestamp // max timestamp
@@ -650,27 +694,36 @@ module Protocol =
       buf.WriteInt32 -1  // first sequence
       buf.WriteInt32 ms.messages.Length // num records
       let mutable batchLength = batchLength
-      match ms.compression with
-      | CompressionCodec.None ->
+      let mutable compression = ms.compression
+      match compression with
+      | CompressionCodec.None -> 
         MessageSet.WriteRecords (ms,buf)
-      | CompressionCodec.LZ4 | CompressionCodec.GZIP | CompressionCodec.Snappy ->
-        let value = MessageSet.SizeRecords ms |> Binary.zeros
-        MessageSet.WriteRecords (ms,BinaryZipper(value)) |> ignore
-        let compressedValue = CompressionCodec.compress ms.compression value
-        buf.WriteBytesNoLengthPrefix compressedValue
-        batchLength <- compressedValue.Count + RecordBatch.RECORD_BATCH_OVERHEAD
-      | c -> failwithf "compression=%i not supported" c
-      //let crcCount = batchLength - RecordBatch.ATTRIBUTES_OFFSET
+      | _ ->
+        let value = 
+          let value = MessageSet.SizeRecords ms |> Binary.zeros
+          MessageSet.WriteRecords (ms,BinaryZipper(value)) |> ignore
+          value
+        let compressedValue = CompressionCodec.compress compression value
+        if compressedValue.Count > value.Count then 
+          //failwithf "compressed_value_larged|compressed=%i uncompressed=%i" compressedValue.Count value.Count
+          compression <- CompressionCodec.None
+          MessageSet.WriteRecords (ms,buf)
+        else
+          buf.WriteBytesNoLengthPrefix compressedValue
+          batchLength <- compressedValue.Count + RecordBatch.RECORD_BATCH_OVERHEAD
+      Binary.pokeInt32In (batchLength - RecordBatch.LOG_OVERHEAD) buf.Buffer.Array batchLengthOffset
+      let attributes = 0s ||| int16 (CompressionCodec.Mask &&& compression)
+      Binary.pokeInt16In attributes buf.Buffer.Array attributesOffset
       let crcCount = buf.Buffer.Offset - attributesOffset
       let crc = Crc.crc32C buf.Buffer.Array attributesOffset crcCount
       Binary.pokeInt32In (int crc) buf.Buffer.Array crcOffset
       batchLength
 
-    static member internal ReadFromRecordBatches (partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
+    static member internal ReadFromRecordBatches (checkCrc:bool, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper) =
       let mss = ResizeArray<MessageSetItem>()
       let mutable lastOffset = 0L
       while buf.Buffer.Count > RecordBatch.RECORD_BATCH_OVERHEAD do
-        let lo = MessageSet.ReadFromRecordBatch (partition,ec,messageSetSize,buf,mss)
+        let lo = MessageSet.ReadFromRecordBatch (checkCrc, partition,ec,messageSetSize,buf,mss)
         lastOffset <- max lastOffset lo
       MessageSet(mss.ToArray(),lastOffset)
 
@@ -681,7 +734,6 @@ module Protocol =
         let recordLength = buf.ReadVarint()
         let recordStart = buf.Buffer.Offset
         if buf.Buffer.Count < recordLength then
-          //printfn "skipping|readCount=%i numRecords=%i buffer=%i recLength=%i ct=%i" readCount numRecords buf.Buffer.Count recordLength compressionType
           buf.ShiftOffset buf.Buffer.Count
         else
         try          
@@ -691,7 +743,7 @@ module Protocol =
           let key = buf.ReadVarintBytes()
           let value = buf.ReadVarintBytes()
           let headersLength = buf.ReadVarint()          
-          if headersLength < 0 then failwithf "invalid headers length=%i" headersLength else
+          if headersLength < 0 then failwithf "invalid_headers_length=%i" headersLength else
           let headers = Array.zeroCreate headersLength
           for i = 0 to headers.Length - 1 do
             let k = buf.ReadVarintString ()
@@ -702,9 +754,8 @@ module Protocol =
             if timestampType = TimestampType.LOG_APPEND_TIME then maxTimestamp
             else firstTimestamp + timestampDelta
           let readRecordLength = buf.Buffer.Offset - recordStart
-          if (readRecordLength <> recordLength) then failwithf "invalid_record_length|actual=%i expected=%i delta=%i offset=%i" readRecordLength recordLength offsetDelta offset
-          //consumed <- consumed + readRecordLength
-          //printfn "key=%s value=%s headers=%i offset=%i length=%i timestamp=%i buffer=%i consumed=%i" (Binary.toString key) (Binary.toString value) _headersLength offset recordLength timestamp buf.Buffer.Count consumed
+          if (readRecordLength <> recordLength) then 
+            failwithf "invalid_record_length|actual=%i expected=%i delta=%i offset=%i" readRecordLength recordLength offsetDelta offset
           let message = Message(-1 (*crc*), magicByte, recordAttrributes, timestamp, key, value)
           mss.Add (MessageSetItem(offset, recordLength, message))
           readCount <- readCount + 1
@@ -712,7 +763,7 @@ module Protocol =
           let msg = sprintf "num_records=%i read_records=%i buffer=%i record_length=%i" numRecords readCount buf.Buffer.Count recordLength
           raise (Exception(msg, ex))
 
-    static member private ReadFromRecordBatch (partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper, mss:ResizeArray<MessageSetItem>) =
+    static member private ReadFromRecordBatch (checkCrc:bool, partition:Partition, ec:ErrorCode, messageSetSize:int, buf:BinaryZipper, mss:ResizeArray<MessageSetItem>) =
       let firstOffset = buf.ReadInt64()      
       let recordBatchLength = buf.ReadInt32 ()
       let sizeInBytes = recordBatchLength + RecordBatch.LOG_OVERHEAD
@@ -726,12 +777,14 @@ module Protocol =
       let crcSum = buf.ReadInt32()
       let attributesOffset = buf.Buffer.Count
       let batchAttributes = buf.ReadInt16()
-      let compressionType = batchAttributes &&& int16 CompressionCodec.Mask      
+      let compression = byte (batchAttributes &&& int16 CompressionCodec.Mask)
       let timestampType = 
         if (batchAttributes &&& int16 TimestampType.MASK) = 0s then TimestampType.CREATE_TIME 
         else TimestampType.LOG_APPEND_TIME
       let isControl = batchAttributes &&& int16 0x20 > 0s
       let isTx = batchAttributes &&& int16 0x10 > 0s
+      if isControl then failwith "control_record_batch_not_supported"
+      if isTx then failwith "tx_record_batch_not_supported"
       let lastOffsetDelta = buf.ReadInt32()
       let lastOffset = firstOffset + int64 lastOffsetDelta
       let firstTimestamp = buf.ReadInt64()
@@ -739,28 +792,22 @@ module Protocol =
       let _producerId = buf.ReadInt64()
       let _producerEpoch = buf.ReadInt16()
       let _firstSequence = buf.ReadInt32()
-      let numRecords = buf.ReadInt32() // Note the response isn't guaranteed to contain every record in this count!
-      if numRecords < 0 then failwithf "invalid record count=%i" numRecords else
-      //let mutable consumed = RecordBatch.RECORD_BATCH_OVERHEAD //buf.Buffer.Offset - recordBatchStart
-      //printfn "p=%i _recordBatchLength=%i mss=%i _numRecords=%i last_offset=%i batch_attrs=%i consumed=%i magic=%i tst=%i payload=%i" partition recordBatchLength messageSetSize numRecords lastOffset batchAttributes consumed magicByte timestampType payloadSize
-      if compressionType <> 0s then        
-        //let m = Message(0, magicByte, 0, 0L, Binary.empty, value)
-        // TODO: read into Binary.Segment and place into a single message        
-        //mss.Add (MessageSetItem(firstOffset, 0, m))
-        failwith "compression not supported" 
-      else 
+      let numRecords = buf.ReadInt32()
+      if numRecords < 0 then 
+        failwithf "invalid_record_count|num_records=%i compression=%i mb=%i first_offset=%i mc=%i" numRecords compression magicByte firstOffset mss.Count
+      match compression with
+      | CompressionCodec.None ->
         MessageSet.ReadRecords (buf,magicByte,numRecords,firstOffset,timestampType,firstTimestamp,maxTimestamp,mss)
-      
-      //TODO: run check elsewhere?
-      //let crcCount = buf.Buffer.Count - attributesOffset
-      //let crc = Crc.crc32C buf.Buffer.Array attributesOffset crcCount
-      //if int crc <> crcSum then raise (CorruptCrc32Exception ("")) else
-
-      //if numRecords = arr.Count then 
-      //  printfn "matching_record_counts|buffer=%i" buf.Buffer.Count
-      //printfn "p=%i consumed=%i _recordBatchLength=%i recordBatchSize=%i _numRecords=%i last_offset=%i batch_attrs=%i read_count=%i ct=%i" 
-      //  partition consumed recordBatchLength messageSetSize numRecords lastOffset batchAttributes readCount compressionType
-
+      | compression ->        
+        let recordsLength = sizeInBytes - RecordBatch.RECORD_BATCH_OVERHEAD
+        let compressedValue = buf.Slice recordsLength
+        let decompressedValue = CompressionCodec.decompress compression compressedValue
+        MessageSet.ReadRecords (BinaryZipper(decompressedValue),magicByte,numRecords,firstOffset,timestampType,firstTimestamp,maxTimestamp,mss)    
+        buf.ShiftOffset recordsLength
+      if checkCrc then
+        let crcCount = buf.Buffer.Count - attributesOffset
+        let crc = Crc.crc32C buf.Buffer.Array attributesOffset crcCount
+        if int crc <> crcSum then raise (CorruptCrc32Exception (sprintf "crc_computed=%i crc_returned=%i" crc crcSum))
       lastOffset
 
     static member CheckCrc (ms:MessageSet) =
@@ -951,10 +998,12 @@ module Protocol =
         size <- size + (Binary.sizeString y.topic)
         size <- size + 4 // partition array size
         for z in y.partitions do
+          //let mss = z.messageSetSize // TODO: compression?
+          let mss = MessageSet.SizeByMagicByte z.messageSet
           size <- size + 
             4 + // partition
-            4 + // message set size
-            z.messageSetSize // message set TODO: compression?
+            4 + // message set size field
+            mss // message set 
       size
 
     static member Write (ver:ApiVersion, x:ProduceRequest, buf:BinaryZipper) =
@@ -971,12 +1020,9 @@ module Protocol =
           buf.WriteInt32 z.partition
           let messageSetSizeOffset = buf.Buffer.Offset
           buf.ShiftOffset 4 // messageSetSize (written after message set)
-          let messageSetSize =
-            if ver >= 3s then 
-              MessageSet.WriteRecordBatch (z.messageSetSize, z.messageSet, buf)
-            else            
-              MessageSet.Write (z.messageSet, buf)
-              z.messageSetSize
+          let messageSetSize = 
+            let mss = MessageSet.SizeByMagicByte z.messageSet
+            MessageSet.WriteByMagicByte (mss, z.messageSet, buf)
           Binary.pokeInt32In messageSetSize buf.Buffer.Array messageSetSizeOffset
 
 
@@ -1104,6 +1150,7 @@ module Protocol =
       new (tt,topics) = { throttleTime = tt ; topics = topics }
     end
   with
+
     // Leverages mutability and lack of modular functions for efficiency, as this is a high throughput API. 
     static member Read (ver:ApiVersion, buf:BinaryZipper) =
       let throttleTime =
@@ -1134,15 +1181,12 @@ module Protocol =
             else
               null
           let messageSetSize = buf.ReadInt32 ()
-          if messageSetSize < 0 then failwithf "corrupt_fetch_response_partition_size|size=%i buffer=%i" messageSetSize buf.Buffer.Count
-          let innerBuf = buf.Limit messageSetSize
+          if messageSetSize < 0 then failwithf "corrupt_fetch_response_partition_size|size=%i buffer=%i" messageSetSize buf.Buffer.Count          
           let messageSet =
             if messageSetSize = 0 then MessageSet([||]) else
+            let innerBuf = buf.Limit messageSetSize
             let magicByte = innerBuf.TryPeekIn8AtOffset 16
-            if magicByte >= 2y || ver >= 3s then 
-              MessageSet.ReadFromRecordBatches (partition,errorCode,messageSetSize,innerBuf)
-            else 
-              MessageSet.Read (magicByte,partition,errorCode,messageSetSize,false,innerBuf)
+            MessageSet.ReadByMagicByte (false,ver,magicByte,partition,errorCode,messageSetSize,innerBuf)
           buf.ShiftOffset messageSetSize
           partitions.[j] <- FetchResponsePartitionItem(partition, errorCode, highWatermark, lastStableOffset, logStartOffset, abortedTxns, messageSetSize, messageSet)        
         topics.[i] <- (topic,partitions)

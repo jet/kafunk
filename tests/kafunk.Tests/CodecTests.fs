@@ -50,7 +50,7 @@ let ``Message.ComputeCrc``() =
   let m = Message.create (Binary.ofArray "hello world"B) (Binary.empty) None
   //let bytes = toArraySeg (Message.size messageVer) (Message.write messageVer) m
   let bytes = toArraySeg (fun m -> Message.Size m) (fun (m,buf) -> Message.Write (m,buf)) m
-  let m2 = Message.Read (0y, BinaryZipper(bytes))
+  let m2 = Message.Read (BinaryZipper(bytes))
   let crc32 = Message.ComputeCrc (m2)
   let expected = int 1940715388u
   Assert.AreEqual(expected, m2.crc)
@@ -86,7 +86,7 @@ let ``MessageSet.write should encode MessageSet``() =
   let size = MessageSet.Size (ms)
   let data = Binary.zeros size
   let bz = BinaryZipper (data)
-  MessageSet.Write (ms, bz)
+  MessageSet.Write (size, ms, bz) |> ignore
   //let data = toArraySeg (MessageSet.size 0s) (MessageSet.write 0s) ms
   let encoded = data |> Binary.toArray |> Array.toList
   Assert.True ((expected = encoded))
