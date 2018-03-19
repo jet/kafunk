@@ -4,7 +4,6 @@ framework: netstandard2.0
 nuget FSharp.Core >= 4.3 lowest_matching: true
 nuget FSharp.Control.AsyncSeq >= 2.0.21 lowest_matching: true
 nuget SourceLink.Create.CommandLine copy_local: true
-nuget lz4net
 
 group Legacy
   source https://api.nuget.org/v3/index.json
@@ -14,7 +13,6 @@ group Legacy
   nuget FSharp.Control.AsyncSeq >= 2.0.21 lowest_matching: true
   nuget Snappy.NET >= 1.1.1.8 lowest_matching: true
   nuget SourceLink.Create.CommandLine copy_local: true
-  nuget lz4net
 
 group Build
   source https://api.nuget.org/v3/index.json

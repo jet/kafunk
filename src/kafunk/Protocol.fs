@@ -80,21 +80,21 @@ module Protocol =
       match compression with
       | None -> value
       | GZIP -> Compression.GZip.compress value
-      | LZ4  -> Compression.LZ4.compress value
+      //| LZ4  -> Compression.LZ4.compress value
     #if !NETSTANDARD2_0
       | Snappy -> Compression.Snappy.compress value
     #endif
-      | _ -> failwithf "Incorrect compression codec %A" compression
+      | _ -> failwithf "unsuported_compression_codec|codec=%i" compression
 
     let decompress compression value =
       match compression with
       | None -> value
       | GZIP -> Compression.GZip.decompress value
-      | LZ4 -> Compression.LZ4.decompress value
+      //| LZ4 -> Compression.LZ4.decompress value
 #if !NETSTANDARD2_0    
       | Snappy -> Compression.Snappy.decompress value
 #endif
-      | c -> failwithf "compression_code=%i not supported" c
+      | _ -> failwithf "unsuported_compression_codec|codec=%i" compression
 
   /// A Kafka message key (bytes).
   type Key = System.ArraySegment<byte>

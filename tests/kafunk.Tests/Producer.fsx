@@ -72,7 +72,7 @@ let producerCfg =
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 100000, //ProducerConfig.DefaultBatchSizeBytes,
     batchLingerMs = 100,
-    compression = CompressionCodec.None,
+    compression = CompressionCodec.Snappy,
     maxInFlightRequests = 1
     )
 

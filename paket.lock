@@ -4,14 +4,6 @@ NUGET
     FSharp.Control.AsyncSeq (2.0.21)
       FSharp.Core (>= 4.3.2)
     FSharp.Core (4.3.2)
-    lz4net (1.0.15.93)
-      lz4net.unsafe.netcore (1.0.15.93)
-      NETStandard.Library (>= 1.6.1)
-    lz4net.unsafe.netcore (1.0.15.93)
-      NETStandard.Library (>= 1.6.1)
-    Microsoft.NETCore.Platforms (2.0.1)
-    NETStandard.Library (2.0.1)
-      Microsoft.NETCore.Platforms (>= 1.1)
     SourceLink.Create.CommandLine (2.8) - copy_local: true
 
 GROUP Build
@@ -38,7 +30,6 @@ NUGET
     FSharp.Control.AsyncSeq (2.0.21)
       FSharp.Core (>= 3.1.2)
     FSharp.Core (3.1.2)
-    lz4net (1.0.15.93)
     Snappy.NET (1.1.1.8)
       Crc32C.NET (>= 1.0.5)
     SourceLink.Create.CommandLine (2.8) - copy_local: true

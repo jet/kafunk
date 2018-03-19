@@ -255,14 +255,14 @@ module internal Chan =
       let size = Request.size (apiVer, req)
       let buf = bufferPool.Alloc size
       let bz = BinaryZipper(buf)
-      let o = bz.Buffer.Offset
+      //let o = bz.Buffer.Offset
       Request.Write (apiVer, req, bz)
-      let written = bz.Buffer.Offset - o
-      let buf = 
-        if written <> size then
-          //printfn "s=%i w=%i" size written
-          ArraySegment(buf.Array, buf.Offset, written)
-        else buf
+      //let written = bz.Buffer.Offset - o
+      //let buf = 
+      //  if written <> size then
+      //    //printfn "s=%i w=%i" size written
+      //    ArraySegment(buf.Array, buf.Offset, written)
+      //  else buf
       buf,(apiKey,apiVer)
 
     /// Decodes the session layer input and session state into a response.
