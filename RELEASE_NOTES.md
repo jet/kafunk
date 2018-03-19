@@ -1,3 +1,6 @@
+### 0.1.15-alpha05 - 19.3.2018
+* BUG: ensure CRC check runs with respect to appropriate message version (magic byte)
+
 ### 0.1.15-alpha04 - 19.3.2018
 * BUG: compression works when using v0.11 (auto) protocol
 
