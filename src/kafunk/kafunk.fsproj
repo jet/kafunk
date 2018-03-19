@@ -42,12 +42,12 @@
     <Compile Include="Utility\Pool.fs" />
     <Compile Include="Utility\Buffer.fs" />
     <Compile Include="Tcp.fs" />
+    <Compile Include="Compression.fs" />
     <Compile Include="Protocol.fs" />
     <Compile Include="Helpers.fs" />
     <Compile Include="Versions.fs" />
     <Compile Include="Chan.fs" />
     <Compile Include="Kafka.fs" />
-    <Compile Include="Compression.fs" />
     <Compile Include="Producer.fs" />
     <Compile Include="BufferingProducer.fs" />
     <Compile Include="Group.fs" />

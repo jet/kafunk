@@ -521,7 +521,7 @@ type KafkaConfig = {
 } with
 
   /// The default Kafka server version = 0.10.1.
-  static member DefaultVersion = Version.Parse "0.10.1"
+  static member DefaultVersion = Versions.V_0_10_1
 
   /// The default setting for supporting auto API versions = true.
   static member DefaultAutoApiVersions = true
@@ -544,6 +544,13 @@ type KafkaConfig = {
   /// Creates a Kafka configuration object.
   static member create (bootstrapServers:Uri list, ?clientId:ClientId, ?tcpConfig, ?bootstrapConnectRetryPolicy, ?requestRetryPolicy, 
                         ?version, ?autoApiVersions) =
+    
+    // auto-api doesn't exist on versions prior to 0.10.0
+    let autoApiVersions =
+      match version with
+      | Some v when v < Versions.V_0_10_0 -> Some false
+      | _ -> autoApiVersions
+
     { version = defaultArg version KafkaConfig.DefaultVersion
       autoApiVersions = defaultArg autoApiVersions KafkaConfig.DefaultAutoApiVersions
       bootstrapServers = bootstrapServers

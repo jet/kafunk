@@ -214,40 +214,45 @@ module Resource =
 
   let injectWithRecovery (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) (r:Resource<'r>) (a:'a) : Async<'b> =
     let rec go (rs:RetryState) = async {
-      let! ep = r.Get ()
-      let! b = Async.cancelWithTaskThrow resourceError ep.state.Task (op ep.resource a)
-      match b with
-      | Success b -> 
-        return b
-      | Failure (Retry e) ->
-        Log.trace "retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
-          r.Name ep.version rs.attempt e
-        let! rs' = RetryPolicy.awaitNextState rp rs
-        match rs' with
-        | None ->
-          let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s version=%i attempt=%i error=\"%O\"" r.Name ep.version rs.attempt e
-          Log.trace "%s" msg
-          return raise (FaultedResourceOperationException(msg, e))
-        | Some rs' ->
-          return! go rs'
-      | Failure (CloseResume (ex,b)) ->
-        Log.trace "closing_and_resuming_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
-          r.Name ep.version rs.attempt ex
-        do! r.Close (ep,ex)
-        return b
-      | Failure (CloseRetry ex) ->
-        // TODO: collect errors?
-        Log.trace "closing_and_retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
-          r.Name ep.version rs.attempt ex
-        do! r.Close (ep,ex)
-        let! rs' = RetryPolicy.awaitNextState rp rs
-        match rs' with
-        | None ->
-          let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s version=%i attempt=%i error=\"%O\"" r.Name ep.version rs.attempt ex
-          Log.trace "%s" msg
-          return raise (FaultedResourceOperationException(msg, ex))
-        | Some rs' ->          
-          return! go rs' }
+      try
+        let! ep = r.Get ()
+        let! b = Async.cancelWithTaskThrow resourceError ep.state.Task (op ep.resource a)
+        //let! b = op ep.resource a
+        match b with
+        | Success b -> 
+          return b
+        | Failure (Retry e) ->
+          Log.trace "retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
+            r.Name ep.version rs.attempt e
+          let! rs' = RetryPolicy.awaitNextState rp rs
+          match rs' with
+          | None ->
+            let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s version=%i attempt=%i error=\"%O\"" r.Name ep.version rs.attempt e
+            Log.trace "%s" msg
+            return raise (FaultedResourceOperationException(msg, e))
+          | Some rs' ->
+            return! go rs'
+        | Failure (CloseResume (ex,b)) ->
+          Log.trace "closing_and_resuming_after_failure|type=%s v=%i attempt=%i error=\"%O\"" 
+            r.Name ep.version rs.attempt ex
+          do! r.Close (ep,ex)
+          return b
+        | Failure (CloseRetry ex) ->
+          // TODO: collect errors?
+          Log.trace "closing_and_retrying_after_failure|type=%s v=%i attempt=%i error=\"%O\"" 
+            r.Name ep.version rs.attempt ex
+          do! r.Close (ep,ex)
+          let! rs' = RetryPolicy.awaitNextState rp rs
+          match rs' with
+          | None ->
+            let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s v=%i attempt=%i error=\"%O\"" r.Name ep.version rs.attempt ex
+            Log.trace "%s" msg
+            return raise (FaultedResourceOperationException(msg, ex))
+          | Some rs' ->          
+            return! go rs'
+      with ex ->
+        Log.trace "unhandled_resource_exn|type=%s error=%O attempt=%i" r.Name ex rs.attempt
+        return raise ex }
     go RetryState.init
 
   let states (r:Resource<'r>) : AsyncSeq<ResourceState<'r>> = r.States

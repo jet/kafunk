@@ -240,36 +240,51 @@ module Async =
   /// the sequence causes the resulting computation to error or cancel, respectively.
   let parallelThrottledIgnoreThread (startOnCallingThread:bool) (parallelism:int) (xs:seq<Async<_>>) = async {
     let! ct = Async.CancellationToken
-    use sm = new SemaphoreSlim(parallelism)
+    let sm = new SemaphoreSlim(parallelism)
     let count = ref 1
     let res = IVar.create ()
+    let tryWait () =
+      try sm.Wait () ; true
+      with _ -> false
     let tryComplete () =
       if Interlocked.Decrement count = 0 then
-        IVar.tryPut () res
+        IVar.tryPut () res |> ignore
+        false
       else
         not res.Task.IsCompleted
     let ok _ =
       if tryComplete () then
-        sm.Release() |> ignore      
-    let err (ex:exn) =
-      if IVar.tryError ex res then
-        sm.Release() |> ignore
-    let cnc (_:OperationCanceledException) =
-      if IVar.tryCancel res then
-        sm.Release() |> ignore
+        // sm can be disposed when an error/cancellation completes IVar
+        // after the res.Task.IsCompleted is read by tryComplete ()
+        try sm.Release () |> ignore with _ -> ()
+    let err (ex:exn) = IVar.tryError ex res |> ignore
+    let cnc (_:OperationCanceledException) = IVar.tryCancel res |> ignore
     let start = async {
       use en = xs.GetEnumerator()
       while not (res.Task.IsCompleted) && en.MoveNext() do
-        sm.Wait()
-        Interlocked.Increment count |> ignore
-        if startOnCallingThread then Async.StartWithContinuations (en.Current, ok, err, cnc, ct)
-        else startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
+        if tryWait () then
+          Interlocked.Increment count |> ignore
+          if startOnCallingThread then Async.StartWithContinuations (en.Current, ok, err, cnc, ct)
+          else startThreadPoolWithContinuations (en.Current, ok, err, cnc, ct)
       tryComplete () |> ignore }
     Async.Start (tryWith (err >> async.Return) start, ct)
     return! res.Task |> awaitTaskCancellationAsError }
 
   let parallelThrottledIgnore (parallelism:int) (xs:seq<Async<_>>) =
     parallelThrottledIgnoreThread true parallelism xs
+
+  let parallelThrottledThread (startOnCallingThread:bool) (parallelism:int) (xs:Async<'a>[]) : Async<'a[]> = async {
+    let rs = Array.zeroCreate xs.Length
+    let xs =
+      xs
+      |> Seq.mapi (fun i comp -> async {
+        let! a = comp
+        rs.[i] <- a })
+    do! parallelThrottledIgnoreThread startOnCallingThread parallelism xs
+    return rs }
+
+  let parallelThrottled (parallelism:int) (xs:Async<'a>[]) : Async<'a[]> =
+    parallelThrottledThread true parallelism xs
 
   /// Creates an async computation which completes when any of the argument computations completes.
   /// The other computation is cancelled.

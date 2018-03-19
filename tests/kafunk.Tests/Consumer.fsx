@@ -72,18 +72,17 @@ let go = async {
     //use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)
-    //Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
-    //  ms.topic
-    //  ms.partition
-    //  (ms.messageSet.messages.Length)
-    //  (ConsumerMessageSet.size ms)
-    //  (ConsumerMessageSet.firstOffset ms)
-    //  (ConsumerMessageSet.lastOffset ms)
-    //  (ConsumerMessageSet.firstTimestamp ms)
-    //  (ms.highWatermarkOffset)
-    //  (ConsumerMessageSet.lag ms) 
-    return ()
-  }
+    Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
+      ms.topic
+      ms.partition
+      (ms.messageSet.messages.Length)
+      (ConsumerMessageSet.size ms)
+      (ConsumerMessageSet.firstOffset ms)
+      (ConsumerMessageSet.lastOffset ms)
+      (ConsumerMessageSet.firstTimestamp ms)
+      (ms.highWatermarkOffset)
+      (ConsumerMessageSet.lag ms) 
+    return () }
 
   use counter = Metrics.counter Log 5000
 

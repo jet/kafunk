@@ -43,8 +43,8 @@ let connCfg =
       requestRetryPolicy = ChanConfig.DefaultRequestRetryPolicy,
 //      connectRetryPolicy = RetryPolicy.none,
 //      requestRetryPolicy = RetryPolicy.none
-      bufferPool = BufferPool.bufferManager 100000000L 1000000
-      //bufferPool = BufferPool.GC
+      //bufferPool = BufferPool.bufferManager 100000000L 1000000
+      bufferPool = BufferPool.GC
       )
 
   KafkaConfig.create (
@@ -72,7 +72,7 @@ let producerCfg =
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 100000, //ProducerConfig.DefaultBatchSizeBytes,
     batchLingerMs = 100,
-    compression = CompressionCodec.None,
+    compression = CompressionCodec.Snappy,
     maxInFlightRequests = 1
     )
 

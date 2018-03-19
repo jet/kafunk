@@ -276,7 +276,7 @@ module Producer =
       size <- size + (ProducerMessage.size m)
     size
 
-  let private toMessageSet (magicByte:int8) (compression:byte) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
+  let private toMessageSet (magicByte:MagicByte) (compression:byte) (batch:ProducerMessageBatch[]) (ps:Dictionary<Partition, ResizeArray<_>>) =
     for i = 0 to batch.Length - 1 do
       let b = batch.[i]
       let mutable xs = Unchecked.defaultof<_>
@@ -287,20 +287,13 @@ module Producer =
         let offset = int64 xs.Count // the offset of the message with respect to partition batj
         let pm = b.messages.[j]
         let m = Message(0, magicByte, 0y, 0L, pm.key, pm.value)
-        let ms = 
-          if magicByte < 2y then Message.Size m
-          else 
-            // the offset delta is simply the offset of this message in the in-memory batch
-            Message.SizeRecord 0L (int offset) m        
+        let ms = 0
         xs.Add (MessageSetItem(offset, ms, m))
     let arr = Array.zeroCreate ps.Count
     let mutable i = 0
     for p in ps do
-      let ms = MessageSet(p.Value.ToArray())
-      let ms = ms |> Compression.compress magicByte compression
-      let mss = 
-        if magicByte < 2y then MessageSet.Size ms
-        else MessageSet.SizeRecordBatch ms
+      let ms = MessageSet(p.Value.ToArray(), compression, magicByte)
+      let mss = 0 // TODO: estimate?
       arr.[i] <- ProduceRequestPartitionMessageSet (p.Key, mss, ms)
       i <- i + 1
     arr
@@ -309,7 +302,7 @@ module Producer =
   let private sendBatchToBroker
     (conn:KafkaConn)
     (cfg:ProducerConfig)
-    (magicByte:int8)
+    (magicByte:MagicByte)
     (b:Broker)
     (batch:ProducerMessageBatch[]) = async {
     //Log.info "sending_batch|ep=%O batch_size_bytes=%i batch_count=%i partition_count=%i" 
@@ -438,7 +431,7 @@ module Producer =
       |> Seq.map (fun (b,xs) -> b, xs |> Seq.map fst |> Seq.sort |> Seq.toArray)
       |> Map.ofSeq
 
-    Log.info "discovered_topic_partitions|topic=%s partitions=[%s] allocs=[%s]"
+    Log.info "discovered_topic_partitions|topic=%s partitions=[%s] allocations=[%s]"
       topic (Printers.partitionCount partitionCount) (partitionsByBroker |> Map.toSeq |> Seq.map (fun (b,ps) -> sprintf "[n=%i ep=%s ps=[%s]]" b.nodeId (Broker.endpoint b) (Printers.partitions ps)) |> String.concat " ; ")
 
     return {
@@ -535,6 +528,12 @@ module Producer =
     else
       do! state.partitionQueues.[batch.partition] batch
       return! batch.rep |> IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch)) }
+      //return! 
+      //  batch.rep 
+      //  |> IVar.getWithTimeout p.batchTimeout (fun _ -> Failure (ProducerError.BatchTimeoutError batch))
+      //  |> Async.tryWith (fun ex -> async { 
+      //    Log.error "exception|error=%O" ex
+      //    return raise ex }) }
 
   let private splitBySize (maxBatchSize:int) (batch:ProducerMessage ResizeArray) =
     // NB: if the size of an individual message is larger than the max, then this
@@ -587,22 +586,28 @@ module Producer =
     | _ -> Choice2Of2 ex
 
   let private produceBatchedWithState (producer:Producer) (state:ProducerState) (batch:ProducerMessage seq) = async {
-    let reqs = formBatchProduceRequests producer state batch
-    let! res = Async.Parallel reqs
-    let oks,errs = res |> Seq.concat |> Seq.partitionChoices
-    if errs.Length > 0 then
-      let retries,recovers =
-        errs 
-        |> Seq.map producerErrorToRetryAction
-        |> Seq.partitionChoices
-      if recovers.Length > 0 then
-        let ex = Exn.ofSeq (Seq.append recovers retries)
-        return Failure (Resource.ResourceErrorAction.CloseRetry (Some ex))
-      else
-        let ex = Exn.ofSeq retries
-        return Failure (Resource.ResourceErrorAction.Retry (Some ex))
-    else 
-      return Success oks }
+    //try
+      let reqs = formBatchProduceRequests producer state batch |> Seq.toArray
+      //let! res = Async.Parallel reqs
+      let! res = Async.parallelThrottledThread false reqs.Length reqs
+      let oks,errs = res |> Seq.concat |> Seq.partitionChoices
+      if errs.Length > 0 then
+        let retries,recovers =
+          errs 
+          |> Seq.map producerErrorToRetryAction
+          |> Seq.partitionChoices
+        if recovers.Length > 0 then
+          let ex = Exn.ofSeq (Seq.append recovers retries)
+          return Failure (Resource.ResourceErrorAction.CloseRetry (Some ex))
+        else
+          let ex = Exn.ofSeq retries
+          return Failure (Resource.ResourceErrorAction.Retry (Some ex))
+      else 
+        return Success oks 
+    //with ex ->
+    //  Log.error "Unhandled:%O" ex
+    //  return raise ex
+    }
 
   let private produceBatchWithState (p:Producer) (state:ProducerState) (createBatch:PartitionCount -> Partition * ProducerMessage[]) = async {
     let batch =
@@ -639,9 +644,9 @@ module Producer =
             Log.info "closing_producer|version=%i topic=%s partitions=[%s]"
               s.version config.topic (Printers.partitionCount s.resource.routes.partitionCount)
           return () })
-    let! state = Resource.getResource resource
+    //let! state = Resource.getResource resource
     let p = { state = resource ; config = config ; conn = conn ; batchTimeout = batchTimeout }
-    Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitionCount state.routes.partitionCount)
+    //Log.info "producer_initialized|topic=%s partitions=[%s]" config.topic (Printers.partitionCount state.routes.partitionCount)
     return p }
 
   /// Creates a producer.

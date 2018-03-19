@@ -92,11 +92,12 @@ module Binary =
   let inline readInt16 (buf : Segment) : int16 * Segment =
     (peekInt16 buf, buf |> shiftOffset 2)
 
-  let inline pokeInt16 (x : int16) (buf : Segment) =
-    let offset = buf.Offset
-    let array = buf.Array
-    array.[offset] <- byte (x >>> 8)
+  let inline pokeInt16In (x : int16) (array:byte[]) (offset:int) =
+    array.[offset + 0] <- byte (x >>> 8)
     array.[offset + 1] <- byte x
+
+  let inline pokeInt16 (x : int16) (buf : Segment) =
+    pokeInt16In x buf.Array buf.Offset
     buf
 
   let inline writeInt16 (x : int16) (buf : Segment) =
@@ -384,6 +385,10 @@ type BinaryZipper (buf:ArraySegment<byte>) =
       System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
       __.ShiftOffset bytes.Count
 
+  member __.WriteBytesNoLengthPrefix (bytes:ArraySegment<byte>) =
+    System.Buffer.BlockCopy(bytes.Array, bytes.Offset, buf.Array, buf.Offset, bytes.Count)
+    __.ShiftOffset bytes.Count
+
   member __.ReadBytes () : ArraySegment<byte> =
     let length = __.ReadInt32 ()
     if length = -1 then
@@ -460,6 +465,9 @@ type BinaryZipper (buf:ArraySegment<byte>) =
   /// Creates a BinaryZipper and limits the size to the specified value.
   /// NB: the child BinaryZipper is not linked and the parent must be shifted after the child is consumed.
   member __.Limit (count:int) =
-    let buf = ArraySegment(__.Buffer.Array, __.Buffer.Offset, count)
+    let buf = __.Slice count
     BinaryZipper(buf)
+
+  member __.Slice (count:int) =
+    Binary.Segment(__.Buffer.Array, __.Buffer.Offset, count)
 

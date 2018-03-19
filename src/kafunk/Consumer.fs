@@ -618,14 +618,14 @@ module Consumer =
   
   let private processPartitionFetchResponse 
     (cfg:ConsumerConfig)
-    (magicByte:int8)
+    (magicByte:MagicByte)
     (topic:TopicName)
     (p:FetchResponsePartitionItem) =
     match p.errorCode with
     | ErrorCode.NoError ->
       if p.messageSetSize = 0 then Choice2Of4 (p.partition,p.highWatermarkOffset)
       else 
-        let ms = Compression.decompress magicByte p.messageSet
+        let ms = p.messageSet
         if cfg.checkCrc && magicByte < 2y then
           MessageSet.CheckCrc ms
         Choice1Of4 (ConsumerMessageSet(topic, p.partition, ms, p.highWatermarkOffset))
