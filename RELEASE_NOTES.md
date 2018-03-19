@@ -1,3 +1,20 @@
+### 0.1.15 - 19.3.2018
+* BREAKING: `FetchResponse` item now explicit structure rather than tuple. Breaking only if using low-level Fetch API.
+
+* BUG: consumer doesn't recover from `leaderless_partition_detected` #204
+* BUG: consumer would enter an infinite loop between `offsets_out_of_range` and `resuming_fetch_from_reset_offsets`
+* BUG: stalled consumers after TCP connection timeout
+* BUG: offsets committed for partitions which are no longer assigned after a rebalance
+
+* FEATURE: `ConsumerConfig.fetchMaxBytesOverride` allows increasing `fetchMaxBytes` to a ceiling on message too big exceptions.
+* FEATURE: `ProducerQueueType` to allow configuration of producer message queue networks.
+
+* IMPROVE: support for v0.11 of broker protocol, including v5 of Fetch and v3 of Produce APIs
+* IMPROVE: logging where `received_empty_buffer` logged as `INFO` message as it doesn't indicate an error
+* IMPROVE: connection managemeng to ensure only a single TCP connection per broker per Kafka connection
+* IMPROVE: Reduce recovery time from broker restarts and rebalancing
+* IMPROVE: improved TCP connection logging and log levels to reduce "false positives"
+
 ### 0.1.15-alpha05 - 19.3.2018
 * BUG: ensure CRC check runs with respect to appropriate message version (magic byte)
 
