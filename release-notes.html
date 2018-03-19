@@ -32,6 +32,21 @@
       <div class="row">
         <div class="span9" id="main">
           
+<h3><a name="0-1-15-19-3-2018" class="anchor" href="#0-1-15-19-3-2018">0.1.15 - 19.3.2018</a></h3>
+<ul>
+<li><p>BREAKING: <code>FetchResponse</code> item now explicit structure rather than tuple. Breaking only if using low-level Fetch API.</p></li>
+<li><p>BUG: consumer doesn't recover from <code>leaderless_partition_detected</code> #204</p></li>
+<li><p>BUG: consumer would enter an infinite loop between <code>offsets_out_of_range</code> and <code>resuming_fetch_from_reset_offsets</code></p></li>
+<li>BUG: stalled consumers after TCP connection timeout</li>
+<li>BUG: offsets committed for partitions which are no longer assigned after a rebalance</li>
+<li><p>FEATURE: <code>ConsumerConfig.fetchMaxBytesOverride</code> allows increasing <code>fetchMaxBytes</code> to a ceiling on message too big exceptions.</p></li>
+<li><p>FEATURE: <code>ProducerQueueType</code> to allow configuration of producer message queue networks.</p></li>
+<li>IMPROVE: support for v0.11 of broker protocol, including v5 of Fetch and v3 of Produce APIs</li>
+<li><p>IMPROVE: logging where <code>received_empty_buffer</code> logged as <code>INFO</code> message as it doesn't indicate an error</p></li>
+<li>IMPROVE: connection managemeng to ensure only a single TCP connection per broker per Kafka connection</li>
+<li>IMPROVE: Reduce recovery time from broker restarts and rebalancing</li>
+<li>IMPROVE: improved TCP connection logging and log levels to reduce "false positives"</li>
+</ul>
 <h3><a name="0-1-15-alpha05-19-3-2018" class="anchor" href="#0-1-15-alpha05-19-3-2018">0.1.15-alpha05 - 19.3.2018</a></h3>
 <ul>
 <li>BUG: ensure CRC check runs with respect to appropriate message version (magic byte)</li>
