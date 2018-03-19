@@ -1,3 +1,6 @@
+### 0.1.15-alpha04 - 19.3.2018
+* BUG: compression works when using v0.11 (auto) protocol
+
 ### 0.1.15-alpha02 - 14.3.2018
 * IMPROVE: support for v0.11 of broker protocol, including v5 of Fetch and v3 of Produce APIs
 * IMPROVE: improved TCP connection logging and log levels to reduce "false positives"
