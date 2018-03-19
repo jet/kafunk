@@ -24,18 +24,22 @@ module Protocol =
 
   type ApiVersion = int16
 
+  /// Message format version.
+  type MagicByte = int8
+
   [<Compile(Module)>]
   module internal MessageVersions =
     
     /// Gets the version of Message for a ProduceRequest of the specified API version.
-    let internal produceReqMessage (apiVer:ApiVersion) : int8 =
+    let internal produceReqMessage (apiVer:ApiVersion) : MagicByte =
       if apiVer >= 3s then 2y 
       elif apiVer = 2s then 1y
       else 0y
 
     /// Gets the version of Message for a FetchResponse of the specified API version.
-    let internal fetchResMessage (apiVer:ApiVersion) : int8 =
-      if apiVer >= 2s then 1y
+    let internal fetchResMessage (apiVer:ApiVersion) : MagicByte =
+      if apiVer >= 3s then 2y
+      elif apiVer >= 2s then 1y
       else 0y
 
   /// A correlation id of a Kafka request-response transaction.
@@ -46,8 +50,6 @@ module Protocol =
 
   /// Crc digest of a Kafka message.
   type Crc = int32
-
-  type MagicByte = int8
 
   /// Kafka message attributes.
   type Attributes = int8

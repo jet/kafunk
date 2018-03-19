@@ -616,44 +616,9 @@ module Consumer =
     | _, Some _ -> r2
     | _ -> None
   
-  //// reads a set of messages from a compressed value
-  //let private readDecompressed (magicByte:int8) (ms:MessageSet) (value:Binary.Segment) =
-  //  match magicByte with
-  //  | 0y | 1y ->
-  //    let decompressed = MessageSet.Read (magicByte, 0, 0s, value.Count, true, BinaryZipper(value))
-  //    decompressed.messages
-  //  | 2y ->
-  //    let msis = ResizeArray<_>()
-  //    let buf = BinaryZipper(value)
-  //    MessageSet.ReadRecords (buf,magicByte,0,0L,0,0L,0L,msis) // TODO: pass from MessageSet structure
-  //    msis.ToArray()
-  //  | _ -> failwithf "unsupported_message_format|magic=%i" magicByte
-
-  //let private decompress (magicByte:int8) (ms:MessageSet) =
-  //  if ms.messages.Length = 0 then ms
-  //  else
-  //    let msis =
-  //      ms.messages
-  //      |> Array.Parallel.collect (fun msi -> 
-  //        match (msi.message.attributes &&& (sbyte CompressionCodec.Mask)) |> byte with
-  //        | CompressionCodec.None -> [|msi|]
-  //        | CompressionCodec.GZIP ->
-  //          let value = Compression.GZip.decompress msi.message.value
-  //          readDecompressed magicByte ms value
-  //        | CompressionCodec.LZ4 ->
-  //          let value = Compression.LZ4.decompress msi.message.value
-  //          readDecompressed magicByte ms value
-  //  #if !NETSTANDARD2_0    
-  //        | CompressionCodec.Snappy ->
-  //          let value = Compression.Snappy.decompress msi.message.value
-  //          readDecompressed magicByte ms value
-  //  #endif
-  //        | c -> failwithf "compression_code=%i not supported" c)
-  //    MessageSet (msis, ms.lastOffset) // NB: lastOffset mast be propagated for magicByte>=2y support
-
   let private processPartitionFetchResponse 
     (cfg:ConsumerConfig)
-    (magicByte:int8)
+    (magicByte:MagicByte)
     (topic:TopicName)
     (p:FetchResponsePartitionItem) =
     match p.errorCode with
@@ -661,7 +626,6 @@ module Consumer =
       if p.messageSetSize = 0 then Choice2Of4 (p.partition,p.highWatermarkOffset)
       else 
         let ms = p.messageSet
-        //let ms = decompress magicByte p.messageSet
         if cfg.checkCrc && magicByte < 2y then
           MessageSet.CheckCrc ms
         Choice1Of4 (ConsumerMessageSet(topic, p.partition, ms, p.highWatermarkOffset))

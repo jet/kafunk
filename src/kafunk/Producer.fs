@@ -302,7 +302,7 @@ module Producer =
   let private sendBatchToBroker
     (conn:KafkaConn)
     (cfg:ProducerConfig)
-    (magicByte:int8)
+    (magicByte:MagicByte)
     (b:Broker)
     (batch:ProducerMessageBatch[]) = async {
     //Log.info "sending_batch|ep=%O batch_size_bytes=%i batch_count=%i partition_count=%i" 
