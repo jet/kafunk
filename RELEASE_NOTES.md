@@ -14,6 +14,7 @@
 * IMPROVE: connection managemeng to ensure only a single TCP connection per broker per Kafka connection
 * IMPROVE: Reduce recovery time from broker restarts and rebalancing
 * IMPROVE: improved TCP connection logging and log levels to reduce "false positives"
+* IMPROVE: .NET Standard support
 
 ### 0.1.15-alpha05 - 19.3.2018
 * BUG: ensure CRC check runs with respect to appropriate message version (magic byte)
