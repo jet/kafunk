@@ -77,13 +77,6 @@ module IVar =
   let inline get (i:IVar<'a>) : Async<'a> = 
     i.Task |> awaitTaskCancellationAsError
 
-//  /// Creates an async computation which returns the value contained in an IVar.
-//  let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
-//    let! ct = Async.CancellationToken
-//    (Task.Delay (timeout, ct)).ContinueWith (Func<_,_>(fun _ -> tryPut (timeoutResult ()) i))
-//    |> ignore
-//    return! i.Task |> awaitTaskCancellationAsError }
-
   /// Creates an async computation which returns the value contained in an IVar.
   let inline getWithTimeout (timeout:TimeSpan) (timeoutResult:unit -> 'a) (i:IVar<'a>) : Async<'a> = async {
     use _timer = new Timer((fun _ -> tryPut (timeoutResult ()) i |> ignore), null, (int timeout.TotalMilliseconds), Timeout.Infinite)
@@ -312,37 +305,6 @@ module Async =
         startThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
         startThreadPoolWithContinuations (b, ok, err, cnc, cts.Token) }
 
-  let choose2 (a:Async<'a>) (b:Async<'a>) : Async<'a> = async {
-    let! ct = Async.CancellationToken
-    let cts = CancellationTokenSource.CreateLinkedTokenSource ct
-    let res = IVar.create ()
-    IVar.intoCancellationToken cts res
-    let inline ok a = IVar.tryPut a res |> ignore
-    let inline err e = IVar.tryError e res |> ignore
-    let inline cnc (_:OperationCanceledException) = IVar.tryCancel res |> ignore
-    startThreadPoolWithContinuations (a, ok, err, cnc, cts.Token)
-    startThreadPoolWithContinuations (b, ok, err, cnc, cts.Token)
-    return! IVar.get res }
-
-  let chooseChoice (a:Async<'a>) (b:Async<'b>) : Async<Choice<'a, 'b>> =
-    choose (a |> map Choice1Of2) (b |> map Choice2Of2)
-
-  /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
-  /// computation completes.
-  let withCancellation (ct:CancellationToken) (a:Async<'a>) : Async<'a> = async {
-    let! ct2 = Async.CancellationToken
-    use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
-    let tcs = new TaskCompletionSource<'a>()
-    use _reg = cts.Token.Register (fun () -> tcs.TrySetCanceled() |> ignore)
-    let a = async {
-      try
-        let! a = a
-        tcs.TrySetResult a |> ignore
-      with ex ->
-        tcs.TrySetException ex |> ignore }
-    Async.Start (a, cts.Token)
-    return! tcs.Task |> awaitTaskCancellationAsError }
-
   /// Cancels a computation and returns None if the CancellationToken is cancelled before the 
   /// computation completes.
   let cancelTokenWith (ct:CancellationToken) (f:unit -> 'a) (a:Async<'a>) : Async<'a> = async {
@@ -374,38 +336,11 @@ module Async =
         tcs.TrySetException ex |> ignore }
     Async.Start (a, cts.Token)
     return! tcs.Task |> awaitTaskCancellationAsError }
-
-  let cancelWithTask (t:Task<unit>) (a:Async<'a>) : Async<'a option> = async {
-    let! ct = Async.CancellationToken
-    use cts = CancellationTokenSource.CreateLinkedTokenSource ct
-    let t = t.ContinueWith (fun (_:Task<unit>) -> cts.Cancel () ; None)
-    let at = Async.StartAsTask (a, cancellationToken = cts.Token) |> Task.map Some
-    let! r = Task.WhenAny (t, at) |> awaitTaskCancellationAsError
-    return r.Result }
-
-  let cancelWithTaskThrow (err:exn -> exn) (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {
-    let! ct = Async.CancellationToken
-    use cts = CancellationTokenSource.CreateLinkedTokenSource ct
-    let t = 
-      t 
-      |> Task.extend (fun t -> 
-        cts.Cancel () |> ignore
-        raise (err t.Exception))
-    let at = Async.StartAsTask (a, cancellationToken = cts.Token)
-    let! r = Task.WhenAny (at, t) |> awaitTaskCancellationAsError
-    return r.Result }
-
-  let cancelWithTaskTimeout (timeout:TimeSpan) (t:Task<unit>) (a:Async<'a>) : Async<'a> = async {
-    let timeout = (Task.Delay timeout).ContinueWith (fun (_:Task) -> failwith "task_timedout")
-    let t = t |> Task.extend (fun _ -> failwith "task_cancelled")
-    let! at = Async.StartChildAsTask a
-    let! r = Task.WhenAny (at, t, timeout) |> awaitTaskCancellationAsError
-    return r.Result }
         
   let sleep (s:TimeSpan) : Async<unit> =
     Async.Sleep (int s.TotalMilliseconds)
       
-  let timeoutWith (g:'a -> 'b) (f:unit -> 'b) (timeout:TimeSpan) (c:Async<'a>) : Async<'b> =
+  let private timeoutWith (g:'a -> 'b) (f:unit -> 'b) (timeout:TimeSpan) (c:Async<'a>) : Async<'b> =
     let timeout = async {
       do! sleep timeout
       return f () }
@@ -419,21 +354,6 @@ module Async =
 
   let timeoutResult (timeout:TimeSpan) (c:Async<'a>) : Async<Result<'a, TimeoutException>> =
     timeoutResultWith (fun () -> TimeoutException(sprintf "The operation timed out after %fsec" timeout.TotalSeconds)) timeout c
-
-  let chooseTasks (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> =
-    async { 
-        let! ct = Async.CancellationToken
-        let i = Task.WaitAny( [| (a :> Task);(b :> Task) |],ct)
-        if i = 0 then return (Choice1Of2 (a.Result, b))
-        elif i = 1 then return (Choice2Of2 (b.Result, a)) 
-        else return! failwith (sprintf "unreachable, i = %d" i) }
-
-  let chooseTasksAsync (a:Task<'T>) (b:Task<'U>) : Async<Choice<'T * Task<'U>, 'U * Task<'T>>> = async {
-    let ta, tb = a :> Task, b :> Task
-    let! i = Task.WhenAny( ta, tb ) |> awaitTaskCancellationAsError
-    if i = ta then return (Choice1Of2 (a.Result, b))
-    elif i = tb then return (Choice2Of2 (b.Result, a)) 
-    else return! failwith "unreachable" }
 
   let chooseTasksUnit (a:Task<'T>) (b:Task) : Async<Choice<'T * Task, unit * Task<'T>>> = async {
     let ta, tb = a :> Task, b

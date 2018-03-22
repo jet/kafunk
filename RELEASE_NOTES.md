@@ -1,3 +1,6 @@
+### 0.1.16-alpha01 - 27.3.2018
+* BUG: memory leak in 0.1.15.
+
 ### 0.1.15 - 19.3.2018
 * BREAKING: `FetchResponse` item now explicit structure rather than tuple. Breaking only if using low-level Fetch API.
 

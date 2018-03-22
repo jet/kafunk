@@ -6,7 +6,6 @@ open System.Threading
 open System.Threading.Tasks
 open Kafunk
 open FSharp.Control
-open Kafunk.RetryPolicy
 
 let private Log = Log.create "Kafunk.Resource"
 
@@ -108,10 +107,10 @@ type Resource<'r> internal (id:string, create:Task<unit> -> ResourceEpoch<'r> op
           if fault then currentEpoch.tryCloseOrFault ex 
           else currentEpoch.tryCloseOrFault None
         if closed then
-          Log.trace "closing_resource|type=%s version=%i" name currentEpoch.version
-          currentEpoch.cts.Dispose ()
+          Log.trace "closing_resource|type=%s version=%i" name currentEpoch.version          
           do! close (currentEpoch, ex)
-          return { currentEpoch with version = currentEpoch.version + 1 ; resource = Unchecked.defaultof<_> }
+          currentEpoch.cts.Dispose ()
+          return { currentEpoch with version = currentEpoch.version + 1 ; resource = Unchecked.defaultof<_>  }
         else
           Log.trace "resource_already_closed|type=%s calling_version=%i current_version=%i" 
             name callingEpoch.version currentEpoch.version
@@ -208,20 +207,32 @@ module Resource =
   let getResource (r:Resource<'r>) =
     r.Get () |> Async.map (fun ep -> ep.resource)
 
-  let private resourceError (ex:exn) =
-    if isNull ex then ClosedResourceException() :> exn
-    else FaultedResourceException(ex) :> exn
-
+  // NB: to avoid exceptions when the token is already disposed
+  let private resourceEpochCancellationToken (ep:ResourceEpoch<'r>) =
+    try ep.cts.Token
+    with :? ObjectDisposedException ->
+      let cts = new CancellationTokenSource()
+      cts.Cancel ()
+      cts.Token
+    
   let injectWithRecovery (rp:RetryPolicy) (op:'r -> ('a -> Async<Result<'b, ResourceErrorAction<'b, exn>>>)) (r:Resource<'r>) (a:'a) : Async<'b> =
     let rec go (rs:RetryState) = async {
       try
         let! ep = r.Get ()
-        let! b = Async.cancelWithTaskThrow resourceError ep.state.Task (op ep.resource a)
-        //let! b = op ep.resource a
+        let! b = Async.cancelWithToken (resourceEpochCancellationToken ep) (op ep.resource a)
         match b with
-        | Success b -> 
+        | None -> 
+          let! rs' = RetryPolicy.awaitNextState rp rs
+          match rs' with
+          | None ->
+            let msg = sprintf "escalating_after_retry_attempts_depleted|type=%s v=%i attempt=%i" r.Name ep.version rs.attempt
+            //Log.trace "%s" msg
+            return raise (FaultedResourceOperationException(msg, None))
+          | Some rs' ->          
+            return! go rs'
+        | Some (Success b) -> 
           return b
-        | Failure (Retry e) ->
+        | Some (Failure (Retry e)) ->
           Log.trace "retrying_after_failure|type=%s version=%i attempt=%i error=\"%O\"" 
             r.Name ep.version rs.attempt e
           let! rs' = RetryPolicy.awaitNextState rp rs
@@ -232,12 +243,12 @@ module Resource =
             return raise (FaultedResourceOperationException(msg, e))
           | Some rs' ->
             return! go rs'
-        | Failure (CloseResume (ex,b)) ->
+        | Some (Failure (CloseResume (ex,b))) ->
           Log.trace "closing_and_resuming_after_failure|type=%s v=%i attempt=%i error=\"%O\"" 
             r.Name ep.version rs.attempt ex
           do! r.Close (ep,ex)
           return b
-        | Failure (CloseRetry ex) ->
+        | Some (Failure (CloseRetry ex)) ->
           // TODO: collect errors?
           Log.trace "closing_and_retrying_after_failure|type=%s v=%i attempt=%i error=\"%O\"" 
             r.Name ep.version rs.attempt ex

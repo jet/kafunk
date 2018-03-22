@@ -41,7 +41,7 @@ let go = async {
       groupId = group, 
       topic = topic, 
       autoOffsetReset = AutoOffsetReset.StartFromTime Time.EarliestOffset,
-      fetchMaxBytes = 500000,
+      fetchMaxBytes = 1000000,
       fetchMaxBytesTotal = 50000000,
       fetchMaxBytesOverride = 1000000,
       //fetchMinBytes = 0,
@@ -72,7 +72,7 @@ let go = async {
     //use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
     //for m in ms.messageSet.messages do
     //  Log.info "key=%s" (Binary.toString m.message.key)
-    Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
+    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
       ms.topic
       ms.partition
       (ms.messageSet.messages.Length)
