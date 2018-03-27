@@ -40,8 +40,8 @@ let chooseTaskOrAsync2 (t:Task<'a>) (a:Async<'a>) : Async<'a> = async {
   use _reg = cts.Token.Register (fun () -> tcs.TrySetCanceled () |> ignore)
   IVar.intoCancellationToken cts tcs
   //let opts = TaskContinuationOptions.DenyChildAttach
-  let t = Task.Factory.ContinueWhenAny([|t|], (fun (t:Task<_>) ->  tcs.TrySetResult t.Result |> ignore), cts.Token)
-  //t.ContinueWith((fun (t:Task<'a>) -> tcs.TrySetResult t.Result |> ignore ; cts.Cancel ()), opts) |> ignore
+  //let t = Task.Factory.ContinueWhenAny([|t|], (fun (t:Task<_>) ->  tcs.TrySetResult t.Result |> ignore), cts.Token)
+  let _t = t.ContinueWith((fun (t:Task<'a>) -> tcs.TrySetResult t.Result |> ignore ; cts.Cancel ()), cts.Token)
   let a = async {
     try
       let! a = a
@@ -78,7 +78,7 @@ let cancelWithToken (ct:CancellationToken) (a:Async<'a>) : Async<'a option> = as
   let! ct2 = Async.CancellationToken
   use cts = CancellationTokenSource.CreateLinkedTokenSource (ct, ct2)
   let tcs = new TaskCompletionSource<'a option>()
-  use _reg = cts.Token.Register (fun () -> tcs.TrySetResult None |> ignore)
+  let _reg = cts.Token.Register (fun () -> tcs.TrySetResult None |> ignore)
   let a = async {
     try
       let! a = a
@@ -123,4 +123,4 @@ let go3 = async {
     |> Async.parallelThrottledIgnore 1000
 }
 
-Async.RunSynchronously go3
+Async.RunSynchronously go2
