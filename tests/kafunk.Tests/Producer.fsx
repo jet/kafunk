@@ -51,8 +51,8 @@ let connCfg =
     [KafkaUri.parse host], 
     //[KafkaUri.parse "localhost:9092" ; KafkaUri.parse "localhost:9093" ; KafkaUri.parse "localhost:9094"], 
     tcpConfig = chanConfig,
-    requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
-    //requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 10,
+    //requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
+    requestRetryPolicy = RetryPolicy.constantBoundedMs 1000 1000,
     bootstrapConnectRetryPolicy = KafkaConfig.DefaultBootstrapConnectRetryPolicy,
     //bootstrapConnectRetryPolicy = RetryPolicy.constantBoundedMs 1000 3,
     //version = Versions.V_0_9_0,
@@ -71,9 +71,10 @@ let producerCfg =
     timeout = ProducerConfig.DefaultTimeoutMs,
     bufferSizeBytes = ProducerConfig.DefaultBufferSizeBytes,
     batchSizeBytes = 100000, //ProducerConfig.DefaultBatchSizeBytes,
-    batchLingerMs = 100,
-    compression = CompressionCodec.Snappy,
-    maxInFlightRequests = 1
+    batchLingerMs = 500,
+    compression = CompressionCodec.None,
+    maxInFlightRequests = 1,
+    queueType = ProducerQueueType.QueuePerPartition
     )
 
 let producer =

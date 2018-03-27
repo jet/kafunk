@@ -394,7 +394,7 @@ type ReqRepSession<'a, 'b, 's> internal
       do! receive |> AsyncSeq.iter __.Demux
       //Log.info "session_closed2|remote_endpoint=%O" remoteEndpoint
     with ex ->
-      Log.error "session_exception|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
+      Log.warn "session_exception|remote_endpoint=%O error=\"%O\"" remoteEndpoint ex
       __.CancelAll (Some ex)
       return raise ex }
 
