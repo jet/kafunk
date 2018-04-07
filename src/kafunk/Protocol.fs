@@ -80,7 +80,7 @@ module Protocol =
       match compression with
       | None -> value
       | GZIP -> Compression.GZip.compress value
-      //| LZ4  -> Compression.LZ4.compress value
+      | LZ4  -> Compression.LZ4.compress value
     #if !NETSTANDARD2_0
       | Snappy -> Compression.Snappy.compress value
     #endif
@@ -90,7 +90,7 @@ module Protocol =
       match compression with
       | None -> value
       | GZIP -> Compression.GZip.decompress value
-      //| LZ4 -> Compression.LZ4.decompress value
+      | LZ4 -> Compression.LZ4.decompress value
 #if !NETSTANDARD2_0    
       | Snappy -> Compression.Snappy.decompress value
 #endif

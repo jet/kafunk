@@ -134,47 +134,15 @@ module Snappy =
 
 #endif
   
-// TODO: implement lz4
-//[<Compile(Module)>]
-//module LZ4 =
+[<Compile(Module)>]
+module LZ4 =
+    open Kafunk.Native
 
-//  open LZ4
+    let compress (value: ArraySegment<byte>) : ArraySegment<byte> =
+        // TODO: consider preallocated buffer for compression
+        let compressedBound = Lz4Framing.compressFrameBound value.Count
+        let compressedBuffer = Array.zeroCreate compressedBound
+        Lz4Framing.compressFrame value compressedBuffer
 
-//  //let compress ver ms =
-//  //  Stream.compress 
-//  //    CompressionCodec.LZ4 
-//  //    (fun memStream -> upcast new LZ4Stream(memStream, LZ4StreamMode.Compress, LZ4StreamFlags.IsolateInnerStream))
-//  //    ver
-//  //    ms
-
-//  //let decompress ver m =
-//  //  Stream.decompress 
-//  //    (fun memStream -> upcast new LZ4Stream(memStream, LZ4StreamMode.Decompress, LZ4StreamFlags.IsolateInnerStream)) 
-//  //    ver 
-//  //    m
-
-//  let compress (value:Binary.Segment) =
-//    let maxLen = LZ4Codec.MaximumOutputLength value.Count
-//    let outBuf = Binary.zeros maxLen
-//    let written = LZ4Codec.Encode(value.Array, value.Offset, value.Count, outBuf.Array, outBuf.Offset, outBuf.Count)
-//    if written <= 0 then failwith "compression failed" else
-//    ArraySegment(outBuf.Array, outBuf.Offset, written)
-    
-//  let decompress (value:Binary.Segment) =
-//    let guessedOutputLength = value.Count * 10
-//    //let buf = Binary.zeros outputLength
-//    //let decoded = LZ4Codec.Decode(m.value.Array, m.value.Offset, m.value.Count, buf.Array, buf.Offset, buf.Count, false)
-//    //let buf = ArraySegment(buf.Array, buf.Count, decoded)
-//    let buf = LZ4Codec.Decode(value.Array, value.Offset, value.Count, guessedOutputLength)
-//    Binary.ofArray buf
-
-  //let compress (messageVer:ApiVersion) (ms:MessageSet) =
-  //  let buf = MessageSet.Size (messageVer,ms) |> Binary.zeros
-  //  MessageSet.Write (messageVer,ms,BinaryZipper(buf))
-  //  let compressed = LZ4.LZ4Codec.Wrap (buf.Array, buf.Offset, buf.Count)
-  //  createMessage (Binary.ofArray compressed) CompressionCodec.LZ4
-    
-  //let decompress (messageVer:ApiVersion) (m:Message) =
-  //  let decompressed = LZ4.LZ4Codec.Unwrap(m.value.Array, m.value.Offset)
-  //  let buf = Binary.ofArray decompressed
-  //  MessageSet.Read (messageVer, 0, 0s, buf.Count, true, BinaryZipper(buf))
+    let decompress (value: ArraySegment<byte>) : ArraySegment<byte> =
+        Lz4Framing.decompress value |> ArraySegment
