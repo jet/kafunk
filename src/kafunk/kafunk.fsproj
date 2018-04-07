@@ -25,9 +25,17 @@
     <Reference Include="System.ServiceModel" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="lib\win32\liblz4.so.1.8.1.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="lib\win64\liblz4.so.1.8.1.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Native\Loader.fs" />
+    <Compile Include="Native\lz4.fs" />
     <Compile Include="Utility\Prelude.fs" />
     <Compile Include="Utility\Log.fs" />
     <Compile Include="Utility\Binary.fs" />
