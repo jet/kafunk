@@ -52,38 +52,38 @@ module Lz4Framing =
             end
 
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_compressFrameBound(nativeint _srcSize, IntPtr _preferencesPtr);
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_compressFrame(nativeint _dstBuffer, nativeint _dstCapacity,
                                     nativeint _srcBuffer, nativeint _srcSize,
                                     LZ4F_preferences_t& _preferences);
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern uint32 LZ4F_isError(nativeint _code);
     
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_getErrorName(nativeint _code);
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_createDecompressionContext(nativeint& _dctxPtr, nativeint _version);
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_freeDecompressionContext(nativeint _dctx);
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_decompress(nativeint _dctx, nativeint _dstBuffer, nativeint& _dstSize, 
             nativeint _srcBuffer, nativeint& _srcSizePtr, nativeint _optionsPtr);
 
-        [<DllImport("liblz4.so", CallingConvention=CallingConvention.Cdecl)>]
+        [<DllImport("liblz4.so.1", CallingConvention=CallingConvention.Cdecl)>]
         extern nativeint LZ4F_getFrameInfo(nativeint _dctx, LZ4F_frameInfo_t& _frameInfoPtr, nativeint _srcBuffer, nativeint& _srcSizePtr);
 
     open System
     open FSharp.NativeInterop
     open native
 
-    let private ensureNativeIsLoaded = Loader.load "liblz4.so"
+    let private ensureNativeIsLoaded = Loader.load "liblz4.so.1"
 
     //
     // liblz4 error reporting
