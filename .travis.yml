@@ -13,6 +13,9 @@ matrix:
       mono: latest
       sudo: false
 
+install:
+  - if [ $TRAVIS_OS_NAME = linux ]; then sudo apt-get install liblz4-1; else brew install lz4; fi
+
 script: 
   - dotnet --info
   - ./build.sh All
