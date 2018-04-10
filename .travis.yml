@@ -5,12 +5,12 @@ matrix:
     - os: linux # Ubuntu 14.04
       dist: trusty
       sudo: false
-      mono: latest
+      #mono: latest
       dotnet: 2.0.0
     - os: osx # OSX 10.12
       osx_image: xcode9.1
       dotnet: 2.0.0
-      mono: latest
+      #mono: latest
       sudo: false
 
 install:
