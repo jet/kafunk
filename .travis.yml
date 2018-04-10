@@ -5,13 +5,16 @@ matrix:
     - os: linux # Ubuntu 14.04
       dist: trusty
       sudo: false
-      mono: latest
+      #mono: latest
       dotnet: 2.0.0
     - os: osx # OSX 10.12
       osx_image: xcode9.1
       dotnet: 2.0.0
-      mono: latest
+      #mono: latest
       sudo: false
+
+install:
+  - if [ $TRAVIS_OS_NAME = linux ]; then sudo apt-get install liblz4-1; else brew install lz4; fi
 
 script: 
   - dotnet --info
