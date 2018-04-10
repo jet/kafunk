@@ -25,10 +25,10 @@
     <Reference Include="System.ServiceModel" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="lib\win32\liblz4.so.1.8.1.dll">
+    <None Include="lib\win32\liblz4.so">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="lib\win64\liblz4.so.1.8.1.dll">
+    <None Include="lib\win64\liblz4.so">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="paket.references" />
