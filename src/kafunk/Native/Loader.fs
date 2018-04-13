@@ -1,5 +1,6 @@
 ﻿namespace Kafunk.Native
 
+/// Windlows pre-load dll from x86/x64 folder depending on Environment.Is64BitProcess
 module Loader = 
     open System
     open System.Runtime.InteropServices
@@ -20,31 +21,24 @@ module Loader =
     /// This function will not work for multi-assembly configuration, but is ok for kafunk for now.
     /// More elaborative loading strategies can be found here:
     /// https://github.com/mellinoe/nativelibraryloader
-    let resolveLibPath name =
+    let private resolveLibPath name =
         System.Reflection.Assembly.GetExecutingAssembly().CodeBase
         |> fun path -> (new Uri(path)).LocalPath
         |> Path.GetDirectoryName
         |> fun path -> Path.Combine(path, name)
 
     let private loadWin name =
-        let ptr = resolveLibPath name
-                |> LoadLibrary
+        let path = resolveLibPath name 
+        let ptr = LoadLibrary path
 
         if ptr = IntPtr.Zero then
             failwithf "Failed to load native dll '%s'" name
 
-    let private loadUnix name: unit =
-        let path = resolveLibPath name
-        let ptr = dlopen(path, RTLD_NOW)
-        if ptr = IntPtr.Zero then
-            failwith (sprintf "Failed to load dynamic library '%s'" path)
-
     let load name = lazy(
         match (Environment.Is64BitProcess, Environment.OSVersion.Platform) with
-            | (true, PlatformID.Win32NT) -> loadWin (sprintf "lib\\win64\\%s" name)
-            | (false, PlatformID.Win32NT) -> loadWin (sprintf "lib\\win32\\%s" name)
-            | (true, PlatformID.Unix) -> loadUnix (sprintf "lib/linux64-libc6/%s" name)
-            | _ -> failwithf "Unsupported platform for LZ4 compression: %O, 64 bits: %O" Environment.OSVersion.Platform Environment.Is64BitProcess
+            | (true, PlatformID.Win32NT) -> loadWin (sprintf "x64\\%s.dll" name)
+            | (false, PlatformID.Win32NT) -> loadWin (sprintf "x86\\%s.dll" name)
+            | _ -> ()
     )
 
 
