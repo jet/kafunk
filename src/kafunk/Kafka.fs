@@ -331,14 +331,17 @@ type private RetryAction =
 
   with
 
-    static member errorRetryAction (ec:ErrorCode) =
+    static member errorRetryAction (ec:ErrorCode) (topicNames:TopicName[]) =
       match ec with
       | ErrorCode.NoError -> None
+
+      | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.GroupCoordinatorNotAvailableCode when topicNames.Length > 0 -> 
+        Some (RefreshMetadataAndRetry topicNames)
       
       | ErrorCode.LeaderNotAvailable | ErrorCode.RequestTimedOut | ErrorCode.GroupLoadInProgressCode | ErrorCode.GroupCoordinatorNotAvailableCode
       | ErrorCode.NotEnoughReplicasAfterAppendCode | ErrorCode.NotEnoughReplicasCode ->
         Some (RetryAction.WaitAndRetry)
-
+        
       | ErrorCode.NotCoordinatorForGroupCode | ErrorCode.IllegalGenerationCode | ErrorCode.OffsetOutOfRange | ErrorCode.UnknownMemberIdCode -> 
         Some (RetryAction.PassThru)
       
@@ -360,7 +363,7 @@ type private RetryAction =
           | ErrorCode.UnknownTopicOrPartition -> 
             Some (x.topicErrorCode,RetryAction.RefreshMetadataAndRetry [|x.topicName|])
           | _ ->
-            RetryAction.errorRetryAction x.topicErrorCode
+            RetryAction.errorRetryAction x.topicErrorCode [|x.topicName|]
             |> Option.map (fun action -> x.topicErrorCode,action))
 
       | ResponseMessage.OffsetResponse r ->
@@ -385,11 +388,11 @@ type private RetryAction =
             | ErrorCode.NotLeaderForPartition | ErrorCode.UnknownTopicOrPartition -> 
               Some (ec, RetryAction.RefreshMetadataAndRetry [|topicName|])
             | ec ->
-              RetryAction.errorRetryAction ec
+              RetryAction.errorRetryAction ec [|topicName|]
               |> Option.map (fun action -> ec, action)))
       
       | ResponseMessage.GroupCoordinatorResponse r ->
-        RetryAction.errorRetryAction r.errorCode
+        RetryAction.errorRetryAction r.errorCode  [||]
         |> Option.map (fun action -> r.errorCode,action)
 
       | ResponseMessage.HeartbeatResponse r ->
@@ -397,7 +400,7 @@ type private RetryAction =
         | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
           Some (r.errorCode,RetryAction.PassThru)
         | _ ->
-          RetryAction.errorRetryAction r.errorCode
+          RetryAction.errorRetryAction r.errorCode [||]
           |> Option.map (fun action -> r.errorCode,action)
 
       | ResponseMessage.OffsetFetchResponse r -> 
@@ -412,7 +415,7 @@ type private RetryAction =
                 | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
                   Some (ec,RetryAction.PassThru)
                 | _ ->
-                  RetryAction.errorRetryAction ec
+                  RetryAction.errorRetryAction ec [|_t|]
                   |> Option.map (fun action -> ec,action)))
 
       | ResponseMessage.OffsetCommitResponse r ->
@@ -424,7 +427,7 @@ type private RetryAction =
             | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
               Some (ec,RetryAction.PassThru)
             | _ ->
-              RetryAction.errorRetryAction ec
+              RetryAction.errorRetryAction ec [|_tn|]
               |> Option.map (fun action -> ec,action)))
                         
       | ResponseMessage.JoinGroupResponse r ->
@@ -432,7 +435,7 @@ type private RetryAction =
         | ErrorCode.UnknownMemberIdCode ->
           Some (r.errorCode,RetryAction.PassThru)
         | _ ->
-          RetryAction.errorRetryAction r.errorCode
+          RetryAction.errorRetryAction r.errorCode [||]
           |> Option.map (fun action -> r.errorCode,action)
 
       | ResponseMessage.SyncGroupResponse r ->
@@ -440,28 +443,28 @@ type private RetryAction =
         | ErrorCode.UnknownMemberIdCode | ErrorCode.IllegalGenerationCode | ErrorCode.RebalanceInProgressCode ->
           Some (r.errorCode,RetryAction.PassThru)
         | _ ->
-          RetryAction.errorRetryAction r.errorCode
+          RetryAction.errorRetryAction r.errorCode [||]
           |> Option.map (fun action -> r.errorCode,action)
       
       | ResponseMessage.LeaveGroupResponse r ->
-        RetryAction.errorRetryAction r.errorCode
+        RetryAction.errorRetryAction r.errorCode [||]
         |> Option.map (fun action -> r.errorCode,action)
 
       | ResponseMessage.DescribeGroupsResponse r ->
         r.groups
         |> Seq.tryPick (fun (ec,_,_,_,_,_) -> 
-          RetryAction.errorRetryAction ec
+          RetryAction.errorRetryAction ec [||]
           |> Option.map (fun action -> ec,action))
 
       | ResponseMessage.ListGroupsResponse r ->
-        RetryAction.errorRetryAction r.errorCode
+        RetryAction.errorRetryAction r.errorCode [||]
         |> Option.map (fun action -> r.errorCode,action)
     
       | ResponseMessage.ProduceResponse _ ->
         None
 
       | ResponseMessage.ApiVersionsResponse r ->
-        RetryAction.errorRetryAction r.errorCode
+        RetryAction.errorRetryAction r.errorCode [||]
         |> Option.map (fun a -> r.errorCode,a)
 
 
