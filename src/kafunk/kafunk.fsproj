@@ -25,6 +25,7 @@
     <Reference Include="System.ServiceModel" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AssemblyInfoVisibility.fs" />
     <None Include="liblz4.so">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
