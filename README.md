@@ -1,14 +1,13 @@
+# UPDATE
+
+We found a bug in the implementation of the v0.11+ protocol wherein messages were skipped during consumption. The bug only manifests when using the newer protocol version (the default). Due to this bug and for long term maintenance, we've started investing into the Confluent.Kafka client: https://github.com/jet/confluent-kafka-fsharp.
+
 # Kafunk 
 [![NuGet Status](http://img.shields.io/nuget/v/kafunk.svg?style=flat)](https://www.nuget.org/packages/kafunk/)
 [![Build status](https://ci.appveyor.com/api/projects/status/j61df5g4tbxrmfg5/branch/master?svg=true)](https://ci.appveyor.com/project/Jet/kafunk/branch/master)
 [![Build status](https://travis-ci.org/jet/kafunk.svg?branch=master)](https://travis-ci.org/jet/kafunk)
 
-
 **Kafunk** is a [Kafka](https://kafka.apache.org/) client written in F#.
-
-# UPDATE
-
-We found a bug in the implementation of the v0.11+ protocol wherein messages were skipped during consumption. The bug only manifests when using the newer protocol version (the default). Due to this bug and for long term maintenance, we've started investing into the Confluent.Kafka client: https://github.com/jet/confluent-kafka-fsharp
 
 
 See [the home page](http://jet.github.io/kafunk) for details.
