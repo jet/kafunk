@@ -796,18 +796,30 @@ module Protocol =
       let numRecords = buf.ReadInt32()
       if numRecords < 0 then 
         failwithf "invalid_record_count|num_records=%i compression=%i mb=%i first_offset=%i mc=%i" numRecords compression magicByte firstOffset mss.Count
-      match compression with
-      | CompressionCodec.None ->
-        MessageSet.ReadRecords (buf,magicByte,numRecords,firstOffset,timestampType,firstTimestamp,maxTimestamp,mss)
-      | compression ->        
-        let recordsLength = sizeInBytes - RecordBatch.RECORD_BATCH_OVERHEAD
-        if buf.Buffer.Count < recordsLength then
-          buf.ShiftOffset buf.Buffer.Count
-        else
-          let compressedValue = buf.Slice recordsLength
-          let decompressedValue = CompressionCodec.decompress compression compressedValue
-          MessageSet.ReadRecords (BinaryZipper(decompressedValue),magicByte,numRecords,firstOffset,timestampType,firstTimestamp,maxTimestamp,mss)    
-          buf.ShiftOffset recordsLength
+      let lastOffset : Offset =
+        match compression with
+        | CompressionCodec.None ->
+          //let c0 = mss.Count
+          MessageSet.ReadRecords (buf,magicByte,numRecords,firstOffset,timestampType,firstTimestamp,maxTimestamp,mss)
+          if mss.Count > 0 then            
+            let lastMessage = mss.[mss.Count - 1]
+            //let count = mss.Count - c0
+            //if lastMessage.offset <> lastOffset then
+            //  failwithf "unmatched_offsets|batch_last_offset=%i message_last_offset=%i count=%i num_records=%i" lastOffset lastMessage.offset count numRecords
+            lastMessage.offset
+            //lastOffset
+          else
+            lastOffset
+        | compression ->        
+          let recordsLength = sizeInBytes - RecordBatch.RECORD_BATCH_OVERHEAD
+          if buf.Buffer.Count < recordsLength then
+            buf.ShiftOffset buf.Buffer.Count
+          else
+            let compressedValue = buf.Slice recordsLength
+            let decompressedValue = CompressionCodec.decompress compression compressedValue
+            MessageSet.ReadRecords (BinaryZipper(decompressedValue),magicByte,numRecords,firstOffset,timestampType,firstTimestamp,maxTimestamp,mss)    
+            buf.ShiftOffset recordsLength
+          lastOffset
       if checkCrc then
         let crcCount = buf.Buffer.Count - attributesOffset
         let crc = Crc.crc32C buf.Buffer.Array attributesOffset crcCount
