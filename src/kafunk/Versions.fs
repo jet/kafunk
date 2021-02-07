@@ -47,7 +47,7 @@ let internal byApiVersionResponse (x:ApiVersionsResponse) : ApiKey -> ApiVersion
     | ApiKey.Produce -> min 3s v
     | ApiKey.Fetch -> min 5s v
     | ApiKey.Offset -> min 0s v // TODO: any higher version for offset is currently crashing
-    | ApiKey.Metadata -> min 5s v
+    | ApiKey.Metadata -> min 1s v
     | ApiKey.OffsetCommit -> min 2s v
     | ApiKey.OffsetFetch -> min 2s v
     | ApiKey.GroupCoordinator -> min 1s v
