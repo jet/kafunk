@@ -1,3 +1,6 @@
+### 0.1.17-alpha1 - 12.4.2018
+* LZ4 compression support is implemented
+
 ### 0.1.16 - 27.3.2018
 * Tested 0.1.16-alpha01
 

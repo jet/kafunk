@@ -25,9 +25,24 @@
     <Reference Include="System.ServiceModel" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AssemblyInfoVisibility.fs" />
+    <None Include="liblz4.so">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="liblz4.dylib">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="x86\liblz4.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="x64\liblz4.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Native\Loader.fs" />
+    <Compile Include="Native\lz4.fs" />
     <Compile Include="Utility\Prelude.fs" />
     <Compile Include="Utility\Log.fs" />
     <Compile Include="Utility\Binary.fs" />

@@ -56,7 +56,7 @@ Please also join the [F# Open Source Group](http://fsharp.github.com)
 | ----------|----------|
 | GZip      | Complete |
 | Snappy    | Complete |
-| LZ4       | https://github.com/jet/kafunk/issues/125 |
+| LZ4       | Complete |
 | TLS       | https://github.com/jet/kafunk/issues/66  |
 | SASL      | https://github.com/jet/kafunk/issues/139 |
 | ACL       | https://github.com/jet/kafunk/issues/140 |
