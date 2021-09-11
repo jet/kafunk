@@ -4,6 +4,7 @@
 open FSharp.Control
 open Kafunk
 open System
+open System.Collections.Concurrent
 
 //Log.MinLevel <- LogLevel.Trace
 let Log = Log.create __SOURCE_FILE__
@@ -31,7 +32,7 @@ let go = async {
         tcpConfig = chanConfig,
         requestRetryPolicy = KafkaConfig.DefaultRequestRetryPolicy,
         version = Versions.V_0_10_1,
-        autoApiVersions = true,
+        //autoApiVersions = true,
         //version = Versions.V_0_9_0,
         //autoApiVersions = false,
         clientId = "leo")
@@ -68,20 +69,33 @@ let go = async {
 
   let! _ = Async.StartChild showProgress
 
+  let partitionOffsets = new ConcurrentDictionary<Partition, Offset> ()
+
   let handle (s:ConsumerState) (ms:ConsumerMessageSet) = async {
-    //use! _cnc = Async.OnCancel (fun () -> Log.warn "cancelling_handler")    
-    //for m in ms.messageSet.messages do
-    //  Log.info "key=%s" (Binary.toString m.message.key)
-    Log.trace "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
-      ms.topic
-      ms.partition
-      (ms.messageSet.messages.Length)
-      (ConsumerMessageSet.size ms)
-      (ConsumerMessageSet.firstOffset ms)
-      (ConsumerMessageSet.lastOffset ms)
-      (ConsumerMessageSet.firstTimestamp ms)
-      (ms.highWatermarkOffset)
-      (ConsumerMessageSet.lag ms) 
+    
+    do! Async.Sleep 5000
+    
+    if ms.partition = 0 then
+      Log.info "consuming_message_set|topic=%s partition=%i count=%i size=%i os=[%i-%i] ts=[%O] hwo=%i lag=%i"
+        ms.topic
+        ms.partition
+        (ms.messageSet.messages.Length)
+        (ConsumerMessageSet.size ms)
+        (ConsumerMessageSet.firstOffset ms)
+        (ConsumerMessageSet.lastOffset ms)
+        (ConsumerMessageSet.firstTimestamp ms)
+        (ms.highWatermarkOffset)
+        (ConsumerMessageSet.lag ms) 
+
+    for msi in ms.messageSet.messages do
+      match partitionOffsets.TryGetValue (ms.partition) with
+      | true, lastOffset ->
+        if (lastOffset + 1L < msi.offset) then
+          let gap = msi.offset - (lastOffset + 1L)
+          failwithf "non_contig_offsets_detected|partition=%i last_offset=%i current_offset=%i gap=%i" ms.partition lastOffset msi.offset gap
+      | _ -> ()
+      partitionOffsets.[ms.partition] <- msi.offset
+
     return () }
 
   use counter = Metrics.counter Log 5000

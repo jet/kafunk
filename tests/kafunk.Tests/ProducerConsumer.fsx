@@ -20,6 +20,8 @@ let batchSize = argiDefault 4 "1000" |> Int32.Parse
 let consumerCount = argiDefault 5 "1" |> Int32.Parse
 let producerThreads = argiDefault 6 "100" |> Int32.Parse
 
+let contigDeltaThreshold = 200000
+
 let testId = Guid.NewGuid().ToString("n")
 let consumerGroup = "kafunk-producer-consumer-test-" + testId
 
@@ -153,7 +155,7 @@ module Reporter =
 
       let report () =
         let r = new Report(ack.Received, ack.Duplicates, ack.Sent, ack.Contig) 
-        printReport r
+        //printReport r
         r
 
       let rec loop () = async {
@@ -196,12 +198,11 @@ let monitor = async {
     do! Async.Sleep 5000
     let! report = Reporter.report reporter
     printReport report
-    if (report.received - report.contigCount) > 100000 then
+    if (report.received - report.contigCount) > contigDeltaThreshold then
       Log.error "contig_delta_surpassed_threshold"
       IVar.tryPut () completed |> ignore }
 
 // ----------------------------------------------------------------------------------------------------------------------------------
-
 
 
 let producer = async {
@@ -218,7 +219,12 @@ let producer = async {
 
   Log.info "starting_producer_process|batch_count=%i" batchCount
 
-  let connCfg = KafkaConfig.create ([KafkaUri.parse host], tcpConfig = chanConfig)
+  let connCfg = 
+    KafkaConfig.create (
+      [KafkaUri.parse host], 
+      tcpConfig = chanConfig, 
+      version = Versions.V_0_10_1)
+
   use! conn = Kafka.connAsync connCfg
 
   let producerCfg =
@@ -252,7 +258,36 @@ let producer = async {
 
 let consumer = async {
 
+  let partitionOffsets = new ConcurrentDictionary<Partition, Offset> ()
+
   let handle (_:ConsumerState) (ms:ConsumerMessageSet) = async {
+        
+    //failwithf "testing ERRORs!"
+    //Log.error "testing error!"
+
+    //let firstOffset' = ConsumerMessageSet.firstOffset ms
+    
+    //let mutable lastOffset = 0L
+    //if partitionOffsets.TryGetValue (ms.partition, &lastOffset) then
+    //  if firstOffset' > lastOffset + 1L then
+    //    failwithf "offset_gap_detected|partition=%i last_offset=%i first_offset_next_batch=%i" ms.partition lastOffset firstOffset'
+    
+    //partitionOffsets.[ms.partition] <- ConsumerMessageSet.lastOffset ms
+
+    //ms.messageSet.messages
+    //|> Seq.pairwise
+    //|> Seq.iter (fun (msi1,msi2) -> 
+    //  if msi1.offset + 1L <> msi2.offset then
+    //    failwithf "non_contiguous_offsets_detected|offset1=%i offset2=%i" msi1.offset msi2.offset
+    //  ())
+
+    for msi in ms.messageSet.messages do
+      match partitionOffsets.TryGetValue (ms.partition) with
+      | true, lastOffset ->
+        if (lastOffset + 1L <> msi.offset) then
+          failwithf "non_contig_offsets|partition=%i last_offset=%i current_offset=%i" ms.partition lastOffset msi.offset
+      | _ -> ()
+      partitionOffsets.[ms.partition] <- msi.offset
         
     let values = 
       ms.messageSet.messages
@@ -270,7 +305,8 @@ let consumer = async {
   let connCfg = 
     KafkaConfig.create (
       [KafkaUri.parse host], 
-      tcpConfig = chanConfig)
+      tcpConfig = chanConfig,
+      version = Versions.V_0_10_1)
   use! conn = Kafka.connAsync connCfg
 
   let consumerCfg = 

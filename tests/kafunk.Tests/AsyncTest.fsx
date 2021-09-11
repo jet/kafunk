@@ -123,4 +123,17 @@ let go3 = async {
     |> Async.parallelThrottledIgnore 1000
 }
 
-Async.RunSynchronously go2
+let go4 = async {
+  let t : Task<unit> = Task.never
+  let N = 1000000
+  return!
+    Seq.init N id
+    |> Seq.map (fun i -> async {
+      let delay = Async.Sleep 100 |> Async.StartAsTask
+      let! t = Task.WhenAny [| t ; delay |] |> Async.AwaitTask
+      let r = t.Result
+      return () })
+    |> Async.parallelThrottledIgnore 1000
+}
+
+Async.RunSynchronously go4

@@ -5,6 +5,7 @@
 open System
 open System.Text
 open System.Collections.Generic
+open System.Collections.Concurrent
 open System.Diagnostics
 open System.Threading
 open Kafunk
@@ -69,8 +70,19 @@ let go = async {
   let md = consumer.GetMetadata(true)
   Log.info "metadata|%A" md.Topics
 
+  let partitionOffsets = new ConcurrentDictionary<Partition, int64> ()
+
   let handle (m:Message) = async {
-    Log.info "handing message|p=%i key=%s" m.Partition (Encoding.UTF8.GetString m.Key)
+    //Log.info "handing message|p=%i key=%s" m.Partition (Encoding.UTF8.GetString m.Key)
+    let offset = m.Offset.Value
+    match partitionOffsets.TryGetValue (m.Partition) with
+    | true, lastOffset ->
+      if (lastOffset + 1L < offset) then
+        let gap = offset - (lastOffset + 1L)
+        failwithf "non_contig_offsets_detected|partition=%i last_offset=%i current_offset=%i gap=%i" m.Partition lastOffset offset gap
+    | _ -> ()
+    partitionOffsets.[m.Partition] <- offset
+
     return () }
 
   use counter = Metrics.counter Log 5000
